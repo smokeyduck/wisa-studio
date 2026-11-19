@@ -275,3 +275,49 @@ describe("renderer content security policy", () => {
 		expect(sources("connect-src")).toEqual(["'self'"]);
 	});
 });
+
+/**
+ * The download buttons are the only path a visitor has to the app, so a link
+ * that 404s costs the release. macOS is not built by CI, which is how every
+ * button came to point at a versioned path for an asset that did not exist yet.
+ */
+describe("download links", () => {
+	const SITE = path.join(PACKAGE_ROOT, "site/index.html");
+
+	function anchors(html: string): { href: string; attributes: string }[] {
+		return [...html.matchAll(/<a\b([^>]*)>/g)].map(match => ({
+			attributes: match[1],
+			href: /\bhref="([^"]*)"/.exec(match[1])?.[1] ?? "",
+		}));
+	}
+
+	it("never hardcodes a versioned asset path in the page", () => {
+		const html = fs.readFileSync(SITE, "utf8");
+		const versioned = anchors(html).filter(anchor => /\/releases\/download\/v\d/.test(anchor.href));
+		expect(versioned.map(anchor => anchor.href)).toEqual([]);
+	});
+
+	it("points every download button at a URL that exists before any asset does", () => {
+		const html = fs.readFileSync(SITE, "utf8");
+		const buttons = anchors(html).filter(anchor => /data-omp-(dmg|win|linux)/.test(anchor.attributes));
+		expect(buttons.length).toBeGreaterThan(0);
+		for (const button of buttons) {
+			// /releases/latest is a page GitHub always serves; the inline script
+			// swaps in the exact asset URL once the release resolves.
+			expect(button.href, button.attributes).toBe("https://github.com/smokeyduck/wisa-studio/releases/latest");
+		}
+	});
+
+	it("links only assets the README claims exist", () => {
+		// Direct asset links may only name Windows/Linux, which CI builds. A macOS
+		// link would 404 until someone packages on a Mac and attaches the DMG.
+		for (const file of ["README.md", "README.en.md"]) {
+			const text = fs.readFileSync(path.join(PACKAGE_ROOT, file), "utf8");
+			const direct = [...text.matchAll(/releases\/download\/[^)\s]+/g)].map(match => match[0]);
+			expect(
+				direct.filter(url => /\.dmg$/.test(url)),
+				`${file} links a DMG directly`,
+			).toEqual([]);
+		}
+	});
+});

@@ -10,8 +10,8 @@ Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding age
 
 | Platform | Package |
 |---|---|
-| macOS Apple Silicon | [`wisa-studio-0.9.46-arm64.dmg`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46-arm64.dmg) |
-| macOS Intel | [`wisa-studio-0.9.46.dmg`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46.dmg) |
+| macOS Apple Silicon | `wisa-studio-0.9.46-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.46) |
+| macOS Intel | `wisa-studio-0.9.46.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.46) |
 | Windows x64 | [`wisa-studio-0.9.46-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46-setup.exe) |
 | Linux x64 | [`wisa-studio-0.9.46.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46.AppImage) |
 
