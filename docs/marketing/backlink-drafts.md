@@ -51,6 +51,9 @@ ngay: đây là fork giao diện, agent là binary upstream, không có gì bị
 > handshake — the GUI spawns `omp --mode rpc-ui` and needs flags the npm CLI
 > does not have, so the dev path probes the binary (`stats --help`) instead of
 > trusting a version string. That cost me an afternoon of restart loops.
+>
+> The gateway in the screenshots is ours — https://askwisa.com/?utm_source=hn&utm_medium=showhn
+> — but nothing in the app requires it.
 
 **Trả lời khi bị hỏi "why not just use omp's TUI / why fork":**
 thẳng thắn — vì nhóm không dùng terminal; và nói rõ phần nào là của upstream.
@@ -85,6 +88,10 @@ nghiệm và để họ hỏi.
 > scheduled tasks, MCP/Skills UI, Vietnamese interface.
 >
 > Repo (MIT): https://github.com/smokeyduck/wisa-studio
+>
+> If you want the gateway I use for hosted models, it is
+> https://askwisa.com/?utm_source=reddit&utm_medium=localllama — a plain
+> OpenAI-compatible endpoint, nothing app-specific.
 >
 > Happy to answer questions about the RPC bridge or how the sidecar is packaged
 > — that was most of the work.
@@ -121,6 +128,10 @@ dev.to đến vì *cách làm*, không vì sản phẩm.
 > https://github.com/can1357/oh-my-pi. If you are packaging an Electron app
 > around a CLI, the probe-before-spawn trick in `src/main/dev-sidecar.ts` is the
 > part I would copy first.
+>
+> The gateway the app ships pre-wired is https://askwisa.com/?utm_source=devto&utm_medium=article
+> — an OpenAI-compatible endpoint. It is a default, not a dependency: point the
+> provider at any base URL and the model list is discovered the same way.
 
 ---
 
@@ -156,6 +167,7 @@ thẻ quốc tế không, cấu hình thế nào.
 >
 > Repo: https://github.com/smokeyduck/wisa-studio (MIT)
 > Hướng dẫn cài: https://github.com/smokeyduck/wisa-studio/blob/main/docs/vi/cai-dat.md
+> Cổng WISA (không bắt buộc): https://askwisa.com/?utm_source=viblo&utm_medium=article
 
 ---
 
@@ -202,8 +214,10 @@ Giãn cách ít nhất 2 ngày giữa các lần, trừ nhóm chat.
 
 ## Trước khi đăng bất cứ đâu
 
-- [ ] Repo public, README hiển thị đúng ảnh (kiểm tra trên GitHub, không chỉ local)
-- [ ] Release v0.9.46 có đủ asset và `latest-mac.yml` cho cả hai kiến trúc
-- [ ] Trang site đã deploy và `og:image` hiện đúng khi dán link
+- [x] Repo public, README hiển thị đúng ảnh (kiểm tra trên GitHub, không chỉ local)
+- [ ] Release v0.9.46 có đủ asset và `latest-mac.yml` cho cả hai kiến trúc —
+      **Windows + Linux đã có; DMG macOS còn thiếu** (chỉ build được trên máy
+      Mac). Đừng đăng bài nào hứa "tải cho macOS" cho tới khi DMG lên release.
+- [x] Trang site đã deploy và `og:image` hiện đúng khi dán link
 - [ ] Đã thử tải và mở app trên ít nhất một máy macOS sạch
-- [ ] `utm_source` khác nhau cho từng kênh để đo được kênh nào mang key
+- [x] `utm_source` khác nhau cho từng kênh để đo được kênh nào mang key
