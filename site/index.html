@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WISA STUDIO — GUI desktop cho oh-my-pi (omp), tiếng Việt, cài một lần là chạy</title>
+<meta name="description" content="WISA STUDIO là GUI desktop cho oh-my-pi (omp): trình coding agent dễ dùng, giao diện tiếng Việt, nhiều phiên song song, cài một lần là chạy. Electron cho macOS, Windows và Linux. Bởi WISA (askwisa.com)." />
+<link rel="canonical" href="https://smokeyduck.github.io/wisa-studio/" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="WISA STUDIO" />
+<meta property="og:title" content="WISA STUDIO — GUI desktop tiếng Việt cho oh-my-pi (omp)" />
+<meta property="og:description" content="Trình coding agent dễ dùng: nhiều phiên song song, tác vụ định kỳ, MCP và Skills trong một cửa sổ. Cài một lần là chạy trên macOS, Windows, Linux." />
+<meta property="og:image" content="https://smokeyduck.github.io/wisa-studio/assets/wisa-studio-og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:locale" content="vi_VN" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="WISA STUDIO — GUI desktop tiếng Việt cho oh-my-pi (omp)" />
+<meta name="twitter:description" content="Nhiều phiên coding agent song song trong một cửa sổ. macOS, Windows, Linux." />
+<meta name="twitter:image" content="https://smokeyduck.github.io/wisa-studio/assets/wisa-studio-og.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #060a09;
+    --bg-2: #0a100f;
+    --line: rgba(255, 255, 255, 0.07);
+    --line-strong: rgba(255, 255, 255, 0.12);
+    --text: #ecf3f1;
+    --muted: #96a8a3;
+    --faint: #5f706b;
+    --accent: #34d3be;
+    --accent-soft: rgba(52, 211, 190, 0.12);
+    --radius: 22px;
+    --container: 1180px;
+    --ease: cubic-bezier(0.22, 0.68, 0.26, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  ::selection { background: rgba(52, 211, 190, 0.28); }
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+  .container { max-width: var(--container); margin: 0 auto; padding: 0 32px; }
+
+  /* ---------- background stage ---------- */
+  .stage { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+  .stage .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 20%, transparent 75%);
+  }
+  .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.5; }
+  .orb-a {
+    width: 560px; height: 560px; left: 8%; top: -180px;
+    background: radial-gradient(circle, rgba(52, 211, 190, 0.22), transparent 65%);
+    animation: drift-a 26s ease-in-out infinite;
+  }
+  .orb-b {
+    width: 480px; height: 480px; right: 4%; top: 12%;
+    background: radial-gradient(circle, rgba(94, 164, 255, 0.13), transparent 65%);
+    animation: drift-b 32s ease-in-out infinite;
+  }
+  @keyframes drift-a { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(70px, 46px); } }
+  @keyframes drift-b { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-56px, 64px); } }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    transition: background 0.35s var(--ease), border-color 0.35s var(--ease), backdrop-filter 0.35s var(--ease);
+    border-bottom: 1px solid transparent;
+  }
+  nav.scrolled {
+    background: rgba(6, 10, 9, 0.72);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    border-bottom-color: var(--line);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 700; font-size: 16px; letter-spacing: -0.01em; white-space: nowrap; }
+  .brand-mark {
+    width: 32px; height: 32px; border-radius: 9px;
+    background: linear-gradient(135deg, #123f39, #1a6b60);
+    border: 1px solid rgba(52, 211, 190, 0.35);
+    display: grid; place-items: center; color: var(--accent);
+    box-shadow: 0 0 24px rgba(52, 211, 190, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .nav-links { display: flex; gap: 28px; align-items: center; white-space: nowrap; }
+  .nav-links a { color: var(--muted); font-size: 14px; font-weight: 500; transition: color 0.25s; position: relative; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-links a::after {
+    content: ""; position: absolute; left: 0; bottom: -4px; width: 0; height: 1.5px;
+    background: var(--accent); transition: width 0.3s var(--ease);
+  }
+  .nav-links a:hover::after { width: 100%; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 13px 26px; border-radius: 999px;
+    font-weight: 600; font-size: 15px; letter-spacing: -0.01em;
+    transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), background 0.3s, border-color 0.3s;
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .btn-primary {
+    background: var(--accent); color: #052019;
+    box-shadow: 0 0 0 rgba(52, 211, 190, 0);
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 40px rgba(52, 211, 190, 0.28);
+  }
+  .btn-ghost { border-color: var(--line-strong); color: var(--text); background: rgba(255, 255, 255, 0.02); }
+  .btn-ghost:hover { transform: translateY(-2px); border-color: rgba(52, 211, 190, 0.45); background: var(--accent-soft); }
+  .btn .btn-sub { font-weight: 500; font-size: 12px; opacity: 0.72; }
+  .btn-sm { padding: 9px 18px; font-size: 13.5px; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 196px 0 0; text-align: center; position: relative; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 7px 16px; border-radius: 999px;
+    border: 1px solid rgba(52, 211, 190, 0.3);
+    background: rgba(52, 211, 190, 0.07);
+    color: #9fe8dd; font-size: 13px; font-weight: 500;
+  }
+  .hero-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .hero h1 {
+    margin: 34px auto 0; max-width: 900px;
+    font-size: clamp(46px, 6.6vw, 84px);
+    font-weight: 800; letter-spacing: -0.045em; line-height: 1.04;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(92deg, #eafffa 0%, var(--accent) 55%, #5ea4ff 115%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .sub {
+    margin: 28px auto 0; max-width: 620px;
+    color: var(--muted); font-size: clamp(17px, 1.6vw, 19.5px); line-height: 1.65;
+  }
+  .hero-cta { display: flex; gap: 16px; justify-content: center; margin-top: 44px; flex-wrap: wrap; }
+  .hero-fine { margin-top: 26px; font-size: 13.5px; color: var(--faint); }
+  .hero-fine a { color: var(--accent); border-bottom: 1px solid transparent; transition: border-color 0.25s; }
+  .hero-fine a:hover { border-bottom-color: var(--accent); }
+
+  .hero-shot-wrap { margin: 96px auto 0; max-width: 1120px; padding: 0 8px; perspective: 1400px; }
+  .hero-shot {
+    position: relative; border-radius: var(--radius);
+    transition: transform 0.5s var(--ease);
+    transform-style: preserve-3d; will-change: transform;
+  }
+  .hero-shot::before {
+    content: ""; position: absolute; inset: -1px; border-radius: inherit; z-index: -1;
+    background: linear-gradient(180deg, rgba(52, 211, 190, 0.35), rgba(255, 255, 255, 0.06) 30%, transparent 70%);
+    padding: 1px;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+  }
+  .hero-shot::after {
+    content: ""; position: absolute; left: 8%; right: 8%; bottom: -60px; height: 120px; z-index: -2;
+    background: radial-gradient(ellipse, rgba(52, 211, 190, 0.22), transparent 70%);
+    filter: blur(40px);
+  }
+  .hero-shot img { border-radius: var(--radius); box-shadow: 0 60px 140px rgba(0, 0, 0, 0.65); }
+
+  /* entrance */
+  .rise { opacity: 0; animation: rise 1s var(--ease) forwards; }
+  @keyframes rise { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }
+  .d1 { animation-delay: 0.08s; } .d2 { animation-delay: 0.18s; } .d3 { animation-delay: 0.3s; }
+  .d4 { animation-delay: 0.42s; } .d5 { animation-delay: 0.56s; }
+
+  /* ---------- marquee ---------- */
+  .marquee {
+    margin-top: 110px; padding: 26px 0;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    overflow: hidden; position: relative;
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+  .marquee-track { display: flex; gap: 14px; width: max-content; animation: marquee 36s linear infinite; }
+  .marquee:hover .marquee-track { animation-play-state: paused; }
+  @keyframes marquee { to { transform: translateX(-50%); } }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+    padding: 9px 18px; border-radius: 999px;
+    border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02);
+    color: var(--muted); font-size: 13.5px; font-weight: 500;
+  }
+  .chip svg { color: var(--accent); flex: none; }
+
+  /* ---------- stats ---------- */
+  .stats { padding: 130px 0 10px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .stat {
+    padding: 36px 30px; border-radius: var(--radius);
+    border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent);
+    transition: transform 0.35s var(--ease), border-color 0.35s;
+  }
+  .stat:hover { transform: translateY(-4px); border-color: rgba(52, 211, 190, 0.3); }
+  .stat .num { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; color: var(--text); line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat .num em { font-style: normal; color: var(--accent); }
+  .stat .lbl { margin-top: 12px; color: var(--muted); font-size: 14px; }
+
+  /* ---------- sections ---------- */
+  section { padding: 150px 0; position: relative; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--accent); font-size: 12.5px; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 1.5px; background: var(--accent); }
+  h2 { margin-top: 20px; font-size: clamp(34px, 4.4vw, 54px); font-weight: 800; letter-spacing: -0.038em; line-height: 1.08; }
+  .lead { margin-top: 22px; color: var(--muted); font-size: 17.5px; max-width: 540px; }
+  .center { text-align: center; }
+  .center .lead { margin-left: auto; margin-right: auto; }
+  .center .eyebrow::before { display: none; }
+
+  .split { display: grid; grid-template-columns: 5fr 7fr; gap: 88px; align-items: center; }
+  .split.flip { grid-template-columns: 7fr 5fr; }
+  .split.flip .split-text { order: 2; }
+
+  .points { margin-top: 34px; display: flex; flex-direction: column; gap: 0; }
+  .point { display: flex; gap: 16px; padding: 18px 0; border-top: 1px solid var(--line); }
+  .point:last-child { border-bottom: 1px solid var(--line); }
+  .point .ico {
+    flex: none; width: 38px; height: 38px; border-radius: 11px;
+    display: grid; place-items: center; color: var(--accent);
+    background: var(--accent-soft); border: 1px solid rgba(52, 211, 190, 0.22);
+  }
+  .point strong { display: block; font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .point p { color: var(--muted); font-size: 14.5px; margin-top: 3px; }
+
+  .shot {
+    position: relative; border-radius: var(--radius);
+    border: 1px solid var(--line-strong);
+    overflow: hidden;
+    box-shadow: 0 40px 110px rgba(0, 0, 0, 0.55);
+    transition: transform 0.5s var(--ease), box-shadow 0.5s var(--ease), border-color 0.5s;
+  }
+  .shot:hover { transform: translateY(-6px); border-color: rgba(52, 211, 190, 0.35); box-shadow: 0 56px 130px rgba(0, 0, 0, 0.65), 0 0 80px rgba(52, 211, 190, 0.08); }
+  .shot img { width: 100%; }
+  .shot figcaption {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 40px 24px 16px;
+    background: linear-gradient(transparent, rgba(4, 8, 7, 0.92));
+    font-size: 13.5px; color: var(--muted);
+    opacity: 0; transform: translateY(8px);
+    transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
+  }
+  .shot:hover figcaption { opacity: 1; transform: none; }
+
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .duo .shot:nth-child(2) { transform: translateY(28px); }
+  .duo .shot:nth-child(2):hover { transform: translateY(22px); }
+
+  /* ---------- native cards ---------- */
+  .cards { margin-top: 70px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .card {
+    position: relative; border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg-2);
+    transition: transform 0.4s var(--ease), border-color 0.4s, box-shadow 0.4s;
+  }
+  .card:hover { transform: translateY(-6px); border-color: rgba(52, 211, 190, 0.3); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); }
+  .card img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; opacity: 0.92; transition: opacity 0.4s, transform 0.6s var(--ease); }
+  .card:hover img { opacity: 1; transform: scale(1.02); }
+  .card-body { padding: 28px 30px 32px; }
+  .card-body h3 { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px; }
+  .card-body h3 svg { color: var(--accent); }
+  .card-body p { margin-top: 10px; color: var(--muted); font-size: 14.5px; }
+
+  /* ---------- steps ---------- */
+  .steps { margin-top: 80px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; counter-reset: step; }
+  .step {
+    position: relative; padding: 40px 32px; border-radius: var(--radius);
+    border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent);
+    transition: transform 0.35s var(--ease), border-color 0.35s;
+    overflow: hidden;
+  }
+  .step:hover { transform: translateY(-4px); border-color: rgba(52, 211, 190, 0.3); }
+  .step .n {
+    font-size: 64px; font-weight: 800; letter-spacing: -0.04em; line-height: 1;
+    background: linear-gradient(180deg, rgba(52, 211, 190, 0.85), rgba(52, 211, 190, 0.12));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .step h3 { margin-top: 20px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .step p { margin-top: 10px; color: var(--muted); font-size: 14.5px; }
+
+  /* ---------- install ---------- */
+  .install-panel {
+    margin-top: 70px; border-radius: 28px; padding: 72px 64px;
+    border: 1px solid rgba(52, 211, 190, 0.22);
+    background:
+      radial-gradient(ellipse 70% 120% at 15% 0%, rgba(52, 211, 190, 0.09), transparent 60%),
+      radial-gradient(ellipse 60% 120% at 90% 100%, rgba(94, 164, 255, 0.06), transparent 60%),
+      var(--bg-2);
+    text-align: center;
+  }
+  .install-panel .cta-row { display: flex; gap: 16px; justify-content: center; margin-top: 40px; flex-wrap: wrap; }
+  .install-note {
+    margin: 34px auto 0; max-width: 640px;
+    padding: 18px 22px; border-radius: 14px; text-align: left;
+    border: 1px solid rgba(255, 200, 100, 0.25); background: rgba(255, 200, 100, 0.05);
+    color: #d8c9a8; font-size: 14px; display: flex; gap: 14px;
+  }
+  .install-note svg { flex: none; color: #e8c47a; margin-top: 2px; }
+  .install-note code, .src code {
+    font-family: "JetBrains Mono", monospace; font-size: 12.5px;
+    background: rgba(0, 0, 0, 0.45); padding: 3px 8px; border-radius: 7px;
+    border: 1px solid var(--line); color: #bfe9e2; white-space: nowrap;
+  }
+  .src { margin-top: 44px; text-align: left; border-top: 1px solid var(--line); padding-top: 36px; }
+  .src h3 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 16px; color: var(--text); }
+  .src pre {
+    font-family: "JetBrains Mono", monospace; font-size: 13px; line-height: 1.85;
+    background: rgba(0, 0, 0, 0.4); border: 1px solid var(--line);
+    border-radius: 16px; padding: 24px 28px; overflow-x: auto; color: #b7c6c2;
+  }
+  .src pre .c { color: var(--faint); }
+
+  /* ---------- footer ---------- */
+  footer { border-top: 1px solid var(--line); padding: 56px 0 64px; }
+  .foot { display: flex; justify-content: space-between; align-items: flex-start; gap: 40px; flex-wrap: wrap; }
+  .foot .brand { font-size: 15px; }
+  .foot-links { display: flex; gap: 56px; flex-wrap: wrap; }
+  .foot-col strong { display: block; font-size: 13px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+  .foot-col a { display: block; color: var(--muted); font-size: 13.5px; padding: 4px 0; transition: color 0.2s; }
+  .foot-col a:hover { color: var(--accent); }
+  .foot-base { margin-top: 48px; color: var(--faint); font-size: 13px; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+  /* ---------- reveal on scroll ---------- */
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.9s var(--ease), transform 0.9s var(--ease); }
+  .reveal.visible { opacity: 1; transform: none; }
+  .reveal-late { transition-delay: 0.12s; }
+  .reveal-later { transition-delay: 0.24s; }
+
+  @media (max-width: 1000px) {
+    .nav-links { display: none; }
+  }
+  @media (max-width: 940px) {
+    .split, .split.flip { grid-template-columns: 1fr; gap: 48px; }
+    .split.flip .split-text { order: 0; }
+    .cards { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .duo { grid-template-columns: 1fr; }
+    .duo .shot:nth-child(2) { transform: none; }
+    section { padding: 100px 0; }
+    .install-panel { padding: 48px 28px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    html { scroll-behavior: auto; }
+    .reveal, .rise { opacity: 1 !important; transform: none !important; }
+  }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "WISA STUDIO",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Windows, Linux",
+  "description": "GUI desktop tiếng Việt cho oh-my-pi (omp): nhiều phiên coding agent song song, tác vụ định kỳ, MCP và Skills trong một cửa sổ. Cài một lần là chạy trên macOS, Windows và Linux.",
+  "url": "https://smokeyduck.github.io/wisa-studio/",
+  "downloadUrl": "https://github.com/smokeyduck/wisa-studio/releases",
+  "softwareVersion": "0.9.46",
+  "inLanguage": "vi",
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "sameAs": [
+    "https://github.com/smokeyduck/wisa-studio"
+  ],
+  "publisher": {
+    "@type": "Organization",
+    "name": "WISA",
+    "url": "https://askwisa.com"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "inLanguage": "vi",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "WISA STUDIO là gì?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Là GUI desktop cho oh-my-pi (omp) — trình coding agent chạy trong một cửa sổ thay vì terminal. Giao diện viết lại bằng tiếng Việt, chạy trên Electron cho macOS, Windows và Linux."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Có phải cài Node, Bun hay omp CLI không?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Không. Agent được đóng gói thành sidecar nhị phân ngay trong ứng dụng, nên bạn chỉ cần tải gói cài đặt và chạy."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Có bắt buộc dùng API key của WISA không?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Không. WISA STUDIO có sẵn nhà cung cấp wisa trỏ tới https://api.askwisa.com/v1, nhưng bạn vẫn dùng được mọi nhà cung cấp khác mà omp hỗ trợ. Khóa WISA là tùy chọn."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Dùng được những mô hình nào?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Mọi mô hình mà gateway WISA phục vụ, cộng với mô hình của các nhà cung cấp bạn tự thêm. Sau khi lưu khóa, danh sách mô hình được tải về tự động và bạn chọn trong ứng dụng."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "WISA STUDIO có phải bản sao của oh-my-pi không?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Không. Đây là lớp hiển thị mới cho oh-my-pi: sidecar là agent upstream build nguyên bản từ commit ghi trong sidecar-source.json, phần WISA làm là GUI và bản địa hóa. Giấy phép MIT."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Có bản cho Windows và Linux không?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Có. Windows x64 có bản cài đặt và bản portable; Linux x64 có AppImage và gói .deb. macOS có bản arm64 cho Apple Silicon và bản x64 cho Intel."
+      }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<div class="stage">
+  <div class="grid"></div>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+</div>
+
+<nav id="nav">
+  <div class="container nav-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </span>
+      WISA STUDIO
+    </a>
+    <div class="nav-links">
+      <a href="#tabs">Phiên</a>
+      <a href="#dock">Dock</a>
+      <a href="#tasks">Tác vụ</a>
+      <a href="#themes">Giao diện</a>
+      <a href="#management">Quản lý</a>
+      <a href="#native">Tích hợp</a>
+      <a href="#updates">Cập nhật</a>
+      <a href="#install">Cài đặt</a>
+      <a href="https://github.com/smokeyduck/wisa-studio">GitHub</a>
+    </div>
+    <a class="btn btn-primary btn-sm" href="#install">Chọn bản dựng <span data-omp-version>v0.9.46</span></a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="container">
+    <div class="hero-badge rise d1"><span class="dot"></span><span data-omp-version>v0.9.46</span> · <span data-omp-release-date>Tháng 11, 2026</span> — sidecar đóng gói sẵn, Apple Silicon, Intel, Windows &amp; Linux</div>
+    <h1 class="rise d2">Một cửa sổ.<br /><span class="grad">Mọi phiên chạy song song.</span></h1>
+    <p class="sub rise d3">GUI desktop tiếng Việt cho coding agent oh-my-pi (omp). Mỗi tab phiên là một tiến trình agent riêng — bạn chuyển tab, việc vẫn chạy tiếp ở nền. Đủ sức của TUI, không còn giới hạn của terminal.</p>
+    <div class="hero-cta rise d4">
+      <a class="btn btn-primary" data-omp-dmg="arm64" href="https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46-arm64.dmg">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Tải cho macOS <span class="btn-sub">Apple Silicon</span>
+      </a>
+      <a class="btn btn-ghost" data-omp-dmg="x64" href="https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46.dmg">Bản Intel <span class="btn-sub">macOS x64</span></a>
+      <a class="btn btn-ghost" data-omp-win href="https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46-setup.exe">Bản Windows <span class="btn-sub">trình cài x64</span></a>
+      <a class="btn btn-ghost" href="https://askwisa.com/?utm_source=github&amp;utm_medium=site">Lấy API key WISA <span class="btn-sub">askwisa.com</span></a>
+    </div>
+    <p class="hero-fine rise d5">Sidecar đóng gói sẵn — không cần cài agent, Bun hay Node · <a href="https://github.com/smokeyduck/wisa-studio/releases">Tất cả bản phát hành</a> · <a href="#install">Tự build từ mã nguồn</a></p>
+    <div class="hero-shot-wrap rise d5">
+      <div class="hero-shot" id="tilt">
+        <img src="assets/overview-vi.webp" alt="WISA STUDIO với một hội thoại đã xong và tab Tổng quan: ngữ cảnh theo hạng mục, không gian làm việc, tệp đã đổi, tác nhân con đang chạy và máy chủ MCP" loading="eager" />
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track" id="marquee">
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>Tab phiên song song</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/></svg>Tiến trình agent độc lập</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Chạy nền</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Điều phối công việc có cấu trúc</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="4" width="18" height="17" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M12 13v3l2 1"/></svg>Tác vụ định kỳ</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="15" y1="4" x2="15" y2="20"/></svg>Ngăn Tổng quan</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Tìm trong hội thoại</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/></svg>Chế độ giọng nói trực tiếp</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Cộng tác thời gian thực</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Bảng gỡ lỗi</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>Bảng lệnh</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Tự cập nhật ba bước</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Phục hồi sau lỗi &amp; chẩn đoán</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Số liệu phiên</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Quản lý nhà cung cấp &amp; đăng nhập</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 12h18"/><path d="m15 6 6 6-6 6"/></svg>Tải danh sách mô hình</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1"/><circle cx="16" cy="10" r="1"/></svg>Trình sửa giao diện</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Trung tâm bảo mật</span>
+    <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg>Quản lý Skills &amp; MCP</span>
+  </div>
+</div>
+
+<section class="stats">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat reveal"><div class="num"><em>0</em></div><div class="lbl">Runtime phải cài thêm — sidecar nằm sẵn trong ứng dụng</div></div>
+      <div class="stat reveal reveal-late"><div class="num"><span class="count" data-to="14">0</span><em>+</em></div><div class="lbl">Hộp thoại RPC gốc, từ nhà cung cấp tới điều khiển tiến trình</div></div>
+      <div class="stat reveal reveal-late"><div class="num"><span class="count" data-to="2">0</span><em>×</em></div><div class="lbl">Agent song song quan sát trực tiếp trong một cửa sổ</div></div>
+      <div class="stat reveal reveal-later"><div class="num"><span class="count" data-to="3">0</span></div><div class="lbl">Bước từ banner cập nhật đến lúc ứng dụng khởi động lại</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="why" style="padding-top: 40px;">
+  <div class="container">
+    <div class="center reveal">
+      <span class="eyebrow">Vì sao WISA STUDIO</span>
+      <h2>GUI desktop tiếng Việt cho coding agent oh-my-pi</h2>
+      <p class="lead" style="max-width: 700px;">omp là coding agent mạnh, nhưng mạnh trong terminal thì khó đưa vào quy trình hằng ngày. WISA STUDIO bọc agent đó trong một ứng dụng desktop: nhiều phiên song song, tác vụ định kỳ, MCP và Skills đều có giao diện riêng — và toàn bộ giao diện nói tiếng Việt.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><div class="n">01</div><h3>Cài một lần là chạy</h3><p>Agent được build thành sidecar nhị phân nằm trong ứng dụng. Không cần cài Node, Bun hay omp CLI riêng, cũng không cần cấu hình môi trường.</p></div>
+      <div class="step reveal reveal-late"><div class="n">02</div><h3>Tiếng Việt là mặc định</h3><p>Giao diện có sẵn Tiếng Việt, English, 中文, Русский và ไทย. Thuật ngữ giữ nguyên chỗ cần kỹ thuật: phiên, mô hình, nhà cung cấp, tác vụ, không gian làm việc.</p></div>
+      <div class="step reveal reveal-later"><div class="n">03</div><h3>Agent thật, không phải bản viết lại</h3><p>Sidecar là agent upstream oh-my-pi build nguyên bản từ commit ghi trong <code>sidecar-source.json</code>. WISA làm phần hiển thị và bản địa hóa.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="tabs">
+  <div class="container split">
+    <div class="split-text reveal">
+      <span class="eyebrow">Tab phiên</span>
+      <h2>Nhiều phiên song song, mỗi tab một tiến trình riêng</h2>
+      <p class="lead">Mỗi tab sở hữu một tiến trình agent đầy đủ. Giao một việc dài, chuyển sang tab khác và để nó tự chạy xong — thanh tiêu đề giữ nhịp báo sống nên bạn luôn biết cái gì đang chạy.</p>
+      <div class="points">
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/></svg></span>
+          <div><strong>Tiến trình độc lập</strong><p>Một tab treo hay thoát bất ngờ không ảnh hưởng các tab còn lại.</p></div>
+        </div>
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="12" y1="4" x2="12" y2="20"/></svg></span>
+          <div><strong>Chia đôi hai phiên</strong><p>Kéo một tab vào không gian làm việc để chạy hai phiên tách biệt cạnh nhau hoặc xếp trên dưới.</p></div>
+        </div>
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+          <div><strong>Không gian làm việc bền vững</strong><p>Tab đang mở, phiên đang dùng và điều hướng gần đây nhất vẫn còn sau khi khởi động lại hay nâng cấp ứng dụng.</p></div>
+        </div>
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+          <div><strong>Chốt quyền sở hữu</strong><p>Phiên đang chạy bị khóa, không ai chiếm nhầm được.</p></div>
+        </div>
+      </div>
+    </div>
+    <figure class="shot reveal reveal-late">
+      <img src="assets/split-view.webp" alt="Hai phiên cạnh nhau trong chế độ chia đôi" loading="lazy" />
+      <figcaption>Hai tab cạnh nhau — mỗi tab chạy tiến trình agent của riêng nó.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="dock" style="padding-top: 40px;">
+  <div class="container split flip">
+    <div class="split-text reveal">
+      <span class="eyebrow">Dock hội thoại</span>
+      <h2>Trạng thái thực thi nằm ngay chỗ công việc diễn ra</h2>
+      <p class="lead">Todo, duyệt kế hoạch, tác nhân con và việc đang xếp hàng nằm giữa bản ghi hội thoại và ô soạn tin. Danh sách dài vẫn gọn, dòng gấp luôn hiện ra, và mở rộng thành chế độ xem toàn bộ mà không cần thanh cuộn lồng nhau.</p>
+      <div class="points">
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+          <div><strong>Thẻ todo &amp; kế hoạch trực tiếp</strong><p>Sửa tác vụ, duyệt kế hoạch, chấp thuận từng bước, và mọi thay đổi todo đều được lưu lại trong hội thoại.</p></div>
+        </div>
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg></span>
+          <div><strong>Chế độ xem gọn cho danh sách dài</strong><p>Tóm tắt các thẻ Todo và Agent đang bận, rồi mở một thẻ để xem từng dòng trong khi ô soạn tin vẫn hiển thị.</p></div>
+        </div>
+      </div>
+    </div>
+    <div class="duo reveal reveal-late">
+      <figure class="shot">
+        <img src="assets/dock-agents.webp" alt="Thẻ Agent phía trên ô soạn tin, hiển thị mô hình, token, chi phí và bước hiện tại của từng tác nhân con" loading="lazy" />
+        <figcaption>Thẻ Agent cho thấy mô hình, chi phí và bước hiện tại của từng tác nhân con ngay trên ô soạn tin.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="assets/agent-hub.webp" alt="Agent Hub liệt kê tác nhân con đã xong, đang chạy và đang tạm dừng, kèm nút tạm dừng và hủy" loading="lazy" />
+        <figcaption>Agent Hub liệt kê mọi tác nhân con với nút tạm dừng, hủy và khôi phục.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="tasks" style="padding-top: 40px;">
+  <div class="container split">
+    <div class="split-text reveal">
+      <span class="eyebrow">Tác vụ định kỳ</span>
+      <h2>Tác vụ định kỳ chạy nền, không cần bạn ngồi canh</h2>
+      <p class="lead">Bảo agent làm một việc theo lịch ("kiểm tra dashboard mỗi ngày làm việc lúc 9 giờ") — nó tạo tác vụ ngay, hoặc bạn tự tạo từ thanh bên. Mỗi lần chạy kết thúc bằng một báo cáo ngắn.</p>
+      <div class="points">
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+          <div><strong>Chỉ đọc hoặc worktree riêng</strong><p>Chế độ chỉ đọc thì chỉ xem. Chế độ không gian làm việc sửa trong một Git worktree tách biệt, có thể chạy bước kiểm tra shell, và chờ trong hàng duyệt trước khi bất cứ thứ gì chạm vào nhánh của bạn.</p></div>
+        </div>
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+          <div><strong>Số liệu tổng hợp</strong><p>Số lần chạy mỗi ngày, tỷ lệ thành công, chi phí theo tác vụ và các lần lỗi gần đây trong 7, 30 hoặc 90 ngày.</p></div>
+        </div>
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div><strong>Không chạy bù bất ngờ</strong><p>Tác vụ chỉ chạy khi WISA STUDIO đang mở. Khung giờ máy đã ngủ được ghi là bỏ lỡ, không bao giờ chạy lại.</p></div>
+        </div>
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+          <div><strong>Chuông báo khi chạy xong</strong><p>Phần đầu trang liệt kê các lần chạy đã xong, kèm số lần bạn chưa mở. Đặt độ sâu cho tác vụ: một lượt, theo đuổi mục tiêu, hoặc nghiên cứu qua nhiều vòng.</p></div>
+        </div>
+      </div>
+    </div>
+    <div class="duo reveal reveal-late">
+      <figure class="shot">
+        <img src="assets/scheduled-tasks.webp" alt="Cửa sổ tác vụ định kỳ với một tác vụ kiểm tra dashboard ngày làm việc và lịch sử chạy" loading="lazy" />
+        <figcaption>Mỗi tác vụ giữ lịch chạy, mức quyền truy cập và lịch sử chạy.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="assets/task-insights.webp" alt="Số liệu tác vụ định kỳ: số lần chạy mỗi ngày, tỷ lệ thành công và chi phí theo tác vụ" loading="lazy" />
+        <figcaption>Số liệu tổng hợp 30 ngày gần nhất trên mọi tác vụ.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="themes" style="padding-top: 40px;">
+  <div class="container">
+    <div class="center reveal">
+      <span class="eyebrow">Giao diện &amp; nhà cung cấp</span>
+      <h2>Màu của bạn, endpoint của bạn</h2>
+      <p class="lead" style="max-width: 640px;">Tạo giao diện bằng cách chọn vài màu và xem trước ngay. Thêm nhà cung cấp bằng cách nhập URL và chọn từ danh sách mô hình nó trả về. Cả hai đều không bắt bạn sửa tệp cấu hình bằng tay.</p>
+      <p class="lead" style="max-width: 640px;">WISA STUDIO có sẵn nhà cung cấp <b>wisa</b> trỏ tới <code>https://api.askwisa.com/v1</code>, tương thích OpenAI. Một khóa WISA dùng được cho mọi mô hình mà gateway phục vụ — danh sách mô hình tự tải về sau khi bạn lưu khóa. Các nhà cung cấp khác mà omp hỗ trợ vẫn dùng song song; khóa WISA là tùy chọn.</p>
+    </div>
+    <div class="cards">
+      <div class="card reveal">
+        <img src="assets/theme-editor.webp" alt="Trình sửa giao diện với bảng chọn màu bên trái và bản xem trước trực tiếp bên phải" loading="lazy" />
+        <div class="card-body">
+          <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16" cy="10" r="1"/><path d="M12 21c-1.5 0-2-1-2-2s1-2 2-2h2a3 3 0 0 0 3-3"/></svg>Trình sửa giao diện</h3>
+          <p>Chọn màu nền, màu chữ, màu nhấn và hơn thế, hoặc sinh các bề mặt hài hòa từ một màu nhấn. Mọi màu còn lại tự theo.</p>
+        </div>
+      </div>
+      <div class="card reveal">
+        <img src="assets/fetch-models.webp" alt="Biểu mẫu thêm nhà cung cấp liệt kê mô hình tải từ endpoint, mỗi mô hình có một ô chọn" loading="lazy" />
+        <div class="card-body">
+          <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Tải danh sách mô hình</h3>
+          <p>Lấy danh sách từ endpoint, chọn những mô hình bạn muốn, và sửa từng dòng trước khi lưu.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="management" style="padding-top: 40px;">
+  <div class="container">
+    <div class="center reveal">
+      <span class="eyebrow">Quản lý gốc</span>
+      <h2>Không cần mở terminal để chỉnh cấu hình</h2>
+      <p class="lead" style="max-width: 700px;">Cấu hình agent qua những bề mặt riêng, phản hồi nhanh. Lựa chọn và trạng thái mang màu nhấn; phần còn lại sạch, dễ đọc và co giãn theo cửa sổ.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><div class="n">01</div><h3>Skills &amp; MCP</h3><p>Đọc đầy đủ hướng dẫn của skill, chỉnh phạm vi, thêm máy chủ, kiểm tra kết nối và cấp lại quyền mà không phải sửa tệp cấu hình bằng tay.</p></div>
+      <div class="step reveal reveal-late"><div class="n">02</div><h3>Bảo mật &amp; SSH</h3><p>Kiểm tra kho mã hiện tại, xem phát hiện kèm bằng chứng, và quản lý các máy chủ từ xa dùng lại được trong cùng một khu vực vận hành.</p></div>
+      <div class="step reveal reveal-later"><div class="n">03</div><h3>Một chỗ cập nhật</h3><p>Xem phiên bản GUI và omp cùng lúc, xử lý lỗi cập nhật rõ ràng, và cài gói đã xác minh kèm siêu dữ liệu công bố.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="native" style="padding-top: 40px;">
+  <div class="container">
+    <div class="center reveal">
+      <span class="eyebrow">Giao diện gốc, không phải vỏ bọc</span>
+      <h2>Mỗi quy trình có một giao diện thật</h2>
+      <p class="lead" style="max-width: 640px;">Giọng nói, cộng tác, gỡ lỗi và bảng lệnh đều có bề mặt gốc riêng — không phải terminal nhét vào webview.</p>
+    </div>
+    <div class="cards">
+      <div class="card reveal">
+        <img src="assets/04-voice.webp" alt="Hộp thoại giọng nói trực tiếp với mức âm lượng micro và bản ghi lời nói" loading="lazy" />
+        <div class="card-body">
+          <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>Chế độ giọng nói trực tiếp</h3>
+          <p>Phiên nói chuyện thời gian thực với bản ghi trực tiếp — trao đổi với agent trong khi tay vẫn ở trên bàn phím.</p>
+        </div>
+      </div>
+      <div class="card reveal reveal-late">
+        <img src="assets/05-collab.webp" alt="Hộp thoại cộng tác trực tiếp với liên kết chia sẻ và danh sách người tham gia" loading="lazy" />
+        <div class="card-body">
+          <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Cộng tác</h3>
+          <p>Mời đồng đội vào một phiên và cùng xem agent làm việc, trực tiếp.</p>
+        </div>
+      </div>
+      <div class="card reveal">
+        <img src="assets/06-debug.webp" alt="Bảng gỡ lỗi với một phiên đang dừng và ngăn xếp của nó" loading="lazy" />
+        <div class="card-body">
+          <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Bảng gỡ lỗi</h3>
+          <p>Xem các phiên gỡ lỗi của agent, kiểm tra luồng và khung ngăn xếp, rồi tiếp tục, bước tiếp hoặc dừng.</p>
+        </div>
+      </div>
+      <div class="card reveal reveal-late">
+        <img src="assets/command-palette-zh.webp" alt="Bảng lệnh hiển thị bằng tiếng Trung" loading="lazy" />
+        <div class="card-body">
+          <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>Bảng lệnh</h3>
+          <p>Mọi lệnh, hộp thoại và cài đặt cách bạn một tổ hợp phím — giao diện có sẵn Tiếng Việt, English, 中文, Русский và ไทย.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="context" style="padding-top: 40px;">
+  <div class="container split">
+    <div class="split-text reveal">
+      <span class="eyebrow">Ngữ cảnh &amp; mức dùng</span>
+      <h2>Ngữ cảnh nhìn được từng hạng mục</h2>
+      <p class="lead">Mức dùng ngữ cảnh theo hạng mục — tin nhắn, lược đồ công cụ, câu lệnh hệ thống, skill và phần trống — kèm bảng chi tiết theo tệp và chi phí trực tiếp: những con số đứng sau mỗi phiên.</p>
+      <div class="points">
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+          <div><strong>Số liệu phiên</strong><p>Số yêu cầu, token, chi phí và tỷ lệ trúng bộ đệm trong một cái nhìn.</p></div>
+        </div>
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+          <div><strong>Báo cáo ngữ cảnh</strong><p>Biết chính xác tệp và công cụ nào đang chiếm cửa sổ ngữ cảnh.</p></div>
+        </div>
+        <div class="point">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="15" y1="4" x2="15" y2="20"/></svg></span>
+          <div><strong>Tab Tổng quan</strong><p>Ngữ cảnh theo hạng mục, không gian làm việc, tệp đã đổi, tác nhân con đang chạy và máy chủ MCP nằm cạnh hội thoại.</p></div>
+        </div>
+      </div>
+    </div>
+    <figure class="shot reveal reveal-late">
+      <img src="assets/context-breakdown.webp" alt="Bảng ngữ cảnh với lượng token theo từng hạng mục" loading="lazy" />
+      <figcaption>Ngữ cảnh theo hạng mục ngay trên thanh trạng thái, báo cáo đầy đủ chỉ cách một cú nhấp.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="updates" style="padding-top: 40px;">
+  <div class="container">
+    <div class="center reveal">
+      <span class="eyebrow">Cập nhật</span>
+      <h2>Biết ngay khi có bản dựng mới cho macOS, Windows và Linux</h2>
+      <p class="lead" style="max-width: 620px;">Ứng dụng kiểm tra GitHub và hiển thị tiến trình phát hành. Bản macOS chỉ ký ad-hoc và bản Windows chưa ký, nên lần mở đầu tiên có thể cần bạn xác nhận thủ công.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><div class="n">01</div><h3>Banner hiện ra</h3><p>Bản phát hành mới trên GitHub hiện thành một banner nhỏ — không hộp thoại chặn, không ngắt việc.</p></div>
+      <div class="step reveal reveal-late"><div class="n">02</div><h3>Lấy đúng bản cho máy bạn</h3><p>Chọn bản Apple Silicon, Intel, Windows x64 hoặc Linux x64 từ GitHub Release mới nhất.</p></div>
+      <div class="step reveal reveal-later"><div class="n">03</div><h3>Cài và mở lại</h3><p>Cài gói tương ứng với nền tảng, rồi mở lại WISA STUDIO với nguyên phiên và cài đặt cũ.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" style="padding-top: 40px;">
+  <div class="container">
+    <div class="center reveal">
+      <span class="eyebrow">Câu hỏi thường gặp</span>
+      <h2>Những điều dev hay hỏi trước khi cài</h2>
+    </div>
+    <div class="points" style="margin-top: 34px;">
+      <div class="point reveal">
+        <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 1 1 4.4 2.7c-.9.5-1.5 1.3-1.5 2.3"/><line x1="12" y1="17.5" x2="12" y2="17.5"/></svg></span>
+        <div><strong>WISA STUDIO là gì?</strong><p>Là GUI desktop cho oh-my-pi (omp) — trình coding agent chạy trong một cửa sổ thay vì terminal. Giao diện viết lại bằng tiếng Việt, chạy trên Electron cho macOS, Windows và Linux.</p></div>
+      </div>
+      <div class="point reveal">
+        <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+        <div><strong>Có phải cài Node, Bun hay omp CLI không?</strong><p>Không. Agent được đóng gói thành sidecar nhị phân ngay trong ứng dụng, nên bạn chỉ cần tải gói cài đặt và chạy.</p></div>
+      </div>
+      <div class="point reveal">
+        <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="12" r="3"/><path d="M11 12h10"/><path d="M18 12v4"/></svg></span>
+        <div><strong>Có bắt buộc dùng API key của WISA không?</strong><p>Không. WISA STUDIO có sẵn nhà cung cấp <code>wisa</code> trỏ tới <code>https://api.askwisa.com/v1</code>, nhưng bạn vẫn dùng được mọi nhà cung cấp khác mà omp hỗ trợ. Khóa WISA là tùy chọn.</p></div>
+      </div>
+      <div class="point reveal">
+        <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1"/><circle cx="16" cy="10" r="1"/></svg></span>
+        <div><strong>Dùng được những mô hình nào?</strong><p>Mọi mô hình mà gateway WISA phục vụ, cộng với mô hình của các nhà cung cấp bạn tự thêm. Sau khi lưu khóa, danh sách mô hình được tải về tự động và bạn chọn trong ứng dụng.</p></div>
+      </div>
+      <div class="point reveal">
+        <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <div><strong>WISA STUDIO có phải bản sao của oh-my-pi không?</strong><p>Không. Đây là lớp hiển thị mới cho oh-my-pi: sidecar là agent upstream build nguyên bản từ commit ghi trong <code>sidecar-source.json</code>, phần WISA làm là GUI và bản địa hóa. Giấy phép MIT.</p></div>
+      </div>
+      <div class="point reveal">
+        <span class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="12" y1="4" x2="12" y2="20"/></svg></span>
+        <div><strong>Có bản cho Windows và Linux không?</strong><p>Có. Windows x64 có bản cài đặt và bản portable; Linux x64 có AppImage và gói .deb. macOS có bản arm64 cho Apple Silicon và bản x64 cho Intel.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install" style="padding-top: 40px;">
+  <div class="container">
+    <div class="install-panel reveal">
+      <span class="eyebrow" style="justify-content: center; display: inline-flex;">Cài đặt</span>
+      <h2>Cài một lần là chạy trên macOS, Windows và Linux</h2>
+      <p class="lead" style="margin-left: auto; margin-right: auto;">Chọn bản dựng cho nền tảng của bạn. Agent, runtime và mọi thứ cần thiết đã nằm sẵn bên trong.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" data-omp-dmg="arm64" href="https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46-arm64.dmg">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Apple Silicon <span class="btn-sub">arm64</span>
+        </a>
+        <a class="btn btn-ghost" data-omp-dmg="x64" href="https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46.dmg">Intel <span class="btn-sub">x64</span></a>
+        <a class="btn btn-ghost" data-omp-win href="https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46-setup.exe">Windows <span class="btn-sub">trình cài x64</span></a>
+        <a class="btn btn-ghost" data-omp-linux href="https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.46/wisa-studio-0.9.46.AppImage">Linux <span class="btn-sub">x64 AppImage</span></a>
+        <a class="btn btn-ghost" href="https://github.com/smokeyduck/wisa-studio/releases">Tất cả bản phát hành</a>
+      </div>
+      <p class="hero-fine" style="margin-top: 16px;">Còn có <code>wisa-studio-0.9.46-portable.exe</code> (Windows portable) và <code>wisa-studio_0.9.46_&lt;arch&gt;.deb</code> (Debian/Ubuntu) trong cùng bản phát hành. · <a href="https://askwisa.com/?utm_source=github&amp;utm_medium=site">Lấy API key WISA</a></p>
+      <div class="install-note">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>Bản macOS chỉ ký ad-hoc, chưa notarized; bản Windows chưa ký. Lần mở đầu tiên, macOS có thể cần chuột phải → <b>Open</b> hoặc System Settings → Privacy &amp; Security → Open Anyway, còn Windows cần More info → <b>Run anyway</b>.</span>
+      </div>
+      <div class="src">
+        <h3>Muốn tự build?</h3>
+        <pre><span class="c"># lấy mã GUI</span>
+git clone https://github.com/smokeyduck/wisa-studio.git
+cd wisa-studio
+bun install
+bun run build:omp   <span class="c"># build sidecar từ commit ghi trong sidecar-source.json</span>
+bun run package:mac:arm64   <span class="c"># → dist/*.dmg</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="foot">
+      <div>
+        <a class="brand" href="#top">
+          <span class="brand-mark">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          </span>
+          WISA STUDIO
+        </a>
+        <p style="margin-top: 14px; color: var(--faint); font-size: 13.5px; max-width: 300px;">GUI desktop tiếng Việt cho coding agent oh-my-pi (omp). Chạy trên agent thật, không phải bản viết lại.</p>
+      </div>
+      <div class="foot-links">
+        <div class="foot-col">
+          <strong>Sản phẩm</strong>
+          <a href="https://github.com/smokeyduck/wisa-studio/releases">Bản phát hành</a>
+          <a href="https://github.com/smokeyduck/wisa-studio#readme">README</a>
+          <a href="#install">Cài đặt</a>
+          <a href="#faq">Câu hỏi thường gặp</a>
+        </div>
+        <div class="foot-col">
+          <strong>Mã nguồn</strong>
+          <a href="https://github.com/smokeyduck/wisa-studio">GUI repo</a>
+          <a href="https://github.com/smokeyduck/wisa-studio/blob/main/sidecar-source.json">Nguồn sidecar</a>
+          <a href="https://github.com/can1357/oh-my-pi">Upstream omp</a>
+        </div>
+      </div>
+    </div>
+    <div class="foot-base">
+      <span>© 2026 WISA · MIT</span>
+      <span>Fork of oh-my-pi (MIT). UI rebrand by WISA.</span>
+      <span>Không liên kết với Anthropic, OpenAI hay bất kỳ nhà cung cấp mô hình nào.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // nav backdrop on scroll
+  const nav = document.getElementById("nav");
+  const onScroll = () => nav.classList.toggle("scrolled", window.scrollY > 24);
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  // scroll reveal
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) { e.target.classList.add("visible"); io.unobserve(e.target); }
+    }
+  }, { threshold: 0.16 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+  // count-up stats
+  const counters = document.querySelectorAll(".count");
+  const cio = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      cio.unobserve(e.target);
+      const to = Number(e.target.dataset.to);
+      const t0 = performance.now();
+      const dur = 1100;
+      const tick = (t) => {
+        const p = Math.min(1, (t - t0) / dur);
+        e.target.textContent = String(Math.round(to * (1 - Math.pow(1 - p, 3))));
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+  }, { threshold: 0.6 });
+  counters.forEach((c) => cio.observe(c));
+
+  // hero shot tilt (fine pointers only)
+  const tilt = document.getElementById("tilt");
+  if (tilt && window.matchMedia("(pointer: fine)").matches) {
+    const wrap = tilt.parentElement;
+    wrap.addEventListener("mousemove", (ev) => {
+      const r = wrap.getBoundingClientRect();
+      const x = (ev.clientX - r.left) / r.width - 0.5;
+      const y = (ev.clientY - r.top) / r.height - 0.5;
+      tilt.style.transform = `rotateX(${(-y * 3.5).toFixed(2)}deg) rotateY(${(x * 4.5).toFixed(2)}deg)`;
+    });
+    wrap.addEventListener("mouseleave", () => { tilt.style.transform = ""; });
+  }
+
+  // duplicate marquee content for a seamless loop
+  const track = document.getElementById("marquee");
+  track.innerHTML += track.innerHTML;
+</script>
+
+<script>
+  // The release is the source of truth for the version string and platform installer links, so the
+  // page cannot advertise a stale build between releases. The markup ships the current
+  // release as the no-JS / rate-limited fallback; any failure simply leaves it in place.
+  const installerUrl = (assets, tag, architecture) => {
+    const version = tag.replace(/^v/, "");
+    // DMGs are named after productName (wisa-studio-<version>-<arch>.dmg); the
+    // arch segment is explicit for both, so match that form exactly.
+    const name = `wisa-studio-${version}-${architecture}.dmg`;
+    return assets.find((asset) => asset.name === name)?.browser_download_url;
+  };
+  const windowsInstallerUrl = (assets) => assets.find((asset) => asset.name.endsWith("-setup.exe"))?.browser_download_url;
+  const linuxAppImageUrl = (assets) => assets.find((asset) => asset.name.endsWith(".AppImage"))?.browser_download_url;
+
+  fetch("https://api.github.com/repos/smokeyduck/wisa-studio/releases/latest", {
+    headers: { accept: "application/vnd.github+json" },
+  })
+    .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
+    .then((release) => {
+      document.querySelectorAll("[data-omp-version]").forEach((element) => { element.textContent = release.tag_name; });
+      const date = new Date(release.published_at).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      document.querySelectorAll("[data-omp-release-date]").forEach((element) => { element.textContent = date; });
+      for (const architecture of ["arm64", "x64"]) {
+        const url = installerUrl(release.assets, release.tag_name, architecture);
+        if (!url) continue;
+        document.querySelectorAll(`[data-omp-dmg="${architecture}"]`).forEach((element) => { element.href = url; });
+      }
+      const windowsUrl = windowsInstallerUrl(release.assets);
+      if (windowsUrl) document.querySelectorAll("[data-omp-win]").forEach((element) => { element.href = windowsUrl; });
+      const linuxUrl = linuxAppImageUrl(release.assets);
+      if (linuxUrl) document.querySelectorAll("[data-omp-linux]").forEach((element) => { element.href = linuxUrl; });
+    })
+    .catch(() => {});
+</script>
+
+</body>
+</html>

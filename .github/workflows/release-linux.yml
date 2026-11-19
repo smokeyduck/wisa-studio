@@ -1,0 +1,143 @@
+name: Release Linux builds
+
+# Builds the Linux artifacts (AppImage + deb + latest-linux.yml) on Ubuntu and
+# attaches them to the release. The bundled sidecar must come from the monorepo
+# fork — upstream lacks the GUI-only flags — so this checks out BOTH repos:
+# the GUI at the release tag, the monorepo at the commit recorded in
+# sidecar-source.json (written by scripts/sync-upstream.sh).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach artifacts to (e.g. v0.9.14)"
+        required: true
+      gui_ref:
+        description: "GUI checkout ref (default: the tag; use main to backfill an old tag)"
+        required: false
+      monorepo_sha:
+        description: "Monorepo commit override (default: sidecar-source.json pin)"
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  GUI_REPO: smokeyduck/wisa-studio
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: refs
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+            echo "gui_ref=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "gui_ref=${{ inputs.gui_ref || inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout monorepo fork (sidecar source)
+        uses: actions/checkout@v6
+        with:
+          repository: nornzach/oh-my-pi
+          path: oh-my-pi
+          fetch-depth: 0
+
+      - name: Checkout GUI repo at the release tag
+        uses: actions/checkout@v6
+        with:
+          repository: smokeyduck/wisa-studio
+          path: oh-my-pi/packages/gui
+          ref: ${{ steps.refs.outputs.gui_ref }}
+          fetch-depth: 1
+
+      - name: Pin monorepo to the sidecar source commit
+        working-directory: oh-my-pi
+        shell: bash
+        run: |
+          PIN="${{ inputs.monorepo_sha }}"
+          if [ -z "$PIN" ] && [ -f packages/gui/sidecar-source.json ]; then
+            PIN="$(jq -r .commit packages/gui/sidecar-source.json)"
+          fi
+          PIN="${PIN:-main}"
+          echo "monorepo pin: $PIN"
+          git checkout "$PIN"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          # The sidecar build requires the monorepo's exact Bun (packageManager),
+          # so follow the pinned checkout instead of a hard-coded version.
+          bun-version-file: oh-my-pi/package.json
+
+      - name: Install dependencies
+        working-directory: oh-my-pi
+        run: bun install
+
+      - name: Provision natives addon (source build when the npm leaf lags)
+        working-directory: oh-my-pi
+        shell: bash
+        # build:omp downloads @oh-my-pi/pi-natives-<platform>@<ver> from npm,
+        # but upstream's publish can lag the monorepo version bump — when the
+        # leaf is absent, compile the host addon from crates/pi-natives instead
+        # (rust-toolchain.toml pins the toolchain; rustup installs it on first
+        # cargo invocation). Both x64 ISA variants are built so the sidecar
+        # keeps the modern/baseline split it gets from the npm package.
+        run: |
+          VER=$(jq -r .version packages/natives/package.json)
+          LEAF="@oh-my-pi/pi-natives-linux-x64"
+          if npm view "$LEAF@$VER" version >/dev/null 2>&1; then
+            echo "npm leaf $LEAF@$VER published — build:omp will download it"
+          else
+            echo "$LEAF@$VER not on npm — building natives from source"
+            bun --cwd=packages/natives run build
+            PI_NATIVE_VARIANT=baseline bun --cwd=packages/natives run build
+          fi
+
+      - name: Build the bundled Linux sidecar
+        working-directory: oh-my-pi
+        run: bun --cwd=packages/gui run build:omp
+
+      - name: Smoke-test the sidecar (RPC handshake + settings round-trip)
+        working-directory: oh-my-pi/packages/gui
+        run: bun scripts/smoke-sidecar.mjs resources/omp
+
+      # The settings schema lives in the sidecar, so a Core update that adds a
+      # setting silently leaves ru/vi untranslated until this runs against the
+      # binary being shipped.
+      - name: Verify ru + vi cover every bundled setting
+        working-directory: oh-my-pi/packages/gui
+        run: bun run check:locale
+
+      - name: Build GUI + Linux packages
+        working-directory: oh-my-pi/packages/gui
+        # NOTE: invoke electron-builder through bun — the bunx shim falls back
+        # to Node, which crashes on ESM deps under Node < 22 (see issue #10).
+        # The monorepo's bun install hoists deps to the workspace root, so the
+        # cli.js lives two levels up, not in packages/gui/node_modules.
+        run: |
+          bun run build
+          bun ../../node_modules/electron-builder/cli.js \
+            --config electron-builder.yml --linux AppImage deb --publish never
+
+      - name: Upload Linux assets to the release
+        working-directory: oh-my-pi/packages/gui/dist
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          # Upload every installer the build produced; artifact names are pinned
+          # in electron-builder.yml (wisa-studio-*/wisa-studio_*), so globbing a
+          # fixed `omp-*` prefix would upload nothing.
+          files=(*.AppImage *.AppImage.blockmap *.deb latest-linux.yml)
+          printf 'uploading: %s\n' "${files[@]}"
+          gh release upload "${{ steps.refs.outputs.tag }}" \
+            "${files[@]}" --repo "$GUI_REPO" --clobber

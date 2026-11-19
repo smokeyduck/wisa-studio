@@ -1,0 +1,42 @@
+# WISA STUDIO
+
+> WISA STUDIO là GUI desktop cho oh-my-pi (omp) — trình coding agent chạy được ngay sau khi cài, giao diện tiếng Việt, một cửa sổ cho nhiều phiên làm việc song song. Ứng dụng Electron cho macOS, Windows và Linux, do WISA (askwisa.com) phát hành.
+
+WISA STUDIO là bản rebrand giao diện của [oh-my-pi](https://github.com/can1357/oh-my-pi) (MIT). Agent bên trong là binary biên dịch nguyên bản từ upstream, không bị sửa. Toàn bộ mã nguồn GUI nằm ở https://github.com/smokeyduck/wisa-studio.
+
+## Sản phẩm là gì
+
+- Ứng dụng desktop (Electron) bọc quanh agent omp; cài xong là chạy, không cần cài Node, Bun hay CLI riêng.
+- Nhiều tab phiên, mỗi tab một tiến trình agent riêng — công việc nền tiếp tục chạy khi bạn chuyển tab.
+- Chia đôi cửa sổ để so hai phiên, mở nhiều cửa sổ, khôi phục bố cục sau khi khởi động lại.
+- Tác vụ định kỳ (cron/interval) chạy nền, có lịch sử chạy và báo cáo.
+- Quản lý MCP, Skills, plugin, hook, SSH host, theme tuỳ chỉnh ngay trong giao diện.
+- Giao diện có 5 ngôn ngữ: Tiếng Việt, English, 中文, Русский, ไทย. Bản này mặc định tiếng Việt.
+
+## Cổng WISA
+
+WISA STUDIO tự tạo sẵn nhà cung cấp `wisa` trỏ tới `https://api.askwisa.com/v1` (OpenAI-compatible). Một API key của WISA dùng được cho mọi mô hình mà cổng phục vụ; danh sách mô hình được lấy tự động sau khi lưu key. Các nhà cung cấp khác mà agent hỗ trợ vẫn dùng được song song.
+
+- Lấy API key: https://askwisa.com/?utm_source=github&utm_medium=llms-txt
+- Hướng dẫn cấu hình: https://github.com/smokeyduck/wisa-studio/blob/main/docs/vi/nha-cung-cap-wisa.md
+
+## Tải và cài đặt
+
+- Bản phát hành: https://github.com/smokeyduck/wisa-studio/releases
+- macOS arm64: `wisa-studio-<version>-arm64.dmg`
+- macOS Intel: `wisa-studio-<version>.dmg`
+- Windows x64: `wisa-studio-<version>-setup.exe` (hoặc bản `-portable.exe`)
+- Linux x64: `wisa-studio-<version>.AppImage`, `wisa-studio_<version>_<arch>.deb`
+- Hướng dẫn cài đặt tiếng Việt: https://github.com/smokeyduck/wisa-studio/blob/main/docs/vi/cai-dat.md
+
+Bản macOS được ký ad-hoc (chưa notarize) và bản Windows chưa ký, nên lần chạy đầu có thể phải xác nhận thủ công: macOS → chuột phải → Open; Windows → More info → Run anyway.
+
+## Câu hỏi thường gặp
+
+Xem https://github.com/smokeyduck/wisa-studio/blob/main/docs/vi/faq.md và https://askwisa.com/wisa-studio/faq
+
+## Ghi công
+
+- oh-my-pi (upstream, MIT): https://github.com/can1357/oh-my-pi
+- Lớp GUI gốc (MIT) và bản quyền gốc: xem NOTICE trong repo.
+- Giấy phép: MIT — xem LICENSE và NOTICE trong repo.

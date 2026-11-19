@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The landing page is the only HTML page this repository serves: the Vietnamese
+  guides live in docs/ and are canonicalised to askwisa.com, so they are not
+  listed here (a sitemap may only claim URLs on its own host).
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://smokeyduck.github.io/wisa-studio/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

@@ -1,0 +1,44 @@
+WISA STUDIO
+===========
+
+WISA STUDIO is a **display-layer rebrand of oh-my-pi's desktop GUI**. The
+application code is the oh-my-pi GUI; WISA changes the product name, the
+interface language (Vietnamese), the seeded model gateway, and the packaging
+metadata. The agent that does the work is upstream's.
+
+Upstream project
+----------------
+oh-my-pi — https://github.com/can1357/oh-my-pi
+Licensed under the MIT License. The full text is in LICENSE, including the
+original copyright lines, which are kept unmodified.
+
+The GUI this build is based on
+-------------------------------
+oh-my-pi GUI — https://github.com/nornzach/oh-my-pi-gui
+(MIT, same license.)
+
+Bundled binaries
+----------------
+Every installer ships `resources/omp` (macOS arm64), `resources/omp.x64`
+(macOS Intel), `resources/omp.exe` (Windows x64) or the Linux equivalent: a
+**compiled binary of upstream oh-my-pi's coding agent**, built unmodified from
+the monorepo commit recorded in `sidecar-source.json`. WISA does not patch the
+agent. Those binaries are upstream's work under the MIT License above, and they
+are never committed to this repository — they are build artifacts produced by
+`bun run build:omp*`.
+
+What WISA adds
+--------------
+- Product name, window titles, tray labels, installer artifact names.
+- Vietnamese localization of the interface (upstream ships English, Chinese,
+  Russian and Thai).
+- A pre-seeded `wisa` provider pointing at https://api.askwisa.com/v1, so one
+  WISA API key reaches every model the gateway serves. Any other provider the
+  upstream agent supports still works.
+- Release metadata pointing at this repository.
+
+Trademarks and affiliation
+--------------------------
+WISA STUDIO is not affiliated with, endorsed by, or sponsored by Anthropic,
+OpenAI, Google, or any model provider. "oh-my-pi" and "omp" refer to the
+upstream project and remain the property of their authors.

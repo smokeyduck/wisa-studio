@@ -1,0 +1,27 @@
+# WISA STUDIO — robots.txt
+# The marketing page and the docs are indexed; askwisa.com is the canonical home.
+
+User-agent: *
+Allow: /
+
+# AI crawlers are explicitly welcome: llms.txt summarises the product for
+# answer engines, and the docs pages answer installation/provider questions.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://smokeyduck.github.io/wisa-studio/sitemap.xml
