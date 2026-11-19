@@ -105,6 +105,10 @@ linux:
 # canonical AppImage compression.
 appImage:
   compression: gzip
+  # Without this the name derives from productName and ships as
+  # `WISA.STUDIO-0.9.46.AppImage` — a space turned into a dot, which no
+  # download link or updater lookup expects.
+  artifactName: wisa-studio-${version}.${ext}
 
 # artifactName is pinned for the same reason as the mac/win targets: productName
 # carries a space, and the default would embed it.

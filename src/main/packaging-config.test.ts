@@ -26,6 +26,7 @@ interface BuilderConfig {
 	};
 	win?: { target?: { target?: string; arch?: string[] }[] };
 	dmg?: { artifactName?: string };
+	appImage?: { artifactName?: string };
 	/** Anything else the file declares at the root, so a bad key is visible. */
 	[extra: string]: unknown;
 	nsis?: { artifactName?: string; shortcutName?: string };
@@ -169,28 +170,42 @@ describe("mac bundle configs", () => {
  * derive one from productName.
  */
 describe("release artifact names", () => {
-	function artifactNames(config: BuilderConfig): string[] {
-		return [
-			config.dmg?.artifactName,
-			// The zip target has no config section of its own in electron-builder
-			// 26 — its name comes from the mac-level artifactName.
-			config.mac?.artifactName,
-			config.nsis?.artifactName,
-			config.portable?.artifactName,
-			config.deb?.artifactName,
-		]
-			.filter((name): name is string => typeof name === "string")
-			.map(name => name.replace(/\$\{\w+\}/g, "x"));
-	}
+	/**
+	 * What each config actually produces, with the key that names it. Listed per
+	 * file rather than collected from whatever is present: a missing name must
+	 * fail, not drop out of the assertion. The zip target has no section of its
+	 * own in electron-builder 26 — it takes the mac-level name.
+	 *
+	 * electron-builder.yml also declares `win:` targets, but nothing builds them
+	 * from that file (CI runs `--linux AppImage deb`), so they are not listed.
+	 */
+	const EXPECTED: Record<string, [string, (config: BuilderConfig) => string | undefined][]> = {
+		"electron-builder.yml": [
+			["dmg", config => config.dmg?.artifactName],
+			["mac zip", config => config.mac?.artifactName],
+			["deb", config => config.deb?.artifactName],
+			["appImage", config => config.appImage?.artifactName],
+		],
+		"electron-builder.x64.yml": [
+			["dmg", config => config.dmg?.artifactName],
+			["mac zip", config => config.mac?.artifactName],
+		],
+		"electron-builder.win.yml": [
+			["nsis", config => config.nsis?.artifactName],
+			["portable", config => config.portable?.artifactName],
+		],
+	};
 
-	it("pins a space-free artifact name for every target that carries productName", () => {
-		for (const file of ["electron-builder.yml", "electron-builder.x64.yml", "electron-builder.win.yml"]) {
+	it("pins a space-free artifact name for every target it builds", () => {
+		for (const [file, targets] of Object.entries(EXPECTED)) {
 			const config = parse(fs.readFileSync(path.join(PACKAGE_ROOT, file), "utf8")) as BuilderConfig;
 			expect(config.productName, `${file} names no productName`).toBe("WISA STUDIO");
-			const names = artifactNames(config);
-			expect(names.length, `${file} pins no artifact name`).toBeGreaterThan(0);
-			for (const name of names) {
-				expect(name, `${file} → ${name}`).toMatch(/^[A-Za-z0-9._-]+$/);
+			for (const [target, read] of targets) {
+				const name = read(config);
+				expect(name, `${file} pins no artifact name for ${target}`).toBeTypeOf("string");
+				// Substituting the variables is what exposes a productName-derived
+				// name: "WISA.STUDIO-0.9.46.AppImage" fails the character check.
+				expect(name!.replace(/\$\{\w+\}/g, "x"), `${file} → ${target}`).toMatch(/^[A-Za-z0-9._-]+$/);
 			}
 		}
 	});
