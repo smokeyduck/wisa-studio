@@ -138,6 +138,25 @@ jobs:
           Write-Host "sidecar machine: $name"
           if ($machine -ne 0x8664) { Write-Host "::error::sidecar is $name, expected x86-64"; exit 1 }
 
+      # The workflows check out the release tag, so a tag whose packaging config
+      # is invalid ships nothing and reports the failure deep in the build log.
+      # Validate the config up front instead — electron-builder rejects unknown
+      # root keys outright (a stray `zip:` aborted every run once).
+      - name: Validate the packaging config before building
+        working-directory: oh-my-pi/packages/gui
+        shell: bash
+        run: |
+          node -e '
+            const { validateConfiguration } = require("app-builder-lib/out/util/config/config.js");
+            const yaml = require("js-yaml");
+            const fs = require("fs");
+            for (const file of ["electron-builder.yml", "electron-builder.x64.yml", "electron-builder.win.yml"]) {
+              const config = yaml.load(fs.readFileSync(file, "utf8"));
+              validateConfiguration(config);
+              console.log(`${file}: valid`);
+            }
+          '
+
       - name: Build GUI + Windows packages
         working-directory: oh-my-pi/packages/gui
         shell: bash
