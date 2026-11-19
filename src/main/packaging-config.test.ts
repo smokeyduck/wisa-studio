@@ -18,6 +18,7 @@ interface BuilderConfig {
 	extraResources?: { from: string; to: string }[];
 	protocols?: { name: string; schemes?: string[] }[];
 	mac?: {
+		artifactName?: string;
 		extendInfo?: Record<string, unknown>;
 		hardenedRuntime?: boolean;
 		entitlements?: string;
@@ -25,7 +26,8 @@ interface BuilderConfig {
 	};
 	win?: { target?: { target?: string; arch?: string[] }[] };
 	dmg?: { artifactName?: string };
-	zip?: { artifactName?: string };
+	/** Anything else the file declares at the root, so a bad key is visible. */
+	[extra: string]: unknown;
 	nsis?: { artifactName?: string; shortcutName?: string };
 	portable?: { artifactName?: string };
 	deb?: { artifactName?: string };
@@ -170,7 +172,9 @@ describe("release artifact names", () => {
 	function artifactNames(config: BuilderConfig): string[] {
 		return [
 			config.dmg?.artifactName,
-			config.zip?.artifactName,
+			// The zip target has no config section of its own in electron-builder
+			// 26 — its name comes from the mac-level artifactName.
+			config.mac?.artifactName,
 			config.nsis?.artifactName,
 			config.portable?.artifactName,
 			config.deb?.artifactName,
@@ -188,6 +192,19 @@ describe("release artifact names", () => {
 			for (const name of names) {
 				expect(name, `${file} → ${name}`).toMatch(/^[A-Za-z0-9._-]+$/);
 			}
+		}
+	});
+
+	/**
+	 * electron-builder 26 validates the whole config before building and rejects
+	 * any unknown root key, so a stray `zip:` section aborts packaging outright
+	 * (observed: "configuration has an unknown property 'zip'"). The zip target's
+	 * name lives on `mac.artifactName`; assert the bad key cannot come back.
+	 */
+	it("declares no root-level key electron-builder rejects", () => {
+		for (const file of ["electron-builder.yml", "electron-builder.x64.yml", "electron-builder.win.yml"]) {
+			const config = parse(fs.readFileSync(path.join(PACKAGE_ROOT, file), "utf8")) as BuilderConfig;
+			expect(config.zip, `${file} declares a root zip section`).toBeUndefined();
 		}
 	});
 
