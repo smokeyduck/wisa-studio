@@ -49,10 +49,13 @@ mac:
       NSAllowsArbitraryLoads: false
       NSAllowsLocalNetworking: true
   notarize: false
+  # productName carries a space ("WISA STUDIO"), so every artifact name is
+  # pinned explicitly: the default would bake the space into the file name and
+  # therefore into the release URL and the updater's asset lookup. mac-level
+  # `artifactName` covers the zip target — electron-builder 26 has no root
+  # `zip:` section (it rejects the whole config with "unknown property 'zip'").
+  artifactName: wisa-studio-${version}-${arch}.${ext}
 
-# productName carries a space ("WISA STUDIO"), so every artifact name is pinned
-# explicitly: the default would bake the space into the file name and therefore
-# into the release URL and the updater's asset lookup.
 dmg:
   artifactName: wisa-studio-${version}-${arch}.${ext}
   contents:
@@ -62,9 +65,6 @@ dmg:
       y: 220
       type: link
       path: /Applications
-
-zip:
-  artifactName: wisa-studio-${version}-${arch}.${ext}
 
 publish:
   provider: github
