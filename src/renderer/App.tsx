@@ -145,6 +145,14 @@ const ProvidersWindow = lazy(() =>
 	import("./components/settings/ProvidersWindow").then(m => ({ default: m.ProvidersWindow })),
 );
 
+// Dev-only visual feedback overlay (dev/DevAgentation.tsx). The conditional is
+// `import.meta.env.DEV`, which Vite folds to `false` in a production build, so
+// Rollup drops the branch and never emits a chunk for the package — a plain
+// import here would ship a 4 MB dev tool inside the installer.
+const DevAgentation = import.meta.env.DEV
+	? lazy(() => import("./dev/DevAgentation").then(m => ({ default: m.DevAgentation })))
+	: null;
+
 function FocusedSessionEffects() {
 	useTraySync();
 	useQuotaPolling();
@@ -977,6 +985,11 @@ export function App() {
 			<Suspense fallback={null}>{feedbackOpen && <FeedbackDialog />}</Suspense>
 			<ToastStack />
 			<AgentHoverCardLayer />
+			{DevAgentation && (
+				<Suspense fallback={null}>
+					<DevAgentation />
+				</Suspense>
+			)}
 		</div>
 	);
 	return focusedRuntime ? (

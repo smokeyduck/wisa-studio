@@ -321,3 +321,77 @@ describe("download links", () => {
 		}
 	});
 });
+
+/**
+ * The dev-only Agentation overlay must never reach a user's window. It is a
+ * visual feedback toolbar with its own global key handlers (Cmd/Ctrl+Shift+F)
+ * and a 4 MB payload; it is wired behind `import.meta.env.DEV`, and this guards
+ * the two ways that could regress — a plain import, or the gate being removed.
+ */
+describe("dev-only Agentation overlay", () => {
+	const app = fs.readFileSync(path.join(PACKAGE_ROOT, "src/renderer/App.tsx"), "utf8");
+	const devDir = path.join(PACKAGE_ROOT, "src/renderer/dev");
+
+	it("is only imported behind the build-time DEV flag", () => {
+		// A bare `import ... from "agentation"` (or from ./dev/DevAgentation)
+		// would put the overlay in the production bundle.
+		const eager = /^\s*import\s[^\n]*["'](?:agentation|\.\/dev\/DevAgentation)["']/m.test(app);
+		expect(eager).toBe(false);
+		expect(app).toMatch(/import\.meta\.env\.DEV\s*\n?\s*\?[^:]*import\("\.\/dev\/DevAgentation"\)/);
+	});
+
+	it("keeps the package import inside the dev directory", () => {
+		const offenders = fs
+			.readdirSync(path.join(PACKAGE_ROOT, "src/renderer"), { recursive: true, encoding: "utf8" })
+			.filter(name => name.endsWith(".ts") || name.endsWith(".tsx"))
+			.filter(name => !name.startsWith("dev/") && !name.includes(".test."))
+			.filter(name =>
+				/from\s+["']agentation["']/.test(fs.readFileSync(path.join(PACKAGE_ROOT, "src/renderer", name), "utf8")),
+			);
+		expect(offenders).toEqual([]);
+		expect(fs.existsSync(path.join(devDir, "DevAgentation.tsx"))).toBe(true);
+	});
+});
+
+/**
+ * The brand mark is one artwork file (`resources/icon-source.png`) that every
+ * generated icon derives from, and `scripts/gen-icons.ts` is the only writer.
+ * The failure this guards is silent: the dock, the tray and the window quietly
+ * keeping an older mark because a generated file was hand-edited or a source
+ * was swapped back to the π artwork.
+ */
+describe("brand icon pipeline", () => {
+	const source = path.join(PACKAGE_ROOT, "resources", "icon-source.png");
+	const generated = [
+		"resources/icon.png",
+		"resources/icon.ico",
+		"resources/icon.icns",
+		"resources/icons/16x16.png",
+		"resources/icons/1024x1024.png",
+		"src/renderer/public/wisa-icon-32.png",
+		"src/main/tray-mark.ts",
+	];
+
+	it("ships the artwork and every icon generated from it", () => {
+		for (const file of [source, ...generated.map(name => path.join(PACKAGE_ROOT, name))]) {
+			expect(fs.existsSync(file), `${path.relative(PACKAGE_ROOT, file)} is missing`).toBe(true);
+		}
+	});
+
+	it("keeps the π artwork out of the icon sources", () => {
+		// The old mark shipped as a vector source; a stray copy would let a future
+		// regeneration quietly restore it.
+		for (const name of ["icon.svg", "icon-source.svg"]) {
+			expect(fs.existsSync(path.join(PACKAGE_ROOT, "resources", name)), `resources/${name} came back`).toBe(false);
+		}
+	});
+
+	it("generates the menu-bar mark from the same artwork", () => {
+		const module = fs.readFileSync(path.join(PACKAGE_ROOT, "src/main/tray-mark.ts"), "utf8");
+		expect(module).toMatch(/export const TRAY_MARK_PNG_BASE64 =\s*"[A-Za-z0-9+/=]{500,}";/);
+		const tray = fs.readFileSync(path.join(PACKAGE_ROOT, "src/main/tray.ts"), "utf8");
+		expect(tray).toMatch(/TRAY_MARK_PNG_BASE64/);
+		// The π was drawn by hand here; that code must not return.
+		expect(tray).not.toMatch(/fillRoundedRect/);
+	});
+});

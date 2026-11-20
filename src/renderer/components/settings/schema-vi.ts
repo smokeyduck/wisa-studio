@@ -2266,7 +2266,8 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		description: "Bật nhập giọng nói từ micrô và chuyển thành văn bản",
 	},
 	"stt.language": {
-		label: "stt.language",
+		label: "Ngôn ngữ nhận dạng giọng nói",
+		description: "Để trống để model tự nhận diện ngôn ngữ bạn nói. Model chỉ hỗ trợ tiếng Anh sẽ bỏ qua mục này.",
 	},
 	"stt.submitTrigger": {
 		label: "Điều kiện gửi giọng nói đã nhận dạng",

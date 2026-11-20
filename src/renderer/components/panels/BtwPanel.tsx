@@ -208,6 +208,7 @@ export function BtwPanel() {
 					<div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
 						<div className="text-omp-lg font-medium text-(--omp-text)">{t("btw.empty")}</div>
 						<div className="max-w-xs text-omp-sm text-(--omp-dim)">{t("btw.emptyHint")}</div>
+						<div className="max-w-xs text-omp-xs text-(--omp-dim)">{t("btw.noToolsHint")}</div>
 					</div>
 				) : record ? (
 					<div className="space-y-5">
@@ -297,21 +298,25 @@ export function BtwPanel() {
 					className="max-h-40 w-full"
 					onChange={event => setDraft(event.target.value)}
 					onKeyDown={event => {
-						if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-							event.preventDefault();
-							void submit();
-						}
+						// Enter asks; Shift+Enter is a newline. The separate "Ask now"
+						// button was a second way to do the same thing.
+						if (event.key !== "Enter" || event.shiftKey) return;
+						// An IME's Enter commits the composition, it does not ask.
+						if ((event.nativeEvent as KeyboardEvent | undefined)?.isComposing) return;
+						if (event.metaKey || event.ctrlKey) return;
+						event.preventDefault();
+						if (draft.trim() && !busy) void submit();
 					}}
 					placeholder={selectedId ? t("btw.followUpPlaceholder") : t("btw.questionPlaceholder")}
 					ref={inputRef}
 					rows={2}
 					value={draft}
 				/>
-				<div className="mt-2 flex items-center justify-end">
-					<Button disabled={!draft.trim() || busy} loading={pending} onClick={() => void submit()} size="sm">
-						{selectedId ? t("btw.followUp") : t("btw.ask")}
-					</Button>
+				<div className="mt-1.5 flex items-center gap-2 text-omp-xs text-(--omp-dim)">
+					<span className="min-w-0 flex-1 truncate">{t("btw.enterToAsk")}</span>
+					{pending ? <Spinner size="sm" /> : null}
 				</div>
+				<div className="mt-1 text-omp-xs leading-snug text-(--omp-dim)">{t("btw.noToolsHint")}</div>
 			</div>
 		</div>
 	);

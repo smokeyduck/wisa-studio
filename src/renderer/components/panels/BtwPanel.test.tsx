@@ -118,6 +118,33 @@ async function typeInto(element: TestElement, value: string): Promise<void> {
 	await dispatch(element, new Event("input", { bubbles: true, cancelable: true }));
 }
 
+/**
+ * Press Enter in the controlled textarea. It drives React's own onKeyDown prop:
+ * a synthetic DOM keydown makes React's input polyfill re-read the value tracker
+ * against a detached instance under linkedom.
+ */
+async function pressEnter(element: TestElement, init: { shiftKey?: boolean } = {}): Promise<void> {
+	const props = Object.getOwnPropertyNames(element).find(key => key.startsWith("__reactProps$"));
+	const handler = props
+		? (element as unknown as Record<string, { onKeyDown?: (event: object) => void }>)[props]?.onKeyDown
+		: undefined;
+	if (!handler) throw new Error("pressEnter: no onKeyDown handler");
+	let prevented = false;
+	await act(async () => {
+		handler({
+			key: "Enter",
+			shiftKey: init.shiftKey ?? false,
+			metaKey: false,
+			ctrlKey: false,
+			nativeEvent: { isComposing: false },
+			preventDefault: () => {
+				prevented = true;
+			},
+		});
+	});
+	expect(prevented).toBe(true);
+}
+
 function buttonWithText(text: string): TestElement | undefined {
 	return (Array.from(document.querySelectorAll("button")) as unknown as TestElement[]).find(button =>
 		button.textContent?.includes(text),
@@ -202,13 +229,13 @@ describe("BtwPanel", () => {
 
 		await mount();
 		await typeInto(textarea(), "more context");
-		await click(buttonWithText(translate("btw.followUp")));
+		await pressEnter(textarea());
 
 		expect(command).toHaveBeenCalledWith({ type: "btw", question: "more context", recordId: "topic-1" }, 120_000);
 
 		await click(buttonWithText(translate("btw.newQuestion")));
 		await typeInto(textarea(), "fresh question");
-		await click(buttonWithText(translate("btw.ask")));
+		await pressEnter(textarea());
 
 		expect(command).toHaveBeenCalledWith({ type: "btw", question: "fresh question" }, 120_000);
 	});
@@ -225,7 +252,7 @@ describe("BtwPanel", () => {
 	it("branches a completed side conversation into the main chat", async () => {
 		await mount();
 		await typeInto(textarea(), "branch me");
-		await click(buttonWithText(translate("btw.ask")));
+		await pressEnter(textarea());
 		await act(async () => {
 			useBtwStore.getState().applyFrame({
 				type: "btw_record",

@@ -2285,7 +2285,9 @@ export const RU_SETTINGS: Record<string, { label?: string; description?: string 
 		description: "Включить ввод речи с микрофона с преобразованием в текст",
 	},
 	"stt.language": {
-		label: "stt.language",
+		label: "Язык распознавания речи",
+		description:
+			"Оставьте пустым, чтобы модель определяла язык сама. Модели только с английским этот параметр игнорируют.",
 	},
 	"stt.submitTrigger": {
 		label: "Условие отправки распознанной речи",

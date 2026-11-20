@@ -1223,7 +1223,10 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	"retry.enabled": { label: "启用重试", description: "API 请求失败时自动重试的总开关" },
 	"retry.baseDelayMs": { label: "重试基础延迟", description: "重试之间指数退避的基础等待时间（毫秒，默认 500）" },
 	// 语音
-	"stt.language": { label: "语音识别语言", description: "语音转文字的识别语言代码（默认 en）" },
+	"stt.language": {
+		label: "语音识别语言",
+		description: "留空则让模型自动识别你说的语言。仅支持英语的模型会忽略此项。",
+	},
 	// 压缩
 	"compaction.reserveTokens": {
 		label: "压缩预留 Token",
