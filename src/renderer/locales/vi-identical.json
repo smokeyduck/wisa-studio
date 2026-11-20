@@ -107,6 +107,7 @@
 	"time.secondsDecimalShort",
 	"time.secondsShort",
 	"titlebar.agentHub",
+	"titlebar.skills",
 	"titlebar.plugins",
 	"tools.astedit.fallback",
 	"tools.astgrep.fallback",
