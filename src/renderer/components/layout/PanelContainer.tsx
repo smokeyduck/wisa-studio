@@ -1,4 +1,4 @@
-import { Bot, Diff, FolderTree, Globe, LayoutDashboard, MessageCircleQuestion, SquareTerminal, X } from "lucide-react";
+import { Bot, Diff, FolderTree, LayoutDashboard, MessageCircleQuestion, SquareTerminal, X } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
@@ -11,7 +11,6 @@ import { CHAT_PANEL_TABS, type PanelTab, useUiStore } from "../../stores/ui";
 import { AgentRoster, useAgentsTabSignal } from "../agents/AgentRoster";
 import { PanelErrorBoundary } from "../common";
 import { Glide } from "../common/Glide";
-import { BrowserPanel } from "../panels/BrowserPanel";
 import { BtwPanel } from "../panels/BtwPanel";
 import { DiffPanel } from "../panels/DiffPanel";
 import { FilesPanel } from "../panels/FilesPanel";
@@ -33,7 +32,6 @@ const TABS: { id: PanelTab; labelKey: string; icon: typeof Diff }[] = [
 	{ id: "diff", labelKey: "panel.tabs.diff", icon: Diff },
 	{ id: "files", labelKey: "panel.tabs.files", icon: FolderTree },
 	{ id: "terminal", labelKey: "panel.tabs.terminal", icon: SquareTerminal },
-	{ id: "browser", labelKey: "panel.tabs.browser", icon: Globe },
 ];
 
 interface InspectorTabProps {
@@ -210,7 +208,6 @@ export function PanelContainer() {
 					{visiblePanelTab === "diff" && <DiffPanel />}
 					{visiblePanelTab === "files" && <FilesPanel />}
 					{visiblePanelTab === "terminal" && <TerminalPanel />}
-					{visiblePanelTab === "browser" && <BrowserPanel />}
 				</PanelErrorBoundary>
 			</div>
 			<div

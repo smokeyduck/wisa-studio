@@ -328,6 +328,8 @@ export const IPC_COMMANDS = {
 	BROWSER_CAPTURE: "browser:capture",
 	/** The app keymap's chords, so a focused page hands them to the app instead of keeping them. */
 	BROWSER_SET_SHORTCUTS: "browser:set-shortcuts",
+	/** Move a page into a window of its own (or focus the one it already has). */
+	BROWSER_DETACH: "browser:detach",
 } as const;
 
 export type RuntimeErrorSource =
@@ -1610,6 +1612,8 @@ export interface OmpApi {
 		action(payload: IpcBrowserActionPayload): Promise<IpcBrowserState | null>;
 		setViewport(payload: IpcBrowserViewportPayload): void;
 		capture(tabId: string): Promise<string | null>;
+		/** Pull the browser out of the app window into one of its own. */
+		detach(tabId: string): Promise<boolean>;
 		/** Fire-and-forget: the chords the app keymap dispatches. */
 		setShortcuts(chords: string[]): void;
 	};

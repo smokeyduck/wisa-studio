@@ -9,6 +9,7 @@ import {
 	useTerminalsStore,
 } from "../stores/terminals";
 import { useUiStore } from "../stores/ui";
+import { showBrowserWindow } from "../lib/browser-window";
 
 /**
  * Feeds the Terminal and Browser drawer views for every tab, mounted once at
@@ -39,7 +40,7 @@ export function useWorkspaceSurfaces(): void {
 		const offBrowser = useBrowserStore.subscribe((state, previous) => {
 			const reveal = state.reveal;
 			if (!reveal || reveal === previous.reveal || reveal.tabId !== useTabsStore.getState().activeTabId) return;
-			useUiStore.getState().setPanelTab("browser");
+			showBrowserWindow(reveal.tabId);
 		});
 		return () => {
 			offTerminal();

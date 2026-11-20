@@ -137,9 +137,11 @@ describe("PanelContainer chat tab filter", () => {
 		await mount(<PanelContainer />);
 
 		const labels = drawerTabLabels();
-		for (const visible of ["Agents", "Side questions", "Changes", "Files", "Terminal", "Browser"]) {
+		for (const visible of ["Agents", "Side questions", "Changes", "Files", "Terminal"]) {
 			expect(labels).toContain(visible);
 		}
+		// The built-in browser is a window of its own, not an inspector view.
+		expect(labels).not.toContain("Browser");
 		// Live-execution tabs moved to the center dock, logs to their own dialog.
 		for (const moved of ["Todo", "Plan", "Queue", "Logs"]) {
 			expect(labels).not.toContain(moved);
@@ -159,10 +161,10 @@ describe("PanelContainer chat tab filter", () => {
 			await mount(<PanelContainer />);
 			scrolledTo.length = 0;
 			await act(async () => {
-				useUiStore.getState().setPanelTab("browser");
+				useUiStore.getState().setPanelTab("terminal");
 			});
 			await flush();
-			expect(scrolledTo).toEqual(["Browser"]);
+			expect(scrolledTo).toEqual(["Terminal"]);
 		} finally {
 			if (original) proto.scrollIntoView = original;
 			else delete proto.scrollIntoView;

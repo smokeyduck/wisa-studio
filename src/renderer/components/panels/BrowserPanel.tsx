@@ -1,4 +1,15 @@
-import { ArrowLeft, ArrowRight, Bot, Code, ExternalLink, Globe, Plus, RotateCw, X } from "lucide-react";
+import {
+	AppWindow,
+	ArrowLeft,
+	ArrowRight,
+	Bot,
+	Code,
+	ExternalLink,
+	Globe,
+	Plus,
+	RotateCw,
+	X,
+} from "lucide-react";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { IpcBrowserAction, IpcBrowserKeyPayload, IpcBrowserPage } from "../../../shared/ipc-types";
 import { describeError } from "../../lib/errors";
@@ -146,9 +157,12 @@ function PageChip({
  * and stay scriptable while the drawer is closed. ⌘F (the Edit menu) finds in
  * the shown page.
  */
-export function BrowserPanel() {
+export function BrowserPanel({ tabId: forcedTabId }: { tabId?: string } = {}) {
 	const t = useT();
-	const tabId = useTabsStore(state => state.activeTabId);
+	const activeTabId = useTabsStore(state => state.activeTabId);
+	// A window of its own was opened for one tab: it draws that tab's browser,
+	// not whatever the app window currently has in front.
+	const tabId = forcedTabId ?? activeTabId;
 	const browser = useTabBrowser(tabId);
 	const pages = browser?.pages ?? [];
 	const activePage = pages.find(page => page.pageId === browser?.activePageId) ?? null;
@@ -429,6 +443,18 @@ export function BrowserPanel() {
 						<Bot aria-hidden="true" size={12} />
 						{t("browser.agentDriving")}
 					</span>
+				)}
+				{forcedTabId ? null : (
+					<ToolbarIconButton
+						label={t("browser.openWindow")}
+						disabled={!activePage}
+						onClick={() => {
+							if (!tabId) return;
+							void window.omp.browser.detach(tabId).catch(() => {});
+						}}
+					>
+						<AppWindow size={14} />
+					</ToolbarIconButton>
 				)}
 				<ToolbarIconButton
 					label={t("browser.openExternal")}

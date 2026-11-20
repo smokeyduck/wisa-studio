@@ -259,6 +259,7 @@ const api: OmpApi = {
 			ipcRenderer.send(IPC_COMMANDS.BROWSER_SET_VIEWPORT, payload);
 		},
 		capture: (tabId: string) => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_CAPTURE, { tabId }),
+		detach: (tabId: string) => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_DETACH, { tabId }) as Promise<boolean>,
 		setShortcuts: (chords: string[]) => {
 			ipcRenderer.send(IPC_COMMANDS.BROWSER_SET_SHORTCUTS, { chords });
 		},

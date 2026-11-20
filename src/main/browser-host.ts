@@ -31,9 +31,10 @@
  * (`webContents.debugger`), opens pages for the agent, and closes the ones it
  * opened. The user watches every step and can take over at any time.
  */
+import { join } from "node:path";
 import {
 	app,
-	type BrowserWindow,
+	BrowserWindow,
 	type ContextMenuParams,
 	clipboard,
 	Menu,
@@ -165,8 +166,13 @@ function errorText(error: unknown): string {
 /** One tab's pages and its link to the tab's sidecar relay. */
 class TabBrowser {
 	readonly tabId: string;
-	readonly win: BrowserWindow;
+	/** The window the pages are laid out in: the app window, or the detached browser window. */
+	#win: BrowserWindow;
 	#pages = new Map<number, BrowserPage>();
+	/** The window holding this tab's pages when the user pulls the browser out of the app. */
+	#detachedWindow: BrowserWindow | null = null;
+	/** The app window the pages came from, and go back to. */
+	readonly #appWindow: BrowserWindow;
 	#activePageId: number | null = null;
 	/** Where the panel shows the active page, in window DIPs; null while the panel is hidden. */
 	#viewport: BrowserRect | null = null;
@@ -191,11 +197,47 @@ class TabBrowser {
 
 	constructor(tabId: string, win: BrowserWindow, appChords: () => ReadonlySet<string>) {
 		this.tabId = tabId;
-		this.win = win;
+		this.#win = win;
+		this.#appWindow = win;
 		this.#appChords = appChords;
+		this.#observeWindow(win);
+	}
+
+	get win(): BrowserWindow {
+		return this.#win;
+	}
+
+	#observeWindow(win: BrowserWindow): void {
 		win.on("resize", this.#onWindowResize);
 		win.on("restore", this.#onWindowShown);
 		win.on("show", this.#onWindowShown);
+	}
+
+	#stopObservingWindow(win: BrowserWindow): void {
+		win.off("resize", this.#onWindowResize);
+		win.off("restore", this.#onWindowShown);
+		win.off("show", this.#onWindowShown);
+	}
+
+	/**
+	 * Move every page into `win` (the detached browser window) or back to the
+	 * app window. The pages themselves — their contents, the relay link, the
+	 * agent's debugger — survive; only the surface they are drawn on changes.
+	 */
+	moveTo(win: BrowserWindow): void {
+		if (this.#disposed || win === this.#win) return;
+		const previous = this.#win;
+		for (const page of this.#pages.values()) {
+			if (page.view.webContents.isDestroyed()) continue;
+			if (!previous.isDestroyed()) previous.contentView.removeChildView(page.view);
+			win.contentView.addChildView(page.view);
+		}
+		if (this.#cover && !previous.isDestroyed()) previous.contentView.removeChildView(this.#cover);
+		this.#cover = null;
+		this.#stopObservingWindow(previous);
+		this.#win = win;
+		this.#observeWindow(win);
+		this.#layout();
 	}
 
 	get state(): IpcBrowserState {
@@ -346,11 +388,75 @@ class TabBrowser {
 	dispose(): void {
 		this.unlink();
 		this.#disposed = true;
+		this.#closeDetachedWindows();
 		for (const page of [...this.#pages.values()]) this.#closePage(page.id);
-		if (this.win.isDestroyed()) return;
-		this.win.off("resize", this.#onWindowResize);
-		this.win.off("restore", this.#onWindowShown);
-		this.win.off("show", this.#onWindowShown);
+		if (this.#win.isDestroyed()) return;
+		this.#win.off("resize", this.#onWindowResize);
+		this.#win.off("restore", this.#onWindowShown);
+		this.#win.off("show", this.#onWindowShown);
+	}
+
+	/**
+	 * Move this tab's pages into a window of their own, running the app's own
+	 * browser panel there — the address bar, the page chips and the agent badge
+	 * are the same components, just in their own window. The pages are the same
+	 * WebContents: session, debugger and relay link all keep working, so a
+	 * sign-in the user completes there still serves the agent.
+	 */
+	detach(): boolean {
+		if (this.#disposed) return false;
+		const existing = this.#detachedWindow;
+		if (existing && !existing.isDestroyed()) {
+			existing.focus();
+			return true;
+		}
+		const win = new BrowserWindow({
+			width: 1100,
+			height: 820,
+			show: false,
+			backgroundColor: "#1f1f1f",
+			autoHideMenuBar: true,
+			title: this.#pages.get(this.#activePageId ?? -1)?.view.webContents.getTitle() || "Browser",
+			webPreferences: {
+				contextIsolation: true,
+				nodeIntegration: false,
+				sandbox: true,
+				preload: join(__dirname, "../preload/index.cjs"),
+			},
+		});
+		win.webContents.setWindowOpenHandler(({ url }) => {
+			if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+			return { action: "deny" };
+		});
+		win.webContents.on("will-navigate", event => event.preventDefault());
+		const query = `browser=${encodeURIComponent(this.tabId)}`;
+		if (process.env.ELECTRON_RENDERER_URL) {
+			void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}?${query}`);
+		} else {
+			void win.loadFile(join(__dirname, "../renderer/index.html"), { query: { browser: this.tabId } });
+		}
+		this.#detachedWindow = win;
+		this.moveTo(win);
+		win.once("ready-to-show", () => win.show());
+		win.on("closed", () => {
+			if (this.#detachedWindow === win) this.#detachedWindow = null;
+			if (this.#disposed || this.#win.isDestroyed() || this.#appWindow.isDestroyed()) return;
+			// Back into the app window, where the panel will lay it out again.
+			this.moveTo(this.#appWindow);
+		});
+		return true;
+	}
+
+	/** True when `win` is the window this tab's pages are drawn in. */
+	ownsWindow(win: BrowserWindow): boolean {
+		return this.#win === win;
+	}
+
+	/** Close the detached window, putting the pages back in the app window. */
+	#closeDetachedWindows(): void {
+		const win = this.#detachedWindow;
+		this.#detachedWindow = null;
+		if (win && !win.isDestroyed()) win.close();
 	}
 
 	#connect(): void {
@@ -560,7 +666,7 @@ class TabBrowser {
 			title: destroyed ? "" : contents.getTitle(),
 			active: page.id === this.#activePageId,
 			discarded: false,
-			windowId: this.win.isDestroyed() ? -1 : this.win.id,
+			windowId: this.#win.isDestroyed() ? -1 : this.#win.id,
 			pinned: false,
 			groupId: page.driven ? DRIVEN_GROUP_ID : -1,
 		};
@@ -580,7 +686,7 @@ class TabBrowser {
 		agentWorks?: boolean;
 		webContents?: WebContents;
 	}): BrowserPage {
-		if (this.#disposed || this.win.isDestroyed()) throw new Error("The browser panel's window is closed");
+		if (this.#disposed || this.#win.isDestroyed()) throw new Error("The browser panel's window is closed");
 		const view = new WebContentsView(
 			options.webContents
 				? { webContents: options.webContents }
@@ -616,7 +722,7 @@ class TabBrowser {
 		this.#pages.set(page.id, page);
 		this.#wirePage(page);
 		if (options.agentWorks) this.#agentWorks(page, { layout: false });
-		this.win.contentView.addChildView(view);
+		this.#win.contentView.addChildView(view);
 		if (options.select || this.#activePageId === null) this.#activePageId = page.id;
 		this.#layout();
 		this.#post({ t: "tabCreated", tab: this.#snapshot(page) });
@@ -726,11 +832,11 @@ class TabBrowser {
 	}
 
 	#focusWindow(): void {
-		if (!this.win.isDestroyed()) this.win.webContents.focus();
+		if (!this.#win.isDestroyed()) this.#win.webContents.focus();
 	}
 
 	#sendKey(payload: IpcBrowserKeyPayload): void {
-		if (!this.win.isDestroyed()) this.win.webContents.send(IPC_EVENTS.BROWSER_KEY, payload);
+		if (!this.#win.isDestroyed()) this.#win.webContents.send(IPC_EVENTS.BROWSER_KEY, payload);
 	}
 
 	#load(page: BrowserPage, url: string): void {
@@ -764,7 +870,7 @@ class TabBrowser {
 		this.#pages.delete(page.id);
 		if (page.idleTimer) clearTimeout(page.idleTimer);
 		page.idleTimer = null;
-		if (!this.win.isDestroyed()) this.win.contentView.removeChildView(page.view);
+		if (!this.#win.isDestroyed()) this.#win.contentView.removeChildView(page.view);
 		this.#post({ t: "tabRemoved", tabId: page.id });
 		if (this.#activePageId === page.id) {
 			const next = [...this.#pages.values()].at(-1);
@@ -784,8 +890,8 @@ class TabBrowser {
 	 * are awake, the rest sleep.
 	 */
 	#layout(): void {
-		if (this.win.isDestroyed()) return;
-		const [windowWidth = 0, windowHeight = 0] = this.win.getContentSize();
+		if (this.#win.isDestroyed()) return;
+		const [windowWidth = 0, windowHeight = 0] = this.#win.getContentSize();
 		const corner = { x: windowWidth - 1, y: windowHeight - 1 };
 		const panelSize = this.#pageSize;
 		const agentSize = {
@@ -833,7 +939,7 @@ class TabBrowser {
 			contents.capturePage(undefined, { stayHidden: false }).catch(() => {});
 			contents.setBackgroundThrottling(false);
 			// Chromium cannot capture it until the window is shown.
-			page.blind = !this.win.isVisible() || this.win.isMinimized();
+			page.blind = !this.#win.isVisible() || this.#win.isMinimized();
 		} else {
 			contents.setBackgroundThrottling(true);
 			page.view.setBounds(bounds);
@@ -882,14 +988,14 @@ class TabBrowser {
 	/** One window-colored pixel over the parked pages' corner; null removes it. */
 	#placeCover(corner: { x: number; y: number } | null): void {
 		if (!corner) {
-			if (this.#cover) this.win.contentView.removeChildView(this.#cover);
+			if (this.#cover) this.#win.contentView.removeChildView(this.#cover);
 			this.#cover = null;
 			return;
 		}
 		this.#cover ??= new View();
-		this.#cover.setBackgroundColor(this.win.getBackgroundColor());
+		this.#cover.setBackgroundColor(this.#win.getBackgroundColor());
 		// Re-adding moves it above pages added since.
-		this.win.contentView.addChildView(this.#cover);
+		this.#win.contentView.addChildView(this.#cover);
 		this.#cover.setBounds({ ...corner, width: 1, height: 1 });
 	}
 
@@ -947,7 +1053,7 @@ class TabBrowser {
 			{ type: "separator" },
 			{ label: mainT("browser.inspect", language), click: () => contents.inspectElement(params.x, params.y) },
 		);
-		if (!this.win.isDestroyed()) Menu.buildFromTemplate(items).popup({ window: this.win });
+		if (!this.#win.isDestroyed()) Menu.buildFromTemplate(items).popup({ window: this.#win });
 	}
 
 	/** Push the state to the window once per turn, however many page events fired. */
@@ -956,7 +1062,7 @@ class TabBrowser {
 		this.#statePending = true;
 		setImmediate(() => {
 			this.#statePending = false;
-			if (!this.win.isDestroyed()) this.win.webContents.send(IPC_EVENTS.BROWSER_STATE, this.state);
+			if (!this.#win.isDestroyed()) this.#win.webContents.send(IPC_EVENTS.BROWSER_STATE, this.state);
 		});
 	}
 }
@@ -1026,6 +1132,16 @@ export class BrowserHost {
 		const tab = this.#ensure(tabId, win);
 		tab.openForUser(address);
 		return tab.state;
+	}
+
+	/** Pull a tab's browser out of the app window into one of its own. */
+	detach(tabId: string): boolean {
+		return this.#tabs.get(tabId)?.detach() ?? false;
+	}
+
+	/** True when `win` is where this tab's browser pages are drawn. */
+	ownsWindow(tabId: string, win: BrowserWindow): boolean {
+		return this.#tabs.get(tabId)?.ownsWindow(win) ?? false;
 	}
 
 	action(tabId: string, pageId: number, action: IpcBrowserAction): IpcBrowserState {

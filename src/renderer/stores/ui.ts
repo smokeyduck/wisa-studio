@@ -10,7 +10,8 @@ import { useTabsStore } from "./tabs";
 
 export type { ThemeMode };
 
-export type PanelTab = "overview" | "agents" | "btw" | "diff" | "files" | "terminal" | "browser";
+/** The inspector's views. The built-in browser is not one: it lives in its own window. */
+export type PanelTab = "overview" | "agents" | "btw" | "diff" | "files" | "terminal";
 const CLOSED_WORKSPACE_PAGES = {
 	activeToolsOpen: false,
 	agentHubOpen: false,

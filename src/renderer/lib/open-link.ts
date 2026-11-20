@@ -4,7 +4,7 @@
  * no browser), and anything that is not a web page go to the system browser.
  */
 import { useTabsStore } from "../stores/tabs";
-import { useUiStore } from "../stores/ui";
+import { showBrowserWindow } from "./browser-window";
 
 export type LinkDestination = "panel" | "external";
 
@@ -31,7 +31,7 @@ export function openLink(href: string, event?: { metaKey: boolean; ctrlKey: bool
 		void window.omp.system.openExternal(href);
 		return;
 	}
-	useUiStore.getState().setPanelTab("browser");
+	showBrowserWindow(tab.id);
 	window.omp.browser.open(tab.id, href).then(
 		state => {
 			if (!state) void window.omp.system.openExternal(href);

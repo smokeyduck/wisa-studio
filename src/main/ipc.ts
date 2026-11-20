@@ -839,8 +839,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	// the calling window.
 	const browserTabWindow = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent, tabId: unknown) => {
 		const win = BrowserWindow.fromWebContents(event.sender);
-		if (!win || typeof tabId !== "string" || !deps.sidecarPool.sidecarForTab(win, tabId)) return null;
-		return win;
+		if (!win || typeof tabId !== "string") return null;
+		// A detached browser window owns the pages it draws, so it speaks for the
+		// tab without holding that tab's sidecar.
+		if (deps.browserHost.ownsWindow(tabId, win)) return win;
+		return deps.sidecarPool.sidecarForTab(win, tabId) ? win : null;
 	};
 	ipcMain.handle(IPC_COMMANDS.BROWSER_GET_STATE, (event, payload: { tabId: string }) => {
 		return browserTabWindow(event, payload?.tabId) ? deps.browserHost.state(payload.tabId) : null;
@@ -869,6 +872,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	});
 	ipcMain.handle(IPC_COMMANDS.BROWSER_CAPTURE, (event, payload: { tabId: string }) => {
 		return browserTabWindow(event, payload?.tabId) ? deps.browserHost.capture(payload.tabId) : null;
+	});
+	ipcMain.handle(IPC_COMMANDS.BROWSER_DETACH, (event, payload: { tabId: string }) => {
+		if (!browserTabWindow(event, payload?.tabId)) return false;
+		return deps.browserHost.detach(payload.tabId);
 	});
 	ipcMain.on(IPC_COMMANDS.BROWSER_SET_SHORTCUTS, (_event, payload: { chords: unknown }) => {
 		const chords = Array.isArray(payload?.chords) ? payload.chords : [];
