@@ -97,6 +97,7 @@ import { anchorFromEvent, ContextMenu, type ContextMenuAnchor } from "../common/
 import { Glide } from "../common/Glide";
 import { LangSwitcher } from "../common/LangSwitcher";
 import { ProjectSettingsDialog } from "../dialogs/ProjectSettingsDialog";
+import { WorkspaceDialog } from "../dialogs/WorkspaceDialog";
 import { useUnreadNoticeCount } from "./NotificationBell";
 import { SidebarQuotas } from "./SidebarQuotas";
 
@@ -262,6 +263,7 @@ export function Sidebar() {
 	const [renameDraft, setRenameDraft] = useState("");
 	// App, project and session menus.
 	const [moreMenu, setMoreMenu] = useState<ContextMenuAnchor | null>(null);
+	const [newSessionOpen, setNewSessionOpen] = useState(false);
 	const [groupMenu, setGroupMenu] = useState<{ anchor: ContextMenuAnchor; group: WorkspaceGroup } | null>(null);
 	const [sessionMenu, setSessionMenu] = useState<{ anchor: ContextMenuAnchor; session: SessionInfo } | null>(null);
 	// Workspace display alias rename (group header inline input).
@@ -287,9 +289,12 @@ export function Sidebar() {
 		return pairs;
 	}, [tabGroups, tabs, shownPair]);
 	const [hoveredPair, setHoveredPair] = useState<string | null>(null);
+	const lane = useSidebarPrefs(s => s.lane);
 	const registeredWorkspaces = useSidebarPrefs(s => s.registeredWorkspaces);
 	const pinnedGroups = useSidebarPrefs(s => s.pinnedGroups);
 	const pinnedSessions = useSidebarPrefs(s => s.pinnedSessions);
+	const pinnedNav = useSidebarPrefs(s => s.pinnedNav);
+	const toggleNavPin = useSidebarPrefs(s => s.toggleNavPin);
 	const archivedPaths = useSidebarPrefs(s => s.archivedSessions);
 	const archived = useMemo(() => new Set(archivedPaths), [archivedPaths]);
 	const groupAliases = useSidebarPrefs(s => s.groupAliases);
@@ -376,8 +381,13 @@ export function Sidebar() {
 	useEffect(() => {
 		setOpenFamilies(prev => Object.fromEntries(Object.entries(prev).filter(([, open]) => open)));
 	}, [sessionId]);
-	const { projectSessions, projectlessSessions, archivedSessions } = useMemo(() => {
+	// Three kinds of session, three places to find them: a project's agent work
+	// (grouped by folder), the default-workspace agent work ("Work"), and chats
+	// with no folder at all ("Recent"). Mixing the last two hid the difference
+	// between an agent session and a throwaway chat.
+	const { projectSessions, workSessions, projectlessSessions, archivedSessions } = useMemo(() => {
 		const projectSessions: SessionInfo[] = [];
+		const workSessions: SessionInfo[] = [];
 		const projectlessSessions: SessionInfo[] = [];
 		const archivedSessions: SessionInfo[] = [];
 		for (const session of sessions) {
@@ -386,15 +396,29 @@ export function Sidebar() {
 				continue;
 			}
 			const root = familyRoot(session);
-			if (root.kind === "chat" || !root.cwd || root.cwd === defaultWorkspace) projectlessSessions.push(session);
+			if (root.kind === "chat" || !root.cwd) projectlessSessions.push(session);
+			else if (root.cwd === defaultWorkspace) workSessions.push(session);
 			else projectSessions.push(session);
 		}
 		return {
 			projectSessions,
+			workSessions,
 			projectlessSessions,
 			archivedSessions: archivedSessions.sort((a, b) => recencyForSession(b) - recencyForSession(a)),
 		};
 	}, [sessions, defaultWorkspace, familyRoot, isArchived, recencyForSession]);
+
+	/** An archived session belongs to the lane that would have listed it. */
+	const inLane = useMemo(
+		() =>
+			(session: SessionInfo): boolean => {
+				const root = familyRoot(session);
+				const isWork = root.kind !== "chat" && root.cwd === defaultWorkspace;
+				return lane === "work" ? isWork : !isWork;
+			},
+		[lane, familyRoot, defaultWorkspace],
+	);
+	const laneArchived = useMemo(() => archivedSessions.filter(inLane), [archivedSessions, inLane]);
 
 	// Pins remain a priority partition, with project recency inside it.
 	const groups = useMemo<WorkspaceGroup[]>(() => {
@@ -451,6 +475,7 @@ export function Sidebar() {
 	}
 	// Counts name the sessions you started; subagent transcripts sit inside them.
 	const listedCount = (list: readonly SessionInfo[]) => list.filter(session => !isSubagentSession(session)).length;
+	const workCollapsed = collapsed.__work__ ?? false;
 	const projectlessCollapsed = collapsed.__projectless__ ?? false;
 	const archivedCollapsed = collapsed.__archived__ ?? true;
 	// A tab knows its session file from the start; the id comes later, from the sidecar.
@@ -553,6 +578,7 @@ export function Sidebar() {
 	// Within a section a pair's rows are drawn together, and a ⇧-click range follows that.
 	const visibleSessions = [
 		...groups.flatMap(group => (isCollapsedGroup(group.cwd) ? [] : rowsOf(group.sessions))),
+		...(workCollapsed ? [] : rowsOf(workSessions)),
 		...(projectlessCollapsed ? [] : rowsOf(projectlessSessions)),
 		...(archivedCollapsed ? [] : rowsOf(archivedSessions)),
 	].map(spec => spec.session);
@@ -590,7 +616,14 @@ export function Sidebar() {
 		if (session.id === sessionId) return;
 		void openSessionFromSidebar(session);
 	};
+	// The lane decides what "New" creates: a code session needs a folder, so it
+	// asks which one; a work session runs in the default workspace and starts at
+	// once. (The "+" on a project frame always starts there, whatever the lane.)
 	const startNew = () => {
+		if (lane === "code") {
+			setNewSessionOpen(true);
+			return;
+		}
 		useUiStore.getState().returnToConversation();
 		void openTab({ kind: "agent", work: true });
 	};
@@ -1208,14 +1241,6 @@ export function Sidebar() {
 			onClick: () => useUiStore.getState().openConversationSearch(),
 		},
 		{
-			id: "agents",
-			page: "agentHubOpen",
-			icon: Bot,
-			label: t("titlebar.agentHub"),
-			shortcut: actionChords.get("agents.hub")?.[0],
-			onClick: () => useUiStore.getState().openAgentHub(),
-		},
-		{
 			id: "memory",
 			page: "memoryOpen",
 			icon: Brain,
@@ -1238,6 +1263,16 @@ export function Sidebar() {
 			label: t("titlebar.plugins"),
 			onClick: () => useUiStore.getState().openPlugins(),
 		},
+	];
+	const secondaryNavigation: NavigationItem[] = [
+		{
+			id: "agents",
+			page: "agentHubOpen",
+			icon: Bot,
+			label: t("titlebar.agentHub"),
+			shortcut: actionChords.get("agents.hub")?.[0],
+			onClick: () => useUiStore.getState().openAgentHub(),
+		},
 		{
 			id: "pull-requests",
 			page: "prCenterOpen",
@@ -1256,8 +1291,6 @@ export function Sidebar() {
 			unread: unreadNotices > 0,
 			onClick: () => useSchedulerStore.getState().openTasks(pendingTaskReviews > 0 ? { view: "review" } : undefined),
 		},
-	];
-	const secondaryNavigation: NavigationItem[] = [
 		{
 			id: "capabilities",
 			icon: Sparkles,
@@ -1293,6 +1326,11 @@ export function Sidebar() {
 			onClick: () => useUiStore.getState().openFeedback(),
 		},
 	];
+	// Promoted entries keep their More-menu definition; the list order is the
+	// order they were pinned in, so a fresh pin lands under the built-ins.
+	const pinnedNavigation = pinnedNav
+		.map(id => secondaryNavigation.find(item => item.id === id))
+		.filter((item): item is NavigationItem => item !== undefined);
 	const navigationRow =
 		"omp-pressable group/nav flex h-8 w-full min-w-0 items-center gap-2.5 rounded-lg px-2 text-left text-omp-md text-[var(--omp-text-secondary)] hover:bg-[var(--omp-sidebar-item-hover)] hover:text-[var(--omp-text)]";
 	const renderNavigationItem = (item: NavigationItem) => {
@@ -1343,16 +1381,25 @@ export function Sidebar() {
 				<div aria-hidden className="omp-window-caption drag-region" />
 				{/* Primary action + navigation. */}
 				<div className="shrink-0 px-2 pt-1 pb-3" data-sidebar-navigation>
-					<div className="mb-1 flex items-center gap-1">
-						<button
-							type="button"
-							data-sidebar-new-agent
-							onClick={startNew}
-							className="omp-pressable group/nav flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left text-omp-md font-medium text-[var(--omp-text)] hover:bg-[var(--omp-sidebar-item-hover)]"
-						>
-							<SquarePen aria-hidden="true" size={16} strokeWidth={1.75} className="shrink-0" />
-							<span className="min-w-0 flex-1 truncate">{t("sidebar.newSession")}</span>
-						</button>
+					{/* The lane switch stays visible above the list: it decides which
+					    sessions the list below holds, so it reads as a heading, not a
+					    setting buried in a menu. */}
+					<div className="mb-1.5 flex items-center gap-1.5">
+						<div className="omp-segmented flex-1" role="group" aria-label={t("sidebar.mode.aria")}>
+							<Glide activeKey={lane} selector='[aria-pressed="true"]' variant="thumb" />
+							{(["code", "work"] as const).map(value => (
+								<button
+									key={value}
+									type="button"
+									aria-pressed={lane === value}
+									title={t(value === "code" ? "sidebar.mode.codeDescription" : "sidebar.mode.workDescription")}
+									onClick={() => void useSidebarPrefs.getState().setLane(value)}
+									className="flex h-7 flex-1 items-center justify-center px-2 text-omp-sm font-medium"
+								>
+									{t(value === "code" ? "sidebar.mode.code" : "sidebar.mode.work")}
+								</button>
+							))}
+						</div>
 						<button
 							type="button"
 							onClick={openSessionPicker}
@@ -1363,7 +1410,23 @@ export function Sidebar() {
 							<Search aria-hidden="true" size={15} />
 						</button>
 					</div>
-					<div className="space-y-px">{primaryNavigation.map(renderNavigationItem)}</div>
+					<div className="mb-1 flex items-center gap-1">
+						<button
+							type="button"
+							data-sidebar-new-agent
+							onClick={startNew}
+							className="omp-pressable group/nav flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left text-omp-md font-medium text-[var(--omp-text)] hover:bg-[var(--omp-sidebar-item-hover)]"
+						>
+							<SquarePen aria-hidden="true" size={16} strokeWidth={1.75} className="shrink-0" />
+							<span className="min-w-0 flex-1 truncate">
+								{t(lane === "code" ? "sidebar.newCode" : "sidebar.newWork")}
+							</span>
+						</button>
+					</div>
+					<div className="space-y-px">
+						{primaryNavigation.map(renderNavigationItem)}
+						{pinnedNavigation.map(renderNavigationItem)}
+					</div>
 					<button
 						type="button"
 						aria-haspopup="menu"
@@ -1471,74 +1534,96 @@ export function Sidebar() {
 							</Button>
 						</div>
 					)}
-					{!isLoading && !listError && groups.length === 0 && projectlessSessions.length === 0 && (
-						<div className="omp-sidebar-empty px-2 py-2 text-omp-sm leading-relaxed text-[var(--omp-dim)]">
-							{t("sidebar.emptySessions")}
-						</div>
-					)}
-					{groups.map(group => {
-						const groupCollapsed = isCollapsedGroup(group.cwd);
-						const menuOpen = groupMenu?.group.cwd === group.cwd;
-						const newSessionLabel = t("sidebar.newSessionInProject", { name: group.name });
-						return (
-							<div key={group.cwd} className="mb-1">
-								{renderGroupHeader({
-									id: group.cwd,
-									name: group.name,
-									count: listedCount(group.sessions),
-									icon: Folder,
-									collapsedState: groupCollapsed,
-									onToggle: () => {
-										if (group.sessions.length > 0) toggleGroup(group.cwd);
-										else startProjectSession(group.cwd);
-									},
-									pinned: pinnedGroups.includes(group.cwd),
-									current: group.cwd === cwd,
-									onContextMenu: event => setGroupMenu({ anchor: anchorFromEvent(event), group }),
-									actions: (
-										<>
-											<button
-												type="button"
-												title={newSessionLabel}
-												aria-label={newSessionLabel}
-												className={rowActionButton}
-												onClick={() => startProjectSession(group.cwd)}
-											>
-												<Plus aria-hidden="true" size={14} />
-											</button>
-											<button
-												type="button"
-												title={t("sidebar.groupMenu")}
-												aria-label={t("sidebar.groupMenu")}
-												aria-haspopup="menu"
-												aria-expanded={menuOpen}
-												className={rowActionButton}
-												onClick={event => {
-													const rect = event.currentTarget.getBoundingClientRect();
-													setGroupMenu(
-														menuOpen ? null : { anchor: { x: rect.left, y: rect.bottom + 4 }, group },
-													);
-												}}
-											>
-												<MoreHorizontal aria-hidden="true" size={13} />
-											</button>
-										</>
-									),
-								})}
-								{/* Collapsed groups render nothing: a long-lived install with
+					{!isLoading &&
+						!listError &&
+						(lane === "work"
+							? workSessions.length === 0
+							: groups.length === 0 && projectlessSessions.length === 0) && (
+							<div className="omp-sidebar-empty px-2 py-2 text-omp-sm leading-relaxed text-[var(--omp-dim)]">
+								{t(lane === "work" ? "sidebar.emptyWork" : "sidebar.emptyCode")}
+							</div>
+						)}
+					{lane === "code" &&
+						groups.map(group => {
+							const groupCollapsed = isCollapsedGroup(group.cwd);
+							const menuOpen = groupMenu?.group.cwd === group.cwd;
+							const newSessionLabel = t("sidebar.newSessionInProject", { name: group.name });
+							return (
+								<div key={group.cwd} className="mb-1">
+									{renderGroupHeader({
+										id: group.cwd,
+										name: group.name,
+										count: listedCount(group.sessions),
+										icon: Folder,
+										collapsedState: groupCollapsed,
+										onToggle: () => {
+											if (group.sessions.length > 0) toggleGroup(group.cwd);
+											else startProjectSession(group.cwd);
+										},
+										pinned: pinnedGroups.includes(group.cwd),
+										current: group.cwd === cwd,
+										onContextMenu: event => setGroupMenu({ anchor: anchorFromEvent(event), group }),
+										actions: (
+											<>
+												<button
+													type="button"
+													title={newSessionLabel}
+													aria-label={newSessionLabel}
+													className={rowActionButton}
+													onClick={() => startProjectSession(group.cwd)}
+												>
+													<Plus aria-hidden="true" size={14} />
+												</button>
+												<button
+													type="button"
+													title={t("sidebar.groupMenu")}
+													aria-label={t("sidebar.groupMenu")}
+													aria-haspopup="menu"
+													aria-expanded={menuOpen}
+													className={rowActionButton}
+													onClick={event => {
+														const rect = event.currentTarget.getBoundingClientRect();
+														setGroupMenu(
+															menuOpen ? null : { anchor: { x: rect.left, y: rect.bottom + 4 }, group },
+														);
+													}}
+												>
+													<MoreHorizontal aria-hidden="true" size={13} />
+												</button>
+											</>
+										),
+									})}
+									{/* Collapsed groups render nothing: a long-lived install with
 								    hundreds of sessions must not build the full DOM per
 								    debounced refresh just to hide it. */}
-								{!groupCollapsed && (
-									<div className="omp-sidebar-group" data-session-group={group.cwd} data-state="expanded">
-										<div className="omp-sidebar-group-content space-y-px">
-											{renderSessionRows(group.sessions)}
+									{!groupCollapsed && (
+										<div className="omp-sidebar-group" data-session-group={group.cwd} data-state="expanded">
+											<div className="omp-sidebar-group-content space-y-px">
+												{renderSessionRows(group.sessions)}
+											</div>
 										</div>
-									</div>
-								)}
-							</div>
-						);
-					})}
-					{projectlessSessions.length > 0 && (
+									)}
+								</div>
+							);
+						})}
+					{lane === "work" && workSessions.length > 0 && (
+						<div className="mb-1" data-work-section>
+							{renderGroupHeader({
+								id: "__work__",
+								name: t("sidebar.work"),
+								count: listedCount(workSessions),
+								icon: SquareTerminal,
+								collapsedState: workCollapsed,
+								onToggle: () => setCollapsed(prev => ({ ...prev, __work__: !workCollapsed })),
+							})}
+							{!workCollapsed && (
+								<div className="omp-sidebar-group" data-session-group="__work__" data-state="expanded">
+									<div className="omp-sidebar-group-content space-y-px">{renderSessionRows(workSessions)}</div>
+								</div>
+							)}
+						</div>
+					)}
+					{lane === "code" && projectlessSessions.length > 0 && (
 						<div className="mb-1" data-projectless-section>
 							{renderGroupHeader({
 								id: "__projectless__",
@@ -1557,21 +1642,19 @@ export function Sidebar() {
 							)}
 						</div>
 					)}
-					{archivedSessions.length > 0 && (
+					{laneArchived.length > 0 && (
 						<div className="mt-2 mb-1" data-archived-section>
 							{renderGroupHeader({
 								id: "__archived__",
 								name: t("sidebar.archived"),
-								count: listedCount(archivedSessions),
+								count: listedCount(laneArchived),
 								icon: Archive,
 								collapsedState: archivedCollapsed,
 								onToggle: () => setCollapsed(prev => ({ ...prev, __archived__: !archivedCollapsed })),
 							})}
 							{!archivedCollapsed && (
 								<div className="omp-sidebar-group" data-session-group="__archived__" data-state="expanded">
-									<div className="omp-sidebar-group-content space-y-px">
-										{renderSessionRows(archivedSessions)}
-									</div>
+									<div className="omp-sidebar-group-content space-y-px">{renderSessionRows(laneArchived)}</div>
 								</div>
 							)}
 						</div>
@@ -1703,6 +1786,15 @@ export function Sidebar() {
 						onSelect: () => {
 							setMoreMenu(null);
 							item.onClick();
+						},
+						// Everyone needs a different handful of these: pin the ones
+						// you reach for, the rest stay one menu away.
+						action: {
+							id: `pin-${item.id}`,
+							label: pinnedNav.includes(item.id) ? t("sidebar.menu.unpin") : t("sidebar.menu.pin"),
+							icon: pinnedNav.includes(item.id) ? PinOff : Pin,
+							active: pinnedNav.includes(item.id),
+							onSelect: () => void toggleNavPin(item.id),
 						},
 					}))}
 				/>
@@ -1935,6 +2027,7 @@ export function Sidebar() {
 				}}
 				onCancel={() => setPendingDelete(null)}
 			/>
+			<WorkspaceDialog open={newSessionOpen} onClose={() => setNewSessionOpen(false)} intent="new-session" />
 		</>
 	);
 }

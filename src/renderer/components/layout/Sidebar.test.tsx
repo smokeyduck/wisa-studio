@@ -240,17 +240,49 @@ function SidebarWithRecency() {
 }
 
 describe("Sidebar menus and pinned ordering", () => {
+	it("promotes a More-menu entry into the main list when pinned and sends it back", async () => {
+		installMockOmp(LIST);
+		seedStores();
+		await mount(<Sidebar />);
+
+		const navigation = () => container.querySelector("[data-sidebar-navigation]");
+		expect(navigation()?.textContent).not.toContain("Agent Hub");
+
+		await fire(navigation()!.querySelector('[aria-label="Show more navigation"]'), "onClick");
+		const pin = document.body.querySelector('[role="menu"] [aria-label="Pin to top"]');
+		expect(pin).not.toBeNull();
+		await fire(pin as Element, "onClick");
+
+		expect(useSidebarPrefs.getState().pinnedNav).toEqual(["agents"]);
+		// The promoted entry keeps its own button, so its shortcut and badge work
+		// from the main list exactly as they did from the menu.
+		const promoted = [...(navigation()!.querySelectorAll("button") as unknown as Element[])].find(button =>
+			(button.textContent ?? "").includes("Agent Hub"),
+		);
+		expect(promoted).not.toBeUndefined();
+		await fire(promoted as Element, "onClick");
+		expect(useUiStore.getState().agentHubOpen).toBe(true);
+
+		await fire(navigation()!.querySelector('[aria-label="Show more navigation"]'), "onClick");
+		const unpin = document.body.querySelector('[role="menu"] [aria-label="Unpin"]');
+		await fire(unpin as Element, "onClick");
+		expect(useSidebarPrefs.getState().pinnedNav).toEqual([]);
+	});
+
 	it("keeps session tools visible and opens app-wide tools from the More menu", async () => {
 		installMockOmp(LIST);
 		seedStores();
 		await mount(<Sidebar />);
 
 		const navigation = container.querySelector("[data-sidebar-navigation]");
-		for (const label of ["New session", "Commands", "Agent Hub", "Plugins", "PR Center", "More"]) {
+		for (const label of ["New session", "Commands", "Plugins", "More"]) {
 			expect(navigation?.textContent).toContain(label);
 		}
 		// App-wide tools do not compete with the task list until asked for.
 		expect(navigation?.textContent).not.toContain("Providers & login");
+		// Agent Hub and PR Center live in More until they are pinned.
+		expect(navigation?.textContent).not.toContain("Agent Hub");
+		expect(navigation?.textContent).not.toContain("PR Center");
 		expect(document.body.querySelector('[role="menu"]')).toBeNull();
 
 		const more = navigation!.querySelector('[aria-label="Show more navigation"]');
@@ -258,6 +290,8 @@ describe("Sidebar menus and pinned ordering", () => {
 		expect(more?.getAttribute("aria-expanded")).toBe("true");
 		const labels = menuItemLabels();
 		for (const label of [
+			"Agent Hub",
+			"PR Center",
 			"OMP capabilities",
 			"Providers & login",
 			"Usage & quotas",
@@ -387,12 +421,12 @@ describe("Sidebar menus and pinned ordering", () => {
 		expect(workspaceOrder()).toEqual(["/work/alpha", "/work/beta"]);
 	});
 
-	it("opens a projectless agent session directly from the sidebar over an active project", async () => {
+	it("opens a projectless agent session directly from the Work lane", async () => {
 		const omp = installMockOmp(LIST);
 		seedStores();
+		useSidebarPrefs.setState({ lane: "work", hydrated: true });
 		await mount(<Sidebar />);
 
-		expect(container.querySelector('[aria-label="Choose workspace mode"]')).toBeNull();
 		await fire(container.querySelector("[data-sidebar-new-agent]"), "onClick");
 		expect(document.querySelector('[role="dialog"]')).toBeNull();
 
@@ -411,6 +445,41 @@ describe("Sidebar menus and pinned ordering", () => {
 				expect.objectContaining({ id: "t-new", kind: "agent", cwd: "/default/work" }),
 			]),
 		});
+	});
+
+	it("keeps the Code/Work switch visible and filters the list under it", async () => {
+		const agent = session("/work/alpha/agent.jsonl", "/work/alpha");
+		const work = session("/default/work/personal.jsonl", "/default/work");
+		installMockOmp([agent, work]);
+		seedStores();
+		await mount(<Sidebar />);
+
+		const lane = container.querySelector('[aria-label="Choose session lane"]');
+		expect(lane).not.toBeNull();
+		const buttons = [...(lane?.querySelectorAll("button") ?? [])];
+		expect(buttons.map(button => button.textContent)).toEqual(["Code", "Work"]);
+		// Code is the default lane: project sessions listed, work ones not.
+		expect(container.querySelector('[data-session-group="/work/alpha"]')).not.toBeNull();
+		expect(container.querySelector('[data-session-group="__work__"]')).toBeNull();
+
+		await fire(buttons[1] as unknown as Element, "onClick");
+		await flush();
+		expect(container.querySelector('[data-session-group="__work__"]')).not.toBeNull();
+		expect(container.querySelector('[data-session-group="/work/alpha"]')).toBeNull();
+		// The lane is a preference: it survives a restart, and the mock records it.
+		expect(useSidebarPrefs.getState().lane).toBe("work");
+	});
+
+	it("opens the workspace picker from New session in the Code lane", async () => {
+		installMockOmp(LIST);
+		seedStores();
+		await mount(<Sidebar />);
+
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
+		await fire(container.querySelector("[data-sidebar-new-agent]"), "onClick");
+		await flush();
+		// The dialog is the fix for the dead chevron: one visible action, one modal.
+		expect(document.querySelector('[role="dialog"]')).not.toBeNull();
 	});
 
 	it("creates a project agent tab without re-rooting the current chat", async () => {
@@ -669,7 +738,7 @@ describe("Sidebar menus and pinned ordering", () => {
 		expect(container.querySelector('[data-workspace-group="/work/original"]')).not.toBeNull();
 	});
 
-	it("lists legacy Work and tool-free chats together while keeping the project group and chat kind", async () => {
+	it("lists project agents and chats in the Code lane, work sessions only in the Work lane", async () => {
 		const chat = session("/work/alpha/chat.jsonl", "/work/alpha", { kind: "chat" });
 		const agent = session("/work/alpha/agent.jsonl", "/work/alpha");
 		const work = session("/default/work/personal.jsonl", "/default/work");
@@ -682,7 +751,10 @@ describe("Sidebar menus and pinned ordering", () => {
 		expect(workspace?.textContent).toContain("Session /work/alpha/agent");
 		expect(workspace?.textContent).not.toContain("Session /work/alpha/chat");
 		expect(projectless?.textContent).toContain("Session /work/alpha/chat");
-		expect(projectless?.textContent).toContain("Session /default/work/personal");
+		// A default-workspace agent session is Work, not a chat: the Code lane
+		// hides it entirely rather than mixing it into Recent.
+		expect(container.querySelector('[data-session-group="__work__"]')).toBeNull();
+		expect(projectless?.textContent).not.toContain("Session /default/work/personal");
 		expect(container.querySelector('[data-workspace-group="/default/work"]')).toBeNull();
 		const chatRow = [...projectless!.querySelectorAll('div[role="button"]')].find(element =>
 			(element.textContent ?? "").includes("Session /work/alpha/chat"),
@@ -696,7 +768,7 @@ describe("Sidebar menus and pinned ordering", () => {
 		});
 	});
 
-	it("keeps archived project and projectless conversations in the same archive", async () => {
+	it("keeps each lane's archived conversations in its own archive", async () => {
 		const work = session("/default/work/personal.jsonl", "/default/work");
 		const project = session("/work/alpha/archived.jsonl", "/work/alpha");
 		installMockOmp([work, project, ...LIST]);
@@ -704,10 +776,20 @@ describe("Sidebar menus and pinned ordering", () => {
 		useSidebarPrefs.setState({ archivedSessions: [work.path, project.path], hydrated: true });
 		await mount(<Sidebar />);
 
-		const archive = container.querySelector("[data-archived-section]");
-		await fire(archive?.querySelector("button[aria-expanded]") ?? null, "onClick");
-		expect(archive?.textContent).toContain(work.title);
-		expect(archive?.textContent).toContain(project.title);
+		// Code lane: the project's archive, never the work session's.
+		const codeArchive = container.querySelector("[data-archived-section]");
+		await fire(codeArchive?.querySelector("button[aria-expanded]") ?? null, "onClick");
+		expect(codeArchive?.textContent).toContain(project.title);
+		expect(codeArchive?.textContent).not.toContain(work.title);
+
+		await act(async () => {
+			useSidebarPrefs.setState({ lane: "work" });
+		});
+		await flush();
+		// Still expanded: the collapse state is shared across lanes.
+		const workArchive = container.querySelector("[data-archived-section]");
+		expect(workArchive?.textContent).toContain(work.title);
+		expect(workArchive?.textContent).not.toContain(project.title);
 	});
 
 	it("keeps the active task protected while it is compacting", async () => {

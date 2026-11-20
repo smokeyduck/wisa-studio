@@ -18,12 +18,19 @@ interface SidebarPrefsBlob {
 	registeredWorkspaces?: string[];
 	pinnedGroups?: string[];
 	pinnedSessions?: string[];
+	/** Navigation entries the user promoted out of the More menu, in pin order. */
+	pinnedNav?: string[];
 	archivedSessions?: string[];
 	groupAliases?: Record<string, string>;
 	workspaceLastUsed?: Record<string, number>;
 	sessionLastUsed?: Record<string, number>;
 	workspaceSort?: WorkspaceSort;
+	/** Which lane the sidebar lists: code sessions or work sessions. */
+	lane?: SidebarLane;
 }
+
+/** The sidebar's two lists: project code sessions, or default-workspace work sessions. */
+export type SidebarLane = "code" | "work";
 
 /** How the Recent section orders workspace groups; pinned groups stay first either way (#55). */
 export type WorkspaceSort = "recent" | "name";
@@ -32,17 +39,23 @@ interface SidebarPrefsStore {
 	registeredWorkspaces: string[];
 	pinnedGroups: string[];
 	pinnedSessions: string[];
+	/** Navigation entries promoted out of the More menu into the main list. */
+	pinnedNav: string[];
 	/** Session files hidden from the lanes and listed under "Archived". */
 	archivedSessions: string[];
 	groupAliases: Record<string, string>;
 	workspaceLastUsed: Record<string, number>;
 	sessionLastUsed: Record<string, number>;
 	workspaceSort: WorkspaceSort;
+	/** Sidebar lane: "code" lists project sessions, "work" the default workspace's. */
+	lane: SidebarLane;
 	hydrated: boolean;
 	hydrate: () => Promise<void>;
 	addWorkspace: (cwd: string) => Promise<void>;
 	toggleGroupPin: (cwd: string) => Promise<void>;
 	toggleSessionPin: (path: string) => Promise<void>;
+	/** Promote a More-menu entry into the main navigation list, or send it back. */
+	toggleNavPin: (id: string) => Promise<void>;
 	setSessionsArchived: (paths: readonly string[], archived: boolean) => Promise<void>;
 	/** Drop deleted session files from the pinned and archived lists. */
 	forgetSessions: (paths: readonly string[]) => void;
@@ -50,6 +63,7 @@ interface SidebarPrefsStore {
 	inheritSessions: (heirs: ReadonlyMap<string, string>) => void;
 	setGroupAlias: (cwd: string, alias: string | null) => Promise<void>;
 	setWorkspaceSort: (sort: WorkspaceSort) => Promise<void>;
+	setLane: (lane: SidebarLane) => Promise<void>;
 	touchWorkspace: (cwd: string) => void;
 	touchSession: (path: string, cwd?: string) => void;
 	reset: () => void;
@@ -92,11 +106,13 @@ function prefsBlob(state: SidebarPrefsStore): SidebarPrefsBlob {
 		registeredWorkspaces: state.registeredWorkspaces,
 		pinnedGroups: state.pinnedGroups,
 		pinnedSessions: state.pinnedSessions,
+		pinnedNav: state.pinnedNav,
 		archivedSessions: state.archivedSessions,
 		groupAliases: state.groupAliases,
 		workspaceLastUsed: state.workspaceLastUsed,
 		sessionLastUsed: state.sessionLastUsed,
 		workspaceSort: state.workspaceSort,
+		lane: state.lane,
 	};
 }
 
@@ -119,11 +135,13 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 	registeredWorkspaces: [],
 	pinnedGroups: [],
 	pinnedSessions: [],
+	pinnedNav: [],
 	archivedSessions: [],
 	groupAliases: {},
 	workspaceLastUsed: {},
 	sessionLastUsed: {},
 	workspaceSort: "recent",
+	lane: "code",
 	hydrated: false,
 
 	hydrate: async () => {
@@ -136,11 +154,15 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 					: [],
 				pinnedGroups: Array.isArray(blob?.pinnedGroups) ? blob.pinnedGroups : [],
 				pinnedSessions: Array.isArray(blob?.pinnedSessions) ? blob.pinnedSessions : [],
+				pinnedNav: Array.isArray(blob?.pinnedNav)
+					? blob.pinnedNav.filter(id => typeof id === "string" && id.length > 0)
+					: [],
 				archivedSessions: Array.isArray(blob?.archivedSessions) ? blob.archivedSessions : [],
 				groupAliases: blob?.groupAliases && typeof blob.groupAliases === "object" ? blob.groupAliases : {},
 				workspaceLastUsed: validRecencyMap(blob?.workspaceLastUsed),
 				sessionLastUsed: validRecencyMap(blob?.sessionLastUsed),
 				workspaceSort: blob?.workspaceSort === "name" ? "name" : "recent",
+				lane: blob?.lane === "work" ? "work" : "code",
 				hydrated: true,
 			});
 		} catch {
@@ -165,6 +187,18 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 				pinnedGroups: state.pinnedGroups.includes(cwd)
 					? state.pinnedGroups.filter(item => item !== cwd)
 					: [...state.pinnedGroups, cwd],
+			}),
+			persist: () => writePrefs(get),
+			onFailure: message => toast({ variant: "error", title: translate("sidebar.pinFailed"), message }),
+		}),
+
+	toggleNavPin: id =>
+		optimisticWrite({
+			store: { getState: get, setState: set },
+			mutate: state => ({
+				pinnedNav: state.pinnedNav.includes(id)
+					? state.pinnedNav.filter(item => item !== id)
+					: [...state.pinnedNav, id],
 			}),
 			persist: () => writePrefs(get),
 			onFailure: message => toast({ variant: "error", title: translate("sidebar.pinFailed"), message }),
@@ -244,6 +278,14 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 			onFailure: message => toast({ variant: "error", title: translate("sidebar.sort.failed"), message }),
 		}),
 
+	setLane: lane =>
+		optimisticWrite({
+			store: { getState: get, setState: set },
+			mutate: () => ({ lane }),
+			persist: () => writePrefs(get),
+			onFailure: message => toast({ variant: "error", title: translate("sidebar.sort.failed"), message }),
+		}),
+
 	touchWorkspace: cwd => {
 		if (!cwd) return;
 		const state = get();
@@ -270,11 +312,13 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 			registeredWorkspaces: [],
 			pinnedGroups: [],
 			pinnedSessions: [],
+			pinnedNav: [],
 			archivedSessions: [],
 			groupAliases: {},
 			workspaceLastUsed: {},
 			sessionLastUsed: {},
 			workspaceSort: "recent",
+			lane: "code",
 			hydrated: false,
 		}),
 }));
