@@ -173,8 +173,8 @@ export function formatTokens(n: number): string {
 
 /** Hover text: the icon itself stays a static template mark by design. */
 export function trayTooltip(state: TrayState | null): string {
-	if (!state) return "Wisa Studio";
-	return `Wisa Studio — ${state.projectName} · ${statusLabel(state.language, state.status)}`;
+	if (!state) return "WISA STUDIO";
+	return `WISA STUDIO — ${state.projectName} · ${statusLabel(state.language, state.status)}`;
 }
 
 /**

@@ -216,7 +216,7 @@ export function missingSidecarMessage(packaged: boolean, resourcesPath?: string)
 		return "Built-in omp not found. Build it with `bun --cwd=packages/gui run build:omp`, then relaunch.";
 	}
 	const target = resourcesPath ? join(resourcesPath, "omp") : "the bundled omp binary";
-	return `Wisa Studio is missing from this installation (${target}). Reinstall Wisa Studio, then relaunch.`;
+	return `WISA STUDIO is missing from this installation (${target}). Reinstall WISA STUDIO, then relaunch.`;
 }
 
 export interface SidecarEvents {

@@ -1,5 +1,5 @@
 /**
- * Wisa Studio sign-in from the browser: `omp://wisa-auth?code=…`.
+ * WISA STUDIO sign-in from the browser: `omp://wisa-auth?code=…`.
  *
  * The web app at askwisa.com holds the wallet key behind a JWT in an httpOnly
  * cookie, which this app cannot read and has no session for. So the browser

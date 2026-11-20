@@ -44,7 +44,7 @@ let trayState: TrayState | null = null;
 /** Label set the currently installed native menu renders, and whether it is open. */
 let installedSignature: string | null = null;
 let menuIsOpen = false;
-let tooltip = "Wisa Studio";
+let tooltip = "WISA STUDIO";
 
 function buildIcon(): Electron.NativeImage {
 	// macOS status items are template images: the system applies the correct
