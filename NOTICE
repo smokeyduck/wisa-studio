@@ -37,6 +37,13 @@ What WISA adds
   upstream agent supports still works.
 - Release metadata pointing at this repository.
 
+Bundled and downloaded components
+---------------------------------
+Piper (https://github.com/rhasspy/piper, MIT) and the Vietnamese voice model
+vi_VN-vais1000-medium (CC BY 4.0, from rhasspy/piper-voices) are downloaded on
+first use, not shipped in the installer. Neither is committed to this
+repository; both are verified against a pinned SHA-256 before use.
+
 Trademarks and affiliation
 --------------------------
 WISA STUDIO is not affiliated with, endorsed by, or sponsored by Anthropic,

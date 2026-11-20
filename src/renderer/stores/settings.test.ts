@@ -10,11 +10,20 @@ import type { RpcResponse } from "../../shared/rpc-types";
 import { useSettingsStore } from "./settings";
 
 const getSettings = vi.fn<(paths?: string[]) => Promise<RpcResponse>>();
+const setSetting = vi.fn<(command: { type: string; path?: string; value?: unknown }) => Promise<RpcResponse>>(
+	async () => ({ type: "response", command: "set_setting", success: true, data: { value: null } }),
+);
+/** The store routes every RPC through one `command`; only writes are recorded separately. */
+const command = vi.fn((cmd: { type: string; paths?: string[]; path?: string; value?: unknown }) =>
+	cmd.type === "set_setting" ? setSetting(cmd) : getSettings(cmd.paths),
+);
 
 // linkedom-less store test: install a minimal omp bridge on the global scope
 // (node env has no `window`; the store resolves it via globalThis).
-const ompGlobal = globalThis as unknown as { window: { omp: { rpc: { getSettings: typeof getSettings } } } };
-ompGlobal.window = { omp: { rpc: { getSettings } } };
+const ompGlobal = globalThis as unknown as {
+	window: { omp: { rpc: { getSettings: typeof getSettings; command: typeof command } } };
+};
+ompGlobal.window = { omp: { rpc: { getSettings, command } } };
 
 function success(values: Record<string, unknown>): Promise<RpcResponse> {
 	return Promise.resolve({ type: "response", command: "get_settings", success: true, data: { values } });
@@ -22,6 +31,7 @@ function success(values: Record<string, unknown>): Promise<RpcResponse> {
 
 afterEach(() => {
 	getSettings.mockReset();
+	setSetting.mockClear();
 	useSettingsStore.getState().reset();
 });
 
@@ -101,5 +111,57 @@ describe("settings store display sync", () => {
 		await firstSync;
 
 		expect(useSettingsStore.getState().titleState).toBe(false);
+	});
+});
+
+describe("speech defaults seeding", () => {
+	it("turns dictation on and lets the model detect the language, once", async () => {
+		// No layers = the profile never chose; the schema defaults are what it reads.
+		getSettings.mockResolvedValue({
+			type: "response",
+			command: "get_settings",
+			success: true,
+			data: {
+				values: { "stt.enabled": false, "stt.language": "en" },
+				provenance: { "stt.enabled": { layers: [] }, "stt.language": { layers: [] } },
+			},
+		});
+		await useSettingsStore.getState().syncDisplaySettings();
+		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "stt.enabled", value: true });
+		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "stt.language", value: "" });
+		// The seeded values land on the store without waiting for another sync.
+		expect(useSettingsStore.getState().sttEnabled).toBe(true);
+
+		// Seeded now, so a later sync sees the layers and writes nothing.
+		setSetting.mockClear();
+		getSettings.mockResolvedValue({
+			type: "response",
+			command: "get_settings",
+			success: true,
+			data: {
+				values: { "stt.enabled": true, "stt.language": "" },
+				provenance: { "stt.enabled": { layers: ["global"] }, "stt.language": { layers: ["global"] } },
+			},
+		});
+		await useSettingsStore.getState().syncDisplaySettings();
+		expect(setSetting).not.toHaveBeenCalled();
+	});
+
+	it("leaves a profile that already chose alone, even when it chose off", async () => {
+		getSettings.mockResolvedValueOnce({
+			type: "response",
+			command: "get_settings",
+			success: true,
+			data: {
+				values: { "stt.enabled": false, "stt.language": "en" },
+				provenance: {
+					"stt.enabled": { layers: ["global"] },
+					"stt.language": { layers: ["global"] },
+				},
+			},
+		});
+		await useSettingsStore.getState().syncDisplaySettings();
+		expect(setSetting).not.toHaveBeenCalled();
+		expect(useSettingsStore.getState().sttEnabled).toBe(false);
 	});
 });

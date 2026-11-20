@@ -409,6 +409,11 @@ const api: OmpApi = {
 		notify: (title: string, body?: string) => {
 			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_NOTIFY, { title, body });
 		},
+		speak: (text: string, language: string) =>
+			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_SPEAK, { text, language }) as Promise<{
+				ok: boolean;
+				error?: string;
+			}>,
 	},
 
 	themes: {

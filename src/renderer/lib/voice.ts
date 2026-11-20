@@ -4,19 +4,22 @@
  * Mirrors the TUI vocalizer/event-controller: `speech.mode` decides what gets
  * spoken — "assistant" speaks finalized assistant text, "all" also speaks
  * tool-result text, "yield" speaks only the last assistant message of a run.
- * Synthesis runs on the sidecar's local TTS (`synthesize_speech` RPC);
- * playback is a plain Audio element.
+ * Synthesis: English text goes through the sidecar's local TTS
+ * (`synthesize_speech` RPC, played by a plain Audio element); any other
+ * language goes through the OS voice, which is the only engine that can
+ * pronounce it. A local-TTS failure falls back to the OS voice too.
  *
  * Playback policy: one utterance at a time — a speak request arriving while
  * another is still synthesizing or playing is DROPPED (documented choice;
  * the TUI vocalizer chains utterances, the GUI keeps the transport simple).
  */
 import type { SynthesizeSpeechResult } from "../../shared/rpc-types";
+import { detectSpeechLanguage } from "../../shared/speech-language";
 import { useMessagesStore } from "../stores/messages";
 import { useSessionStore } from "../stores/session";
 import { useSettingsStore } from "../stores/settings";
 import { toast } from "../stores/toast";
-import { translate } from "./i18n";
+import { getCurrentLanguage, translate } from "./i18n";
 import { messageText } from "./messages";
 
 function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
@@ -46,43 +49,53 @@ async function readSetting(path: string): Promise<unknown> {
 let speaking = false;
 
 /**
- * Speak one utterance through the sidecar's local TTS. Dropped silently when
- * another utterance is still active (see the module header); RPC failures
- * surface as an error toast.
+ * Speak one utterance. English goes through the sidecar's local TTS (better
+ * voice); anything else through the OS engine, which is the only one that can
+ * pronounce it. Dropped silently when another utterance is still active (see
+ * the module header); failures surface as an error toast.
  */
 export function speakText(text: string): void {
 	const trimmed = text.trim();
 	if (!trimmed || speaking) return;
 	speaking = true;
 	void (async () => {
+		const language = detectSpeechLanguage(trimmed);
 		try {
-			const response = await window.omp.rpc.synthesizeSpeech(trimmed);
-			if (!response.success) {
-				toast({ variant: "error", title: translate("voice.speak.failed"), message: response.error });
-				return;
-			}
-			const data = response.data as SynthesizeSpeechResult | undefined;
-			if (!data?.audioBase64) return;
-			const url = URL.createObjectURL(
-				new Blob([base64ToBytes(data.audioBase64)], { type: data.mimeType || "audio/wav" }),
-			);
-			const audio = new Audio(url);
-			const playback = Promise.withResolvers<void>();
-			const finish = (): void => {
-				URL.revokeObjectURL(url);
-				playback.resolve();
-			};
-			audio.onended = finish;
-			audio.onerror = finish;
-			// Autoplay-policy rejections are not user-facing failures.
-			audio.play().catch(finish);
-			await playback.promise;
+			if (language === "en" && (await speakLocally(trimmed))) return;
+			const result = await window.omp.system.speak(trimmed, language);
+			if (!result.ok)
+				toast({ variant: "error", title: translate("voice.speak.failed"), message: result.error ?? "" });
 		} catch (cause) {
 			toast({ variant: "error", title: translate("voice.speak.failed"), message: String(cause) });
 		} finally {
 			speaking = false;
 		}
 	})();
+}
+
+/**
+ * Synthesize with the sidecar's local TTS and play it. `false` means the local
+ * path could not speak this utterance (model missing, RPC error), so the caller
+ * falls back to the OS voice.
+ */
+async function speakLocally(text: string): Promise<boolean> {
+	const response = await window.omp.rpc.synthesizeSpeech(text);
+	if (!response.success) return false;
+	const data = response.data as SynthesizeSpeechResult | undefined;
+	if (!data?.audioBase64) return false;
+	const url = URL.createObjectURL(new Blob([base64ToBytes(data.audioBase64)], { type: data.mimeType || "audio/wav" }));
+	const audio = new Audio(url);
+	const playback = Promise.withResolvers<void>();
+	const finish = (): void => {
+		URL.revokeObjectURL(url);
+		playback.resolve();
+	};
+	audio.onended = finish;
+	audio.onerror = finish;
+	// Autoplay-policy rejections are not user-facing failures.
+	audio.play().catch(finish);
+	await playback.promise;
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +118,14 @@ export function startVoiceAutoSpeak(): () => void {
 	// async mode read: agent_end flips isStreaming in the same batch tick as
 	// the final message_end append, ahead of any awaited continuation.
 	let lastRunAssistantText: string | null = null;
+
+	// The neural voice is ~85 MB, fetched on first use. Start that fetch the
+	// moment speech is switched on, so the first reply does not wait on it;
+	// a language Piper has no voice for resolves immediately.
+	const unsubscribeSettings = useSettingsStore.subscribe((state, previous) => {
+		if (!state.speechEnabled || previous.speechEnabled) return;
+		void window.omp.system.prewarmSpeech(getCurrentLanguage()).catch(() => undefined);
+	});
 
 	const unsubscribeMessages = useMessagesStore.subscribe((state, previous) => {
 		// lastAppended changes only on genuinely new finalized messages —
@@ -151,5 +172,6 @@ export function startVoiceAutoSpeak(): () => void {
 	return () => {
 		unsubscribeMessages();
 		unsubscribeSession();
+		unsubscribeSettings();
 	};
 }

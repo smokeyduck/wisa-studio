@@ -230,6 +230,8 @@ export const IPC_COMMANDS = {
 	SYSTEM_CLIPBOARD_READ: "system:clipboard-read",
 	/** Show notification */
 	SYSTEM_NOTIFY: "system:notify",
+	/** Speak text with the OS voice (the local TTS is English-only) */
+	SYSTEM_SPEAK: "system:speak",
 	/** Read the custom themes folder (IpcCustomThemes) */
 	THEMES_LIST: "themes:list",
 	/** Create the custom themes folder if needed and open it in the file manager */
@@ -1713,6 +1715,8 @@ export interface OmpApi {
 		/** Write a finished recording blob to the user-picked path. */
 		recorderSave(path: string, data: ArrayBuffer): Promise<{ ok: boolean; error?: string }>;
 		notify(title: string, body?: string): void;
+		/** Speak text with the OS voice; resolves once playback finished, or with the engine's error. */
+		speak(text: string, language: string): Promise<{ ok: boolean; error?: string }>;
 	};
 	themes: {
 		list(): Promise<IpcCustomThemes>;

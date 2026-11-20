@@ -158,6 +158,8 @@ const DISPLAY_NUM_MAP: Record<string, "pasteMenuThreshold"> = {
 };
 const DISPLAY_NUM_KEYS = Object.keys(DISPLAY_NUM_MAP);
 const PINNED_AGENTS_PATH = "display.pinnedAgents";
+/** Speech settings seeded for a profile that has never chosen (see seedSpeechDefaults). */
+const SPEECH_SEED_KEYS = ["stt.enabled", "stt.language"];
 
 /**
  * Read the live display config settings into the store. Re-run on session
@@ -172,11 +174,19 @@ async function syncDisplaySettings(
 	try {
 		const res = await command({
 			type: "get_settings",
-			paths: [...DISPLAY_SYNC_KEYS, ...DISPLAY_NUM_KEYS, PINNED_AGENTS_PATH],
+			paths: [...DISPLAY_SYNC_KEYS, ...DISPLAY_NUM_KEYS, PINNED_AGENTS_PATH, ...SPEECH_SEED_KEYS],
 		});
 		if (!isCurrent()) return;
 		if (res.success) {
-			const values = (res.data as { values?: Record<string, unknown> } | undefined)?.values;
+			const data = res.data as
+				| { values?: Record<string, unknown>; provenance?: Record<string, SettingProvenance> }
+				| undefined;
+			const values = data?.values;
+			// Idempotent: only settings with no layer at all are written, so a
+			// seeded profile skips every write from then on.
+			const seeded = await seedSpeechDefaults(command, data?.provenance);
+			if (!isCurrent()) return;
+			if (values) Object.assign(values, seeded);
 			const partial: Partial<SettingsStore> = {};
 			for (const [path, field] of Object.entries(DISPLAY_BOOL_MAP)) {
 				const value = values?.[path];
@@ -194,6 +204,32 @@ async function syncDisplaySettings(
 	} catch {
 		// Settings unreadable - keep the current values.
 	}
+}
+
+/**
+ * Turn dictation on for a profile that has never chosen, and let the model
+ * auto-detect the spoken language. Only a setting with no layer at all (no
+ * global, project, overlay or runtime override) is touched, so a user's own
+ * choice — including turning it off — is never overridden. Idempotent, so a
+ * profile that already has a layer skips every write.
+ */
+async function seedSpeechDefaults(
+	command: TabCommand,
+	provenance: Record<string, SettingProvenance> | undefined,
+): Promise<Record<string, unknown>> {
+	const wanted: Array<[string, unknown]> = [
+		["stt.enabled", true],
+		// Empty = let the model detect the language (Whisper); English-only
+		// models ignore it.
+		["stt.language", ""],
+	];
+	const applied: Record<string, unknown> = {};
+	for (const [path, value] of wanted) {
+		if ((provenance?.[path]?.layers.length ?? 1) !== 0) continue;
+		const res = await command({ type: "set_setting", path, value });
+		if (res.success) applied[path] = value;
+	}
+	return applied;
 }
 
 export const createSettingsStore = (command: TabCommand = activeTabCommand) => {

@@ -83,6 +83,7 @@ import type { LogWatcher } from "./log-watcher";
 import type { MemoryWatcher } from "./memory-watcher";
 import { createMenu } from "./menu";
 import { deleteModelsProvider, listModelsProviders, modelsPath, upsertModelsProvider } from "./models-config";
+import { speakWithOsVoice } from "./os-speech";
 import { PluginCatalog } from "./plugin-catalog";
 import { fetchRemoteImage } from "./remote-image";
 import { runtimeLogPath, writeRuntimeLog } from "./runtime-log";
@@ -1078,6 +1079,15 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 			return { ok: true };
 		} catch (err) {
 			return { ok: false, error: err instanceof Error ? err.message : String(err) };
+		}
+	});
+
+	ipcMain.handle(IPC_COMMANDS.SYSTEM_SPEAK, async (_event, payload: { text?: string; language?: string }) => {
+		try {
+			await speakWithOsVoice(String(payload.text ?? ""), String(payload.language ?? "en"));
+			return { ok: true };
+		} catch (cause) {
+			return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
 		}
 	});
 
