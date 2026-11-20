@@ -195,6 +195,8 @@ interface UiStore {
 	notifications: boolean;
 	/** Also notify while the omp window has focus (Settings → GUI, default off). */
 	notificationsWhenFocused: boolean;
+	/** Play the in-app chime with a notification (the OS sound is not always there). */
+	notificationSound: boolean;
 	/** Expand reasoning (thinking) blocks by default (Settings → GUI, default off). */
 	thinkingExpanded: boolean;
 	/** Provider quotas above the sidebar footer (Settings → GUI, default off). */
@@ -335,6 +337,7 @@ interface UiStore {
 	setFontSize: (size: number) => void;
 	setNotifications: (enabled: boolean) => void;
 	setNotificationsWhenFocused: (enabled: boolean) => void;
+	setNotificationSound: (enabled: boolean) => void;
 	setThinkingExpanded: (enabled: boolean) => void;
 	setSidebarQuotas: (enabled: boolean) => void;
 	setTranscriptDetail: (detail: TranscriptDetail) => void;
@@ -387,6 +390,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	followAgentTheme: false,
 	notifications: true,
 	notificationsWhenFocused: false,
+	notificationSound: true,
 	thinkingExpanded: false,
 	sidebarQuotas: false,
 	confirmSessionDelete: true,
@@ -669,6 +673,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	setFontSize: size => set({ fontSize: size }),
 	setNotifications: enabled => set({ notifications: enabled }),
 	setNotificationsWhenFocused: enabled => set({ notificationsWhenFocused: enabled }),
+	setNotificationSound: enabled => set({ notificationSound: enabled }),
 	setThinkingExpanded: enabled => set({ thinkingExpanded: enabled }),
 	setSidebarQuotas: enabled => set({ sidebarQuotas: enabled }),
 	setTranscriptDetail: detail => set({ transcriptDetail: detail }),

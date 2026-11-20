@@ -247,6 +247,7 @@ export function App() {
 				"fontSize",
 				"notifications",
 				"notificationsWhenFocused",
+				"notificationSound",
 				"thinkingExpanded",
 				"sidebarQuotas",
 				"confirmSessionDelete",
@@ -289,6 +290,9 @@ export function App() {
 					!changedPreferences.has("notificationsWhenFocused")
 				) {
 					useUiStore.setState({ notificationsWhenFocused: prefs.notificationsWhenFocused });
+				}
+				if (typeof prefs.notificationSound === "boolean" && !changedPreferences.has("notificationSound")) {
+					useUiStore.setState({ notificationSound: prefs.notificationSound });
 				}
 				if (typeof prefs.thinkingExpanded === "boolean" && !changedPreferences.has("thinkingExpanded")) {
 					useUiStore.setState({ thinkingExpanded: prefs.thinkingExpanded });

@@ -59,6 +59,7 @@ import { useToastStore } from "../stores/toast";
 import { todoPhasesFromToolResult, useTodoStore } from "../stores/todo";
 import { useToolsStore } from "../stores/tools";
 import { useUiStore } from "../stores/ui";
+import { playNotificationChime } from "../lib/notify-sound";
 
 /**
  * Routine informational notice sources suppressed from the toast stack — they
@@ -128,6 +129,7 @@ async function maybeNotify(
 		const setting = values?.[key];
 		const effective = typeof setting === "string" ? setting : NOTIFY_DEFAULTS[kind];
 		if (effective === "off") return;
+		if (useUiStore.getState().notificationSound) playNotificationChime();
 		window.omp.system.notify(title, body);
 	} catch {
 		// Best-effort: a failed notification must never break event dispatch.
@@ -399,9 +401,18 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							break;
 						}
 						case "auto_compaction_end": {
-							useSessionStore.setState({ isCompacting: false, compactionInfo: null });
+							// The summary row only exists after the transcript reload, and
+							// that fetch takes a couple of seconds. Clearing the loader here
+							// left the old, uncompacted history on screen with no sign that
+							// anything was still happening — the collapse then landed out of
+							// nowhere. Keep the loader up until the new transcript is in.
 							if (!event.aborted) {
-								void (tabId && sessionRuntime(tabId) ? hydrateTabSession(tabId) : hydrateSession());
+								const reload = tabId && sessionRuntime(tabId) ? hydrateTabSession(tabId) : hydrateSession();
+								void reload.finally(() => {
+									useSessionStore.setState({ isCompacting: false, compactionInfo: null });
+								});
+							} else {
+								useSessionStore.setState({ isCompacting: false, compactionInfo: null });
 							}
 							if (event.aborted) {
 								useToastStore

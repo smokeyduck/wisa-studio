@@ -308,6 +308,8 @@ export function SettingsWindow() {
 	const panelTab = useUiStore(state => state.panelTab);
 	const notifications = useUiStore(state => state.notifications);
 	const notificationsWhenFocused = useUiStore(state => state.notificationsWhenFocused);
+	const notificationSound = useUiStore(state => state.notificationSound);
+	const setNotificationSound = useUiStore(state => state.setNotificationSound);
 	const thinkingExpanded = useUiStore(state => state.thinkingExpanded);
 	const sidebarQuotas = useUiStore(state => state.sidebarQuotas);
 	const confirmSessionDelete = useUiStore(state => state.confirmSessionDelete);
@@ -1424,6 +1426,18 @@ export function SettingsWindow() {
 														disabled={!notifications}
 														label={t("settings.gui.notificationsWhenFocused")}
 														onChange={applyNotificationsWhenFocused}
+													/>
+													<Toggle
+														className="omp-settings-row"
+														checked={notificationSound}
+														description={t("settings.gui.notificationSoundDesc")}
+														disabled={!notifications}
+														label={t("settings.gui.notificationSound")}
+														onChange={value =>
+															void saveGuiPreference("notificationSound", value, () =>
+																setNotificationSound(value),
+															)
+														}
 													/>
 												</Section>
 												<Section
