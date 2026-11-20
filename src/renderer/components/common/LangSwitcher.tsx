@@ -29,7 +29,11 @@ export function LangSwitcher({ className }: LangSwitcherProps) {
 				type="button"
 				onClick={event => {
 					const rect = event.currentTarget.getBoundingClientRect();
-					setAnchor(anchor ? null : { x: rect.left, y: rect.bottom + 4 });
+					// The switcher lives in the sidebar footer, against the bottom
+					// edge of the window, so a menu anchored at its BOTTOM edge has
+					// no room and gets pushed up over unrelated content. Anchor the
+					// menu's bottom just above the button and let it grow upward.
+					setAnchor(anchor ? null : { x: rect.left, y: rect.top - 4 });
 				}}
 				aria-haspopup="menu"
 				aria-expanded={anchor !== null}
@@ -47,6 +51,7 @@ export function LangSwitcher({ className }: LangSwitcherProps) {
 				<ContextMenu
 					x={anchor.x}
 					y={anchor.y}
+					placement="above"
 					onClose={() => setAnchor(null)}
 					items={LANGUAGES.map(language => ({
 						id: language.id,

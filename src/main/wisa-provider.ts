@@ -10,9 +10,10 @@
  * Idempotent: an existing `wisa` entry (including one the user edited) is left
  * untouched, so a deleted key or a custom baseUrl survives upgrades.
  */
+import { WISA_PROVIDER_ID } from "../shared/wisa";
 import { listModelsProviders, upsertModelsProvider } from "./models-config";
 
-export const WISA_PROVIDER_ID = "wisa";
+export { WISA_PROVIDER_ID };
 
 const WISA_PROVIDER = {
 	baseUrl: "https://api.askwisa.com/v1",

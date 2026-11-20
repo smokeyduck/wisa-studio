@@ -190,4 +190,80 @@ describe("ContextMenu", () => {
 		expect(onB).toHaveBeenCalledTimes(1);
 		expect(onA).not.toHaveBeenCalled();
 	});
+
+	/**
+	 * A menu opened from a trigger against the bottom edge — the sidebar footer
+	 * language switcher is the real one — used to be positioned at
+	 * `y = trigger.bottom`, leaving no room below. It rendered below the
+	 * viewport, so the user saw a dropdown that "opens" with nothing visible.
+	 */
+	it("keeps a menu anchored to a bottom-edge trigger fully inside the viewport", async () => {
+		// linkedom has no layout, so state the box the menu would occupy and the
+		// viewport it must fit into.
+		const VIEWPORT_HEIGHT = 900;
+		Object.assign(window, { innerWidth: 1280, innerHeight: VIEWPORT_HEIGHT });
+		const originalProto = Object.getPrototypeOf(document.createElement("div")) as object;
+		Object.defineProperties(originalProto, {
+			offsetWidth: { configurable: true, get: () => 200 },
+			offsetHeight: { configurable: true, get: () => 240 },
+		});
+		try {
+			// Trigger sits 4px above the bottom edge; anchor passed as its top edge.
+			const triggerTop = VIEWPORT_HEIGHT - 36;
+			await mount(
+				<ContextMenu
+					items={[{ id: "a", label: "Action A", onSelect: () => {} }]}
+					x={20}
+					y={triggerTop - 4}
+					placement="above"
+					onClose={() => {}}
+				/>,
+			);
+
+			const menu = document.body.querySelector('[role="menu"]') as unknown as {
+				style: { top: string; left: string };
+			};
+			const top = Number.parseFloat(menu.style.top);
+			expect(Number.isFinite(top)).toBe(true);
+			// Grows upward from the trigger, and the whole box fits on screen.
+			expect(top).toBeLessThan(triggerTop);
+			expect(top + 240).toBeLessThanOrEqual(VIEWPORT_HEIGHT);
+			expect(top).toBeGreaterThanOrEqual(0);
+		} finally {
+			Reflect.deleteProperty(originalProto, "offsetWidth");
+			Reflect.deleteProperty(originalProto, "offsetHeight");
+		}
+	});
+
+	/** A `below` menu with no room underneath must flip up rather than clip. */
+	it("flips a below-menu upward when the trigger is near the bottom edge", async () => {
+		const VIEWPORT_HEIGHT = 900;
+		Object.assign(window, { innerWidth: 1280, innerHeight: VIEWPORT_HEIGHT });
+		const originalProto = Object.getPrototypeOf(document.createElement("div")) as object;
+		Object.defineProperties(originalProto, {
+			offsetWidth: { configurable: true, get: () => 200 },
+			offsetHeight: { configurable: true, get: () => 240 },
+		});
+		try {
+			const y = VIEWPORT_HEIGHT - 60;
+			await mount(
+				<ContextMenu
+					items={[{ id: "a", label: "Action A", onSelect: () => {} }]}
+					x={20}
+					y={y}
+					onClose={() => {}}
+				/>,
+			);
+
+			const menu = document.body.querySelector('[role="menu"]') as unknown as { style: { top: string } };
+			const top = Number.parseFloat(menu.style.top);
+			expect(Number.isFinite(top)).toBe(true);
+			expect(top + 240).toBeLessThanOrEqual(VIEWPORT_HEIGHT);
+			// Flipped above the anchor instead of being pinned below it.
+			expect(top).toBeLessThan(y);
+		} finally {
+			Reflect.deleteProperty(originalProto, "offsetWidth");
+			Reflect.deleteProperty(originalProto, "offsetHeight");
+		}
+	});
 });

@@ -25,6 +25,19 @@ export interface ContextMenuItem {
 	disabled?: boolean;
 	disabledReason?: string;
 	onSelect: () => void;
+	/**
+	 * A secondary control drawn at the row's trailing edge (a pin, a mute). It is
+	 * a sibling of the row's button, never a child: a button inside a button is
+	 * invalid and the inner one would never receive the click.
+	 */
+	action?: {
+		id: string;
+		label: string;
+		icon: LucideIcon;
+		/** The action is already in effect (a pinned row draws its icon filled). */
+		active?: boolean;
+		onSelect: () => void;
+	};
 }
 
 interface ContextMenuProps {
@@ -43,13 +56,38 @@ export function ContextMenu({ items, x, y, placement = "below", onClose }: Conte
 	const [pos, setPos] = useState({ left: x, top: y });
 
 	// Clamp inside the viewport once mounted (menu height is content-driven).
+	//
+	// Measured with `offsetWidth`/`offsetHeight`, not `getBoundingClientRect()`:
+	// the pop-in animation starts at `scale(0.92)`, and a rect taken then is
+	// ~8% short, which under-corrects and lets the real menu hang off-screen.
+	// Layout metrics ignore transforms, so they describe the settled box.
 	useLayoutEffect(() => {
 		const el = menuRef.current;
 		if (!el) return;
-		const rect = el.getBoundingClientRect();
-		const left = Math.min(x, window.innerWidth - rect.width - 8);
-		const top = placement === "above" ? y - rect.height : Math.min(y, window.innerHeight - rect.height - 8);
-		setPos({ left: Math.max(8, left), top: Math.max(8, top) });
+		// `offsetWidth` is absent in the linkedom test DOM, where it reads as
+		// undefined and turns the clamp into NaN. Fall back to the rect there.
+		const width = el.offsetWidth || el.getBoundingClientRect().width || 0;
+		const height = el.offsetHeight || el.getBoundingClientRect().height || 0;
+		const GAP = 8;
+		// A DOM without layout (linkedom in tests) reports no viewport size; treat
+		// that as unbounded rather than letting NaN reach the style attribute.
+		const viewWidth = Number.isFinite(window.innerWidth) ? window.innerWidth : Number.POSITIVE_INFINITY;
+		const viewHeight = Number.isFinite(window.innerHeight) ? window.innerHeight : Number.POSITIVE_INFINITY;
+		// Flip to whichever side has room instead of clamping a menu that then
+		// overlaps its own trigger or spills past the edge.
+		let top: number;
+		if (placement === "above") {
+			top = y - height;
+			if (top < GAP) top = Math.min(y + height, viewHeight - height - GAP);
+		} else {
+			top = y;
+			if (top + height > viewHeight - GAP) top = y - height - GAP * 2;
+		}
+		const left = Math.min(x, viewWidth - width - GAP);
+		setPos({
+			left: Math.max(GAP, left),
+			top: Math.max(GAP, Math.min(top, viewHeight - height - GAP)),
+		});
 	}, [x, y, placement]);
 
 	const onCloseRef = useRef(onClose);
@@ -128,41 +166,68 @@ export function ContextMenu({ items, x, y, placement = "below", onClose }: Conte
 			className="omp-pop-in fixed z-50 min-w-44 overflow-hidden rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] py-1 shadow-xl"
 		>
 			{items.map((item, index) => (
-				<button
+				<div
 					key={item.id}
-					type="button"
-					role="menuitem"
-					data-menu-item
-					disabled={item.disabled}
-					title={item.disabled ? item.disabledReason : item.label}
-					onClick={() => {
-						if (item.disabled) return;
-						item.onSelect();
-					}}
-					onMouseEnter={() => setActiveIndex(index)}
 					className={cx(
-						"flex w-full items-center gap-2 px-3 py-2 text-left text-omp-md hover:bg-[var(--omp-selected-bg)]",
-						item.danger ? "text-[var(--omp-error)]" : "text-[var(--omp-text)]",
+						"flex w-full items-stretch",
 						index === activeIndex && "bg-[var(--omp-selected-bg)]",
-						item.disabled && "cursor-not-allowed opacity-70",
 					)}
 				>
-					{item.icon && (
-						<item.icon
-							size={13}
-							className={cx("shrink-0", item.danger ? "text-[var(--omp-error)]" : "text-[var(--omp-muted)]")}
-						/>
-					)}
-					<span className="min-w-0 flex-1">
-						<span className="block truncate">{item.label}</span>
-						{item.description && (
-							<span className="mt-0.5 block text-omp-xs font-normal text-[var(--omp-dim)]">
-								{item.description}
-							</span>
+					<button
+						type="button"
+						role="menuitem"
+						data-menu-item
+						disabled={item.disabled}
+						title={item.disabled ? item.disabledReason : item.label}
+						onClick={() => {
+							if (item.disabled) return;
+							item.onSelect();
+						}}
+						onMouseEnter={() => setActiveIndex(index)}
+						className={cx(
+							"flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-omp-md hover:bg-[var(--omp-selected-bg)]",
+							item.danger ? "text-[var(--omp-error)]" : "text-[var(--omp-text)]",
+							item.disabled && "cursor-not-allowed opacity-70",
 						)}
-					</span>
-					{item.hint && <span className="text-omp-xs text-[var(--omp-dim)]">{item.hint}</span>}
-				</button>
+					>
+						{item.icon && (
+							<item.icon
+								size={13}
+								className={cx(
+									"shrink-0",
+									item.danger ? "text-[var(--omp-error)]" : "text-[var(--omp-muted)]",
+								)}
+							/>
+						)}
+						<span className="min-w-0 flex-1">
+							<span className="block truncate">{item.label}</span>
+							{item.description && (
+								<span className="mt-0.5 block text-omp-xs font-normal text-[var(--omp-dim)]">
+									{item.description}
+								</span>
+							)}
+						</span>
+						{item.hint && !item.action && <span className="text-omp-xs text-[var(--omp-dim)]">{item.hint}</span>}
+					</button>
+					{item.action && (
+						<button
+							type="button"
+							aria-label={item.action.label}
+							title={item.action.label}
+							aria-pressed={item.action.active}
+							onClick={event => {
+								event.stopPropagation();
+								item.action?.onSelect();
+							}}
+							className={cx(
+								"omp-pressable flex w-9 shrink-0 items-center justify-center rounded-md hover:bg-[var(--omp-selected-bg)]",
+								item.action.active ? "text-[var(--omp-accent)]" : "text-[var(--omp-muted)]",
+							)}
+						>
+							<item.action.icon size={13} fill={item.action.active ? "currentColor" : "none"} />
+						</button>
+					)}
+				</div>
 			))}
 		</div>,
 		document.body,

@@ -75,7 +75,7 @@ beforeEach(() => {
 	browserOpen = vi.fn(async () => ({}));
 	ompWindow.omp = {
 		system: { resolvePaths, openPath, openExternal: vi.fn(async () => {}) },
-		browser: { open: browserOpen },
+		browser: { open: browserOpen, detach: vi.fn(async () => {}) },
 	};
 	useTabsStore.setState({
 		tabs: [{ id: "t0", cwd: "/work", status: "ready", kind: "agent", unreadDone: false }],

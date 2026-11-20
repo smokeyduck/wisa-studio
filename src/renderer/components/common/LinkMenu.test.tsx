@@ -70,7 +70,7 @@ beforeEach(() => {
 	writeText = vi.fn(async () => {});
 	ompWindow.omp = {
 		system: { openExternal, openPath, revealPath: vi.fn(async () => ({ ok: true })) },
-		browser: { open: vi.fn(async () => ({})) },
+		browser: { open: vi.fn(async () => ({})), detach: vi.fn(async () => {}) },
 	};
 	vi.stubGlobal("navigator", { platform: "MacIntel", clipboard: { writeText } });
 	seedActiveTab("agent");

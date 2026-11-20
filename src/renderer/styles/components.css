@@ -1010,6 +1010,17 @@
 	}
 }
 
+/* The ribbon is white and gold on a transparent ground: on the light theme's
+   white canvas the white half would vanish. A hairline traces the artwork's own
+   alpha as a contour and a soft drop lifts it off the page — no plate, so the
+   mark sits on the app's background instead of a mismatched square. Kept light:
+   a hard-edged drop reads as a halo around the ribbon's inner curves. */
+:root[data-theme="light"] .omp-brand-mark {
+	filter: drop-shadow(0 0 0.5px rgb(15 18 24 / 0.35)) drop-shadow(0 1px 2px rgb(15 18 24 / 0.18));
+}
+
+/* The mark brings its own plate (the brand artwork), so this box only sizes it
+   and anchors the orbit ring; a border or fill here would stack two tiles. */
 .omp-loading-mark {
 	position: relative;
 	display: flex;
@@ -1017,10 +1028,6 @@
 	height: 72px;
 	align-items: center;
 	justify-content: center;
-	border: 1px solid var(--omp-border-muted);
-	border-radius: 22px;
-	background: var(--omp-selected-bg);
-	color: var(--omp-accent);
 }
 
 .omp-loading-mark::after {
