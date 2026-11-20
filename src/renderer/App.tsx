@@ -69,6 +69,7 @@ import { isImeKeyEvent } from "./lib/ime";
 import { chordFromEvent, compileKeymap, KEYMAP_ACTION_BY_ID, KEYMAP_ACTIONS, type KeymapActionId } from "./lib/keymap";
 import { abortActiveTurn, restoreQueuedMessages } from "./lib/messages";
 import { watchPluginActivation } from "./lib/plugin-activation";
+import { prewarmDictation } from "./lib/stt-prewarm";
 import { closeActiveTab } from "./lib/tab-close";
 import { acceptsActiveTabEvents, onActiveTabRouteSettled, onActiveTabRouteState } from "./lib/tab-routing";
 import { focusedTabRpc } from "./lib/tab-rpc";
@@ -348,6 +349,18 @@ export function App() {
 	// Restart-required plugin installs queue while a run is in flight; restart
 	// the active sidecar (resuming its session) once the run settles.
 	useEffect(() => watchPluginActivation(), []);
+
+	// Warm the dictation model in the background as soon as the active sidecar is
+	// up, so the first microphone press records instead of waiting on a download.
+	useEffect(
+		() =>
+			onActiveTabRouteSettled(() => {
+				const tabs = useTabsStore.getState();
+				const status = tabs.tabs.find(tab => tab.id === tabs.activeTabId)?.status;
+				if (status === "ready" && acceptsActiveTabEvents()) void prewarmDictation();
+			}),
+		[],
+	);
 
 	// Plugin themes are session-scoped: refresh only when the selected tab is
 	// both routed and ready. Route settlement and sidecar readiness can arrive

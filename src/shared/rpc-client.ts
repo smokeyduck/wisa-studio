@@ -337,5 +337,8 @@ export function createSessionRpcClient(transport: RpcTransport): SessionRpcClien
 		// Generous timeouts: the first call on a fresh sidecar loads the STT/TTS
 		// model into the worker, far beyond the default 8s RPC timeout.
 		synthesizeSpeech: (text: string) => rpcCommand({ type: "synthesize_speech", text }, 60_000),
+		// The first call loads (and may download) the STT model into the worker.
+		transcribeSpeech: (audioBase64: string, mimeType = "audio/wav") =>
+			rpcCommand({ type: "transcribe_audio", audioBase64, mimeType }, 660_000),
 	};
 }

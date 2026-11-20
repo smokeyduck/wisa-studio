@@ -41,6 +41,7 @@ import {
 	wrapPasteInAttachmentBlock,
 } from "../../lib/paste-blobs";
 import { parseQueueShorthand, splitQueuedMessages } from "../../lib/queue-input";
+import { supportsFastMode } from "../../lib/service-tier";
 import { insertQuote } from "../../lib/quote-selection";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { composerFileKey, useComposerStore } from "../../stores/composer";
@@ -1279,6 +1280,9 @@ function FastModeControl({ menuItem = false }: { menuItem?: boolean }) {
 	const toggleFastMode = useModelStore(s => s.toggleFastMode);
 	const setModelSpeed = useModelStore(s => s.setModelSpeed);
 	const [menu, setMenu] = useState<ContextMenuAnchor | null>(null);
+	// Nothing to offer when the active model has no serving-priority family:
+	// the request would drop the tier, so the control would only lie.
+	if (!supportsFastMode(model)) return null;
 	const chatGpt = model?.api === "openai-codex-responses" || model?.provider === "openai-codex";
 	const selected: ModelSpeed = active ? (ultrafast ? "ultrafast" : "fast") : "standard";
 	const speeds: ModelSpeed[] = supportsUltrafast ? ["standard", "fast", "ultrafast"] : ["standard", "fast"];

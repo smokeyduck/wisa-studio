@@ -239,6 +239,7 @@ export type RpcCommand =
 	| { id?: string; type: "host_dictation_stop" }
 	| { id?: string; type: "host_dictation_cancel" }
 	| { id?: string; type: "synthesize_speech"; text: string }
+	| { id?: string; type: "transcribe_audio"; audioBase64: string; mimeType: string }
 	| { id?: string; type: "retry" }
 	| { id?: string; type: "clear_context" }
 	| { id?: string; type: "abort_subagent"; agentId: string }

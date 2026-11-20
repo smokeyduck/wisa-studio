@@ -713,6 +713,14 @@ describe("InputArea draft editor", () => {
 	});
 });
 
+/** An OpenAI-family model: the only kind whose wire carries a service tier. */
+const FAST_MODE_MODEL = {
+	id: "gpt-6.2-sol",
+	provider: "openai",
+	api: "openai-responses",
+	serviceTiers: ["priority", "ultrafast"],
+};
+
 describe("InputArea run settings", () => {
 	async function openRunSettings(): Promise<void> {
 		const more = document.querySelector(
@@ -728,6 +736,7 @@ describe("InputArea run settings", () => {
 	}
 
 	it("keeps all primary run controls inline when the composer has room", async () => {
+		useModelStore.setState({ model: FAST_MODE_MODEL });
 		await mount();
 
 		expect(document.querySelector("[data-run-settings-inline]")).not.toBeNull();
@@ -738,8 +747,8 @@ describe("InputArea run settings", () => {
 		expect(buttonWithText("Modes")).toBeDefined();
 	});
 
-	it("marks fast mode selected when enabled but unavailable to the active model", async () => {
-		useModelStore.setState({ fastModeEnabled: true, fastModeActive: false });
+	it("marks fast mode selected when the active model supports it", async () => {
+		useModelStore.setState({ model: FAST_MODE_MODEL, fastModeEnabled: true, fastModeActive: false });
 		await mount();
 
 		const fast = buttonWithText("Fast");
@@ -747,6 +756,20 @@ describe("InputArea run settings", () => {
 		const button = fast as unknown as HTMLElement;
 		expect(button.getAttribute("aria-pressed")).toBe("true");
 		expect(button.className).toContain("text-[var(--omp-accent)]");
+	});
+
+	it("hides the speed control for a model without a service tier", async () => {
+		// A gateway model (the WISA provider) has no fast/slow knob on the wire,
+		// so the control would be a button that changes nothing.
+		useModelStore.setState({
+			model: { id: "wisa-gpt", provider: "wisa", api: "openai-completions" },
+			fastModeEnabled: true,
+		});
+		await mount();
+
+		expect(buttonWithText("Fast")).toBeUndefined();
+		expect(document.querySelector('button[title="Response speed"]')).toBeNull();
+		expect(buttonWithText("Full access")).toBeDefined();
 	});
 
 	it("lets a nested thinking portal dispatch before the parent menu dismisses", async () => {

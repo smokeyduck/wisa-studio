@@ -232,6 +232,8 @@ export const IPC_COMMANDS = {
 	SYSTEM_NOTIFY: "system:notify",
 	/** Speak text with the OS voice (the local TTS is English-only) */
 	SYSTEM_SPEAK: "system:speak",
+	/** Fetch the neural voice for a language ahead of the first utterance */
+	SYSTEM_PREWARM_SPEECH: "system:prewarm-speech",
 	/** Read the custom themes folder (IpcCustomThemes) */
 	THEMES_LIST: "themes:list",
 	/** Create the custom themes folder if needed and open it in the file manager */
@@ -1559,6 +1561,8 @@ export interface OmpApi {
 		setHostUriSchemes(schemes: unknown[]): Promise<RpcResponse>;
 		// Voice (speech in/out): audio is canonical PCM16 mono 16 kHz WAV, base64.
 		synthesizeSpeech(text: string): Promise<RpcResponse>;
+		/** Transcribe a 16 kHz mono PCM16 WAV; the first call loads (or downloads) the model. */
+		transcribeSpeech(audioBase64: string, mimeType?: string): Promise<RpcResponse>;
 	};
 	events: {
 		onBatch(callback: (events: AgentSessionEvent[]) => void): () => void;
@@ -1717,6 +1721,12 @@ export interface OmpApi {
 		notify(title: string, body?: string): void;
 		/** Speak text with the OS voice; resolves once playback finished, or with the engine's error. */
 		speak(text: string, language: string): Promise<{ ok: boolean; error?: string }>;
+		/**
+		 * Fetch the neural voice for `language` in the background, so the first
+		 * utterance is not preceded by a download. Resolves when it is ready (or
+		 * immediately when the platform has no such voice).
+		 */
+		prewarmSpeech(language: string): Promise<{ ok: boolean }>;
 	};
 	themes: {
 		list(): Promise<IpcCustomThemes>;

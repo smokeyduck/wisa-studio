@@ -84,6 +84,7 @@ import type { MemoryWatcher } from "./memory-watcher";
 import { createMenu } from "./menu";
 import { deleteModelsProvider, listModelsProviders, modelsPath, upsertModelsProvider } from "./models-config";
 import { speakWithOsVoice } from "./os-speech";
+import { preparePiper } from "./piper";
 import { PluginCatalog } from "./plugin-catalog";
 import { fetchRemoteImage } from "./remote-image";
 import { runtimeLogPath, writeRuntimeLog } from "./runtime-log";
@@ -1090,6 +1091,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 			return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
 		}
 	});
+
+	ipcMain.handle(IPC_COMMANDS.SYSTEM_PREWARM_SPEECH, async (_event, payload: { language?: string }) => ({
+		ok: (await preparePiper(String(payload.language ?? "en"))) !== null,
+	}));
 
 	ipcMain.handle(IPC_COMMANDS.SYSTEM_NOTIFY, (event, payload: IpcNotifyPayload) => {
 		if (typeof payload.title === "string") {

@@ -414,6 +414,8 @@ const api: OmpApi = {
 				ok: boolean;
 				error?: string;
 			}>,
+		prewarmSpeech: (language: string) =>
+			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_PREWARM_SPEECH, { language }) as Promise<{ ok: boolean }>,
 	},
 
 	themes: {
