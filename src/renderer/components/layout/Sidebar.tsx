@@ -3,6 +3,7 @@ import {
 	ArchiveRestore,
 	ArrowDownAZ,
 	BarChart3,
+	BookOpen,
 	Bot,
 	Brain,
 	CalendarClock,
@@ -98,6 +99,7 @@ import { Glide } from "../common/Glide";
 import { LangSwitcher } from "../common/LangSwitcher";
 import { ProjectSettingsDialog } from "../dialogs/ProjectSettingsDialog";
 import { WorkspaceDialog } from "../dialogs/WorkspaceDialog";
+import { SKILLS_TAB_ID } from "../settings/settings-window-model";
 import { useUnreadNoticeCount } from "./NotificationBell";
 import { SidebarQuotas } from "./SidebarQuotas";
 
@@ -1255,6 +1257,13 @@ export function Sidebar() {
 			shortcut: actionChords.get("memory.open")?.[0],
 			badge: pendingSkillReviews,
 			onClick: () => useUiStore.getState().openMemory(pendingSkillReviews > 0 ? "skills" : undefined),
+		},
+		{
+			id: "skills",
+			icon: BookOpen,
+			label: t("titlebar.skills"),
+			title: t("titlebar.skillsHint"),
+			onClick: () => useUiStore.getState().openSettings(SKILLS_TAB_ID),
 		},
 		{
 			id: "plugins",

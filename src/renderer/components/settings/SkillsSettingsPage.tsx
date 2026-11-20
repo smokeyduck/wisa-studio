@@ -112,6 +112,7 @@ export function SkillsSettingsPage({ query }: { query: string }) {
 	const [detailError, setDetailError] = useState<string | null>(null);
 	const [detailAttempt, setDetailAttempt] = useState(0);
 	const [busyName, setBusyName] = useState<string | null>(null);
+	const [bulkBusy, setBulkBusy] = useState(false);
 	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [deleteArmed, setDeleteArmed] = useState(false);
 	const listRequest = useRef(0);
@@ -224,6 +225,33 @@ export function SkillsSettingsPage({ query }: { query: string }) {
 		}
 	};
 
+	/** One global setting backs every toggle, so a bulk change must run in order. */
+	const setAll = async (enabled: boolean) => {
+		if (!sidecarReady || busyName || bulkBusy) return;
+		const targets = visible.filter(skill => skill.enabled !== enabled);
+		if (targets.length === 0) return;
+		const mutationRoute = routeKey;
+		const previous = skills;
+		setBulkBusy(true);
+		setSkills(current =>
+			current.map(item => (targets.some(t => t.name === item.name) ? { ...item, enabled } : item)),
+		);
+		try {
+			for (const skill of targets) {
+				const response = await tabRpc.setSkillEnabled(skill.name, enabled);
+				if (!response.success) throw new Error(response.error);
+			}
+			if (mutationRoute !== routeRef.current) return;
+			await loadSkills(selectedName);
+		} catch (cause) {
+			if (mutationRoute !== routeRef.current) return;
+			setSkills(previous);
+			toast({ variant: "error", message: describeError(cause) });
+		} finally {
+			setBulkBusy(false);
+		}
+	};
+
 	const save = async () => {
 		if (!sidecarReady || !editor || busyName) return;
 		const mutationRoute = routeKey;
@@ -319,6 +347,25 @@ export function SkillsSettingsPage({ query }: { query: string }) {
 				<span className="ml-auto text-omp-xs tabular-nums text-(--omp-dim)">
 					{visible.length} / {skills.length}
 				</span>
+				<Button
+					disabled={!sidecarReady || bulkBusy || busyName !== null || !visible.some(skill => !skill.enabled)}
+					loading={bulkBusy}
+					onClick={() => void setAll(true)}
+					size="sm"
+					title={t("settings.skills.enableAllHint")}
+					variant="ghost"
+				>
+					{t("settings.skills.enableAll")}
+				</Button>
+				<Button
+					disabled={!sidecarReady || bulkBusy || busyName !== null || !visible.some(skill => skill.enabled)}
+					onClick={() => void setAll(false)}
+					size="sm"
+					title={t("settings.skills.disableAllHint")}
+					variant="ghost"
+				>
+					{t("settings.skills.disableAll")}
+				</Button>
 				<button
 					aria-label={t("settings.skills.refresh")}
 					className="rounded-md p-1.5 text-(--omp-dim) hover:bg-(--omp-bg-tertiary) hover:text-(--omp-text) disabled:opacity-40"
