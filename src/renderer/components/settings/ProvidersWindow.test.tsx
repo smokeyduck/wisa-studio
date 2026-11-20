@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CustomProviderView } from "../../../shared/ipc-types";
 import type { ModelCatalogUpdateFrame, ProviderInfo, ProvidersResult, RpcResponse } from "../../../shared/rpc-types";
+import { WISA_CONNECT_PAGE_URL } from "../../../shared/wisa";
 import { I18nProvider, translate } from "../../lib/i18n";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
@@ -282,10 +283,13 @@ const login = vi.fn(
 	async (_providerId: string): Promise<RpcResponse> => ({ type: "response", command: "login", success: true }),
 );
 
+const openExternal = vi.fn(async (_url: string): Promise<void> => {});
+
 Object.assign(window as unknown as Record<string, unknown>, {
 	omp: {
 		rpc: { getProviders, getLogoutAccounts, logout, login },
 		models: { listProviders },
+		system: { openExternal },
 	},
 });
 
@@ -617,5 +621,108 @@ describe("ProvidersWindow", () => {
 		await mountWindow();
 
 		expect(text()).toContain(translate("providers.customWithoutModels", { ids: "my-proxy" }));
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The WISA gateway is the provider this build ships for, so its sign-in is
+// pinned above everything else and only while it still needs a key. Once the
+// key lands its own row reports the state, and a second "sign in" banner would
+// contradict it.
+// ---------------------------------------------------------------------------
+
+describe("ProvidersWindow WISA sign-in", () => {
+	it("pins the WISA sign-in above the provider list and opens the connect page", async () => {
+		openExternal.mockClear();
+		getProviders.mockResolvedValue(
+			providersResponse(snapshot([row("anthropic"), row("wisa", { name: "WISA", authenticated: false })])),
+		);
+		useSessionStore.setState({ status: "ready" });
+		useUiStore.getState().openProviders();
+		await mountWindow();
+
+		const body = text();
+		// Pinned first: the card reads before the provider rows it introduces.
+		expect(body.indexOf(translate("wisaAuth.title"))).toBeGreaterThanOrEqual(0);
+		expect(body.indexOf(translate("wisaAuth.title"))).toBeLessThan(body.indexOf("anthropic"));
+
+		const button = buttonWithLabel(translate("wisaAuth.signIn"));
+		expect(button).toBeDefined();
+		await act(async () => {
+			button?.click();
+		});
+		expect(openExternal).toHaveBeenCalledWith(WISA_CONNECT_PAGE_URL);
+	});
+
+	it("drops the pinned card once the gateway has a key", async () => {
+		getProviders.mockResolvedValue(
+			providersResponse(snapshot([row("anthropic"), row("wisa", { name: "WISA", authenticated: true })])),
+		);
+		useSessionStore.setState({ status: "ready" });
+		useUiStore.getState().openProviders();
+		await mountWindow();
+
+		expect(text()).not.toContain(translate("wisaAuth.title"));
+	});
+
+	it("hides the pinned card while the user is searching", async () => {
+		// The filter box only appears past SEARCH_THRESHOLD rows, so the list has to
+		// be long enough for the user to be able to search at all.
+		const names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel"];
+		getProviders.mockResolvedValue(
+			providersResponse(
+				snapshot([
+					...names.map(name => row(name.toLowerCase(), { name, authenticated: true })),
+					row("wisa", { name: "WISA", authenticated: false }),
+				]),
+			),
+		);
+		useSessionStore.setState({ status: "ready" });
+		useUiStore.getState().openProviders();
+		await mountWindow();
+
+		expect(text()).toContain(translate("wisaAuth.title"));
+
+		const search = document.body.querySelector(`input[aria-label="${translate("providers.search")}"]`);
+		if (!search) throw new Error("no search box");
+		const record = search as unknown as Record<string, unknown>;
+		const propsKey = Object.getOwnPropertyNames(record).find(key => key.startsWith("__reactProps$"));
+		const props = propsKey ? (record[propsKey] as { onChange: (event: object) => void }) : undefined;
+		await act(async () => props?.onChange({ target: { value: "alpha" } }));
+
+		// A pinned row that survives a filter is a row the filter lies about.
+		expect(text()).not.toContain(translate("wisaAuth.title"));
+	});
+
+	it("shows the card for a seeded gateway the agent has not listed yet", async () => {
+		// The exact shape of a fresh profile: the provider is in models.yml with
+		// no key and no discovered models, so `get_providers` omits it entirely.
+		// Reading only the catalog left the user with 97 providers and no WISA.
+		listProviders.mockResolvedValue([{ ...config("wisa"), hasApiKey: false, auth: "apiKey", models: [] }]);
+		getProviders.mockResolvedValue(
+			providersResponse(snapshot([row("anthropic"), row("openrouter", { authenticated: false })])),
+		);
+		useSessionStore.setState({ status: "ready" });
+		useUiStore.getState().openProviders();
+		await mountWindow();
+
+		const body = text();
+		expect(body).toContain(translate("wisaAuth.title"));
+		expect(buttonWithLabel(translate("wisaAuth.signIn"))).toBeDefined();
+		// "no usable model found" is the wrong sentence for a gateway that has
+		// simply not been signed in to yet.
+		expect(body).not.toContain(translate("providers.customWithoutModels", { ids: "wisa" }));
+	});
+
+	it("drops the card once a seeded gateway has a key but no models yet", async () => {
+		// Signed in, discovery still running: the card must not tell the user to
+		// sign in to a gateway that already holds their key.
+		listProviders.mockResolvedValue([{ ...config("wisa"), hasApiKey: true, auth: "apiKey", models: [] }]);
+		getProviders.mockResolvedValue(providersResponse(snapshot([row("anthropic")])));
+		useSessionStore.setState({ status: "ready" });
+		useUiStore.getState().openProviders();
+		await mountWindow();
+
+		expect(text()).not.toContain(translate("wisaAuth.title"));
 	});
 });

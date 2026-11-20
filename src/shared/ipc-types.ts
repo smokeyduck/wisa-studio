@@ -126,7 +126,7 @@ export const IPC_EVENTS = {
 	STATS_DATA: "stats:data",
 	/** Native application menu action */
 	MENU_ACTION: "menu:action",
-	/** omp:// deep link (new session / switch session) */
+	/** omp:// deep link (new session / switch session / WISA sign-in outcome) */
 	DEEP_LINK: "deep-link",
 	/** Renderer → main fire-and-forget tray-state snapshot */
 	TRAY_STATE_PUSH: "tray:state-push",
@@ -426,7 +426,12 @@ export type MenuAction =
 	| "switch-project";
 
 /** Action forwarded to the renderer for an omp:// deep link. */
-export type DeepLinkPayload = { action: "new-session" } | { action: "switch-session"; sessionId: string };
+export type DeepLinkPayload =
+	| { action: "new-session" }
+	| { action: "switch-session"; sessionId: string }
+	/** The browser finished a WISA sign-in; the key is already in models.yml. */
+	| { action: "wisa-connected"; email: string }
+	| { action: "wisa-failed"; reason: string };
 
 /** Optional payload carried alongside a MenuAction (approval mode / project cwd). */
 export interface MenuActionPayload {

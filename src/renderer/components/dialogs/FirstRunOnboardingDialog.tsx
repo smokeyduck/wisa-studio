@@ -2,6 +2,7 @@ import { ArrowRight, Bot, FileCode2, KeyRound, RefreshCw, Sparkles } from "lucid
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CustomProviderView } from "../../../shared/ipc-types";
 import type { ProviderInfo } from "../../../shared/rpc-types";
+import { WISA_CONNECT_PAGE_URL } from "../../../shared/wisa";
 import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { useTabRpc } from "../../lib/tab-rpc";
@@ -168,7 +169,7 @@ export function FirstRunOnboardingDialog() {
 						icon={<KeyRound size={14} />}
 						onClick={() => {
 							setOpen(false);
-							openProviderConfig("new");
+							void window.omp.system.openExternal(WISA_CONNECT_PAGE_URL);
 						}}
 						trailingIcon={<ArrowRight size={13} />}
 					>

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { customProviderNeedsApiKey } from "../../../shared/custom-provider";
 import type { CustomProviderView } from "../../../shared/ipc-types";
 import type { LogoutAccount, ProviderDiscoveryState, ProviderInfo, ProvidersResult } from "../../../shared/rpc-types";
+import { WISA_CONNECT_PAGE_URL, WISA_PROVIDER_ID } from "../../../shared/wisa";
 import { describeError, describeProviderError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { watchSignInRequests } from "../../stores/extension-ui";
@@ -411,6 +412,19 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 	const needle = query.trim().toLowerCase();
 	const matches = (provider: ProviderInfo) =>
 		!needle || provider.name.toLowerCase().includes(needle) || provider.id.toLowerCase().includes(needle);
+	// Only while the gateway still needs a key: once signed in its own row shows
+	// the state, and a second banner saying "sign in" would contradict it.
+	//
+	// The agent lists a provider only once it has a credential and at least one
+	// model, so a freshly seeded gateway is absent from `providers` until the
+	// user signs in. Reading the models.yml entry as well is what keeps the
+	// sign-in card for this build's own gateway from being the one row nobody
+	// can reach: without it a new profile showed 97 providers and no WISA.
+	const wisaProvider = providers.find(p => p.id === WISA_PROVIDER_ID);
+	const wisaConfig = customConfigs.find(config => config.id === WISA_PROVIDER_ID && !config.builtin);
+	const wisaNeedsKey =
+		wisaProvider !== undefined ? !isReady(wisaProvider) : wisaConfig !== undefined && !wisaConfig.hasApiKey;
+	const showWisaConnect = !needle && wisaNeedsKey;
 	const authenticated = providers.filter(p => isReady(p) && matches(p));
 	const unauthenticated = providers.filter(p => !isReady(p) && matches(p));
 	const readyCount = providers.filter(isReady).length;
@@ -434,8 +448,14 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 		t("providers.discoveryUnavailable"),
 		providersInUse,
 	);
+	// The gateway's absence from the rows above is already explained by the
+	// sign-in card, and "no usable model found" is the wrong sentence for an
+	// account that has simply not signed in yet.
 	const unlistedConfigs = customConfigs.filter(
-		config => !config.builtin && !providers.some(provider => provider.id === config.id),
+		config =>
+			!config.builtin &&
+			!(showWisaConnect && config.id === WISA_PROVIDER_ID) &&
+			!providers.some(provider => provider.id === config.id),
 	);
 
 	return (
@@ -556,6 +576,27 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 					{!loading && !error && readyCount === 0 && (
 						<div className="omp-empty-hint rounded-md border border-[var(--omp-border-muted)] px-3 py-4 text-center text-omp-md text-[var(--omp-muted)]">
 							{t("providers.noAuth")}
+						</div>
+					)}
+
+					{/* Pinned first: the gateway this build ships for. Every other provider is
+					    something the user went looking for; this one is the intended path. */}
+					{showWisaConnect && (
+						<div className="flex items-center gap-3 rounded-lg border border-[var(--omp-border-muted)] bg-[var(--omp-bg-tertiary)] px-3 py-2.5">
+							<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+								<span className="text-omp-lg font-semibold text-[var(--omp-text)]">{t("wisaAuth.title")}</span>
+								<span className="text-omp-sm text-[var(--omp-dim)]">{t("wisaAuth.description")}</span>
+							</div>
+							<Button
+								size="sm"
+								variant="primary"
+								icon={<ExternalLink size={12} />}
+								onClick={() => {
+									void window.omp.system.openExternal(WISA_CONNECT_PAGE_URL);
+								}}
+							>
+								{t("wisaAuth.signIn")}
+							</Button>
 						</div>
 					)}
 

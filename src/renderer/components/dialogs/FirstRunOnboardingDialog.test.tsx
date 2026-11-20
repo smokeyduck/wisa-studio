@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { CustomProviderView } from "../../../shared/ipc-types";
 import type { ProviderInfo, RpcResponse } from "../../../shared/rpc-types";
+import { WISA_CONNECT_PAGE_URL } from "../../../shared/wisa";
 import { I18nProvider } from "../../lib/i18n";
 import { useSessionStore } from "../../stores/session";
 import { useUiStore } from "../../stores/ui";
@@ -174,6 +175,8 @@ describe("FirstRunOnboardingDialog", () => {
 
 	it("offers the WISA gateway before the generic provider and custom-entry cards", async () => {
 		installMockOmp();
+		const openExternal = vi.fn(async () => undefined);
+		(window as unknown as { omp: Record<string, unknown> }).omp.system = { openExternal };
 		useSessionStore.getState().setStatus("ready", "/tmp/project");
 		await mount(<FirstRunOnboardingDialog />);
 
@@ -184,7 +187,10 @@ describe("FirstRunOnboardingDialog", () => {
 		expect(wisa).toBeLessThan(generic);
 
 		await act(async () => buttonNamed("Connect WISA gateway").click());
-		expect(useUiStore.getState().providerConfigOpen).toBe(true);
+		// Sign-in, not the provider form: the gateway hands the key over through
+		// the browser, so a form asking for it by hand is the wrong door.
+		expect(openExternal).toHaveBeenCalledWith(WISA_CONNECT_PAGE_URL);
+		expect(useUiStore.getState().providerConfigOpen).toBe(false);
 	});
 
 	it("does not interrupt startup when a runnable provider already exists", async () => {

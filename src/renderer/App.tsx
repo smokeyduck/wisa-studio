@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo } from "react";
-import type { MenuAction, MenuActionPayload, RunProgressState } from "../shared/ipc-types";
+import type { DeepLinkPayload, MenuAction, MenuActionPayload, RunProgressState } from "../shared/ipc-types";
 import { nextLanguage } from "../shared/languages";
 import { AgentHoverCardLayer } from "./components/agents/AgentHoverCard";
 import { PanelErrorBoundary, Spinner, ToastStack } from "./components/common";
@@ -374,9 +374,21 @@ export function App() {
 	useEffect(() => watchSystemTheme(theme, () => applyThemeByName("system", { persist: false })), [theme]);
 	useEffect(() => applyFontSize(fontSize), [fontSize]);
 
-	// Handle omp:// deep links (omp://new → new session; omp://session/<id> → switch).
+	// Handle omp:// deep links (omp://new → new session; omp://session/<id> → switch;
+	// omp://wisa-auth → the main process already stored the key, we only report it).
 	useEffect(() => {
-		const handle = async (link: { action: "new-session" } | { action: "switch-session"; sessionId: string }) => {
+		const handle = async (link: DeepLinkPayload) => {
+			if (link.action === "wisa-connected") {
+				// The key is in models.yml already; reload so the picker lists the
+				// gateway's models without the user opening settings.
+				toast({ variant: "success", title: t("wisaAuth.connected"), message: t("wisaAuth.connectedDesc") });
+				await useModelStore.getState().refreshProviders(true);
+				return;
+			}
+			if (link.action === "wisa-failed") {
+				toast({ variant: "error", title: t("wisaAuth.failed"), message: link.reason });
+				return;
+			}
 			if (link.action === "new-session") {
 				if (useSessionStore.getState().isStreaming) {
 					toast({ variant: "warning", title: t("deepLink.streaming"), message: t("deepLink.streamingDesc") });
