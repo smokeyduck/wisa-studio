@@ -74,7 +74,7 @@ export const en: Record<string, string> = {
 	"titlebar.planMode": "Plan mode is on — the agent plans before executing",
 	"titlebar.usage": "Usage & quotas",
 	"titlebar.providers": "Providers & login",
-	"titlebar.skills": "SKILLS",
+	"titlebar.skills": "Skills",
 	"titlebar.skillsHint": "Manage the skills WISA STUDIO can use",
 	"titlebar.plugins": "Plugins",
 	"plugins.title": "Plugins",

@@ -69,7 +69,7 @@ export const ru: Record<string, string> = {
 	"titlebar.planMode": "Режим планирования включён — агент сначала составляет план",
 	"titlebar.usage": "Использование и квоты",
 	"titlebar.providers": "Провайдеры и вход",
-	"titlebar.skills": "SKILLS",
+	"titlebar.skills": "Skills",
 	"titlebar.skillsHint": "Управление Skills, доступными WISA STUDIO",
 	"titlebar.plugins": "Plugins",
 	"plugins.title": "Plugins",

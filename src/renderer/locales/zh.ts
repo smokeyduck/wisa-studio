@@ -70,7 +70,7 @@ export const zh: Record<string, string> = {
 	"titlebar.planMode": "计划模式已开启——代理先规划再执行",
 	"titlebar.usage": "用量与配额",
 	"titlebar.providers": "提供商与登录",
-	"titlebar.skills": "SKILLS",
+	"titlebar.skills": "技能",
 	"titlebar.skillsHint": "管理 WISA STUDIO 可用的技能",
 	"titlebar.plugins": "插件",
 	"plugins.title": "插件",

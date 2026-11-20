@@ -69,7 +69,7 @@ export const vi: Record<string, string> = {
 	"titlebar.planMode": "Chế độ lập kế hoạch đang bật — tác nhân lập kế hoạch trước khi thực thi",
 	"titlebar.usage": "Mức dùng & hạn mức",
 	"titlebar.providers": "Nhà cung cấp & đăng nhập",
-	"titlebar.skills": "SKILLS",
+	"titlebar.skills": "Skills",
 	"titlebar.skillsHint": "Quản lý các skill mà WISA STUDIO có thể dùng",
 	"titlebar.plugins": "Plugins",
 	"plugins.title": "Plugins",

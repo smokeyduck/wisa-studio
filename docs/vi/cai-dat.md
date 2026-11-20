@@ -8,14 +8,14 @@ description: Tải và cài WISA STUDIO trên macOS (arm64/Intel), Windows và L
 
 WISA STUDIO là ứng dụng desktop đóng gói sẵn agent omp bên trong. Bạn **không** cần cài Node, Bun hay `omp` CLI trước khi cài — chỉ cần tải đúng gói cho hệ điều hành của mình.
 
-Bản phát hành chính thức: [github.com/smokeyduck/wisa-studio/releases](https://github.com/smokeyduck/wisa-studio/releases). Tài liệu này viết cho bản `0.9.46`; tên tệp luôn theo mẫu `wisa-studio-<phiên bản>-<hậu tố>`.
+Bản phát hành chính thức: [github.com/smokeyduck/wisa-studio/releases](https://github.com/smokeyduck/wisa-studio/releases). Tài liệu này viết cho bản `0.9.47`; tên tệp luôn theo mẫu `wisa-studio-<phiên bản>-<hậu tố>`.
 
 ## macOS
 
 | Máy | Tệp cần tải |
 |---|---|
-| Apple Silicon (M1 trở lên) | `wisa-studio-0.9.46-arm64.dmg` |
-| Intel | `wisa-studio-0.9.46.dmg` |
+| Apple Silicon (M1 trở lên) | `wisa-studio-0.9.47-arm64.dmg` |
+| Intel | `wisa-studio-0.9.47.dmg` |
 
 Không chắc máy mình dùng chip gì? Mở Terminal và chạy:
 
@@ -49,8 +49,8 @@ Chỉ làm việc này khi bạn tải tệp từ trang Releases ở trên. Nế
 
 | Gói | Dùng khi |
 |---|---|
-| `wisa-studio-0.9.46-setup.exe` | Cài bình thường, có lối tắt Start Menu và tự cập nhật |
-| `wisa-studio-0.9.46-portable.exe` | Chạy ngay không cần cài, ví dụ trên máy dùng chung hoặc USB |
+| `wisa-studio-0.9.47-setup.exe` | Cài bình thường, có lối tắt Start Menu và tự cập nhật |
+| `wisa-studio-0.9.47-portable.exe` | Chạy ngay không cần cài, ví dụ trên máy dùng chung hoặc USB |
 
 Yêu cầu: Windows 10/11 x64. Bản cài cho phép chọn thư mục cài đặt; gỡ cài đặt **không** xoá dữ liệu người dùng.
 
@@ -63,8 +63,8 @@ Hai định dạng: AppImage (chạy độc lập) và deb (Debian/Ubuntu và c�
 ### AppImage
 
 ```bash
-chmod +x wisa-studio-0.9.46.AppImage
-./wisa-studio-0.9.46.AppImage
+chmod +x wisa-studio-0.9.47.AppImage
+./wisa-studio-0.9.47.AppImage
 ```
 
 Nếu thiếu FUSE 2, AppImage báo lỗi kiểu `dlopen(): error loading libfuse.so.2` hoặc "Cannot mount AppImage". Cài thư viện:
@@ -79,14 +79,14 @@ sudo dnf install fuse-libs
 Không muốn (hoặc không được phép) cài FUSE? Giải nén rồi chạy:
 
 ```bash
-./wisa-studio-0.9.46.AppImage --appimage-extract
+./wisa-studio-0.9.47.AppImage --appimage-extract
 ./squashfs-root/AppRun
 ```
 
 ### Debian / Ubuntu
 
 ```bash
-sudo apt install ./wisa-studio_0.9.46_amd64.deb
+sudo apt install ./wisa-studio_0.9.47_amd64.deb
 ```
 
 `apt` tự kéo các phụ thuộc cần thiết. Sau khi cài, ứng dụng xuất hiện trong menu ứng dụng với tên **WISA STUDIO**.

@@ -71,7 +71,7 @@ export const th: Record<string, string> = {
 	"titlebar.planMode": "เปิดโหมดวางแผนอยู่ — agent จะวางแผนก่อนลงมือทำงาน",
 	"titlebar.usage": "การใช้งานและโควตา",
 	"titlebar.providers": "ผู้ให้บริการและการเข้าสู่ระบบ",
-	"titlebar.skills": "SKILLS",
+	"titlebar.skills": "Skills",
 	"titlebar.skillsHint": "จัดการ skill ที่ WISA STUDIO ใช้ได้",
 	"titlebar.plugins": "Plugins",
 	"plugins.title": "Plugins",

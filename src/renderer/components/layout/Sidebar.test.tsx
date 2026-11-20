@@ -275,7 +275,7 @@ describe("Sidebar menus and pinned ordering", () => {
 		await mount(<Sidebar />);
 
 		const navigation = container.querySelector("[data-sidebar-navigation]");
-		for (const label of ["New session", "Commands", "SKILLS", "Plugins", "More"]) {
+		for (const label of ["New session", "Commands", "Skills", "Plugins", "More"]) {
 			expect(navigation?.textContent).toContain(label);
 		}
 		// App-wide tools do not compete with the task list until asked for.

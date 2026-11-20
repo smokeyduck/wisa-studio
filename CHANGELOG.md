@@ -7,11 +7,16 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
-Work merged after the 0.9.46 tag lands here until the next release moves it
-into a version section.
+## [0.9.47] - 2026-11-20
 
 ### Changed
 
+- Skills has its own sidebar entry instead of living only behind Settings, so
+  turning one on no longer means finding the tab first. The Skills page gains
+  **Enable all** / **Disable all** over the current filter, sending one toggle
+  per skill that actually needs to change.
+- The sidebar entry reads **Skills**, matching the sentence case of every
+  neighbouring label; the shouting `SKILLS` form is gone from all five locales.
 - The WISA ribbon replaces the π mark everywhere it was visible: the empty
   chat canvas, the transcript loading state, the app icon (dock, taskbar,
   window, installers), the menu-bar/tray mark and the favicon. One artwork
