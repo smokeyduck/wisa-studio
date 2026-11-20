@@ -1311,4 +1311,12 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Use provider-native server compaction (OpenAI Responses compact, Anthropic compaction beta, including on Bedrock) when the active route supports it":
 		"Use provider-native server compaction (OpenAI Responses compact, Anthropic compaction beta, including on Bedrock) when the active route supports it",
 	med: "med",
+	"Keep Alive": "Поддерживать",
+	"Never compact; refresh until it stops paying": "Никогда не сжимать; обновлять, пока это окупается",
+	"Compact at the first decision once the prompt reaches the bridge-compaction threshold":
+		"Сжимать при первом решении, как только промпт достигнет порога сжатия",
+	"Refresh while the refresh spend stays within the cheaper buy-out, then compact large prompts or let the entry expire":
+		"Обновлять, пока расходы ниже повторной записи, затем сжимать большие промпты или дать записи истечь",
+	"Isolated subagents and `/wt` use ovnfs checkouts when ovnfs is found; otherwise (and for other worktrees) the PAL picks the best available backend":
+		"Изолированные субагенты и `/wt` используют checkout-ы ovnfs, когда ovnfs найден; иначе (и для остальных worktree) PAL выбирает лучший доступный бэкенд",
 };

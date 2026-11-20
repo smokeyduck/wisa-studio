@@ -41,8 +41,8 @@ import {
 	wrapPasteInAttachmentBlock,
 } from "../../lib/paste-blobs";
 import { parseQueueShorthand, splitQueuedMessages } from "../../lib/queue-input";
-import { supportsFastMode } from "../../lib/service-tier";
 import { insertQuote } from "../../lib/quote-selection";
+import { supportsFastMode } from "../../lib/service-tier";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { composerFileKey, useComposerStore } from "../../stores/composer";
 import { useInputHistoryStore } from "../../stores/input-history";
@@ -103,6 +103,7 @@ export function InputArea() {
 	const sttEnabled = useSettingsStore(s => s.sttEnabled);
 	/** Agent `paste.largeMenuThreshold` setting: line count that triggers the paste menu. */
 	const pasteMenuThreshold = useDisplayPreference("pasteMenuThreshold");
+	const collapseLargePastes = useUiStore(s => s.collapseLargePastes);
 	/** Agent `emojiAutocomplete` setting: emoji popup/inline/submit expansion. */
 	const emojiAutocomplete = useDisplayPreference("emojiAutocomplete");
 
@@ -227,7 +228,7 @@ export function InputArea() {
 		void useInputHistoryStore.getState().hydrate();
 	}, []);
 
-	// `!` → bash / `$` → python composer mode (TUI parity): drives the border badge
+	// `!` → bash / `$` → python / `?` → side-question composer mode (TUI parity): drives the border badge
 	// and reroutes sending. Detected from the prefix alone so the badge appears
 	// while the user is still typing.
 	const composerMode = useMemo(() => parseComposerMode(text), [text]);
@@ -236,7 +237,9 @@ export function InputArea() {
 			? "var(--omp-info)"
 			: composerMode?.mode === "python"
 				? "var(--omp-warning)"
-				: undefined;
+				: composerMode?.mode === "btw"
+					? "var(--omp-accent)"
+					: undefined;
 
 	// `->` / `=>` yield-queue shorthand (TUI queue-input.ts parity). The badge
 	// preview and the send-path dispatch share this one parser so the "splits
@@ -459,42 +462,52 @@ export function InputArea() {
 		[text, menu, setText],
 	);
 
-	// Collapse a large paste into a `[Paste #N]` marker with the blob held in
-	// memory; the marker expands back to full content at submit time (TUI
-	// editor.ts parity). Inserted at the caret, replacing any selection.
-	const insertPasteBlob = useCallback(
-		(content: string) => {
-			const blob = storePaste(content);
-			const marker = pasteMarkerText(blob.id, blob.content);
+	const insertTextAtCaret = useCallback(
+		(insertion: string) => {
 			const el = textareaRef.current;
 			const start = el?.selectionStart ?? text.length;
 			const end = el?.selectionEnd ?? start;
-			setText(current => `${current.slice(0, start)}${marker}${current.slice(end)}`);
+			setText(current => `${current.slice(0, start)}${insertion}${current.slice(end)}`);
 			requestAnimationFrame(() => {
 				const target = textareaRef.current;
 				if (!target) return;
 				target.focus();
-				const caret = start + marker.length;
+				const caret = start + insertion.length;
 				target.setSelectionRange(caret, caret);
 			});
 		},
 		[text, setText],
 	);
 
+	// Collapse a large paste into a `[Paste #N]` marker with the blob held in
+	// memory; the marker expands back to full content at submit time (TUI
+	// editor.ts parity). Inserted at the caret, replacing any selection.
+	const insertPasteBlob = useCallback(
+		(content: string) => {
+			const blob = storePaste(content);
+			insertTextAtCaret(pasteMarkerText(blob.id, blob.content));
+		},
+		[insertTextAtCaret],
+	);
+
 	// Paste menu actions — the paste always inserts something; the menu only
 	// picks the form. Keep side effects outside state updaters: React may replay
 	// updater functions, which must never duplicate a paste or an RPC write.
+	// With collapsing off, the same choice inserts the text verbatim instead.
 	const choosePasteInline = useCallback(() => {
 		if (!pasteMenu) return;
-		insertPasteBlob(pasteMenu.content);
+		if (collapseLargePastes) insertPasteBlob(pasteMenu.content);
+		else insertTextAtCaret(pasteMenu.content);
 		setPasteMenu(null);
-	}, [insertPasteBlob, pasteMenu]);
+	}, [collapseLargePastes, insertPasteBlob, insertTextAtCaret, pasteMenu]);
 
 	const choosePasteWrapped = useCallback(() => {
 		if (!pasteMenu) return;
-		insertPasteBlob(wrapPasteInAttachmentBlock(pasteMenu.content));
+		const wrapped = wrapPasteInAttachmentBlock(pasteMenu.content);
+		if (collapseLargePastes) insertPasteBlob(wrapped);
+		else insertTextAtCaret(wrapped);
 		setPasteMenu(null);
-	}, [insertPasteBlob, pasteMenu]);
+	}, [collapseLargePastes, insertPasteBlob, insertTextAtCaret, pasteMenu]);
 
 	// Save-as-file: the agent writes the blob into the session's local:// store
 	// (counter allocated agent-side so two windows can never collide) and the
@@ -704,13 +717,16 @@ export function InputArea() {
 			.normalize("NFC")
 			.replace(/\t/g, "   ")
 			.replace(/[\x00-\x08\x0B-\x1F]/g, "");
-		if (!isMarkerSized(content)) return; // small paste: default textarea behavior
-		e.preventDefault();
 		const lineCount = content.split("\n").length;
 		if (shouldOfferPasteMenu(lineCount, pasteMenuThreshold)) {
+			// The menu opens regardless of the collapse preference: it is where the
+			// user picks inline vs wrapped, and both forms honour the flag.
+			e.preventDefault();
 			setPasteMenu({ content, lineCount });
 			return;
 		}
+		if (!collapseLargePastes || !isMarkerSized(content)) return; // verbatim paste: default textarea behavior
+		e.preventDefault();
 		insertPasteBlob(content);
 	};
 
@@ -790,10 +806,12 @@ export function InputArea() {
 					<div
 						className="absolute -top-2 left-5 z-10 flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-omp-xs font-semibold"
 						style={{ borderColor: modeColor, color: modeColor, backgroundColor: "var(--omp-bg-primary)" }}
-						title={composerMode.mode === "bash" ? t("input.mode.bash.title") : t("input.mode.python.title")}
+						title={composerMode.mode === "btw" ? t("cmd.btw.desc") : t(`input.mode.${composerMode.mode}.title`)}
 					>
-						<span className="font-mono text-omp-sm leading-none">{composerMode.mode === "bash" ? "!" : "$"}</span>
-						{composerMode.mode}
+						<span className="font-mono text-omp-sm leading-none">
+							{{ bash: "!", python: "$", btw: "?" }[composerMode.mode]}
+						</span>
+						{composerMode.mode === "btw" ? t("btw.title") : composerMode.mode}
 					</div>
 				)}
 

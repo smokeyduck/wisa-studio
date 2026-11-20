@@ -1291,4 +1291,12 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Use provider-native server compaction (OpenAI Responses compact, Anthropic compaction beta, including on Bedrock) when the active route supports it":
 		"Use provider-native server compaction (OpenAI Responses compact, Anthropic compaction beta, including on Bedrock) when the active route supports it",
 	med: "med",
+	"Keep Alive": "Giữ hoạt động",
+	"Never compact; refresh until it stops paying": "Không bao giờ nén; gia hạn cho đến khi không còn đáng",
+	"Compact at the first decision once the prompt reaches the bridge-compaction threshold":
+		"Nén ngay ở quyết định đầu tiên khi câu lệnh đạt ngưỡng nén cầu nối",
+	"Refresh while the refresh spend stays within the cheaper buy-out, then compact large prompts or let the entry expire":
+		"Gia hạn khi chi phí gia hạn vẫn thấp hơn chi phí ghi lại, sau đó nén các câu lệnh lớn hoặc để mục đó hết hạn",
+	"Isolated subagents and `/wt` use ovnfs checkouts when ovnfs is found; otherwise (and for other worktrees) the PAL picks the best available backend":
+		"Subagent cô lập và `/wt` dùng checkout của ovnfs khi tìm thấy ovnfs; nếu không (và với các worktree khác) PAL chọn backend tốt nhất hiện có",
 };

@@ -1038,4 +1038,12 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Judge each prompt and report the split without acting on it": "判断每条提示并报告拆分方式，但不据此行动",
 	"When a prompt splits into independent subtasks, tell the agent to delegate them in parallel":
 		"提示可拆分为相互独立的子任务时，让代理并行委派它们",
+	"Keep Alive": "保持续期",
+	"Never compact; refresh until it stops paying": "从不压缩；持续续期直到不再划算",
+	"Compact at the first decision once the prompt reaches the bridge-compaction threshold":
+		"提示词达到衔接压缩阈值后，在第一次决策时就压缩",
+	"Refresh while the refresh spend stays within the cheaper buy-out, then compact large prompts or let the entry expire":
+		"续期花费低于重新写入成本时继续续期，之后压缩较大的提示词或让缓存过期",
+	"Isolated subagents and `/wt` use ovnfs checkouts when ovnfs is found; otherwise (and for other worktrees) the PAL picks the best available backend":
+		"找到 ovnfs 时，隔离的子代理和 `/wt` 使用 ovnfs 检出；否则（以及其他 worktree）由 PAL 选择最佳可用后端",
 };

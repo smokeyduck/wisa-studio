@@ -37,6 +37,7 @@ import { describeError, describeProviderError } from "../lib/errors";
 import { formatClock } from "../lib/format";
 import { translate } from "../lib/i18n";
 import { normalizeLoopUpdate } from "../lib/loop-mode";
+import { playNotificationChime } from "../lib/notify-sound";
 import { acceptsActiveTabEvents } from "../lib/tab-routing";
 import { useBtwStore } from "../stores/btw";
 import { useExtensionUiStore } from "../stores/extension-ui";
@@ -59,7 +60,6 @@ import { useToastStore } from "../stores/toast";
 import { todoPhasesFromToolResult, useTodoStore } from "../stores/todo";
 import { useToolsStore } from "../stores/tools";
 import { useUiStore } from "../stores/ui";
-import { playNotificationChime } from "../lib/notify-sound";
 
 /**
  * Routine informational notice sources suppressed from the toast stack — they
@@ -388,6 +388,44 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							}
 							// Re-fetch state so agent-side todo updates mid-turn reach the panel.
 							void refreshSessionState(tabId);
+							break;
+						}
+						case "manual_compaction_start": {
+							const kind = event.mode === "handoff" ? "handoff" : "compact";
+							useSessionStore.setState(state => ({
+								isCompacting: kind === "compact" || state.isCompacting,
+								isBackgroundCompacting: kind === "handoff",
+								manualMaintenance:
+									state.manualMaintenance?.kind === kind
+										? state.manualMaintenance
+										: { kind, startedAt: Date.now() },
+							}));
+							break;
+						}
+						case "manual_compaction_end": {
+							const { isStreaming } = useSessionStore.getState();
+							useSessionStore.setState(state => ({
+								isCompacting: state.compactionInfo !== null,
+								isBackgroundCompacting: false,
+								manualMaintenance: null,
+							}));
+							if (!event.aborted && event.result) {
+								if (isStreaming) void refreshSessionState(tabId);
+								else void (tabId && sessionRuntime(tabId) ? hydrateTabSession(tabId) : hydrateSession());
+							}
+							break;
+						}
+						case "cache_warming_start": {
+							const { phase, method, provider, model } = event;
+							useSessionStore.setState({ cacheWarming: { phase, method, provider, model } });
+							break;
+						}
+						case "cache_warming_end": {
+							const { phase, method, provider, model, outcome, usage } = event;
+							useSessionStore.setState({
+								cacheWarming: { phase, method, provider, model, outcome, cost: usage?.cost?.total },
+							});
+							if (usage) void refreshSessionState(tabId);
 							break;
 						}
 						case "auto_compaction_start": {

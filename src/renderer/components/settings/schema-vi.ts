@@ -761,7 +761,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"providers.cacheWarming": {
 		label: "Làm nóng bộ nhớ đệm",
 		description:
-			"Gửi lại yêu cầu cuối cùng với giới hạn đầu ra một token ngay trước khi hết hạn ghi vào bộ nhớ đệm câu lệnh",
+			"Gia hạn mục bộ nhớ đệm câu lệnh của yêu cầu cuối ngay trước khi hết hạn (Anthropic làm nóng với max_tokens 0, các nhà cung cấp khác phát lại với một token)",
 	},
 	"providers.streamFirstEventTimeoutSeconds": {
 		label: "Thời gian chờ sự kiện đầu tiên của luồng",
@@ -2734,5 +2734,35 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	},
 	"spotlight.url": {
 		label: "spotlight.url",
+	},
+	"mcp.builtinTransforms": {
+		label: "Thay thế MCP tích hợp",
+		description:
+			"Bỏ qua các máy chủ MCP đã được công cụ sẵn có của omp thay thế (node_repl của Codex khi eval chạy JavaScript)",
+	},
+	"mcp.evalNamespaces": {
+		label: "Không gian tên MCP trong eval",
+		description:
+			"Hiển thị mỗi máy chủ MCP thành một đối tượng toàn cục của eval (github.create_issue(...)) thay vì công cụ cấp cao nhất hay xd://",
+	},
+	"providers.cacheWarmingStrategy": {
+		label: "Chiến lược làm nóng bộ nhớ đệm",
+		description:
+			"Cách kéo dài một lần gọi công cụ dài khi việc gia hạn không còn đáng: nén lịch sử trước khi bộ nhớ đệm hết hạn, hoặc để nó hết hạn",
+	},
+	"providers.cacheWarmingCompactPercent": {
+		label: "Tỷ lệ cửa sổ để nén khi gia hạn",
+		description:
+			"Tỷ lệ cửa sổ ngữ cảnh mà sau đó một lần gọi công cụ dài có thể được gia hạn bằng cách nén; áp dụng giá trị nhỏ hơn giữa tỷ lệ này và giới hạn token",
+	},
+	"providers.cacheWarmingCompactTokens": {
+		label: "Số token để nén khi gia hạn",
+		description:
+			"Số token câu lệnh mà sau đó một lần gọi công cụ dài có thể được gia hạn bằng cách nén; áp dụng giá trị nhỏ hơn giữa số này và tỷ lệ cửa sổ",
+	},
+	"task.crossInstance": {
+		label: "Tin nhắn tác nhân giữa các phiên bản",
+		description:
+			"Cho phép các phiên bản omp khác trong cùng thư mục đọc đầu ra của tác nhân và gửi tin nhắn có thể đánh thức chúng",
 	},
 };

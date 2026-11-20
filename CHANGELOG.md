@@ -7,6 +7,62 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+## [0.9.48] - 2026-11-20
+
+The bundled agent moves to Core 19 (omp 19.0.0), upstream's `2bf23c7`. The port
+covers the RPC surface, the browser-window link model, paste collapsing, the
+side-question prefix and session output files — plus one deliberate behaviour
+change: **Handoff no longer starts a new session.**
+
+### Changed
+
+- **Handoff runs in the current session.** It used to summarize, then fork into
+  a new session carrying the summary. Core 19 hands off in place in the
+  background: the agent keeps answering while the summary is prepared, and the
+  transcript you are reading is the one that continues. Stop cancels the
+  maintenance only — it no longer aborts the live turn. This is not reversible
+  once the sidecar pin moves: the old fork flow cannot come back.
+- **Cache warming** is visible while it happens. The session info panel shows
+  the phase, the provider and the model, and whether the refresh confirmed the
+  cache, missed it, failed or was stopped; the transcript shows a status row
+  with a Stop that cancels the refresh.
+- **Usage** badges the subscription plan the provider reports (Claude plans
+  included), so a plan-limited window is not mistaken for a broken account.
+- **Daemon and job rows** follow Core 19's shape: queued jobs read as queued
+  rather than running, and a daemon reports its label, exit code and whether it
+  holds a persistent lease.
+- The background-compaction state is tracked per tab, so a session doing
+  context maintenance in the background shows a chip and is not treated as
+  idle when you switch to it.
+
+### Added
+
+- **Link left-click opens in** — browser window (default) or your system
+  browser; ⌘/Ctrl-click does the opposite. The built-in browser moved to its own
+  window, and the wording now says so.
+- **Collapse long pastes into markers** — pasted text over 10 lines or 1,000
+  characters becomes a compact `[Paste #N]` marker instead of a wall of text.
+  Turn it off to insert verbatim.
+- **`?` at the start of a message** asks a side question: it reads the
+  conversation without touching files or tools, and routes to the side-question
+  panel of the tab you typed in.
+- **Session output files** (`local://N.log`) are previewable. A path in that
+  form opens in the file panel read-only; it never reveals or opens externally.
+- File tabs are scoped per session: switching sessions drops tabs pointing at
+  the previous session's output while keeping your project files.
+- 23 more providers, with `singularityapi` split into `singularityapi-dev` and
+  `singularityapi-tech`.
+- Six new settings are translated in every locale: MCP built-in transforms and
+  eval namespaces, the three cache-warming strategy knobs and cross-instance
+  agent messages.
+
+### Fixed
+
+- The Vietnamese handoff strings still described the old fork-to-a-new-session
+  flow; they now match what the dialog does.
+- A missing Core 19 option string would have failed the locale gate in the
+  release workflows; the Russian, Vietnamese and Chinese option tables carry it.
+
 ## [0.9.47] - 2026-11-20
 
 ### Changed

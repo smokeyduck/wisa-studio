@@ -316,6 +316,8 @@ export function SettingsWindow() {
 	const transcriptDetail = useUiStore(state => state.transcriptDetail);
 	const tabWidth = useUiStore(state => state.tabWidth);
 	const tabRows = useUiStore(state => state.tabRows);
+	const linkOpenMode = useUiStore(state => state.linkOpenMode);
+	const collapseLargePastes = useUiStore(state => state.collapseLargePastes);
 	const sidecarStatus = useSessionStore(state => state.status);
 	const sidecarReady = sidecarStatus === "ready";
 	const sidecarError = useUiStore(state => state.sidecarError);
@@ -553,6 +555,12 @@ export function SettingsWindow() {
 	const applyTabRows = (multi: boolean) => {
 		const next = multi ? "multi" : "single";
 		return saveGuiPreference("tabRows", next, () => useUiStore.getState().setTabRows(next));
+	};
+	const applyLinkOpenMode = (next: typeof linkOpenMode) => {
+		void saveGuiPreference("linkOpenMode", next, () => useUiStore.getState().setLinkOpenMode(next));
+	};
+	const applyCollapseLargePastes = (next: boolean) => {
+		return saveGuiPreference("collapseLargePastes", next, () => useUiStore.getState().setCollapseLargePastes(next));
 	};
 	const applyNotifications = (next: boolean) => {
 		return saveGuiPreference("notifications", next, () => setNotifications(next));
@@ -1268,6 +1276,15 @@ export function SettingsWindow() {
 															<DisplayPreferenceRow key={field} field={field} />
 														))}
 													</div>
+													<div id="setting-gui-collapseLargePastes" className="mt-4">
+														<Toggle
+															className="omp-settings-row"
+															checked={collapseLargePastes}
+															description={t("settings.gui.collapseLargePastesDesc")}
+															label={t("settings.gui.collapseLargePastes")}
+															onChange={applyCollapseLargePastes}
+														/>
+													</div>
 													{/* Same row geometry as the switches above: label left, a
 											    number-sized field right — not a full-width text box. */}
 													<div
@@ -1384,6 +1401,25 @@ export function SettingsWindow() {
 														description={t("settings.gui.tabRowsDesc")}
 														label={t("settings.gui.tabRows")}
 														onChange={applyTabRows}
+													/>
+												</Section>
+												<Section id="setting-gui-linkOpenMode" title={t("settings.gui.linkOpenMode")}>
+													<RadioGroup
+														name="linkOpenMode"
+														onChange={applyLinkOpenMode}
+														options={[
+															{
+																value: "panel",
+																label: t("settings.gui.linkOpenMode.panel"),
+																description: t("settings.gui.linkOpenMode.panelDesc"),
+															},
+															{
+																value: "external",
+																label: t("settings.gui.linkOpenMode.external"),
+																description: t("settings.gui.linkOpenMode.externalDesc"),
+															},
+														]}
+														value={linkOpenMode}
 													/>
 												</Section>
 												<Section id="setting-gui-sidebarQuotas" title={t("settings.gui.sidebarQuotas")}>
