@@ -7,6 +7,30 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+## [0.9.51] - 2026-11-22
+
+### Changed
+
+- **A run of steps reads as one stack.** In full detail a reasoning-only step
+  is its own row between two step chips, and the row carried `py-3` plus a
+  24px footer reserved for its hover actions, so the chip above sat 19px away
+  and the chip below 45px away while neighbouring chips sat about 15px apart.
+  The row now tightens to its disclosure line and its copy/branch buttons float
+  over that line's empty trailing edge instead of reserving height, and the
+  chips themselves lose the padding their 26px touch target already covers:
+  chip to reasoning and reasoning to chip both measure 4px, and a chip plus its
+  reasoning row takes 66px instead of 118px. Hovering still never moves the
+  transcript, and the reasoning row stays 2px at every density.
+
+### Fixed
+
+- **The word-completion options are translated in Chinese.** `zh` had no entry
+  for the autocomplete engine options, so a Chinese Mac showed Off/Auto/N-gram/
+  SmolLM/Apple and their descriptions in English. The Russian and Vietnamese
+  tables also gain the `Apple` option: Core appends it to the schema on macOS
+  only, so a Linux checkout never renders it, and the release check that reads
+  the real schema from the sidecar failed the macOS build on both locales.
+
 ## [0.9.50] - 2026-11-21
 
 ### Added
