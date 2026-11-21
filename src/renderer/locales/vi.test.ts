@@ -33,6 +33,18 @@ describe("Vietnamese locale completeness", () => {
 		}
 	});
 
+	// Vietnamese writes no plural suffix, so dropping the English `{plural}`
+	// token is correct — but a mechanical "remove the token and the space
+	// before it" glues the next word onto the preceding one ("1 tệpđã sửa").
+	// A placeholder may only butt against a unit suffix ("{seconds}s").
+	it("never glues a word onto a placeholder", () => {
+		const UNIT_SUFFIXES = new Set(["s", "ms", "h", "KB", "MB", "GB"]);
+		const offenders = Object.entries(vi)
+			.filter(([, value]) => [...value.matchAll(/\}([A-Za-zÀ-ỹ]+)/g)].some(match => !UNIT_SUFFIXES.has(match[1])))
+			.map(([key]) => key);
+		expect(offenders).toEqual([]);
+	});
+
 	it("retains protected technical terminology and named modes", () => {
 		for (const [key, value] of Object.entries(en)) {
 			if (/\bMCP\b/.test(value)) expect(vi[key], key).toMatch(/\bMCP\b/);
