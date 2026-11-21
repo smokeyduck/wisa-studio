@@ -13,11 +13,11 @@ This file governs the **WISA STUDIO GUI sub-repository**. Read it before any edi
 | Repo | Role | Push? | Pull/sync from? |
 |---|---|---|---|
 | [`smokeyduck/wisa-studio`](https://github.com/smokeyduck/wisa-studio) | **This repo** — WISA STUDIO product, releases. | ✅ all GUI work | only own commits |
-| [`nornzach/oh-my-pi`](https://github.com/nornzach/oh-my-pi) | **Monorepo fork** (`origin` of the enclosing checkout) — agent source; the only sidecar build source, pinned in `sidecar-source.json`. | ✅ (from the monorepo root, not from here) | only own commits |
+| [`smokeyduck/oh-my-pi`](https://github.com/smokeyduck/oh-my-pi) | **Monorepo fork** (`origin` of the enclosing checkout) — agent source; the only sidecar build source, pinned in `sidecar-source.json`. | ✅ (from the monorepo root, not from here) | only own commits |
 | [`can1357/oh-my-pi`](https://github.com/can1357/oh-my-pi) | **Upstream** (`upstream` of the enclosing checkout) — where new omp features come from. | ❌ **NEVER** | ✅ `scripts/sync-upstream.sh` |
 
 - **All GUI work commits to this repo and pushes to `origin/main`.** Never commit GUI paths into the enclosing monorepo's git — from its perspective this directory is an intentionally untracked, self-contained checkout.
-- Agent-side work (RPC commands, session logic, `packages/agent|coding-agent|ai|…`) belongs to the **monorepo**, commits at the monorepo root, and pushes to `nornzach/oh-my-pi` (fork) — it does not exist in this repo's history even though the files sit above this directory.
+- Agent-side work (RPC commands, session logic, `packages/agent|coding-agent|ai|…`) belongs to the **monorepo**, commits at the monorepo root, and pushes to `smokeyduck/oh-my-pi` (fork) — it does not exist in this repo's history even though the files sit above this directory.
 
 ### Upstream sync (pulling new omp features)
 
@@ -137,8 +137,8 @@ Inspect every artifact before publishing:
 - Mount each DMG; verify the seal: `codesign --verify --deep --strict --verbose=2 "<path>/WISA STUDIO.app"`.
 - `file "<path>/WISA STUDIO.app/Contents/Resources/omp"` — the bundled sidecar arch must match the DMG (`wisa-studio-X.Y.Z-arm64.dmg` = arm64; `wisa-studio-X.Y.Z.dmg` = Intel).
 - Launch each package on a compatible host: sidecar reaches `ready`, `get_settings` RPC succeeds, one settings toggle persists. From an agent shell, launch with `env -u ELECTRON_RUN_AS_NODE …/Contents/MacOS/omp --user-data-dir=/tmp/<dir>`: a leaked `ELECTRON_RUN_AS_NODE=1` makes Electron exit 0 silently, and a separate user-data dir avoids the single-instance lock of an installed copy.
-- Windows: `file win-unpacked/resources/omp.exe` (arch must be x86-64). Preferred path is CI: `.github/workflows/release-windows.yml` (windows-latest) runs on release publish — or dispatch it for an existing tag — and reproduces the sidecar from `sidecar-source.json`'s monorepo pin (repo + commit; a pin naming any repository other than `nornzach/oh-my-pi` fails the build), smoke-tests it (sidecar RPC handshake + packaged-GUI launch with no renderer crash, plus the locale-pak regression guard), then attaches the setup/portable installers + `latest.yml` itself. Local `bun run package:win -- --publish never` remains available on a Windows host.
-- Linux is built by CI, not locally: `.github/workflows/release-linux.yml` (ubuntu-latest) runs on release publish — or dispatch it for an existing tag — and reproduces the sidecar from `sidecar-source.json`'s monorepo pin (repo + commit; a pin naming any repository other than `nornzach/oh-my-pi` fails the build), smoke-tests it, then attaches AppImage + deb + `latest-linux.yml` itself.
+- Windows: `file win-unpacked/resources/omp.exe` (arch must be x86-64). Preferred path is CI: `.github/workflows/release-windows.yml` (windows-latest) runs on release publish — or dispatch it for an existing tag — and reproduces the sidecar from `sidecar-source.json`'s monorepo pin (repo + commit; a pin naming any repository other than `smokeyduck/oh-my-pi` fails the build), smoke-tests it (sidecar RPC handshake + packaged-GUI launch with no renderer crash, plus the locale-pak regression guard), then attaches the setup/portable installers + `latest.yml` itself. Local `bun run package:win -- --publish never` remains available on a Windows host.
+- Linux is built by CI, not locally: `.github/workflows/release-linux.yml` (ubuntu-latest) runs on release publish — or dispatch it for an existing tag — and reproduces the sidecar from `sidecar-source.json`'s monorepo pin (repo + commit; a pin naming any repository other than `smokeyduck/oh-my-pi` fails the build), smoke-tests it, then attaches AppImage + deb + `latest-linux.yml` itself.
 
 ### Phase 6 — Publish
 
@@ -190,7 +190,7 @@ git commit -am "Add X to the settings window"   # → smokeyduck/wisa-studio
 git push origin main
 ```
 
-The same edit one level up (`packages/coding-agent/…`) belongs to the **monorepo**: commit at the monorepo root (`packages/gui/../..`) and push to the `nornzach/oh-my-pi` fork — never from here.
+The same edit one level up (`packages/coding-agent/…`) belongs to the **monorepo**: commit at the monorepo root (`packages/gui/../..`) and push to the `smokeyduck/oh-my-pi` fork — never from here.
 
 ### Upstream sync with a merge conflict
 
@@ -200,7 +200,7 @@ bash packages/gui/scripts/sync-upstream.sh
 # resolve the markers, then from the MONOREPO ROOT (git there = fork):
 git add -A && git commit
 SKIP_MERGE=1 bash packages/gui/scripts/sync-upstream.sh   # resumes after the merge step
-git push origin main                       # monorepo root → nornzach/oh-my-pi
+git push origin main                       # monorepo root → smokeyduck/oh-my-pi
 # GUI-side changes (if any) commit and push separately from packages/gui/
 ```
 

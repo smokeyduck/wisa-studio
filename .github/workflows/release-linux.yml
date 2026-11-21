@@ -59,18 +59,18 @@ jobs:
         env:
           MONOREPO_SHA: ${{ inputs.monorepo_sha }}
         run: |
-          repo="nornzach/oh-my-pi"
+          repo="smokeyduck/oh-my-pi"
           commit="main"
           if [ -f gui-pin/sidecar-source.json ]; then
             # Shape-guard both fields: a malformed pin must fail here, not as a
             # confusing checkout error three steps later.
-            repo="$(jq -er '(.repo // "nornzach/oh-my-pi") | strings | select(test("^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$"))' gui-pin/sidecar-source.json)"
+            repo="$(jq -er '(.repo // "smokeyduck/oh-my-pi") | strings | select(test("^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$"))' gui-pin/sidecar-source.json)"
             commit="$(jq -er '.commit | strings | select(test("^[a-fA-F0-9]{40}$"))' gui-pin/sidecar-source.json)"
           fi
           # Release binaries build only from the project's own Core repository: a
           # pin naming anywhere else fails the build instead of shipping it.
-          if [ "$repo" != "nornzach/oh-my-pi" ]; then
-            echo "sidecar-source.json names $repo; release sidecars build only from nornzach/oh-my-pi" >&2
+          if [ "$repo" != "smokeyduck/oh-my-pi" ]; then
+            echo "sidecar-source.json names $repo; release sidecars build only from smokeyduck/oh-my-pi" >&2
             exit 1
           fi
           ref="${MONOREPO_SHA:-$commit}"
