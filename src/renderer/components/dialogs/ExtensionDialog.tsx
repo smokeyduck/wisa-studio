@@ -802,9 +802,9 @@ export function ExtensionDialog() {
 	useEffect(() => {
 		for (const req of focusedPending) {
 			if (req.method === "notify") {
-				// Suppress tool-command mount notifications — they are startup-time
-				// informational messages that don't need user attention.
-				if (!req.message.startsWith("Tool commands: ")) {
+				// Suppress mount notifications (tool commands, or xd:// devices from a
+				// pinned sidecar) — startup-time informational messages, no user action.
+				if (!req.message.startsWith("Tool commands: ") && !req.message.startsWith("xd://: mounted")) {
 					toast({
 						variant: req.notifyType ?? "info",
 						message: req.message,

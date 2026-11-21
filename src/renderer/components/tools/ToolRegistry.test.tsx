@@ -148,6 +148,14 @@ function bodyText(): string {
 	return containers.map(container => container.textContent ?? "").join("");
 }
 
+/** A `write xd://<tool>` call, as the tools store sees it (pinned-sidecar transport). */
+function deviceCall(toolCallId: string, args: Record<string, unknown>, result: unknown): void {
+	useToolsStore.getState().applyEvents([
+		{ type: "tool_execution_start", toolCallId, toolName: "write", args },
+		{ type: "tool_execution_end", toolCallId, toolName: "write", result, isError: false },
+	]);
+}
+
 /** A `bash` call that dispatched one tool command, as the tools store sees it. */
 function commandCall(toolCallId: string, command: string, result: unknown): void {
 	const args = { command };
@@ -316,6 +324,26 @@ describe("tool commands dispatched through bash", () => {
 		expect(bodyText()).toContain("server unavailable");
 	});
 
+	it("still renders a device write from a pinned sidecar", async () => {
+		const args = { path: "xd://security_scan", content: '{"action":"start","plan_id":"p-1"}' };
+		deviceCall("scan-old", args, {
+			content: [{ type: "text", text: "Security scan scan-9 started as op-3." }],
+			details: {
+				xdev: {
+					tool: "security_scan",
+					mode: "execute",
+					args: { action: "start", plan_id: "p-1" },
+					inner: { action: "start", operation: { scanId: "scan-9", phase: "reviewing", findingCount: 0 } },
+				},
+			},
+		});
+		await mountCard("scan-old", "write", args);
+
+		expect(bodyText()).toContain("Security scan scan-9 started as op-3.");
+		// The payload is a JSON request, not a file: a line count would be fiction.
+		expect(bodyText()).not.toMatch(/\d+ lines?\b/);
+	});
+
 	it("keeps a real file write on the write card", async () => {
 		const args = { path: "src/app.ts", content: "export const a = 1;" };
 		useToolsStore.getState().applyEvents([
@@ -335,5 +363,15 @@ describe("tool commands dispatched through bash", () => {
 
 		expect(bodyText()).toContain("src/app.ts");
 		expect(bodyText()).toContain("1 line");
+	});
+});
+
+describe("device call headers", () => {
+	it("reads as the tool that ran instead of the device url", () => {
+		expect(
+			getToolSummary("write", { path: "xd://lsp", content: '{"action":"references","symbol":"buildTool"}' }),
+		).toBe("lsp - references buildTool");
+		// A half-streamed payload decodes to nothing but still names the device.
+		expect(getToolSummary("write", { path: "xd://security_scan", content: '{"act' })).toBe("security_scan");
 	});
 });

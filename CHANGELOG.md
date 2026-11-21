@@ -18,7 +18,11 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
   command now renders through that tool's own card (a plan resolution as the
   resolve card, an MCP call as its MCP card) instead of as a shell run; a run
   that piped the command or bundled several keeps the shell card and lists each
-  dispatched command under it with its own header, exit status and body.
+  dispatched command under it with its own header, exit status and body. The
+  older `write xd://<tool>` transport is still rendered: the bundled sidecar
+  comes from a pinned monorepo commit, so a build whose binary predates the
+  change keeps showing plan resolutions and MCP calls as the tools they are
+  rather than as file writes.
 
 ## [0.9.49] - 2026-11-21
 

@@ -7,6 +7,7 @@ import {
 	toolCommandInnerResult,
 	toolCommandLabel,
 } from "../../lib/tool-commands";
+import { decodeXdevPayload, xdevDispatch, xdevInnerResult, xdevWriteTarget } from "../../lib/xdev";
 import { AskRenderer } from "./AskRenderer";
 import { AstEditRenderer } from "./AstEditRenderer";
 import { AstGrepRenderer } from "./AstGrepRenderer";
@@ -156,9 +157,58 @@ function BashRendererOrToolCommands(props: ToolRendererProps) {
 }
 
 /**
+ * `write` carried the other transport: with `tools.xdev` on, an older sidecar
+ * sends a discoverable tool as a JSON payload written to `xd://<tool>`, so the
+ * transcript holds one `write` call whose result carries the device outcome
+ * under `details.xdev` (see `lib/xdev`). Release sidecars are pinned to a
+ * monorepo commit, and the GUI must render whatever that binary emits, so both
+ * transports stay wired: a device write renders as the tool that ran, and a
+ * real file write still renders as one.
+ */
+function WriteRendererOrDevice(props: ToolRendererProps) {
+	const { args, result, isPartial, partialResult, interrupted } = props;
+	const device = xdevWriteTarget(args);
+	if (!device) return <WriteRenderer {...props} />;
+
+	const envelope = isPartial ? partialResult : result;
+	const dispatch = xdevDispatch(envelope);
+	// No dispatch metadata: the payload is still streaming, or the write failed
+	// before reaching a device. Show the request as key/value rows rather than a
+	// file-write card - the wrapped tool has produced no verdict to render.
+	if (!dispatch) {
+		const raw = typeof args.content === "string" ? args.content : "";
+		const decoded = decodeXdevPayload(raw);
+		return (
+			<GenericRenderer
+				args={Object.keys(decoded).length > 0 ? decoded : { content: clipCardText(raw) }}
+				isPartial={isPartial}
+				result={envelope}
+			/>
+		);
+	}
+	if (dispatch.mode === "help") return <GenericRenderer args={{}} result={envelope} />;
+
+	const name = dispatch.tool || device;
+	// `xd://write` dispatches the write tool itself; delegating would recurse.
+	const Renderer = name === "write" ? GenericRenderer : getToolRenderer(name);
+	const inner = xdevInnerResult(envelope, dispatch);
+	return (
+		<Renderer
+			args={dispatch.args ?? decodeXdevPayload(args.content)}
+			interrupted={interrupted}
+			isError={props.isError}
+			isPartial={isPartial}
+			partialResult={inner}
+			result={inner}
+		/>
+	);
+}
+
+/**
  * Tool name → renderer. Every name the sidecar can emit for a top-level call
- * belongs here or in `GENERIC_TOOL_NAMES` below; a mounted tool command resolves
- * through this table too (see `BashRendererOrToolCommands`). Anything unmapped falls
+ * belongs here or in `GENERIC_TOOL_NAMES` below; a mounted tool command and an
+ * `xd://` device write resolve through this table too (see
+ * `BashRendererOrToolCommands` and `WriteRendererOrDevice`). Anything unmapped falls
  * back to GenericRenderer, which is a lossy view, not a broken one.
  */
 const REGISTRY: Record<string, ComponentType<ToolRendererProps>> = {
@@ -167,7 +217,7 @@ const REGISTRY: Record<string, ComponentType<ToolRendererProps>> = {
 	ast_edit: AstEditRenderer,
 	apply_patch: EditRenderer,
 	goal: GoalRenderer,
-	write: WriteRenderer,
+	write: WriteRendererOrDevice,
 	bash: BashRendererOrToolCommands,
 	grep: GrepRenderer,
 	find: FindRenderer,
@@ -227,6 +277,20 @@ function argLine(args: Record<string, unknown>, keys: readonly string[]): string
 	return "";
 }
 
+/** Keys tried in order for a device call's header: the verb, then its object. */
+const DEVICE_VERB_KEYS = ["action", "op", "command"] as const;
+const DEVICE_OBJECT_KEYS = ["query", "symbol", "path", "file", "pattern", "url", "name"] as const;
+
+/**
+ * `LSP - references buildTool` instead of `xd://lsp`, so a collapsed device
+ * write reads as the tool that ran (parity with the TUI's activity summary).
+ */
+function xdevSummary(device: string, content: unknown): string {
+	const args = decodeXdevPayload(content);
+	const detail = [argLine(args, DEVICE_VERB_KEYS), argLine(args, DEVICE_OBJECT_KEYS)].filter(Boolean).join(" ");
+	return detail ? `${device} - ${detail}` : device;
+}
+
 /** Batch tools name their payload `items`; the first entry is the header. */
 function firstItemContent(args: Record<string, unknown>): string {
 	if (!Array.isArray(args.items)) return "";
@@ -244,7 +308,10 @@ function firstItemContent(args: Record<string, unknown>): string {
  */
 const SUMMARIES: Record<string, (args: Record<string, unknown>) => string> = {
 	read: args => argLine(args, ["path", "file"]),
-	write: args => argLine(args, ["path", "file"]),
+	write: args => {
+		const device = xdevWriteTarget(args);
+		return device ? xdevSummary(device, args.content) : argLine(args, ["path", "file"]);
+	},
 	edit: editArgumentSummary,
 	apply_patch: editArgumentSummary,
 	bash: args => argLine(args, ["command", "cmd"]),

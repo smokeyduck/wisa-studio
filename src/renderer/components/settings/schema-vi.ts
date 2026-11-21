@@ -1657,6 +1657,21 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"async.maxJobs": {
 		label: "async.maxJobs",
 	},
+	"tools.xdev": {
+		label: "Công cụ xd://",
+		description:
+			"Kết nối các công cụ phát hiện được ít dùng dưới dạng thiết bị qua URL xd://, được điều khiển bằng read/write, thay vì gửi schema của chúng trong mỗi yêu cầu. Trong các phiên mà danh sách công cụ rõ ràng cho phép read nhưng không cho write, thiết bị được kết nối qua transport chỉ ghi cho thiết bị (ngoài thiết bị, chỉ vùng local:// là có thể ghi). Tắt để hiển thị mọi công cụ được bật ở cấp cao nhất.",
+	},
+	"tools.xdevDocs": {
+		label: "Tài liệu câu lệnh xd://",
+		description:
+			"Chọn tài liệu và schema của những thiết bị đã kết nối nào sẽ được nhúng vào câu lệnh hệ thống. Ở chế độ Built-ins, các công cụ chính vẫn được nhúng, còn tài liệu MCP và tiện ích mở rộng được tải theo yêu cầu.",
+	},
+	"tools.xdevInlineDevices": {
+		label: "Thiết bị nhúng xd://",
+		description:
+			"Nếu tài liệu câu lệnh xd:// được đặt thành «Chỉ nhúng», hãy nhúng các thiết bị động có tên khớp với các mẫu glob này (ví dụ mcp__context_mode_*). Chế độ «Chỉ danh mục» bỏ qua cài đặt này.",
+	},
 	"tools.commands": {
 		label: "Lệnh công cụ",
 		description:
@@ -2671,6 +2686,11 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		label: "Thư mục bị hạn chế",
 		description:
 			'Các thư mục mà mọi thao tác đọc, ghi, sửa, tìm kiếm hoặc lệnh đều cần phê duyệt rõ ràng, bất kể chế độ phê duyệt hay quyền đã ghi nhớ. Thư mục và mọi thứ bên trong đều bị hạn chế; lệnh được khớp theo thư mục mà chúng chạy trong đó. Một danh sách JSON các đường dẫn, ví dụ ["~/secrets"].',
+	},
+	"tools.xdevNotices": {
+		label: "Thông báo gắn kết xd://",
+		description:
+			"Hiển thị thông báo `xd://: mounted …` khi các công cụ MCP hoặc extension được gắn hoặc gỡ. Model vẫn biết về thay đổi này ở lệnh nhắc tiếp theo.",
 	},
 	"tools.commandNotices": {
 		label: "Thông báo gắn lệnh công cụ",

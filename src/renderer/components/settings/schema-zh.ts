@@ -911,6 +911,21 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 		label: "IRC 超时",
 		description: "hub 消息等待（以及 send await:true）的默认超时（毫秒）；0 表示禁用超时",
 	},
+	"tools.xdev": {
+		label: "xd:// 工具",
+		description:
+			"把不常用（可发现）的工具挂载到 xd:// 设备 URL 下，通过 read/write 驱动，而不是每次请求都携带它们的 schema。禁用则把所有已启用工具顶层暴露。",
+	},
+	"tools.xdevDocs": {
+		label: "xd:// 提示词文档",
+		description:
+			"选择哪些挂载设备的文档与 schema 内联进系统提示词。Built-ins 保持核心工具内联，MCP 与扩展工具保持按需。",
+	},
+	"tools.xdevInlineDevices": {
+		label: "xd:// 内联设备",
+		description:
+			"当 xd:// 提示词文档为“仅内置”时，内联名称匹配这些 glob 模式的动态设备（例如 mcp__context_mode_*）。“仅目录”忽略此设置。",
+	},
 	"tools.commands": {
 		label: "工具命令",
 		description:

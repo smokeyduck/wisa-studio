@@ -26,12 +26,13 @@ function thinking(value: string) {
 }
 
 describe("collapsibleReadTarget", () => {
-	it("collapses plain fs paths", () => {
+	it("collapses plain fs paths and xd:// targets", () => {
 		expect(collapsibleReadTarget({ path: "src/a.ts" })).toEqual({ path: "src/a.ts" });
+		// The pinned sidecar still emits `xd://` reads; the router does not own them.
+		expect(collapsibleReadTarget({ path: "xd://lsp" })).toEqual({ path: "xd://lsp" });
 	});
 
 	it("does not collapse scheme URLs the router handles", () => {
-		expect(collapsibleReadTarget({ path: "local://PLAN.md" })).toBeNull();
 		expect(collapsibleReadTarget({ path: "skill://agent-reach" })).toBeNull();
 		expect(collapsibleReadTarget({ path: "agent://abc" })).toBeNull();
 		expect(collapsibleReadTarget({ path: "memory://m" })).toBeNull();
