@@ -240,6 +240,15 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"10 items": "10 项",
 	"15 items": "15 项",
 	"20 items": "20 项",
+	"No word completion": "不补全单词",
+	"N-gram (nothing to download)": "N-gram（无需下载）",
+	"N-gram": "N-gram",
+	"Learns your vocabulary from prompt history": "从提示历史中学习你的词汇",
+	"Small on-device language model blended with N-gram (downloads weights on first use)":
+		"与 N-gram 混合的小型端侧语言模型（首次使用时下载权重）",
+	// Core appends this option on darwin only; without it a Mac shows English.
+	Apple: "Apple",
+	"macOS dictionary completions": "macOS 词典补全",
 	"Don't check for plugin updates": "不检查插件更新",
 	Notify: "通知",
 	"Check on startup and notify when updates are available": "启动时检查，有可用更新时通知",
