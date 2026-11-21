@@ -29,7 +29,7 @@ function closesFence(line: string, fence: FenceState): boolean {
 	return length >= fence.length && candidate.slice(length).trim().length === 0;
 }
 const LIST_ITEM_RE = /^[ \t]{0,3}(?:[-*+]|\d{1,9}[.)])[ \t]/;
-/** A lone, possibly-still-growing marker token ("-", "2", "2.") — a list
+/** A lone, possibly-still-growing marker token ("-", "2", "2.") · a list
  * continuation candidate that must not yet end the block. */
 const PARTIAL_MARKER_RE = /^(?:[-*+]|\d{1,9}[.)]?)$/;
 
@@ -93,7 +93,7 @@ export function segmentStreamingMarkdown(text: string): StreamingMarkdownSegment
 		let closedMath = false;
 
 		// A pending list boundary resolves against the FIRST following
-		// non-blank line — even when that line opens a fence or math block,
+		// non-blank line · even when that line opens a fence or math block,
 		// which would otherwise swallow the boundary and strand a finished
 		// list in the mutable tail for the whole fenced block. The check is
 		// partial-line-safe: a bare "2" or "2." may still grow into an item,
@@ -142,7 +142,7 @@ export function segmentStreamingMarkdown(text: string): StreamingMarkdownSegment
 					}
 				}
 			} else if (hasNewline && !sawFirstLine) {
-				// Classify list-ness only from complete lines — a partial first
+				// Classify list-ness only from complete lines · a partial first
 				// line ("1.") would freeze a wrong non-list verdict.
 				sawFirstLine = true;
 				listColumn = listContentColumn(line);

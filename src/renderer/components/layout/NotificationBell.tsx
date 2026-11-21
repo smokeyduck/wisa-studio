@@ -3,6 +3,7 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import type { TaskNotice } from "../../../shared/scheduler-types";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx, formatTimeAgo } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { useSchedulerStore } from "../../stores/scheduler";
@@ -48,6 +49,7 @@ export function NotificationBell({ className }: { className: string }) {
 	useEffect(() => {
 		if (!open) return;
 		const onPointerDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			const target = event.target as Node | null;
 			if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
 			setOpen(false);

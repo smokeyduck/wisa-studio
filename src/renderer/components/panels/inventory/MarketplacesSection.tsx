@@ -424,7 +424,7 @@ export function MarketplaceCard({
 						) : (
 							<Badge variant="muted">{t("invPanel.marketplaces.notFetched")}</Badge>
 						)}
-						{/* Catalogs are cache-backed — the note is always visible; the
+						{/* Catalogs are cache-backed - the note is always visible; the
 						    timestamp rides along when the wire carries one. */}
 						<span className="text-omp-xs text-(--omp-dim)">{cacheNote}</span>
 					</div>

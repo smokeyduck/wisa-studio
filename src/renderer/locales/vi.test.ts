@@ -6,7 +6,7 @@ import identicalKeys from "./vi-identical.json";
 const placeholders = (text: string) =>
 	[...text.matchAll(/\{(\w+)\}/g)]
 		.map(match => match[1])
-		.filter(name => name !== "plural")
+		.filter(name => name !== "plural" && !name.endsWith("Plural"))
 		.sort();
 
 /** Latin letters outside ASCII that Vietnamese orthography requires. */
@@ -41,6 +41,24 @@ describe("Vietnamese locale completeness", () => {
 		}
 		expect(vi["tabs.new.agent"]).toContain("Agent");
 		expect(vi["tabs.new.chat"]).toContain("Chat");
+	});
+
+	// Unaccented Vietnamese ("Am thanh thong bao") is what a keyboard without a
+	// Vietnamese IME produces: it reads as neither English nor Vietnamese. Any
+	// value that is pure ASCII yet carries two or more common Vietnamese
+	// function words is that mistake, not a technical name.
+	it("writes Vietnamese with its diacritics", () => {
+		const words = new Set(
+			"khong duoc nguoi nhung phai trong cua ban voi mot nay khi thi cho den se da dang neu bat tat am thanh thong bao tieng chuong ngan ung dung hien xem chon mo dong luu xoa them sua tim kiem trang cai dat phien hoi thoai tin nhan gui ket qua cong cu viec lich su canh chi tiet mau sac hinh anh tep thu muc danh sach trinh don gian day du nho lon cao thap nhanh cham moi truoc sau giua ngoai len xuong trai tren duoi".split(
+				" ",
+			),
+		);
+		const offenders = Object.entries(vi).filter(([, value]) => {
+			if (VIETNAMESE_DIACRITIC.test(value) || !/[a-z]/i.test(value)) return false;
+			const tokens = value.toLowerCase().match(/[a-z]+/g) ?? [];
+			return tokens.filter(token => words.has(token)).length >= 2;
+		});
+		expect(offenders).toEqual([]);
 	});
 
 	it("localizes visible starter templates with Vietnamese diacritics", () => {

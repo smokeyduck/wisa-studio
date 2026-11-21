@@ -51,7 +51,7 @@ describe("subagent status lookups", () => {
 describe("numeric wire formatting", () => {
 	it("renders a placeholder instead of throwing on null, undefined, and NaN cost", () => {
 		for (const value of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY]) {
-			expect(formatCost(value)).toBe("—");
+			expect(formatCost(value)).toBe("-");
 		}
 	});
 
@@ -62,7 +62,7 @@ describe("numeric wire formatting", () => {
 
 	it("renders a placeholder instead of throwing on null, undefined, and NaN percent", () => {
 		for (const value of [null, undefined, Number.NaN]) {
-			expect(formatPercent(value, 1)).toBe("—");
+			expect(formatPercent(value, 1)).toBe("-");
 		}
 	});
 

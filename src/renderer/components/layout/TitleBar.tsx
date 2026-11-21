@@ -172,8 +172,8 @@ export function TitleBar() {
 		executionDuration > 0 ? formatDuration(executionDuration) : null,
 	].filter((part): part is string => part !== null);
 	const metricsTitle = [
-		`${t(visibleStats?.history ? "titlebar.metric.historyTokens" : "titlebar.metric.tokens")}: ${visibleStats ? formatTokens(usedTokens) : "—"}`,
-		`${t(visibleStats?.history ? "titlebar.metric.historyCost" : "titlebar.metric.cost")}: ${visibleStats ? formatCost(usedCost, 4) : "—"}`,
+		`${t(visibleStats?.history ? "titlebar.metric.historyTokens" : "titlebar.metric.tokens")}: ${visibleStats ? formatTokens(usedTokens) : "-"}`,
+		`${t(visibleStats?.history ? "titlebar.metric.historyCost" : "titlebar.metric.cost")}: ${visibleStats ? formatCost(usedCost, 4) : "-"}`,
 		advisorCost > 0 ? `${t("advisor.badge.cost")}: ${formatCost(advisorCost, 4)}` : null,
 		`${t("titlebar.metric.cacheHit")}: ${formatPercent(cacheHit, 0)}`,
 		`${t("titlebar.metric.duration")}: ${formatDuration(executionDuration)}`,
@@ -377,7 +377,7 @@ export function TitleBar() {
 						isStreaming
 							? t("titlebar.abortHint")
 							: !isChat && cwd
-								? `${t("titlebar.openProject")} — ${projectName}`
+								? `${t("titlebar.openProject")} - ${projectName}`
 								: t("titlebar.openProject")
 					}
 					type="button"
@@ -472,7 +472,7 @@ export function TitleBar() {
 				>
 					{metricParts.map((part, index) => (
 						<span className="flex items-center gap-1.5" key={part}>
-							{index > 0 && <span aria-hidden="true">·</span>}
+							{index > 0 && <span aria-hidden="true">-</span>}
 							{part}
 						</span>
 					))}

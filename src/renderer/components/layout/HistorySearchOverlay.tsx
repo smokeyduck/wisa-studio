@@ -1,6 +1,7 @@
 import { History } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx, escapeRegExp, formatTimeAgo, shortenPath } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -68,6 +69,7 @@ export function HistorySearchOverlay({ cwd, onSelect, onClose }: HistorySearchOv
 	// during capture so the app-level Escape handler cannot abort a running turn.
 	useEffect(() => {
 		const onPointerDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			if (overlayRef.current?.contains(event.target as Node)) return;
 			onClose();
 		};

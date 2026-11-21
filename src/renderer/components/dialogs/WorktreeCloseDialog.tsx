@@ -108,7 +108,7 @@ export function WorktreeCloseDialog() {
 						<p className="text-omp-lg leading-relaxed text-(--omp-muted)">{t("worktreeClose.cleanBody")}</p>
 					)}
 					<p className="truncate font-mono text-omp-sm text-(--omp-dim)" title={tab.cwd}>
-						{worktree.branch} — {tab.cwd}
+						{worktree.branch} - {tab.cwd}
 					</p>
 					<div className="flex flex-col gap-2">
 						{query.phase === "ready" && (

@@ -165,7 +165,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"statusLine.compactThinkingLevel": {
 		label: "Mức Reasoning gọn",
 		description:
-			"Hiển thị mức Reasoning bằng một biểu tượng cạnh tên mô hình thay vì hậu tố riêng ` · <level>`; trong trình soạn thảo Tern — bằng biểu tượng trên nhãn mô hình thay vì nhãn riêng (nhấn biểu tượng để chuyển mức).",
+			"Hiển thị mức Reasoning bằng một biểu tượng cạnh tên mô hình thay vì hậu tố riêng ` - <level>`; trong trình soạn thảo Tern - bằng biểu tượng trên nhãn mô hình thay vì nhãn riêng (nhấn biểu tượng để chuyển mức).",
 	},
 	"statusLine.showHookStatus": {
 		label: "Hiển thị trạng thái Hook",
@@ -609,27 +609,27 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		description: "Độ chi tiết của câu trả lời OpenAI Responses và Codex (low, medium hoặc high)",
 	},
 	"tier.openai": {
-		label: "Mức dịch vụ — OpenAI",
+		label: "Mức dịch vụ: OpenAI",
 		description:
 			"Mức xử lý cho các yêu cầu của OpenAI / OpenAI-Codex và các mô hình thuộc họ OpenAI được định tuyến qua OpenRouter (none = không gửi). Được gửi dưới dạng `service_tier`.",
 	},
 	"tier.anthropic": {
-		label: "Mức dịch vụ — Anthropic",
+		label: "Mức dịch vụ: Anthropic",
 		description:
 			'Bậc xử lý cho các yêu cầu Claude. `priority` hiện thực hóa chế độ nhanh (`speed: "fast"`) trên các mô hình Anthropic trực tiếp được hỗ trợ; bị bỏ qua với Claude trên Bedrock/Vertex và qua OpenRouter.',
 	},
 	"tier.google": {
-		label: "Mức dịch vụ — Google",
+		label: "Mức dịch vụ: Google",
 		description:
 			"Mức xử lý cho các yêu cầu Gemini (Google AI Studio + Vertex) và các mô hình thuộc họ Google được định tuyến qua OpenRouter (none = không gửi). Được gửi trong trường cấp cao nhất `serviceTier`.",
 	},
 	"tier.subagent": {
-		label: "Mức dịch vụ — tác nhân con",
+		label: "Mức dịch vụ: tác nhân con",
 		description:
 			"Mức dịch vụ cho các tác nhân con của tác vụ và eval. Inherit = dùng mức hiện tại của tác nhân chính cho từng họ mô hình (theo /fast); giá trị được chọn sẽ áp dụng cho họ mô hình của tác nhân con.",
 	},
 	"tier.advisor": {
-		label: "Mức dịch vụ — cố vấn",
+		label: "Mức dịch vụ: cố vấn",
 		description:
 			"Mức dịch vụ của mô hình cố vấn. None = xử lý tiêu chuẩn; Inherit = mức hiện tại của tác nhân chính cho từng họ mô hình; giá trị được chọn sẽ áp dụng cho họ mô hình cố vấn.",
 	},
@@ -712,7 +712,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"providers.fireworksTier": {
 		label: "Bậc Fireworks",
 		description:
-			'Đường phục vụ cho các yêu cầu Fireworks. Priority gửi `service_tier: "priority"` để có độ tin cậy cao hơn trong giờ cao điểm với giá cao hơn; Standard bỏ qua trường này. Các mô hình Fast (`-fast`) bỏ qua mục này — Fast có đường phục vụ riêng.',
+			'Đường phục vụ cho các yêu cầu Fireworks. Priority gửi `service_tier: "priority"` để có độ tin cậy cao hơn trong giờ cao điểm với giá cao hơn; Standard bỏ qua trường này. Các mô hình Fast (`-fast`) bỏ qua mục này - Fast có đường phục vụ riêng.',
 	},
 	"providers.tinyModelDevice": {
 		label: "Thiết bị cho mô hình nhỏ gọn",
@@ -825,7 +825,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"codexResets.minBlockedMinutes": {
 		label: "Thời gian khóa tối thiểu để tự đặt lại Codex",
 		description:
-			"Chỉ tự động dùng một lượt đặt lại nếu còn ít nhất số phút đã chỉ định trước khi tự mở khóa tự nhiên — lượt đặt lại muộn nhất trong số các cửa sổ 5 giờ và cửa sổ tuần đã dùng hết. Đừng tiêu một lượt đặt lại khan hiếm cho một thời gian chờ ngắn. Tăng giá trị (ví dụ lên 360) để bỏ qua các khóa chỉ kéo dài 5 giờ.",
+			"Chỉ tự động dùng một lượt đặt lại nếu còn ít nhất số phút đã chỉ định trước khi tự mở khóa tự nhiên - lượt đặt lại muộn nhất trong số các cửa sổ 5 giờ và cửa sổ tuần đã dùng hết. Đừng tiêu một lượt đặt lại khan hiếm cho một thời gian chờ ngắn. Tăng giá trị (ví dụ lên 360) để bỏ qua các khóa chỉ kéo dài 5 giờ.",
 	},
 	"codexResets.keepCredits": {
 		label: "Giữ lại lượt tự đặt lại Codex",
@@ -845,7 +845,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"claudeResets.minBlockedMinutes": {
 		label: "Thời gian khóa tối thiểu để tự đặt lại Claude",
 		description:
-			"Chỉ tự động dùng lượt đặt lại nếu còn ít nhất số phút đã chỉ định trước khi mở khóa tự nhiên — tức lượt đặt lại muộn nhất trong các cửa sổ được bao phủ đã cạn —. Lượt đặt lại chỉ 5 giờ không được dùng khi bị khóa theo tuần hoặc khóa theo mô hình.",
+			"Chỉ tự động dùng lượt đặt lại nếu còn ít nhất số phút đã chỉ định trước khi mở khóa tự nhiên - tức lượt đặt lại muộn nhất trong các cửa sổ được bao phủ đã cạn. Lượt đặt lại chỉ 5 giờ không được dùng khi bị khóa theo tuần hoặc khóa theo mô hình.",
 	},
 	"claudeResets.keepCredits": {
 		label: "Dự trữ lượt tự đặt lại Claude",
@@ -902,7 +902,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"advisor.reviewMode": {
 		label: "Chế độ kiểm tra Advisor",
 		description:
-			"Tần suất kiểm tra Advisor mặc định khi không có danh sách WATCHDOG.yml. turn kiểm tra từng lượt chính; agent-end — chỉ khi có kết quả cuối cùng.",
+			"Tần suất kiểm tra Advisor mặc định khi không có danh sách WATCHDOG.yml. turn kiểm tra từng lượt chính; agent-end - chỉ khi có kết quả cuối cùng.",
 	},
 	"advisor.reviewInterval": {
 		label: "Chu kỳ kiểm tra Advisor",
@@ -1115,7 +1115,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	},
 	"sharpshooter.model": {
 		label: "Mô hình Sharpshooter",
-		description: "Chọn mô hình để trích xuất và hợp nhất dữ liệu; giá trị trống — vai trò smol",
+		description: "Chọn mô hình để trích xuất và hợp nhất dữ liệu; giá trị trống - vai trò smol",
 	},
 	"sharpshooter.intervalMinutes": {
 		label: "sharpshooter.intervalMinutes",
@@ -1874,7 +1874,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"worktree.base": {
 		label: "Thư mục gốc Worktree",
 		description:
-			"Thư mục gốc cho các Worktree do tác nhân quản lý — bản sao cách ly tác vụ, các checkout PR `github` và dọn dẹp `omp worktree` đều nằm ở đây. Nếu không đặt, dùng ~/.omp/wt. Phải là đường dẫn tuyệt đối hoặc tương đối với ~; đường dẫn tương đối bị bỏ qua. Biến môi trường OMP_WORKTREE_DIR sẽ ghi đè giá trị này.",
+			"Thư mục gốc cho các Worktree do tác nhân quản lý - bản sao cách ly tác vụ, các checkout PR `github` và dọn dẹp `omp worktree` đều nằm ở đây. Nếu không đặt, dùng ~/.omp/wt. Phải là đường dẫn tuyệt đối hoặc tương đối với ~; đường dẫn tương đối bị bỏ qua. Biến môi trường OMP_WORKTREE_DIR sẽ ghi đè giá trị này.",
 	},
 	"task.eager": {
 		label: "Ưu tiên ủy thác tác vụ",
@@ -1883,7 +1883,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"task.batch": {
 		label: "Gọi tác vụ theo lô",
 		description:
-			"Chuyển công cụ task sang dạng theo lô: một lệnh gọi mang { context, tasks[] } — mỗi mục một tác nhân con, với tác nhân tùy chọn cho từng mục (mặc định là tác nhân theo chính sách khởi tạo của phiên), cách ly theo từng mục và ngữ cảnh chia sẻ bắt buộc được thêm vào đầu mỗi nhiệm vụ. Với async.enabled=true, mỗi lần khởi tạo chạy như một tác nhân chạy nền độc lập với vòng đời nhàn rỗi/tạm dừng thông thường; nếu không, lệnh gọi sẽ chặn để chờ kết quả đã hợp nhất. Tắt để khôi phục lược đồ một lần khởi tạo phẳng.",
+			"Chuyển công cụ task sang dạng theo lô: một lệnh gọi mang { context, tasks[] } - mỗi mục một tác nhân con, với tác nhân tùy chọn cho từng mục (mặc định là tác nhân theo chính sách khởi tạo của phiên), cách ly theo từng mục và ngữ cảnh chia sẻ bắt buộc được thêm vào đầu mỗi nhiệm vụ. Với async.enabled=true, mỗi lần khởi tạo chạy như một tác nhân chạy nền độc lập với vòng đời nhàn rỗi/tạm dừng thông thường; nếu không, lệnh gọi sẽ chặn để chờ kết quả đã hợp nhất. Tắt để khôi phục lược đồ một lần khởi tạo phẳng.",
 	},
 	"task.structured": {
 		label: "Kết quả tác vụ có cấu trúc",
@@ -2377,7 +2377,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"computer.backgroundFallback": {
 		label: "Chế độ dự phòng nhập nền",
 		description:
-			"Việc cần làm khi đường nhập nền vào cửa sổ không khả dụng: thử lại qua cơ chế chặn bắt và trả tiêu điểm về ứng dụng của bạn (macOS; trên nền tảng khác là chặn bắt thông thường), hoặc từ chối — khi đó tác nhân cũng không thể tự đưa cửa sổ lên trước hay mở menu macOS",
+			"Việc cần làm khi đường nhập nền vào cửa sổ không khả dụng: thử lại qua cơ chế chặn bắt và trả tiêu điểm về ứng dụng của bạn (macOS; trên nền tảng khác là chặn bắt thông thường), hoặc từ chối - khi đó tác nhân cũng không thể tự đưa cửa sổ lên trước hay mở menu macOS",
 	},
 	"sharpshooter.minPromptLength": {
 		label: "Độ dài tối thiểu của tin nhắn Sharpshooter",
@@ -2391,7 +2391,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"hindsight.globalScope": {
 		label: "Phạm vi toàn cục của Hindsight",
 		description:
-			"Cho phép retain và learn dùng scope: global — bộ nhớ được lưu không gắn thẻ dự án và được gợi nhớ trong mọi dự án. Yêu cầu phạm vi global hoặc per-project-tagged.",
+			"Cho phép retain và learn dùng scope: global - bộ nhớ được lưu không gắn thẻ dự án và được gợi nhớ trong mọi dự án. Yêu cầu phạm vi global hoặc per-project-tagged.",
 	},
 	"judgment.attemptTimeoutMs": {
 		label: "Thời gian chờ mỗi lần thử của mô hình giám khảo (ms)",
@@ -2420,42 +2420,42 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"task.perCallModelAllow": {
 		label: "Mô hình được phép cho mỗi lần gọi",
 		description:
-			"Các bộ chọn chính xác: `provider/model-id`, với `@upstream` chỉ dành cho tuyến OpenRouter/Vercel đã ghim (ví dụ: `openrouter/x@y`). Nếu danh sách được đặt, mô hình của lần gọi phải nằm trong đó. Danh sách rỗng — mọi mô hình được cấu hình cho phép. Danh sách của dự án chỉ có thể thu hẹp danh sách này.",
+			"Các bộ chọn chính xác: `provider/model-id`, với `@upstream` chỉ dành cho tuyến OpenRouter/Vercel đã ghim (ví dụ: `openrouter/x@y`). Nếu danh sách được đặt, mô hình của lần gọi phải nằm trong đó. Danh sách rỗng - mọi mô hình được cấu hình cho phép. Danh sách của dự án chỉ có thể thu hẹp danh sách này.",
 	},
 	"title.refreshAfterPrompts": {
 		label: "Làm mới tiêu đề mỗi N câu lệnh",
 		description:
-			"Được tính theo số câu lệnh của bạn, không phải theo thời gian; 0 — tắt. Cứ sau mỗi chừng ấy câu lệnh, mô hình giám khảo kiểm tra xem tiêu đề phiên được tạo có phù hợp với cuộc trò chuyện không, và tạo tiêu đề mới nếu không. Các tiêu đề do bạn đặt sẽ không bị thay thế.",
+			"Được tính theo số câu lệnh của bạn, không phải theo thời gian; 0 - tắt. Cứ sau mỗi chừng ấy câu lệnh, mô hình giám khảo kiểm tra xem tiêu đề phiên được tạo có phù hợp với cuộc trò chuyện không, và tạo tiêu đề mới nếu không. Các tiêu đề do bạn đặt sẽ không bị thay thế.",
 	},
 	"magicKeywords.chillax": {
 		label: "Từ khóa chillax",
 		description:
-			"Từ chillax được nhập riêng lẻ sẽ giảm Reasoning xuống mức nỗ lực tối thiểu của mô hình (với các mô hình có mức nỗ lực theo từng tin nhắn — ngay cả giữa lượt) và thêm một thông báo ẩn.",
+			"Từ chillax được nhập riêng lẻ sẽ giảm Reasoning xuống mức nỗ lực tối thiểu của mô hình (với các mô hình có mức nỗ lực theo từng tin nhắn - ngay cả giữa lượt) và thêm một thông báo ẩn.",
 	},
 	"codexResets.autoRedeem5h": {
 		label: "Tự động dùng các lượt đặt lại Codex đã lưu (5 giờ)",
 		description:
-			"Dùng các lượt đặt lại Codex đã lưu cho các lần chặn chỉ ở cửa sổ 5 giờ và cho các khoản tín dụng sắp hết hạn có cửa sổ Chat đầy đủ nhất là 5 giờ. Chưa đặt — hỏi và không bao giờ dùng khi chưa hỏi; «Có» — dùng mà không hỏi; «Không» — không bao giờ dùng.",
+			"Dùng các lượt đặt lại Codex đã lưu cho các lần chặn chỉ ở cửa sổ 5 giờ và cho các khoản tín dụng sắp hết hạn có cửa sổ Chat đầy đủ nhất là 5 giờ. Chưa đặt (hỏi và không bao giờ dùng khi chưa hỏi; «Có») dùng mà không hỏi; «Không» - không bao giờ dùng.",
 	},
 	"codexResets.autoRedeemWeekly": {
 		label: "Tự động dùng các lượt đặt lại Codex đã lưu (tuần)",
 		description:
-			"Dùng các lượt đặt lại Codex đã lưu cho các lần chặn hàng tuần và cho các khoản tín dụng sắp hết hạn có cửa sổ Chat đầy đủ nhất là một tuần. Một lần chặn chỉ được nhận biết qua thời gian chờ 429 ngắn cần cả hai cửa sổ Codex. Chưa đặt — hỏi và không bao giờ dùng khi chưa hỏi; «Có» — dùng mà không hỏi; «Không» — không bao giờ dùng.",
+			"Dùng các lượt đặt lại Codex đã lưu cho các lần chặn hàng tuần và cho các khoản tín dụng sắp hết hạn có cửa sổ Chat đầy đủ nhất là một tuần. Một lần chặn chỉ được nhận biết qua thời gian chờ 429 ngắn cần cả hai cửa sổ Codex. Chưa đặt (hỏi và không bao giờ dùng khi chưa hỏi; «Có») dùng mà không hỏi; «Không» - không bao giờ dùng.",
 	},
 	"claudeResets.autoRedeem5h": {
 		label: "Tự động dùng các lượt đặt lại Claude đã lưu (5 giờ)",
 		description:
-			"Dùng các lượt đặt lại Claude Cedar hoặc Juniper cho các lần chặn chỉ ở cửa sổ 5 giờ và cho các khoản cấp sắp hết hạn có hạn mức được bao phủ đầy đủ nhất là 5 giờ. Chưa đặt — hỏi và không bao giờ dùng khi chưa hỏi; «Có» — dùng mà không hỏi; «Không» — không bao giờ dùng.",
+			"Dùng các lượt đặt lại Claude Cedar hoặc Juniper cho các lần chặn chỉ ở cửa sổ 5 giờ và cho các khoản cấp sắp hết hạn có hạn mức được bao phủ đầy đủ nhất là 5 giờ. Chưa đặt (hỏi và không bao giờ dùng khi chưa hỏi; «Có») dùng mà không hỏi; «Không» - không bao giờ dùng.",
 	},
 	"claudeResets.autoRedeemWeekly": {
 		label: "Tự động dùng các lượt đặt lại Claude đã lưu (tuần)",
 		description:
-			"Dùng các lượt đặt lại Claude Cedar cho các lần chặn hàng tuần hoặc các lần chặn của từng mô hình riêng lẻ và cho các khoản cấp sắp hết hạn có hạn mức được bao phủ đầy đủ nhất là một tuần. Chưa đặt — hỏi và không bao giờ dùng khi chưa hỏi; «Có» — dùng mà không hỏi; «Không» — không bao giờ dùng.",
+			"Dùng các lượt đặt lại Claude Cedar cho các lần chặn hàng tuần hoặc các lần chặn của từng mô hình riêng lẻ và cho các khoản cấp sắp hết hạn có hạn mức được bao phủ đầy đủ nhất là một tuần. Chưa đặt (hỏi và không bao giờ dùng khi chưa hỏi; «Có») dùng mà không hỏi; «Không» - không bao giờ dùng.",
 	},
 	"claudeResets.autoRedeemFable": {
 		label: "Tự động dùng các lượt đặt lại Claude Fable",
 		description:
-			"Dùng các lượt đặt lại ban đầu của Claude Fable, vốn khôi phục hạn mức hàng tuần của Fable và cửa sổ 5 giờ. Chỉ cài đặt này quản lý chúng. Chưa đặt — hỏi và không bao giờ dùng khi chưa hỏi; «Có» — dùng mà không hỏi; «Không» — không bao giờ dùng.",
+			"Dùng các lượt đặt lại ban đầu của Claude Fable, vốn khôi phục hạn mức hàng tuần của Fable và cửa sổ 5 giờ. Chỉ cài đặt này quản lý chúng. Chưa đặt (hỏi và không bao giờ dùng khi chưa hỏi; «Có») dùng mà không hỏi; «Không» - không bao giờ dùng.",
 	},
 	"task.autoParallel": {
 		label: "Song song tự động",
@@ -2465,7 +2465,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"task.steps": {
 		label: "Các bước tuần tự của tác vụ",
 		description:
-			"Tác vụ nhận `steps` có thứ tự thay vì một `task`: tác nhân con nhận bước đầu tiên, còn mỗi bước tiếp theo — sau khi bước trước hoàn tất; khi có hơn 4 bước, các tin nhắn đầu sẽ mang hai bước trở lên. Kết quả của bước cuối cùng là kết quả của tác vụ.",
+			"Tác vụ nhận `steps` có thứ tự thay vì một `task`: tác nhân con nhận bước đầu tiên, còn mỗi bước tiếp theo - sau khi bước trước hoàn tất; khi có hơn 4 bước, các tin nhắn đầu sẽ mang hai bước trở lên. Kết quả của bước cuối cùng là kết quả của tác vụ.",
 	},
 	"browser.webkit": {
 		label: "Trình duyệt WebKit",
@@ -2641,7 +2641,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"providers.webKeyless": {
 		label: "Dịch vụ web không cần khóa",
 		description:
-			"Cho phép tìm kiếm web và đọc URL dùng dịch vụ bên thứ ba không cần thông tin xác thực của bạn: Parallel, Exa, Firecrawl, Keenable và Perplexity không cần khóa, trình đọc Jina, và các engine cào dữ liệu (Startpage, DuckDuckGo, Ecosia, Google, Mojeek, Hacker News). Tắt — chỉ các dịch vụ bạn đã cấu hình mới chạy.",
+			"Cho phép tìm kiếm web và đọc URL dùng dịch vụ bên thứ ba không cần thông tin xác thực của bạn: Parallel, Exa, Firecrawl, Keenable và Perplexity không cần khóa, trình đọc Jina, và các engine cào dữ liệu (Startpage, DuckDuckGo, Ecosia, Google, Mojeek, Hacker News). Tắt - chỉ các dịch vụ bạn đã cấu hình mới chạy.",
 	},
 	"retry.rateLimitWalksChain": {
 		label: "Duyệt chuỗi khi bị giới hạn tốc độ",
@@ -2680,7 +2680,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"tui.colorfulMarkdown": {
 		label: "Markdown nhiều màu",
 		description:
-			"Tô màu tiêu đề theo cấp, chữ đậm và nghiêng, code inline và tiêu đề bảng từ bảng màu ANSI của theme. Tắt — dùng một màu tiêu đề và đậm/nghiêng đơn giản.",
+			"Tô màu tiêu đề theo cấp, chữ đậm và nghiêng, code inline và tiêu đề bảng từ bảng màu ANSI của theme. Tắt - dùng một màu tiêu đề và đậm/nghiêng đơn giản.",
 	},
 	"tui.completeScrollback": {
 		label: "Toàn bộ lịch sử cuộn",
@@ -2705,7 +2705,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"tui.spinnerInterval": {
 		label: "Khoảng thời gian spinner (ms)",
 		description:
-			"Số mili giây giữa các khung hình của mọi spinner, kể cả tiêu đề terminal; 0 hiển thị glyph tĩnh. Không đặt — theo thiết lập Motion",
+			"Số mili giây giữa các khung hình của mọi spinner, kể cả tiêu đề terminal; 0 hiển thị glyph tĩnh. Không đặt - theo thiết lập Motion",
 	},
 	"update.auto": {
 		label: "Tự động cập nhật",

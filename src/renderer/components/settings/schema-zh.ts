@@ -119,7 +119,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	},
 	"statusLine.compactThinkingLevel": {
 		label: "紧凑思考等级",
-		description: "在模型名称上以单个图标显示思考等级，而不是附加独立的 ` · <等级>` 后缀。",
+		description: "在模型名称上以单个图标显示思考等级，而不是附加独立的 ` - <等级>` 后缀。",
 	},
 	"statusLine.showHookStatus": { label: "显示钩子状态", description: "在状态栏下方显示钩子状态消息" },
 	"terminal.showImages": { label: "显示内联图片", description: "在终端中内联渲染图片" },
@@ -190,7 +190,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	"prewalk.enabled": {
 		label: "启用 Prewalk",
 		description:
-			"先以当前模型开始，在计划提示的待办列表生成后、首次编辑/写入时切换到快速/便宜的模型（默认 'smol' 角色）——强模型负责规划、提交待办并开始实现，然后交接。可用 --prewalk / --no-prewalk 按会话覆盖。",
+			"先以当前模型开始，在计划提示的待办列表生成后、首次编辑/写入时切换到快速/便宜的模型（默认 'smol' 角色）：强模型负责规划、提交待办并开始实现，然后交接。可用 --prewalk / --no-prewalk 按会话覆盖。",
 	},
 	"prewalk.auto": {
 		label: "自动 Prewalk",
@@ -288,27 +288,27 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	repetitionPenalty: { label: "重复惩罚", description: "对重复 token 的惩罚（-1 = 提供商默认）" },
 	textVerbosity: { label: "文本详细度", description: "OpenAI Responses 与 Codex 的回复详细度（low、medium 或 high）" },
 	"tier.openai": {
-		label: "服务等级 — OpenAI",
+		label: "服务等级：OpenAI",
 		description:
 			"OpenAI / OpenAI-Codex 请求以及经 OpenRouter 路由的 OpenAI 系模型的处理等级（none = 不发送）。以 `service_tier` 发送。",
 	},
 	"tier.anthropic": {
-		label: "服务等级 — Anthropic",
+		label: "服务等级：Anthropic",
 		description:
 			'Claude 请求的处理等级。`priority` 在支持的 Anthropic 直连模型上实现快速模式（`speed: "fast"`）；在 Bedrock/Vertex Claude 及经 OpenRouter 时忽略。',
 	},
 	"tier.google": {
-		label: "服务等级 — Google",
+		label: "服务等级：Google",
 		description:
 			"Gemini（Google AI Studio + Vertex）请求以及经 OpenRouter 路由的 Google 系模型的处理等级（none = 不发送）。以顶层 `serviceTier` 字段发送。",
 	},
 	"tier.subagent": {
-		label: "服务等级 — 子代理",
+		label: "服务等级：子代理",
 		description:
 			"派生的 task/eval 子代理的服务等级。Inherit = 跟随主 Agent 当前的按厂商等级（随 /fast 变化）；选择具体值则应用于子代理模型所属的厂商。",
 	},
 	"tier.advisor": {
-		label: "服务等级 — 顾问",
+		label: "服务等级：顾问",
 		description:
 			"顾问模型的服务等级。None = 标准处理；Inherit = 跟随主 Agent 当前的按厂商等级；选择具体值则应用于顾问模型所属的厂商。",
 	},
@@ -347,7 +347,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	"providers.anthropic.serverSideFallback": {
 		label: "Anthropic 服务端回退（Fable 5）",
 		description:
-			"当 Claude Fable 5 / Mythos 5 请求被 Anthropic 安全分类器拦截时，在服务端改用 Claude Opus 4.8 重试（Anthropic `server-side-fallback-2026-06-01` beta）。需手动开启——保持关闭则所有请求维持回退前的行为。",
+			"当 Claude Fable 5 / Mythos 5 请求被 Anthropic 安全分类器拦截时，在服务端改用 Claude Opus 4.8 重试（Anthropic `server-side-fallback-2026-06-01` beta）。需手动开启，保持关闭则所有请求维持回退前的行为。",
 	},
 	"providers.autoThinkingModel": {
 		label: "自动思考模型",
@@ -363,7 +363,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	autoResume: { label: "自动恢复", description: "自动恢复当前目录中最近的会话" },
 	"power.sleepPrevention": {
 		label: "防止睡眠",
-		description: "在活动会话期间防止 macOS 睡眠。每个等级是累积的——它会叠加所有更低等级的标志。",
+		description: "在活动会话期间防止 macOS 睡眠。每个等级是累积的，它会叠加所有更低等级的标志。",
 	},
 	"git.enabled": { label: "启用 Git 集成", description: "在 TUI 中显示 git 分支、状态和 PR 信息，并监视仓库元数据。" },
 	steeringMode: { label: "引导模式", description: "Agent 工作时如何处理排队的消息" },
@@ -642,7 +642,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	"hindsight.mentalModelsEnabled": {
 		label: "Hindsight 心智模型",
 		description:
-			"启动时把精选的反思摘要（心智模型）读入开发者指令。加载记忆库上已有的模型——不写入。搭配 hindsight.mentalModelAutoSeed 可同时自动创建内置种子集。",
+			"启动时把精选的反思摘要（心智模型）读入开发者指令。加载记忆库上已有的模型，不写入。搭配 hindsight.mentalModelAutoSeed 可同时自动创建内置种子集。",
 	},
 	"hindsight.mentalModelAutoSeed": {
 		label: "Hindsight 心智模型自动播种",
@@ -802,7 +802,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	},
 	"tools.artifactHeadBytes": {
 		label: "Artifact 头部大小（KB）",
-		description: "输出溢出为 artifact 时与尾部一起保留内联的头部内容量（中间省略）。0 表示禁用——仅保留尾部。",
+		description: "输出溢出为 artifact 时与尾部一起保留内联的头部内容量（中间省略）。0 表示禁用，仅保留尾部。",
 	},
 	"tools.outputMaxColumns": {
 		label: "输出列上限",
@@ -980,13 +980,13 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	"worktree.base": {
 		label: "Worktree 基础目录",
 		description:
-			"Agent 管理的 worktree 的基础目录——任务隔离副本、`github` PR 检出和 `omp worktree` 清理都位于此处。未设置时使用 ~/.omp/wt。必须是绝对路径或 ~ 相对路径；相对路径会被忽略。OMP_WORKTREE_DIR 环境变量可覆盖此项。",
+			"Agent 管理的 worktree 的基础目录，任务隔离副本、`github` PR 检出和 `omp worktree` 清理都位于此处。未设置时使用 ~/.omp/wt。必须是绝对路径或 ~ 相对路径；相对路径会被忽略。OMP_WORKTREE_DIR 环境变量可覆盖此项。",
 	},
 	"task.eager": { label: "优先任务委派", description: "推动把工作委派给子代理的力度" },
 	"task.batch": {
 		label: "批量任务调用",
 		description:
-			"把 task 工具切换为批量形态：一次调用携带 { context, tasks[] }——每项一个子代理，可选按项指定 agent（默认为会话派生策略 agent）、按项隔离，并带有一份前置到每个任务的共享上下文。async.enabled=true 时，每个派生作为独立后台 agent 运行，走正常的 idle/parked 生命周期；否则调用阻塞等待合并结果。禁用则恢复扁平的单次派生 schema。",
+			"把 task 工具切换为批量形态：一次调用携带 { context, tasks[] }：每项一个子代理，可选按项指定 agent（默认为会话派生策略 agent）、按项隔离，并带有一份前置到每个任务的共享上下文。async.enabled=true 时，每个派生作为独立后台 agent 运行，走正常的 idle/parked 生命周期；否则调用阻塞等待合并结果。禁用则恢复扁平的单次派生 schema。",
 	},
 	"task.enableEffort": {
 		label: "按任务指定强度",
@@ -1142,12 +1142,12 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	"codexResets.minBlockedMinutes": {
 		label: "Codex 自动兑换最小锁定时长",
 		description:
-			"仅当自然解锁——已耗尽的 5 小时/每周窗口中最晚的那个重置——距今至少此分钟数时才自动兑换（不要为省去短暂等待而花掉稀缺额度）。调大（如 360）可忽略仅 5 小时窗口的锁定。",
+			"仅当自然解锁，已耗尽的 5 小时/每周窗口中最晚的那个重置，距今至少此分钟数时才自动兑换（不要为省去短暂等待而花掉稀缺额度）。调大（如 360）可忽略仅 5 小时窗口的锁定。",
 	},
 	"codexResets.keepCredits": {
 		label: "Codex 自动兑换保留量",
 		description:
-			"保存的重置低于此数量时绝不自动使用（0 = 最后一份额度也可自动使用）。即将过期的额度例外——保留的额度过期等于什么都没保住。",
+			"保存的重置低于此数量时绝不自动使用（0 = 最后一份额度也可自动使用）。即将过期的额度例外，保留的额度过期等于什么都没保住。",
 	},
 	"codexResets.salvageHorizonHours": {
 		label: "Codex 重置挽救窗口",
@@ -1192,7 +1192,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	},
 	disabledProviders: {
 		label: "禁用的提供商",
-		description: "禁用的提供商 id 列表——能力发现来源与模型选择器中的提供商通用",
+		description: "禁用的提供商 id 列表，能力发现来源与模型选择器中的提供商通用",
 	},
 	disabledExtensions: { label: "禁用的扩展", description: "按 id 禁用的扩展列表（在扩展面板中管理）" },
 	modelRoles: { label: "模型角色分配", description: "角色（default、smol、slow、advisor 等）到模型选择器的映射" },
@@ -1230,7 +1230,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	// 压缩
 	"compaction.reserveTokens": {
 		label: "压缩预留 Token",
-		description: "压缩后为模型回复预留的 token 数。不设置表示未显式选择——小窗口恢复时可能换用按比例计算的预留。",
+		description: "压缩后为模型回复预留的 token 数。不设置表示未显式选择，小窗口恢复时可能换用按比例计算的预留。",
 	},
 	"compaction.keepRecentTokens": {
 		label: "压缩保留最近 Token",
@@ -1249,7 +1249,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	// 本地记忆管线
 	"memories.enabled": {
 		label: "本地记忆（旧版开关）",
-		description: "旧版本地记忆开关，仅为向后兼容迁移保留——请改用 memory.backend",
+		description: "旧版本地记忆开关，仅为向后兼容迁移保留，请改用 memory.backend",
 	},
 	"memories.maxRolloutsPerStartup": {
 		label: "每次启动提取上限",
@@ -1687,7 +1687,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	"claudeResets.minBlockedMinutes": {
 		label: "Claude 自动兑换最小封锁时长",
 		description:
-			"仅当自然解封——已耗尽的受覆盖窗口中最晚的重置——距今至少此分钟数时才自动兑换；单独的 5 小时重置绝不会用于每周或按模型的封锁。",
+			"仅当自然解封，已耗尽的受覆盖窗口中最晚的重置，距今至少此分钟数时才自动兑换；单独的 5 小时重置绝不会用于每周或按模型的封锁。",
 	},
 	"claudeResets.keepCredits": {
 		label: "Claude 自动兑换保留量",
@@ -1852,7 +1852,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	"computer.backgroundFallback": {
 		label: "后台输入降级",
 		description:
-			"窗口输入的后台通道不可用时的处理方式：以接管方式重跑并把焦点还给你的应用（macOS；其他平台为普通接管），或拒绝——同时阻止 Agent 自行抢占前台或打开 macOS 菜单。",
+			"窗口输入的后台通道不可用时的处理方式：以接管方式重跑并把焦点还给你的应用（macOS；其他平台为普通接管），或拒绝，同时阻止 Agent 自行抢占前台或打开 macOS 菜单。",
 	},
 	"task.structured": {
 		label: "结构化任务结果",

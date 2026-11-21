@@ -314,7 +314,7 @@ describe("FilesPanel preview", () => {
 			return shownText();
 		};
 
-		expect(await loaded(PNG_URL, "image/png", "shot.png")).toContain("1920 × 1080 · 2.0 KB");
+		expect(await loaded(PNG_URL, "image/png", "shot.png")).toContain("1920 × 1080 - 2.0 KB");
 
 		await act(async () => root?.unmount());
 		const vector = await loaded(SVG_URL, "image/svg+xml", "icon.svg");

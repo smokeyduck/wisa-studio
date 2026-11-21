@@ -5,7 +5,7 @@ import { useTabRpc } from "../../lib/tab-rpc";
  * set_model.
  */
 
-import { Check, ChevronRight, Cpu, Plus, Search, TriangleAlert } from "lucide-react";
+import { Check, ChevronRight, Plus, Search, TriangleAlert } from "lucide-react";
 import {
 	type CSSProperties,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -20,16 +20,33 @@ import {
 import { createPortal } from "react-dom";
 import type { LoginProvider, ModelInfo } from "../../../shared/rpc-types";
 import { applyModelInfo, hydrateSession } from "../../hooks/use-rpc-events";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { describeProviderError } from "../../lib/errors";
 import { cx, formatTokens } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
+import { modelLabel } from "../../lib/model-label";
+import { rememberModelPick } from "../../lib/model-preference";
+import { providerBrand } from "../../lib/provider-brand";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
 import { useRuntimeTabId } from "../../stores/session-runtime-context";
 import { toast } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
 import { Badge, Spinner } from "../common";
+
+/**
+ * Panel geometry. The dropdown is a two-column-wide list with two-line rows, so
+ * a 420px card left most model names clipped; it now takes the space the
+ * viewport offers and stops short of the window edges. The `w-[min(46rem,…)]`
+ * and `max-h-[min(70vh,44rem)]` classes declare the same intent for CSS-only
+ * readers; the inline style below wins, because the panel must also fit the
+ * space actually left above or below the composer.
+ */
+const PANEL_MAX_WIDTH_PX = 46 * 16;
+const PANEL_MAX_HEIGHT_PX = 44 * 16;
+/** Share of the viewport height the list may claim before it scrolls. */
+const PANEL_VIEWPORT_HEIGHT = 0.7;
 
 function modelTrigger(tabId: string | null | undefined): HTMLButtonElement | undefined {
 	return Array.from(document.querySelectorAll<HTMLButtonElement>("[data-model-picker-trigger]")).find(
@@ -86,19 +103,26 @@ export function ModelPicker() {
 		const place = () => {
 			const rect = anchor?.getBoundingClientRect();
 			const workspace = fallback?.getBoundingClientRect();
-			const width = Math.min(420, Math.max(0, window.innerWidth - 24));
+			const width = Math.min(PANEL_MAX_WIDTH_PX, Math.max(0, window.innerWidth - 32));
 			const left = Math.max(12, Math.min(rect?.left ?? (workspace?.left ?? 0) + 16, window.innerWidth - width - 12));
 			const above = (composer?.getBoundingClientRect().top ?? rect?.top ?? window.innerHeight - 60) - 8;
 			const below = (rect?.bottom ?? 0) + 8;
 			const spaceAbove = above - 12;
 			const spaceBelow = window.innerHeight - below - 12;
+			// Tall enough to show several groups, but never taller than the room
+			// on the side it opens toward.
+			const cap = Math.min(PANEL_MAX_HEIGHT_PX, window.innerHeight * PANEL_VIEWPORT_HEIGHT);
 			setPosition(
 				spaceAbove >= 200 || spaceAbove >= spaceBelow
-					? { left, width, bottom: window.innerHeight - above, maxHeight: Math.min(400, spaceAbove) }
-					: { left, width, top: below, maxHeight: Math.min(400, spaceBelow) },
+					? { left, width, bottom: window.innerHeight - above, maxHeight: Math.min(cap, spaceAbove) }
+					: { left, width, top: below, maxHeight: Math.min(cap, spaceBelow) },
 			);
 		};
 		const closeOutside = (event: PointerEvent | FocusEvent) => {
+			// Activating the dev feedback overlay moves focus into its shadow root;
+			// without this the picker shut the moment Ctrl+Shift+F was pressed, and
+			// the menu the user wanted to annotate vanished.
+			if (isDevOverlayEvent(event)) return;
 			const target = event.target;
 			if (target instanceof Node && (panelRef.current?.contains(target) || anchor?.contains(target))) return;
 			close();
@@ -189,6 +213,12 @@ export function ModelPicker() {
 		return map;
 	}, [providers]);
 
+	/**
+	 * Models grouped by vendor. The group key stays the raw provider id (auth,
+	 * expansion, and `set_model` all speak it); only the header text is branded.
+	 * Groups sort by their display name so the list reads alphabetically the way
+	 * the headers do — `xAI` lands under X, not after `wisa`.
+	 */
 	const groups = useMemo(() => {
 		const q = query.trim().toLowerCase();
 		const filtered = availableModels.filter(
@@ -197,7 +227,8 @@ export function ModelPicker() {
 				model.id.toLowerCase().includes(q) ||
 				model.provider.toLowerCase().includes(q) ||
 				model.name?.toLowerCase().includes(q) ||
-				model.description?.toLowerCase().includes(q),
+				model.description?.toLowerCase().includes(q) ||
+				providerBrand(model.provider).label.toLowerCase().includes(q),
 		);
 		const map = new Map<string, typeof filtered>();
 		for (const model of filtered) {
@@ -205,7 +236,9 @@ export function ModelPicker() {
 			list.push(model);
 			map.set(model.provider, list);
 		}
-		return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+		return [...map.entries()].sort(
+			([a], [b]) => providerBrand(a).label.localeCompare(providerBrand(b).label) || a.localeCompare(b),
+		);
 	}, [availableModels, query]);
 
 	const searching = query.trim().length > 0;
@@ -284,6 +317,9 @@ export function ModelPicker() {
 			// model is a server-side no-op, so the event channel can never heal a
 			// stale label.
 			if (tabId) applyModelInfo(response.data, tabId);
+			// A deliberate pick is the only signal of taste this app gets, so a
+			// fresh session can later open on what the user actually reaches for.
+			rememberModelPick(provider, modelId);
 			// Compaction rewrote the transcript — rehydrate so the chat and the
 			// context bar reflect the compacted session, not just the new model.
 			if (overContext) await hydrateSession();
@@ -331,7 +367,7 @@ export function ModelPicker() {
 	return createPortal(
 		<div
 			aria-label={t("modelPicker.searchLabel")}
-			className="omp-pop-in fixed z-[100] flex flex-col overflow-hidden rounded-xl border border-(--omp-border) bg-(--omp-bg-elevated) shadow-(--omp-shadow-md)"
+			className="omp-pop-in fixed z-[100] flex max-h-[min(70vh,44rem)] w-[min(46rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-(--omp-border) bg-(--omp-bg-elevated) shadow-(--omp-shadow-md)"
 			id="omp-model-picker"
 			ref={panelRef}
 			role="region"
@@ -391,13 +427,18 @@ export function ModelPicker() {
 							const auth = authByProvider.get(provider);
 							const expanded = openProviderSet.has(provider);
 							const groupId = `${listboxId}-group-${provider}`;
+							const brand = providerBrand(provider, models[0]?.api);
+							const BrandIcon = brand.Icon;
 							return (
-								<section aria-label={provider} className="mb-1" key={provider} role="group">
-									<div className="flex items-center gap-1 px-1 pt-1">
+								<section aria-label={brand.label} className="mb-1" key={provider} role="group">
+									{/* Index divider: a rule, the vendor, a rule, so the list reads as
+									    one column of sections rather than a run of rows. */}
+									<div className="flex items-center gap-2 px-1 pt-2">
+										<span aria-hidden="true" className="h-px min-w-2 flex-1 bg-(--omp-border-muted)" />
 										<button
 											aria-controls={expanded ? groupId : undefined}
 											aria-expanded={expanded}
-											className="omp-pressable flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-(--omp-bg-tertiary)"
+											className="omp-pressable flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left hover:bg-(--omp-bg-tertiary)"
 											onClick={() => toggleProvider(provider)}
 											type="button"
 										>
@@ -409,9 +450,9 @@ export function ModelPicker() {
 												)}
 												size={12}
 											/>
-											<Cpu className="shrink-0 text-(--omp-dim)" size={10} />
+											<BrandIcon className="shrink-0 text-(--omp-dim)" size={12} />
 											<span className="truncate text-omp-xxs font-semibold text-(--omp-dim)">
-												{provider}
+												{brand.label}
 											</span>
 											{auth && (
 												<Badge
@@ -427,9 +468,7 @@ export function ModelPicker() {
 											{!expanded && current?.provider === provider && (
 												<Check aria-hidden="true" className="shrink-0 text-(--omp-accent)" size={11} />
 											)}
-											<span className="ml-auto text-omp-xxs tabular-nums text-(--omp-dim)">
-												{models.length}
-											</span>
+											<span className="text-omp-xxs tabular-nums text-(--omp-dim)">{models.length}</span>
 										</button>
 										{auth?.available && !auth.authenticated && (
 											<button
@@ -443,6 +482,7 @@ export function ModelPicker() {
 												{t("providers.login")}
 											</button>
 										)}
+										<span aria-hidden="true" className="h-px min-w-2 flex-1 bg-(--omp-border-muted)" />
 									</div>
 									{expanded && (
 										<div className="mt-0.5" id={groupId}>
@@ -452,6 +492,9 @@ export function ModelPicker() {
 												const optionIndex = indexByKey.get(key) ?? 0;
 												const isActive = optionIndex === activeIndex;
 												const over = !isCurrent && isOverContext(model);
+												// Same rule as the composer trigger: a catalog name wins,
+												// otherwise the id is prettified for display only.
+												const label = modelLabel(model) ?? model.id;
 												return (
 													<button
 														aria-selected={isCurrent}
@@ -472,8 +515,9 @@ export function ModelPicker() {
 															<div className="flex min-w-0 items-center gap-1.5">
 																<span
 																	className={`truncate text-omp-xs ${isCurrent ? "font-semibold text-(--omp-accent)" : over ? "text-(--omp-dim)" : "text-(--omp-text)"}`}
+																	title={label === model.id ? undefined : model.id}
 																>
-																	{model.name || model.id}
+																	{label}
 																</span>
 																{model.isRecommended && (
 																	<Badge className="px-1.5 text-omp-xxs leading-3" variant="success">
@@ -491,23 +535,27 @@ export function ModelPicker() {
 																	</Badge>
 																)}
 															</div>
-															{((model.name && model.name !== model.id) || model.description) && (
+															{(label !== model.id || model.description) && (
 																<span
 																	className="truncate text-omp-xxs text-(--omp-dim)"
 																	title={model.description}
 																>
 																	{/* Only the id is code; the description is prose and stays
 																	    in the interface face, which carries CJK text. */}
-																	{model.name && model.name !== model.id && (
-																		<span className="font-mono">{model.id}</span>
-																	)}
-																	{model.name && model.name !== model.id && model.description && " · "}
+																	{label !== model.id && <span className="font-mono">{model.id}</span>}
+																	{label !== model.id && model.description && " - "}
 																	{model.description}
 																</span>
 															)}
 														</div>
 														{model.int != null && Number.isFinite(model.int) && (
-															<span className="shrink-0 text-omp-xxs tabular-nums text-(--omp-dim)">
+															// INT is a catalog score, not a promise: the tooltip is the
+															// only place it is explained, and the badge stays a badge.
+															<span
+																className="shrink-0 cursor-help text-omp-xxs tabular-nums text-(--omp-dim)"
+																title={t("modelPicker.intelligenceHint")}
+																aria-label={`${t("modelPicker.intelligence", { value: Math.round(model.int) })} - ${t("modelPicker.intelligenceHint")}`}
+															>
 																{t("modelPicker.intelligence", { value: Math.round(model.int) })}
 															</span>
 														)}

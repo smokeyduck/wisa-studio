@@ -317,22 +317,30 @@ export function setupUpdater(): void {
 	ipcMain.handle(IPC_COMMANDS.UPDATER_VERSION, () => appVersion());
 
 	// First check once the app settles; then every 4h.
-	setTimeout(() => {
-		autoUpdater
-			.checkForUpdates()
-			.then(() => {
-				const settled = settleIncompleteUpdateCheck(current, false);
-				if (settled !== current) broadcast(settled);
-			})
-			.catch(() => broadcast({ state: "idle" }));
-	}, 3000);
-	setInterval(() => {
-		autoUpdater
-			.checkForUpdates()
-			.then(() => {
-				const settled = settleIncompleteUpdateCheck(current, false);
-				if (settled !== current) broadcast(settled);
-			})
-			.catch(() => {});
-	}, CHECK_INTERVAL_MS);
+	//
+	// Only a packaged app has an update feed. An unpackaged run has no
+	// app-update.yml, and electron-updater logs "APPIMAGE env is not defined"
+	// on every poll (a dev tree is not an AppImage), so the background check is
+	// skipped entirely. An explicit check still runs — OMP_DEV_UPDATE_CHECK=1
+	// forces the dev config for exercising the updater by hand.
+	if (app.isPackaged) {
+		setTimeout(() => {
+			autoUpdater
+				.checkForUpdates()
+				.then(() => {
+					const settled = settleIncompleteUpdateCheck(current, false);
+					if (settled !== current) broadcast(settled);
+				})
+				.catch(() => broadcast({ state: "idle" }));
+		}, 3000);
+		setInterval(() => {
+			autoUpdater
+				.checkForUpdates()
+				.then(() => {
+					const settled = settleIncompleteUpdateCheck(current, false);
+					if (settled !== current) broadcast(settled);
+				})
+				.catch(() => {});
+		}, CHECK_INTERVAL_MS);
+	}
 }

@@ -20,6 +20,7 @@ import {
 	GitBranchPlus,
 	GitPullRequest,
 	Keyboard,
+	LayoutTemplate,
 	ListChecks,
 	LoaderCircle,
 	type LucideIcon,
@@ -35,7 +36,6 @@ import {
 	Puzzle,
 	RefreshCw,
 	Rows2,
-	Search,
 	Settings,
 	Sparkles,
 	Square,
@@ -86,6 +86,7 @@ import { usePendingSkillReviews } from "../../stores/skill-review";
 import { type SplitAxis, useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
 import { activeWorkspacePage, useEffectiveKeymapOverrides, useUiStore, type WorkspacePageId } from "../../stores/ui";
+import { useDefaultWorkspace } from "../../stores/workspace-mode";
 import {
 	SessionAgentsScope,
 	type SidebarAgentsInfo,
@@ -99,7 +100,6 @@ import { Glide } from "../common/Glide";
 import { LangSwitcher } from "../common/LangSwitcher";
 import { ProjectSettingsDialog } from "../dialogs/ProjectSettingsDialog";
 import { WorkspaceDialog } from "../dialogs/WorkspaceDialog";
-import { SKILLS_TAB_ID } from "../settings/settings-window-model";
 import { useUnreadNoticeCount } from "./NotificationBell";
 import { SidebarQuotas } from "./SidebarQuotas";
 
@@ -198,7 +198,9 @@ export function Sidebar() {
 		return chords;
 	}, [keymapOverrides]);
 	const paletteShortcut = (actionChords.get("palette") ?? []).join(" / ");
-	const [defaultWorkspace, setDefaultWorkspace] = useState<string | null>(null);
+	// Shared with the empty canvas and the composer placeholder, which need the
+	// same path to tell a Work session from a project one.
+	const defaultWorkspace = useDefaultWorkspace();
 	const switchPendingTo = useSessionStore(s => s.switchPending?.toId ?? null);
 	// Resizable left rail (mirrors PanelContainer's right-rail drag, but the
 	// handle sits on the right edge and dragging right grows the sidebar).
@@ -334,17 +336,9 @@ export function Sidebar() {
 	// signal — it needs the user, not just time.
 	const awaitingConfirmation = useAwaitingConfirmation();
 	const openThemePicker = useUiStore(s => s.openThemePicker);
-	const openSessionPicker = useUiStore(s => s.openSessionPicker);
 	const pendingSkillReviews = usePendingSkillReviews();
 	const pendingTaskReviews = useSchedulerStore(state => state.snapshot?.reviewCount ?? 0);
 	const unreadNotices = useUnreadNoticeCount();
-
-	useEffect(() => {
-		void window.omp.sidecar
-			.defaultWorkspace()
-			.then(setDefaultWorkspace)
-			.catch(() => {});
-	}, []);
 
 	const recencyForSession = useCallback(
 		(session: SessionInfo) => sessionLastUsed[session.path] ?? modifiedAt(session),
@@ -383,6 +377,44 @@ export function Sidebar() {
 	useEffect(() => {
 		setOpenFamilies(prev => Object.fromEntries(Object.entries(prev).filter(([, open]) => open)));
 	}, [sessionId]);
+	// The lane follows the session on screen. A session can arrive from a tab
+	// click, the picker, search, a deep link or a restored layout — none of
+	// those go through the lane switch, so a Work session could open while the
+	// list below still showed projects (and the row was not even in it). Keyed
+	// on the session, not on the lane: flipping the switch by hand while a
+	// session is open is a deliberate choice and stays put until another
+	// session arrives. Chats carry no folder, so they never move the lane.
+	// Only a CHANGE of session moves it: the lane is a saved preference, and the
+	// session restored at startup (or the workspace path arriving a beat later)
+	// must not silently rewrite it.
+	const setLane = useSidebarPrefs(s => s.setLane);
+	const laneKeyRef = useRef<string | null>(null);
+	const laneKey = `${sessionId ?? ""}|${activeTab?.id ?? ""}|${activeTab?.cwd ?? ""}`;
+	useEffect(() => {
+		const previous = laneKeyRef.current;
+		laneKeyRef.current = laneKey;
+		if (previous === null || previous === laneKey || !defaultWorkspace) return;
+		const active =
+			sessions.find(candidate => candidate.id === sessionId) ??
+			(activeTab?.sessionPath ? sessions.find(candidate => candidate.path === activeTab.sessionPath) : undefined);
+		if (active && active.kind === "chat") return;
+		// A tab whose session is not in the list yet (fresh, or the list is still
+		// loading) still knows its folder — enough to tell the two lanes apart.
+		const cwd = active ? familyRoot(active).cwd : activeTab?.kind === "chat" ? null : activeTab?.cwd;
+		if (!cwd) return;
+		const next = cwd === defaultWorkspace ? "work" : "code";
+		if (next !== useSidebarPrefs.getState().lane) void setLane(next);
+	}, [
+		activeTab?.kind,
+		activeTab?.sessionPath,
+		activeTab?.cwd,
+		defaultWorkspace,
+		familyRoot,
+		laneKey,
+		sessionId,
+		sessions,
+		setLane,
+	]);
 	// Three kinds of session, three places to find them: a project's agent work
 	// (grouped by folder), the default-workspace agent work ("Work"), and chats
 	// with no folder at all ("Recent"). Mixing the last two hid the difference
@@ -1260,10 +1292,11 @@ export function Sidebar() {
 		},
 		{
 			id: "skills",
+			page: "skillsOpen",
 			icon: BookOpen,
 			label: t("titlebar.skills"),
 			title: t("titlebar.skillsHint"),
-			onClick: () => useUiStore.getState().openSettings(SKILLS_TAB_ID),
+			onClick: () => useUiStore.getState().openSkills(),
 		},
 		{
 			id: "plugins",
@@ -1271,6 +1304,14 @@ export function Sidebar() {
 			icon: Puzzle,
 			label: t("titlebar.plugins"),
 			onClick: () => useUiStore.getState().openPlugins(),
+		},
+		{
+			id: "templates",
+			page: "templatesOpen",
+			icon: LayoutTemplate,
+			label: t("titlebar.templates"),
+			title: t("titlebar.templatesHint"),
+			onClick: () => useUiStore.getState().openTemplates(),
 		},
 	];
 	const secondaryNavigation: NavigationItem[] = [
@@ -1409,15 +1450,6 @@ export function Sidebar() {
 								</button>
 							))}
 						</div>
-						<button
-							type="button"
-							onClick={openSessionPicker}
-							title={t("sidebar.search")}
-							aria-label={t("sidebar.search")}
-							className="omp-pressable flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
-						>
-							<Search aria-hidden="true" size={15} />
-						</button>
 					</div>
 					<div className="mb-1 flex items-center gap-1">
 						<button

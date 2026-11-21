@@ -230,7 +230,7 @@ describe("AgentsDockCard", () => {
 		);
 
 		expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(5);
-		expect(containerText()).toContain("2 more · View all 7 agents");
+		expect(containerText()).toContain("2 more - View all 7 agents");
 		expect(container.querySelector('[data-testid="other-card-body"]')).not.toBeNull();
 
 		await act(async () => {

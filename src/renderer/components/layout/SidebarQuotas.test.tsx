@@ -115,12 +115,12 @@ describe("SidebarQuotas", () => {
 			report("anthropic", [limit("Claude 5 Hour", "5 Hour", { usedFraction: 1 })], "work@example.com"),
 		]);
 		const [first, second] = rows();
-		expect(first.textContent).toContain("· me@example.com");
+		expect(first.textContent).toContain("- me@example.com");
 		expect(first.getAttribute("title")).toMatch(
 			// The reset two hours ahead shows a date ("Oct 29, 00:29") after 22:00.
-			/^anthropic · me@example\.com\nClaude 5 Hour: 58% remaining · resets [^\n]+\nClaude 7 Day \(Opus\): 40% remaining\nClaude 7 Day: 87% remaining\nUpdated \S+$/,
+			/^anthropic - me@example\.com\nClaude 5 Hour: 58% remaining - resets [^\n]+\nClaude 7 Day \(Opus\): 40% remaining\nClaude 7 Day: 87% remaining\nUpdated \S+$/,
 		);
-		expect(second.getAttribute("title")).toContain("Claude 5 Hour: 0% remaining · limit reached");
+		expect(second.getAttribute("title")).toContain("Claude 5 Hour: 0% remaining - limit reached");
 		expect(second.getAttribute("aria-label")).toBe(second.getAttribute("title"));
 	});
 

@@ -11,6 +11,7 @@
 import { Check, ChevronDown, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AvailableModelsResult, ProvidersResult } from "../../../shared/rpc-types";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -153,6 +154,7 @@ export function ModelValueSelect({
 	useEffect(() => {
 		if (!open) return;
 		const onMouseDown = (event: MouseEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			if (rootRef.current && event.target instanceof Node && !rootRef.current.contains(event.target)) {
 				setOpen(false);
 			}

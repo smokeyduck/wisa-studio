@@ -76,7 +76,7 @@ describe("TodoDockCard", () => {
 		]);
 		await mount();
 
-		expect(container.textContent).toContain("Tasks1 running · 1 pending");
+		expect(container.textContent).toContain("Tasks1 running - 1 pending");
 		expect(container.textContent).toContain("Refine compact renderer");
 		expect(container.textContent).toContain("Run visual QA");
 		expect(container.textContent).not.toContain("Implementation");

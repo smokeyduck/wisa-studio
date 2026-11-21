@@ -470,6 +470,55 @@ describe("Sidebar menus and pinned ordering", () => {
 		expect(useSidebarPrefs.getState().lane).toBe("work");
 	});
 
+	it("moves the lane to follow the session that opens, without a manual switch", async () => {
+		const agent = session("/work/alpha/agent.jsonl", "/work/alpha");
+		const work = session("/default/work/personal.jsonl", "/default/work");
+		installMockOmp([agent, work]);
+		seedStores();
+		await mount(<Sidebar />);
+		expect(useSidebarPrefs.getState().lane).toBe("code");
+
+		// Opening a Work session (a tab click, the picker, a deep link) must show
+		// the lane that lists it — otherwise the row on screen is not in the list.
+		await act(async () => {
+			useSessionStore.setState({ sessionId: work.id, cwd: work.cwd });
+			useTabsStore.setState({
+				tabs: [
+					{ id: "t1", cwd: work.cwd, status: "ready", kind: "agent", unreadDone: false, sessionPath: work.path },
+				],
+				activeTabId: "t1",
+			});
+		});
+		await flush();
+		expect(useSidebarPrefs.getState().lane).toBe("work");
+		expect(container.querySelector('[data-session-group="__work__"]')).not.toBeNull();
+
+		// And back: a project session moves it to Code.
+		await act(async () => {
+			useSessionStore.setState({ sessionId: agent.id, cwd: agent.cwd });
+			useTabsStore.setState({
+				tabs: [
+					{ id: "t2", cwd: agent.cwd, status: "ready", kind: "agent", unreadDone: false, sessionPath: agent.path },
+				],
+				activeTabId: "t2",
+			});
+		});
+		await flush();
+		expect(useSidebarPrefs.getState().lane).toBe("code");
+	});
+
+	it("leaves the saved lane alone when the window reopens on a session", async () => {
+		const work = session("/default/work/personal.jsonl", "/default/work");
+		installMockOmp([work, ...LIST]);
+		seedStores();
+		// The user last chose Work; a restart that restores a project tab is not a
+		// lane choice, so the preference must survive it.
+		useSidebarPrefs.setState({ lane: "work", hydrated: true });
+		await mount(<Sidebar />);
+		await flush();
+		expect(useSidebarPrefs.getState().lane).toBe("work");
+	});
+
 	it("opens the workspace picker from New session in the Code lane", async () => {
 		installMockOmp(LIST);
 		seedStores();
@@ -506,13 +555,15 @@ describe("Sidebar menus and pinned ordering", () => {
 		expect(omp.sidecar.setProject).not.toHaveBeenCalled();
 	});
 
-	it("opens the existing global session picker from the header", async () => {
+	it("keeps the session picker reachable after the header button was removed", async () => {
 		installMockOmp(LIST);
 		seedStores();
 		await mount(<Sidebar />);
 
-		await fire(container.querySelector('[aria-label="Search sessions"], [aria-label="搜索会话"]'), "onClick");
-
+		// The header lost its search button to give the lane switch the full
+		// width; the picker is still the store's, opened from the palette.
+		expect(container.querySelector('[aria-label="Search sessions"]')).toBeNull();
+		useUiStore.getState().openSessionPicker();
 		expect(useUiStore.getState().sessionPickerOpen).toBe(true);
 	});
 

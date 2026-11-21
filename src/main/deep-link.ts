@@ -51,26 +51,42 @@ export function startupFolder(): string | undefined {
  */
 export const LINUX_DESKTOP_FILE = "omp-gui.desktop";
 
+/** The entry a dev run registers, so "Open With" can tell it from the install. */
+export const LINUX_DEV_DESKTOP_FILE = "wisa-studio-dev.desktop";
+
 /**
  * A `.desktop` entry that opens this build. `%U` is what makes it a scheme
  * handler; without it `xdg-settings` registers a file that swallows the URL.
  *
  * An AppImage runs from a temporary mount that disappears on exit, so the entry
  * must point at the AppImage file itself (`APPIMAGE`), never at `execPath`.
+ *
+ * `name`/`icon` exist for the dev entry: a dev run and the installed app are both
+ * "WISA STUDIO", so an "Open With" list shows the same label twice with no way to
+ * tell which is which.
  */
-export function linuxDesktopEntry(exec: string): string {
-	const quoted = /\s/.test(exec) ? `"${exec.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : exec;
+export function linuxDesktopEntry(
+	exec: string,
+	options: { name?: string; icon?: string; execArgs?: string } = {},
+): string {
+	const quoted = quoteDesktopArg(exec);
 	return [
 		"[Desktop Entry]",
 		"Type=Application",
-		"Name=WISA STUDIO",
+		`Name=${options.name ?? "WISA STUDIO"}`,
 		"Comment=Desktop GUI for the omp coding agent",
-		`Exec=${quoted} %U`,
+		`Exec=${quoted}${options.execArgs ? ` ${options.execArgs}` : ""} %U`,
+		...(options.icon ? [`Icon=${options.icon}`] : []),
 		"MimeType=x-scheme-handler/omp;",
 		"Terminal=false",
 		"Categories=Development;",
 		"",
 	].join("\n");
+}
+
+/** Quote one `Exec` token for the desktop-entry format, which has no escaping rules. */
+function quoteDesktopArg(value: string): string {
+	return /\s/.test(value) ? `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : value;
 }
 
 /**
@@ -96,6 +112,39 @@ function ensureLinuxDesktopEntry(): void {
 	} catch {
 		// A read-only or unusual HOME is not fatal: the app still runs, the
 		// browser hand-off just falls back to whatever handler exists.
+	}
+}
+
+/**
+ * Register a `.desktop` entry for a dev run, so "Open With" lists it separately
+ * from the installed app instead of showing "WISA STUDIO" twice.
+ *
+ * Deliberately *not* made the `omp://` default: the scheme belongs to the
+ * installed build, and taking it over from a checkout is how a dev run ends up
+ * hijacking the user's links.
+ */
+function ensureLinuxDevDesktopEntry(): void {
+	if (process.platform !== "linux" || app.isPackaged) return;
+	const dataHome = process.env.XDG_DATA_HOME || join(process.env.HOME ?? "", ".local", "share");
+	const dir = join(dataHome, "applications");
+	const icon = join(app.getAppPath(), "resources", "icon.png");
+	try {
+		mkdirSync(dir, { recursive: true });
+		// electron-vite runs `electron .` from the checkout, so `execPath` is the
+		// Electron binary and the repo has to be passed as its argument.
+		writeFileSync(
+			join(dir, LINUX_DEV_DESKTOP_FILE),
+			linuxDesktopEntry(process.execPath, {
+				name: "WISA STUDIO (Dev)",
+				icon: existsSync(icon) ? icon : undefined,
+				execArgs: quoteDesktopArg(app.getAppPath()),
+			}),
+		);
+		// Refresh the MIME cache, otherwise the entry stays invisible to "Open
+		// With" until the desktop environment rescans on its own.
+		execFileSync("update-desktop-database", [dir], { stdio: "ignore" });
+	} catch {
+		// Best effort: no entry just means the dev build stays out of the list.
 	}
 }
 
@@ -127,6 +176,10 @@ export function setupDeepLinks(windowManager: WindowManager, spawnWindow: SpawnW
 			}
 		}
 	}
+
+	// A dev run gets its own entry even though it does not own the scheme, so
+	// "Open With" can offer it by name.
+	ensureLinuxDevDesktopEntry();
 
 	handler = url => handleDeepLink(url, windowManager, spawnWindow);
 	for (const url of beforeSetup.splice(0)) handler(url);

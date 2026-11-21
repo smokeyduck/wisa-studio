@@ -129,7 +129,7 @@ describe("AgentRoster rows", () => {
 		await mount();
 
 		expect(rowText("Map the auth surface")).toContain(
-			"task #1 · anthropic/claude-sonnet-5:high · 7.7k tokens · $0.0123",
+			"task #1 - anthropic/claude-sonnet-5:high - 7.7k tokens - $0.0123",
 		);
 		const spawned = rowText("Audit cookie flags");
 		expect(spawned).toContain("explore #2");

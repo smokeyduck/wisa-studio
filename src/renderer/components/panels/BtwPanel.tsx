@@ -181,7 +181,7 @@ export function BtwPanel() {
 									<span className="shrink-0">{formatClock(entry.createdAt)}</span>
 									{followUps > 0 ? (
 										<span className="truncate">
-											· {t("btw.followUpCount", { count: followUps, plural: followUps === 1 ? "" : "s" })}
+											- {t("btw.followUpCount", { count: followUps, plural: followUps === 1 ? "" : "s" })}
 										</span>
 									) : null}
 									<span className="ml-auto shrink-0">{statusBadge(getBtwLatestTurn(entry).status)}</span>
@@ -230,7 +230,7 @@ export function BtwPanel() {
 										<div className="text-omp-xs tabular-nums text-(--omp-dim)">
 											{index === 0
 												? formatClock(turn.createdAt)
-												: `${t("btw.followUpLabel")} · ${formatClock(turn.createdAt)}`}
+												: `${t("btw.followUpLabel")} - ${formatClock(turn.createdAt)}`}
 										</div>
 									</div>
 									<div className="flex flex-col items-start gap-1.5">

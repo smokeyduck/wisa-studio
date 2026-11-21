@@ -40,8 +40,8 @@ function state(overrides: Partial<TrayState> = {}): TrayState {
 
 describe("tray status surface", () => {
 	it("names the run state in the hover text, in the language the renderer reports", () => {
-		expect(trayTooltip(state({ status: "streaming" }))).toBe("WISA STUDIO — alpha · Running");
-		expect(trayTooltip(state({ status: "waiting", language: "zh" }))).toBe("WISA STUDIO — alpha · 等待确认");
+		expect(trayTooltip(state({ status: "streaming" }))).toBe("WISA STUDIO - alpha - Running");
+		expect(trayTooltip(state({ status: "waiting", language: "zh" }))).toBe("WISA STUDIO - alpha - 等待确认");
 		expect(trayTooltip(state({ status: "error" }))).toContain("Error");
 		expect(trayTooltip(state({ status: "idle" }))).toContain("Idle");
 	});
@@ -121,10 +121,10 @@ describe("tray quota rows", () => {
 	});
 
 	it("prints each window's share on the row, and counts the rows past the top under More quotas", () => {
-		expect(quotaRowLabel(claude(0.42))).toBe("Anthropic — 5h 58% left, 7d 40% left");
+		expect(quotaRowLabel(claude(0.42))).toBe("Anthropic - 5h 58% left, 7d 40% left");
 		// A long account is cut in the middle so one address does not widen the menu.
 		expect(quotaRowLabel({ ...claude(0.42), account: "zach.personal.account@verylongdomain.example.com" })).toBe(
-			"Anthropic · zach.person…example.com — 5h 58% left, 7d 40% left",
+			"Anthropic - zach.person…example.com - 5h 58% left, 7d 40% left",
 		);
 		expect(moreQuotasLabel("en", 3)).toBe("More quotas (3)");
 	});
@@ -135,19 +135,19 @@ describe("tray quota rows", () => {
 			new Date(2026, month, day, hour, minute).getTime();
 		const limit = { label: "Claude 5 Hour", fraction: 0.42, exhausted: false };
 		expect(quotaLimitLabel("en", { ...limit, resetsAt: at(9, 27, 14, 30) }, now)).toBe(
-			"Claude 5 Hour — 58% left · resets 14:30",
+			"Claude 5 Hour - 58% left - resets 14:30",
 		);
 		expect(quotaLimitLabel("en", { ...limit, resetsAt: at(9, 30, 9) }, now)).toBe(
-			"Claude 5 Hour — 58% left · resets Fri 09:00",
+			"Claude 5 Hour - 58% left - resets Fri 09:00",
 		);
 		expect(quotaLimitLabel("en", { ...limit, resetsAt: at(10, 12, 9) }, now)).toBe(
-			"Claude 5 Hour — 58% left · resets Nov 12 09:00",
+			"Claude 5 Hour - 58% left - resets Nov 12 09:00",
 		);
 		expect(quotaLimitLabel("en", { label: "Monthly", fraction: 1, exhausted: true, resetsAt: now - 1 }, now)).toBe(
-			"Monthly — 0% left · limit reached",
+			"Monthly - 0% left - limit reached",
 		);
 		expect(quotaLimitLabel("zh", { ...limit, resetsAt: at(9, 27, 14, 30) }, now)).toBe(
-			"Claude 5 Hour — 剩余 58% · 14:30 重置",
+			"Claude 5 Hour - 剩余 58% - 14:30 重置",
 		);
 	});
 

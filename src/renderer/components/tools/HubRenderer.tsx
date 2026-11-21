@@ -282,9 +282,9 @@ export function HubRenderer({ args, result, isError, isPartial, partialResult }:
 					</div>
 					{typeof spec.cwd === "string" && <div className="truncate text-[var(--omp-dim)]">cwd: {spec.cwd}</div>}
 					<div className="text-[var(--omp-dim)]">
-						pty: {spec.pty === true ? "on" : "off"} · restart: {String(spec.restart ?? "no")} · persist:{" "}
+						pty: {spec.pty === true ? "on" : "off"} - restart: {String(spec.restart ?? "no")} - persist:{" "}
 						{spec.persist === true ? "on" : "off"}
-						{spec.detached === true ? " · detached" : ""}
+						{spec.detached === true ? " - detached" : ""}
 					</div>
 				</div>
 			)}

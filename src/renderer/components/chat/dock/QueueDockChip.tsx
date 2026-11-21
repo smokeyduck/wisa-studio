@@ -40,7 +40,7 @@ export function QueueDockChip() {
 					)}
 					{steering.length > 0 && followUp.length > 0 && (
 						<span aria-hidden="true" className="text-[var(--omp-dim)]">
-							·
+							-
 						</span>
 					)}
 					{followUp.length > 0 && (

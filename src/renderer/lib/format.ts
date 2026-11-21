@@ -169,7 +169,7 @@ export function languageFromPath(path: string | null | undefined): string {
 
 /** 950 → "950", 12_300 → "12.3k", 1_500_000 → "1.5M" */
 export function formatTokens(n: number | null | undefined): string {
-	if (n == null) return "–";
+	if (n == null) return "-";
 	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
 	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
 	return String(Math.round(n));
@@ -183,7 +183,7 @@ export function formatBytes(n: number): string {
 
 /** Format cost with safe fallback for NaN/null (which the wire sends when sidecar aggregates produce NaN). */
 export function formatCost(n: number | null | undefined, decimals = 4): string {
-	if (n == null || !Number.isFinite(n)) return "—";
+	if (n == null || !Number.isFinite(n)) return "-";
 	const threshold = 10 ** -decimals;
 	if (n !== 0 && Math.abs(n) < threshold) return `${n < 0 ? "−" : ""}< $${threshold.toFixed(decimals)}`;
 	return `$${n.toFixed(decimals)}`;
@@ -191,7 +191,7 @@ export function formatCost(n: number | null | undefined, decimals = 4): string {
 
 /** Format percentage with safe fallback for NaN/null/undefined. */
 export function formatPercent(n: number | null | undefined, decimals = 1): string {
-	return n != null && Number.isFinite(n) ? `${n.toFixed(decimals)}%` : "—";
+	return n != null && Number.isFinite(n) ? `${n.toFixed(decimals)}%` : "-";
 }
 
 export function escapeHtml(s: string): string {
@@ -213,7 +213,7 @@ export function dirname(path: string | null | undefined): string {
 	const parts = path.split(/[\\/]/);
 	parts.pop();
 	const joined = parts.join("/");
-	// A bare filename ("README.md") has no directory — "/" would claim the
+	// A bare filename ("README.md") has no directory · "/" would claim the
 	// filesystem root; only genuinely rooted paths keep it.
 	if (joined) return joined;
 	return /^[\\/]/.test(path) ? "/" : "";
@@ -262,7 +262,7 @@ export function resultText(result: unknown): string {
 		// Non-text content block (image/toolUse/…): no text to extract.
 		if (typeof r.type === "string" && r.type !== "text" && typeof r.text !== "string") return "";
 		if (typeof r.content === "string") return r.content;
-		// Live/hydrated envelope: content is an array of blocks — recurse into it
+		// Live/hydrated envelope: content is an array of blocks · recurse into it
 		// (text blocks yield their text; image/other blocks yield nothing).
 		if (Array.isArray(r.content)) return resultText(r.content);
 		if (typeof r.text === "string") return r.text;
@@ -325,7 +325,7 @@ function collectImageDataUrls(value: unknown, keys: readonly string[], depth = 0
 		}
 		if (typeof r.data === "string" && typeof r.mimeType === "string" && r.mimeType.startsWith("image/")) {
 			// `generate_image` reports its pictures as bare `{ data, mimeType }`
-			// pairs under `details.images` — same bytes, no content-block tag.
+			// pairs under `details.images` · same bytes, no content-block tag.
 			return [`data:${r.mimeType};base64,${r.data}`];
 		}
 		return keys.flatMap(key => collectImageDataUrls(r[key], keys, depth + 1));
@@ -340,7 +340,7 @@ export function extractImageDataUrls(value: unknown): string[] {
 
 /**
  * Find the first inline-renderable image (data: URL) inside an unknown tool result.
- * Remote URLs are not returned — the renderer CSP only allows 'self', data:, blob:.
+ * Remote URLs are not returned · the renderer CSP only allows 'self', data:, blob:.
  */
 export function extractImageDataUrl(value: unknown): string | null {
 	return collectImageDataUrls(value, SINGLE_IMAGE_KEYS)[0] ?? null;

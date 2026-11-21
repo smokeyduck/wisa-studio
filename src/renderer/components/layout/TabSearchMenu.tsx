@@ -7,6 +7,7 @@
 import { Check, Columns2, Rows2, Search } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -68,6 +69,7 @@ export function TabSearchMenu({
 	useEffect(() => {
 		const restore = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		const onDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			if (!menuRef.current?.contains(event.target as globalThis.Node | null)) onCloseRef.current();
 		};
 		document.addEventListener("pointerdown", onDown);

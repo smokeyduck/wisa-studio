@@ -8,6 +8,7 @@
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { isImeKeyEvent } from "../../lib/ime";
 
@@ -104,6 +105,7 @@ export function ContextMenu({ items, x, y, placement = "below", onClose }: Conte
 			// has already finished before this effect is installed. Listening for the
 			// next pointer press avoids treating the opening click itself as an
 			// outside dismissal while still closing before a later outside click.
+			if (isDevOverlayEvent(event)) return;
 			if (!menuRef.current?.contains(event.target as globalThis.Node | null)) onCloseRef.current();
 		};
 		const onKey = (event: KeyboardEvent) => {
@@ -168,10 +170,7 @@ export function ContextMenu({ items, x, y, placement = "below", onClose }: Conte
 			{items.map((item, index) => (
 				<div
 					key={item.id}
-					className={cx(
-						"flex w-full items-stretch",
-						index === activeIndex && "bg-[var(--omp-selected-bg)]",
-					)}
+					className={cx("flex w-full items-stretch", index === activeIndex && "bg-[var(--omp-selected-bg)]")}
 				>
 					<button
 						type="button"
@@ -193,10 +192,7 @@ export function ContextMenu({ items, x, y, placement = "below", onClose }: Conte
 						{item.icon && (
 							<item.icon
 								size={13}
-								className={cx(
-									"shrink-0",
-									item.danger ? "text-[var(--omp-error)]" : "text-[var(--omp-muted)]",
-								)}
+								className={cx("shrink-0", item.danger ? "text-[var(--omp-error)]" : "text-[var(--omp-muted)]")}
 							/>
 						)}
 						<span className="min-w-0 flex-1">

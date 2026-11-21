@@ -422,7 +422,7 @@ function SearchPanel() {
 					<span className="flex min-w-0 items-center gap-1.5 truncate">
 						<Kbd>↵</Kbd>
 						{t("search.footer.open")}
-						<span aria-hidden>·</span>
+						<span aria-hidden>-</span>
 						<Kbd>{`${shortcutMod}↵`}</Kbd>
 						{t("search.footer.newTab")}
 					</span>

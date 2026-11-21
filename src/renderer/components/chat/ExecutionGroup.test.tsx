@@ -107,7 +107,7 @@ describe("ExecutionGroup", () => {
 		});
 		await mount(["tool-1"]);
 
-		expect(container.textContent).toContain("1 failed · 2 steps");
+		expect(container.textContent).toContain("1 failed - 2 steps");
 		expect(container.querySelector('[data-testid="details"]')).toBeNull();
 
 		await act(async () => {
@@ -118,7 +118,7 @@ describe("ExecutionGroup", () => {
 
 	it("includes failed completion events in the existing group status", async () => {
 		await mount([], false, undefined, 1);
-		expect(container.textContent).toContain("1 failed · 2 steps");
+		expect(container.textContent).toContain("1 failed - 2 steps");
 		expect(container.querySelector('[data-state="failed"]')).not.toBeNull();
 	});
 
@@ -136,7 +136,7 @@ describe("ExecutionGroup", () => {
 			useToolsStore.setState({ activeTools: new Map([["tool-1", toolEntry("error", true)]]) });
 		});
 
-		expect(container.textContent).toContain("1 failed · 2 steps");
+		expect(container.textContent).toContain("1 failed - 2 steps");
 		expect(container.querySelector('[data-testid="details"]')).not.toBeNull();
 
 		await act(async () => {

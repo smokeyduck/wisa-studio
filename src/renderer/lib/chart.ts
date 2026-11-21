@@ -165,7 +165,7 @@ export function formatUsd(value: number): string {
 }
 
 export function formatMs(value: number | null): string {
-	if (value === null || !Number.isFinite(value)) return "—";
+	if (value === null || !Number.isFinite(value)) return "-";
 	if (value < 1000) return `${Math.round(value)}ms`;
 	return `${(value / 1000).toFixed(1)}s`;
 }

@@ -301,7 +301,7 @@ describe("TabBar", () => {
 		await mount(<TabBar />);
 
 		expect(chips()[0]?.textContent).toContain(firstMessage);
-		expect(chips()[0]?.getAttribute("title")).toBe(`${firstMessage} — infron`);
+		expect(chips()[0]?.getAttribute("title")).toBe(`${firstMessage} - infron`);
 		expect(chips()[0]?.querySelector(".truncate")).not.toBeNull();
 	});
 
@@ -852,7 +852,7 @@ describe("TabBar close confirm", () => {
 		await mount(<TabBar />);
 
 		// The chip carries the worktree marker + branch tooltip…
-		expect(chips()[1]?.getAttribute("title")).toBe("fix — gui-fix-deadbeef — omp/gui/fix");
+		expect(chips()[1]?.getAttribute("title")).toBe("fix - gui-fix-deadbeef - omp/gui/fix");
 		expect(chips()[1]?.textContent).toContain("fix");
 
 		// …and its × opens the cleanup prompt WITHOUT closing the tab.

@@ -5,7 +5,7 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	Mechanical: "规则检测",
 	"Short (5m)": "短期（5 分钟）",
 	"Long (1h)": "长期（1 小时）",
-	"Provider default — Anthropic uses 5m entries kept warm by idle keep-alive refreshes; PI_CACHE_RETENTION still applies":
+	"Provider default - Anthropic uses 5m entries kept warm by idle keep-alive refreshes; PI_CACHE_RETENTION still applies":
 		"使用提供商默认值；Anthropic 使用 5 分钟缓存，空闲时续期；仍遵循 PI_CACHE_RETENTION。",
 	"Cheapest cache writes; Anthropic keeps the entry warm with bounded keep-alive refreshes while idle":
 		"缓存写入成本最低；Anthropic 在空闲时进行有限次数的续期。",
@@ -276,8 +276,8 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Whisper large-v3-turbo, 99 languages. Widest language coverage; large download, slower.":
 		"Whisper large-v3-turbo，支持 99 种语言。语言覆盖最广；下载体积大，速度较慢。",
 	"Parakeet TDT v3 (SoTA)": "Parakeet TDT v3（SoTA）",
-	"NVIDIA Parakeet TDT 0.6B v3, 25 languages. Open ASR Leaderboard leader — best accuracy and far fastest decoding. Default.":
-		"NVIDIA Parakeet TDT 0.6B v3，支持 25 种语言。Open ASR Leaderboard 榜首——准确率最高，解码速度遥遥领先。默认选项。",
+	"NVIDIA Parakeet TDT 0.6B v3, 25 languages. Open ASR Leaderboard leader - best accuracy and far fastest decoding. Default.":
+		"NVIDIA Parakeet TDT 0.6B v3，支持 25 种语言。Open ASR Leaderboard 榜首，准确率最高，解码速度遥遥领先。默认选项。",
 	"Never automatically submit; insert dictation and remain in editor.": "从不自动提交；插入听写内容并停留在编辑器中。",
 	Release: "松开时",
 	"Submit on release if the utterance has 2+ words to avoid accidental sends.":
@@ -387,8 +387,8 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"8x8, sentence hues": "8x8，句子色调",
 	"Plain unscii square cell with sentence-hue ink.": "普通 unscii 方形单元格，使用句子色调字迹。",
 	"6x6 dense, black": "6x6 高密度，黑色",
-	"unscii squeezed to 6x6 — densest readable cell, fewest frames — in black ink.":
-		"将 unscii 压缩至 6x6——可读单元格中密度最高、帧数最少——使用黑色字迹。",
+	"unscii squeezed to 6x6 - densest readable cell, fewest frames - in black ink.":
+		"将 unscii 压缩至 6x6- 可读单元格中密度最高、帧数最少，使用黑色字迹。",
 	"6x6 dense, sentence hues": "6x6 高密度，句子色调",
 	"Densest cell with sentence-hue ink.": "密度最高的单元格，使用句子色调字迹。",
 	"5x8 legacy, black": "5x8 旧版，黑色",
@@ -403,11 +403,11 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"8x13 on 16px pitch, black": "8x13，16px 间距，黑色",
 	"8x13 glyphs on an 8x16 cell (extra leading), black ink.": "8x16 单元格上的 8x13 字形（额外行距），黑色字迹。",
 	"8x13 on 22px pitch (leading), black": "8x13，22px 间距（行距），黑色",
-	"8x13 glyphs on an 8x22 cell — extra line spacing so rows don't crowd. Default for OpenAI/Google.":
-		"8x22 单元格上的 8x13 字形——增加行距，避免各行拥挤。OpenAI/Google 的默认选项。",
+	"8x13 glyphs on an 8x22 cell - extra line spacing so rows don't crowd. Default for OpenAI/Google.":
+		"8x22 单元格上的 8x13 字形，增加行距，避免各行拥挤。OpenAI/Google 的默认选项。",
 	"8x13 on 11px advance (tracking), black": "8x13，11px 步进（字距），黑色",
-	"8x13 glyphs on an 11x16 cell — extra letter spacing so characters don't merge. Default for Anthropic.":
-		"11x16 单元格中的 8x13 字形——增加字母间距，避免字符粘连。Anthropic 的默认设置。",
+	"8x13 glyphs on an 11x16 cell - extra letter spacing so characters don't merge. Default for Anthropic.":
+		"11x16 单元格中的 8x13 字形，增加字母间距，避免字符粘连。Anthropic 的默认设置。",
 	"Silver 16, CJK": "Silver 16，CJK",
 	"Embedded Silver TrueType font on a 16px grid for CJK and other non-Latin text.":
 		"在 16px 网格上嵌入 Silver TrueType 字体，用于 CJK 及其他非拉丁文字。",
@@ -446,9 +446,9 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 		"使用在线 tiny 模型（优先使用 /models 中的 TINY 角色，否则使用 @smol）",
 	Remote: "远程",
 	"Use the Mnemopi remote LLM settings below": "使用下方的 Mnemopi 远程 LLM 设置",
-	"One shared bank — every project sees the same memories": "一个共享记忆库——所有项目都能看到相同记忆",
-	"Isolated bank per cwd basename — projects cannot see each other's memories":
-		"按 cwd 基名使用隔离记忆库——项目之间无法看到彼此的记忆",
+	"One shared bank - every project sees the same memories": "一个共享记忆库，所有项目都能看到相同记忆",
+	"Isolated bank per cwd basename - projects cannot see each other's memories":
+		"按 cwd 基名使用隔离记忆库，项目之间无法看到彼此的记忆",
 	"Shared bank, retains tagged with project:<cwd>. Recall surfaces project + untagged global memories together":
 		"共享记忆库，保留内容标记为 project:<cwd>。回忆时同时显示项目记忆与无标签的全局记忆",
 	"Full session": "完整会话",
@@ -514,7 +514,7 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"5 seconds": "5 秒",
 	"10 seconds": "10 秒",
 	Smart: "智能",
-	"Default — adaptive 5s→5m, resets when you stop polling": "默认——自适应 5 秒→5 分钟；停止轮询时重置",
+	"Default - adaptive 5s→5m, resets when you stop polling": "默认，自适应 5 秒→5 分钟；停止轮询时重置",
 	"All Devices": "所有设备",
 	"Inline docs and schemas for every mounted device.": "内联显示每个已挂载设备的文档和架构。",
 	"Built-ins Only": "仅内置项",
@@ -630,8 +630,8 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"OPENAI_API_KEY (gpt-image-2) or active GPT model; falls back to a connected Codex subscription":
 		"需要 OPENAI_API_KEY（gpt-image-2）或已启用的 GPT 模型；否则回退到已连接的 Codex 订阅",
 	"OpenAI Codex (ChatGPT)": "OpenAI Codex（ChatGPT）",
-	"Uses a connected Codex / ChatGPT subscription — no OPENAI_API_KEY needed":
-		"使用已连接的 Codex / ChatGPT 订阅——无需 OPENAI_API_KEY",
+	"Uses a connected Codex / ChatGPT subscription - no OPENAI_API_KEY needed":
+		"使用已连接的 Codex / ChatGPT 订阅，无需 OPENAI_API_KEY",
 	Antigravity: "Antigravity",
 	"Requires google-antigravity OAuth": "需要 google-antigravity OAuth",
 	"xAI Grok Imagine": "xAI Grok Imagine",
@@ -658,8 +658,8 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"xAI Grok Voice": "xAI Grok Voice",
 	"Requires xAI Grok OAuth or XAI_API_KEY; MP3 or WAV": "需要 xAI Grok OAuth 或 XAI_API_KEY；支持 MP3 或 WAV",
 	"Kokoro-82M": "Kokoro-82M",
-	"Kokoro-82M neural TTS — SoTA on-device quality, multi-voice, fully local":
-		"Kokoro-82M 神经网络 TTS——设备端质量达到 SoTA，支持多种语音，完全本地运行",
+	"Kokoro-82M neural TTS - SoTA on-device quality, multi-voice, fully local":
+		"Kokoro-82M 神经网络 TTS- 设备端质量达到 SoTA，支持多种语音，完全本地运行",
 	"Heart (American female)": "Heart（美国女声）",
 	"Bella (American female)": "Bella（美国女声）",
 	"Nicole (American female)": "Nicole（美国女声）",
@@ -838,8 +838,8 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"1/2 of a 200K window": "200K 窗口的一半",
 	"3/4 of a 200K window": "200K 窗口的四分之三",
 	// 提示词缓存保留与保温
-	"Provider default — Anthropic OAuth subscriber sessions default to 1h, API keys use 5m; PI_CACHE_RETENTION still applies":
-		"提供商默认值——Anthropic OAuth 订阅会话默认 1 小时，API 密钥为 5 分钟；仍遵循 PI_CACHE_RETENTION。",
+	"Provider default - Anthropic OAuth subscriber sessions default to 1h, API keys use 5m; PI_CACHE_RETENTION still applies":
+		"提供商默认值：Anthropic OAuth 订阅会话默认 1 小时，API 密钥为 5 分钟；仍遵循 PI_CACHE_RETENTION。",
 	"Cheapest cache writes; pair with cache warming to keep short entries alive while idle":
 		"缓存写入成本最低；搭配缓存保温可在空闲时维持短时效条目。",
 	"1h TTL where the provider supports it; pricier writes, only warmed during active runs":

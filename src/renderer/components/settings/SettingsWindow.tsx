@@ -217,7 +217,7 @@ export function PendingRestartBanner({
 			<RotateCw className="mt-0.5 shrink-0 text-[var(--omp-warning)]" size={14} />
 			<div className="min-w-0 flex-1">
 				<div className="text-omp-sm font-medium text-(--omp-text)">{t("settings.restartBanner.title")}</div>
-				<div className="mt-0.5 text-omp-xs text-(--omp-muted)">{pending.map(item => item.label).join(" · ")}</div>
+				<div className="mt-0.5 text-omp-xs text-(--omp-muted)">{pending.map(item => item.label).join(" - ")}</div>
 				{busy && <div className="mt-1 text-omp-xs text-(--omp-dim)">{t("settings.restartBanner.busy")}</div>}
 			</div>
 			<Button
@@ -305,7 +305,7 @@ export function SettingsWindow() {
 	const compactDensity = useUiStore(state => state.compactDensity);
 	const colorBlindMode = useUiStore(state => state.colorBlindMode);
 	const followAgentTheme = useUiStore(state => state.followAgentTheme);
-	const panelTab = useUiStore(state => state.panelTab);
+	const defaultPanelTab = useUiStore(state => state.defaultPanelTab);
 	const notifications = useUiStore(state => state.notifications);
 	const notificationsWhenFocused = useUiStore(state => state.notificationsWhenFocused);
 	const notificationSound = useUiStore(state => state.notificationSound);
@@ -546,8 +546,11 @@ export function SettingsWindow() {
 	}, [open, cwd]);
 
 	// ── GUI-local preferences (prefs IPC) ──
-	const applyPanelTab = (next: typeof panelTab) => {
-		void saveGuiPreference("defaultPanelTab", next, () => setPanelTab(next));
+	const applyPanelTab = (next: typeof defaultPanelTab) => {
+		void saveGuiPreference("defaultPanelTab", next, () => {
+			useUiStore.setState({ defaultPanelTab: next });
+			setPanelTab(next);
+		});
 	};
 	const applyTabWidth = (next: typeof tabWidth) => {
 		void saveGuiPreference("tabWidth", next, () => useUiStore.getState().setTabWidth(next));
@@ -1369,7 +1372,7 @@ export function SettingsWindow() {
 															{ value: "diff", label: t("settings.gui.panel.diff") },
 															{ value: "files", label: t("settings.gui.panel.files") },
 														]}
-														value={panelTab}
+														value={defaultPanelTab}
 													/>
 												</Section>
 												<Section id="setting-gui-tabStrip" title={t("settings.gui.tabStrip")}>
@@ -1818,7 +1821,7 @@ export function SettingsWindow() {
 											>
 												<span className="text-omp-md">{t(item.labelKey)}</span>
 												<span className="mt-1 block text-omp-xs text-(--omp-dim)">
-													{t("tabId" in item ? `settings.tabs.${item.tabId}` : "settings.tabs.gui")} ·{" "}
+													{t("tabId" in item ? `settings.tabs.${item.tabId}` : "settings.tabs.gui")} -{" "}
 													{item.id}
 												</span>
 											</button>

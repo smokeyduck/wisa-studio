@@ -37,8 +37,10 @@ import { describeError, describeProviderError } from "../lib/errors";
 import { formatClock } from "../lib/format";
 import { translate } from "../lib/i18n";
 import { normalizeLoopUpdate } from "../lib/loop-mode";
+import { applyPreferredModel } from "../lib/model-preference";
 import { playNotificationChime } from "../lib/notify-sound";
 import { acceptsActiveTabEvents } from "../lib/tab-routing";
+import { applyWorkComputerDefault } from "../lib/work-computer";
 import { useBtwStore } from "../stores/btw";
 import { useExtensionUiStore } from "../stores/extension-ui";
 import { useMessagesStore } from "../stores/messages";
@@ -340,7 +342,7 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							// miss a turn whose start and end arrive in one batch.
 							useTabsStore.getState().setBrowsing(tabId, false);
 							// Server-side mode changes (plan_approval accept exits plan
-							// mode, then dispatches the execution turn) carry no event —
+							// mode, then dispatches the execution turn) carry no event -
 							// re-sync state-derived stores at turn start so the composer
 							// chip / titlebar reflect the server.
 							void refreshSessionState(tabId);
@@ -751,6 +753,12 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							if (isFocused()) useUiStore.getState().clearSidecarError();
 							if (runtime) {
 								void hydrateTabSession(statusTabId);
+								// Work sessions exist to get something done on this machine,
+								// so desktop control starts on. Once per tab, Work only.
+								void applyWorkComputerDefault(statusTabId, payload.cwd);
+								// A brand-new session opens on the model this user actually
+								// reaches for, not on whichever row the catalog lists first.
+								void applyPreferredModel(statusTabId, res.data as RpcSessionState);
 							} else {
 								const wire = res.data as RpcSessionState;
 								applySessionState(wire);

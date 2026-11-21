@@ -19,7 +19,7 @@ function seedActiveTab(kind: "agent" | "chat"): void {
 
 afterEach(() => {
 	useTabsStore.getState().reset();
-	useUiStore.setState({ panelTab: "files", panelVisible: false, diffScope: "repository" });
+	useUiStore.setState({ panelTab: "files", panelVisible: false, diffScope: "repository", defaultPanelTab: "diff" });
 });
 
 describe("setPanelTab chat clamp", () => {
@@ -66,18 +66,29 @@ describe("openChanges", () => {
 });
 
 describe("togglePanel", () => {
-	// The bare toggle answers "what is going on here?", whatever tab was last open;
-	// closing must not disturb the tab a link set.
-	it("opens on Overview, in an agent or a chat tab, and closes without changing the tab", () => {
+	// The bare toggle opens on the Panel default (Changes out of the box), whatever
+	// tab was last open; closing must not disturb the tab a link set.
+	it("opens on the Panel default, in an agent or a chat tab, and closes without changing the tab", () => {
 		for (const kind of ["agent", "chat"] as const) {
 			seedActiveTab(kind);
-			useUiStore.setState({ panelTab: "files", panelVisible: false });
+			useUiStore.setState({ panelTab: "files", panelVisible: false, defaultPanelTab: "diff" });
 			useUiStore.getState().togglePanel();
-			expect(useUiStore.getState()).toMatchObject({ panelVisible: true, panelTab: "overview" });
+			// A chat tab cannot show Changes, so it opens the drawer on Files.
+			expect(useUiStore.getState()).toMatchObject({
+				panelVisible: true,
+				panelTab: kind === "chat" ? "files" : "diff",
+			});
 
 			useUiStore.setState({ panelTab: "files" });
 			useUiStore.getState().togglePanel();
 			expect(useUiStore.getState()).toMatchObject({ panelVisible: false, panelTab: "files" });
 		}
+	});
+
+	it("follows a Files default", () => {
+		seedActiveTab("agent");
+		useUiStore.setState({ panelTab: "diff", panelVisible: false, defaultPanelTab: "files" });
+		useUiStore.getState().togglePanel();
+		expect(useUiStore.getState()).toMatchObject({ panelVisible: true, panelTab: "files" });
 	});
 });

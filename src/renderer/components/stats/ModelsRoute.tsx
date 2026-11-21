@@ -84,7 +84,7 @@ export function ModelsRoute({ range, refreshKey }: { range: StatsRange; refreshK
 				key: "speed",
 				label: t("stats.col.tps"),
 				align: "right",
-				render: row => (row.avgTokensPerSecond !== null ? Math.round(row.avgTokensPerSecond) : "—"),
+				render: row => (row.avgTokensPerSecond !== null ? Math.round(row.avgTokensPerSecond) : "-"),
 			},
 		],
 		[t],

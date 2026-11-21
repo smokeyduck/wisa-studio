@@ -7,6 +7,143 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+### Added
+
+- **Phone access (`/phone`).** Every tab's collab room in one dialog: one QR code
+  and link per session, host/stop per tab, and a `collab.autoStart` setting that
+  hosts tabs as they open. Scanning a link puts the session on a phone browser ·
+  the same relay and the same session as `/collab`, so the phone can send
+  prompts, interrupt a run, and follow the transcript live, with progress and
+  tool output streaming back. The GUI applies `collab.autoStart` itself because
+  the sidecar only honors it in TUI mode, so an `rpc-ui` session would otherwise
+  never open a room; the agent still owns the rooms, main only relays its
+  `collab_start` / `collab_leave` / `get_collab_state` RPCs per tab.
+- **Templates.** A page listing the web-template catalog (served by the
+  `koda-templates-catalog` worker, cached, and bundled as a snapshot so it works
+  offline). Installing downloads the entry's pinned tarball into the Work
+  workspace and opens that folder as a session, so the agent takes it from
+  there; each install seeds an `AGENTS.md` that names the upstream repo, its
+  licence and the pinned commit, and asks for the Agentation overlay
+  (https://www.agentation.com) to be wired in. The page runs nothing itself: no
+  `npm install`, no dev server. Every card carries the template's own
+  screenshot · the catalog's 65 thumbnails are bundled with the renderer, since
+  the CSP allows no remote images and the page has to work offline · and the
+  screenshot (or the title under it) opens the template's live demo in the
+  built-in browser window.
+- **Skills → Community.** A tab over the skills.sh directory: search it, see
+  each skill's install count, and install one in a click. Installs go through the
+  same `npx skills add` path the CLI uses, so what lands on disk is what the
+  directory advertises.
+
+### Changed
+
+- **The model picker is grouped by vendor** with each provider's own mark, the
+  composer label is formatted ("Claude Opus 5.5", not `claude-fable-5-2`), and
+  the panel is taller so a long catalog stays readable. The intelligence tier
+  gets a hover explanation instead of a bare `INT` pill.
+- **A new session opens on the model you actually reach for.** The picker
+  records each deliberate switch (`modelPicks`), and a session with no messages
+  starts on the highest-count, most-recent pick that is still in the catalog.
+  Resumed sessions keep the model they were saved with.
+- **Work sessions start with desktop control on** (`/computer`), since the whole
+  point of the lane is getting something done on this machine.
+- **Skills opens in the right pane** like every other sidebar entry, instead of
+  jumping into Settings → Skills. The session-search button is gone and the two
+  remaining buttons split the row.
+- **The Plugins page seeds more vendor catalogs on first run.** Alongside
+  Anthropic's four, it now adds Cloudflare's, Sentry's, Hugging Face's,
+  Microsoft's, OpenAI's Codex plugins and Supabase's agent skills · each
+  verified to serve a `.claude-plugin/marketplace.json` with a `plugins` array on
+  `main` · and keeps the community catalogs (wshobson, Trail of Bits,
+  superpowers, pm-skills) last, since the earliest catalog wins when two list the
+  same plugin.
+- **Work and Code are told apart by more than a filter.** The lane follows the
+  session that opens (a tab click, the picker, a deep link) instead of staying
+  where it was, and the Work workspace gets its own `AGENTS.md`, an empty canvas
+  and starter prompts for writing, planning and research rather than "understand
+  this project", and a composer placeholder that matches. A saved lane is still
+  the user's: only a change of session moves it.
+- **Compaction threshold choices** are 80 / 60 / 40 / 20 (plus Auto), replacing
+  70 / 80 / 90.
+- **Compaction starts at 20% of the window by default.** The agent's own default
+  is a reserve-based `-1` that the bar showed as "Auto"; the first launch of this
+  build writes 20% to the global settings once (`compactionDefaults` pref) and
+  never again, so a reader who picks Auto afterwards keeps it. "Keep recent"
+  stays at its 20.0k default.
+- **The strategy popover no longer recommends anything.** The "Recommended for
+  this model" pill showed on every strategy and its only concrete effect was
+  spending more tokens; the row, the reason paragraph and the warning dot are
+  gone, and the popover names the vendor as a bold "Wisa" with the capability
+  chips flush right.
+- **The model picker's vendor groups read as index dividers:** a rule, the
+  vendor mark and name, then a rule, so the collapsed list scans as sections
+  instead of a run of rows.
+- **Full detail no longer prints every command it ran.** A reply's shell and tool
+  calls fold into one activity line per phase ("9 steps complete ›") in both
+  details, so the transcript reads as the model's prose and reasoning with a
+  collapsed summary of the work between paragraphs; Full and Compact now differ
+  only in whether intermediate narration stays in the transcript or joins the
+  summary. The transcript's line height and paragraph spacing are also tighter,
+  so a long answer no longer reads as a series of separated blocks.
+- **The thinking-level menu is read from the active model** and re-read when it
+  opens: `off` and `auto` only appear for a model that reasons at all, the
+  ladder is exactly what the sidecar reports, and a non-reasoning model gets an
+  honest note instead of two dead rows.
+- **The display defaults are the quiet ones.** A profile that has never chosen
+  gets the emoji autocomplete off, agent reactions off, and plain session titles
+  (`title.icons: boring`), seeded once alongside the dictation defaults · a
+  choice made later, including turning any of them back on, is never rewritten.
+  The conversation detail defaults to Full, and the drawer opens on Changes
+  rather than Overview; both are preferences, so the first launch writes them
+  and the setting then belongs to the reader.
+
+### Fixed
+
+- **The Templates page could not reach its catalog.** The worker the page fetched
+  from (`wisa-templates-catalog`) answers 404 now, so every user saw "Không kết
+  nối được máy chủ danh mục" and only ever got the snapshot bundled with the app.
+  The catalog is served from `koda-templates-catalog` · same payload, same 65
+  templates · and that is the address the app asks for.
+- **A reopened session paints its transcript at once** instead of a spinner for
+  the seconds the sidecar takes to boot: the last painted messages are kept per
+  session file and shown until the fetch replaces them.
+- **The model menu stays open when the Agentation overlay is activated.** The
+  overlay put focus inside its shadow root, and every popover in the app treats
+  a focus or pointer event from outside itself as a click-away · so Ctrl+Shift+F
+  closed the very menu the user was about to annotate. Popovers now ignore
+  events that originate in the overlay (`lib/dev-overlay.ts`). The earlier fix,
+  which gave the overlay host a real box to cap its `z-index`, is reverted: that
+  box became the containing block for the annotation markers (so numbered
+  markers drew in the wrong place) and sank the overlay under the app's dialogs,
+  which made those dialogs unselectable.
+- **The composer says "Wisa", not "WISA STUDIO",** in its placeholder text, in
+  all five locales.
+- **Em dashes are gone from the interface.** Every user-facing string uses a
+  plain hyphen where a separator or a placeholder was, and prose that read as a
+  parenthetical now uses a comma; a character no keyboard produces should not be
+  the app's punctuation.
+- **The empty-canvas heading and subtitle are centred**, and the template editor
+  no longer logs "Invalid task draft" on every open.
+- **A compacted transcript clears the screen.** After `/compact` or `/handoff`
+  the transcript showed a "Show N earlier messages" button and every todo
+  snapshot archived before the compaction point, so the cleared history still
+  filled the pane. The button is gone and only snapshots newer than the
+  compaction point are drawn; earlier messages stay reachable through
+  conversation search, which unfolds the history it finds.
+- **Four Vietnamese strings were written without their diacritics**
+  ("Am thanh thong bao", "Enter de hoi", "Mo trong cua so rieng"), which reads as
+  neither language; the locale test now rejects a pure-ASCII value carrying
+  Vietnamese function words.
+- **Plural counters no longer render an English "s" in Vietnamese and Russian.**
+  The `{plural}` suffix that English needs was left in the translated strings, so
+  the reasoning footer read "21 dòngs" and "291 từs"; those locales now print the
+  count and noun alone. Vietnamese and Thai also stop leaking the English word
+  "Reasoning" into the reasoning toggle, which now reads "suy luận" and "การคิด".
+- **The Templates page reads as a gallery.** The cards were too small and had no
+  picture, and each carried an `MIT` pill and a "Featured" tag that said nothing
+  the reader needed; the grid is wider, the screenshot fills the card, and the
+  licence/attribution line moved to the page footer where it belongs.
+
 ## [0.9.48] - 2026-11-20
 
 The bundled agent moves to Core 19 (omp 19.0.0), upstream's `2bf23c7`. The port

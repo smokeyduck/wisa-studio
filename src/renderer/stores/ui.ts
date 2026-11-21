@@ -32,7 +32,9 @@ const CLOSED_WORKSPACE_PAGES = {
 	providersOpen: false,
 	sessionInfoOpen: false,
 	sessionTreeOpen: false,
+	skillsOpen: false,
 	statsDashboardOpen: false,
+	templatesOpen: false,
 	usageOpen: false,
 	workspaceDirsOpen: false,
 };
@@ -148,6 +150,8 @@ interface UiStore {
 	btwRequest: string | null;
 	collabOpen: boolean;
 	collabJoinLink: string | null;
+	/** Phone access: every tab's collab link, one QR per session. */
+	phoneOpen: boolean;
 	debugOpen: boolean;
 	liveOpen: boolean;
 	composerEditorOpen: boolean;
@@ -169,6 +173,10 @@ interface UiStore {
 	prCenterOpen: boolean;
 	/** Plugins page: browse catalogs and install plugins. */
 	pluginsOpen: boolean;
+	/** Templates page: browse the web-template catalog, install one, open it. */
+	templatesOpen: boolean;
+	/** Skills page: the same manager Settings hosts, as a workspace page. */
+	skillsOpen: boolean;
 	/** Search over what was said in sessions (⇧⌘F). */
 	conversationSearchOpen: boolean;
 	/** Edit → Find (⌘F) and Find Next/Previous (⌘G/⇧⌘G) for the focused tab's transcript. */
@@ -214,6 +222,8 @@ interface UiStore {
 	confirmSessionDelete: boolean;
 	/** Transcript density: compact folds reasoning/tools; full shows every step. */
 	transcriptDetail: TranscriptDetail;
+	/** Which drawer tab the bare toggle opens (Settings → GUI → Panel default). */
+	defaultPanelTab: PanelTab;
 	tabWidth: TabWidth;
 	tabRows: TabRows;
 	/** Where plain left-clicks on http(s) links open: the browser window or the system browser (#65). */
@@ -304,6 +314,8 @@ interface UiStore {
 	closeBtw: () => void;
 	openCollab: (joinLink?: string) => void;
 	closeCollab: () => void;
+	openPhone: () => void;
+	closePhone: () => void;
 	openDebug: () => void;
 	closeDebug: () => void;
 	openLive: () => void;
@@ -324,6 +336,10 @@ interface UiStore {
 	closePrCenter: () => void;
 	openPlugins: () => void;
 	closePlugins: () => void;
+	openTemplates: () => void;
+	closeTemplates: () => void;
+	openSkills: () => void;
+	closeSkills: () => void;
 	openConversationSearch: () => void;
 	closeConversationSearch: () => void;
 	requestTranscriptFind: (command: FindCommand) => void;
@@ -377,6 +393,17 @@ interface UiStore {
 	resetKeymapOverrides: () => void;
 }
 
+/**
+ * The drawer tab a tool-free chat tab can actually show: Changes, shells and
+ * agent browsing need tools, so they fall back to Files.
+ */
+function clampPanelTab(tab: PanelTab): PanelTab {
+	if (CHAT_PANEL_TABS.has(tab)) return tab;
+	const tabs = useTabsStore.getState();
+	const activeKind = tabs.tabs.find(t => t.id === tabs.activeTabId)?.kind;
+	return activeKind === "chat" ? "files" : tab;
+}
+
 export const useUiStore = create<UiStore>()((set, get) => ({
 	displayPreferences: {},
 	sidebarVisible: true,
@@ -409,21 +436,22 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	thinkingExpanded: false,
 	sidebarQuotas: false,
 	confirmSessionDelete: true,
-	transcriptDetail: "compact",
+	transcriptDetail: "full",
+	defaultPanelTab: "diff",
 	tabWidth: "default",
 	tabRows: "single",
 	linkOpenMode: "panel",
 	collapseLargePastes: true,
 	toggleSidebar: () => set({ sidebarVisible: !get().sidebarVisible }),
-	// The bare toggle (title bar, shortcut) opens on Overview; links that open the
-	// drawer for a reason (Review, a file, /btw) go through setPanelTab instead.
+	// The bare toggle (title bar, shortcut) opens on the Panel default; links that
+	// open the drawer for a reason (Review, a file, /btw) go through setPanelTab.
 	togglePanel: () => {
 		const state = get();
 		set({
 			...workspacePagePatch(null),
 			...(state.panelVisible || activeWorkspacePage(state)
 				? { panelVisible: false }
-				: { panelVisible: true, panelTab: "overview" }),
+				: { panelVisible: true, panelTab: clampPanelTab(state.defaultPanelTab) }),
 		});
 	},
 	toolsExpandAll: { expanded: false, seq: 0 },
@@ -577,6 +605,9 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	collabJoinLink: null as string | null,
 	openCollab: joinLink => set({ collabOpen: true, collabJoinLink: joinLink ?? null }),
 	closeCollab: () => set({ collabOpen: false, collabJoinLink: null }),
+	phoneOpen: false,
+	openPhone: () => set({ phoneOpen: true }),
+	closePhone: () => set({ phoneOpen: false }),
 	debugOpen: false,
 	openDebug: () => set(workspacePagePatch("debugOpen")),
 	closeDebug: () => set({ debugOpen: false }),
@@ -609,6 +640,12 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	pluginsOpen: false,
 	openPlugins: () => set(workspacePagePatch("pluginsOpen")),
 	closePlugins: () => set({ pluginsOpen: false }),
+	templatesOpen: false,
+	openTemplates: () => set(workspacePagePatch("templatesOpen")),
+	closeTemplates: () => set({ templatesOpen: false }),
+	skillsOpen: false,
+	openSkills: () => set(workspacePagePatch("skillsOpen")),
+	closeSkills: () => set({ skillsOpen: false }),
 	conversationSearchOpen: false,
 	openConversationSearch: () => set({ conversationSearchOpen: true }),
 	closeConversationSearch: () => set({ conversationSearchOpen: false }),
@@ -658,6 +695,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 			btwRequest: null,
 			collabOpen: false,
 			collabJoinLink: null,
+			phoneOpen: false,
 			debugOpen: false,
 			liveOpen: false,
 			composerEditorOpen: false,
@@ -668,6 +706,8 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 			armedCloseTab: null,
 			prCenterOpen: false,
 			pluginsOpen: false,
+			templatesOpen: false,
+			skillsOpen: false,
 			conversationSearchOpen: false,
 			filePreviewPath: null,
 			filePreviewImage: null,

@@ -45,7 +45,7 @@ export function ProvidersRoute({ range, refreshKey }: { range: StatsRange; refre
 				key: "speed",
 				label: t("stats.col.tps"),
 				align: "right",
-				render: row => (row.avgTokensPerSecond !== null ? Math.round(row.avgTokensPerSecond) : "—"),
+				render: row => (row.avgTokensPerSecond !== null ? Math.round(row.avgTokensPerSecond) : "-"),
 			},
 		],
 		[t],
@@ -71,7 +71,7 @@ export function ProvidersRoute({ range, refreshKey }: { range: StatsRange; refre
 				key: "perWindow",
 				label: t("stats.providers.col.perWindow"),
 				align: "right",
-				render: row => (row.estTokensPerWindow !== null ? compact(row.estTokensPerWindow) : "—"),
+				render: row => (row.estTokensPerWindow !== null ? compact(row.estTokensPerWindow) : "-"),
 			},
 			{ key: "ideal", label: t("stats.providers.col.ideal"), align: "right", render: row => row.idealAccounts },
 			{

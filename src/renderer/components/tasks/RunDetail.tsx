@@ -95,13 +95,13 @@ export function RunRow({
 									progress.lastTool,
 								]
 									.filter(Boolean)
-									.join(" · ")
+									.join(" - ")
 							: null,
 						run.trigger !== "schedule" && headline !== undefined ? t(`tasks.run.trigger.${run.trigger}`) : null,
 						fileCount > 0 ? t("tasks.run.files", { count: fileCount }) : null,
 					]
 						.filter(Boolean)
-						.join(" · ")}
+						.join(" - ")}
 				</span>
 				<span className="shrink-0">
 					<RunOutcomeBadge run={run} />
@@ -180,7 +180,7 @@ function ReportBody({ report }: { report: RunReport }) {
 function Meta({ label, children }: { label: string; children: ReactNode }) {
 	return (
 		<span
-			className="flex items-center gap-1.5 before:text-(--omp-border-strong) before:content-['·'] first:before:content-none"
+			className="flex items-center gap-1.5 before:text-(--omp-border-strong) before:content-['-'] first:before:content-none"
 			title={label}
 		>
 			{children}
@@ -232,7 +232,7 @@ export function RunDetail({ run, taskTitle, actions }: { run: TaskRun; taskTitle
 							{duration !== null && <Meta label={t("tasks.run.fact.duration")}>{formatDuration(duration)}</Meta>}
 							{run.usage && (
 								<Meta label={t("tasks.run.fact.cost")}>
-									{formatCost(run.usage.costUsd, 3)} ·{" "}
+									{formatCost(run.usage.costUsd, 3)} -{" "}
 									{formatTokens(run.usage.inputTokens + run.usage.outputTokens)}
 								</Meta>
 							)}
@@ -281,9 +281,9 @@ export function RunDetail({ run, taskTitle, actions }: { run: TaskRun; taskTitle
 						</p>
 						{progress && (
 							<p className="truncate text-omp-sm text-(--omp-dim)">
-								{progress.round > 1 && `${t("tasks.run.round", { round: progress.round })} · `}
+								{progress.round > 1 && `${t("tasks.run.round", { round: progress.round })} - `}
 								{t("tasks.run.progress", { turns: progress.turns })}
-								{progress.lastTool && ` · ${progress.lastTool}`}
+								{progress.lastTool && ` - ${progress.lastTool}`}
 							</p>
 						)}
 					</div>
@@ -330,7 +330,7 @@ export function RunDetail({ run, taskTitle, actions }: { run: TaskRun; taskTitle
 					{run.worktree && (
 						<p className="mb-2 text-omp-sm text-(--omp-dim)">
 							{t("tasks.run.branch", { branch: run.worktree.branch })}
-							{run.worktree.removed && ` · ${t("tasks.run.worktreeRemoved")}`}
+							{run.worktree.removed && ` - ${t("tasks.run.worktreeRemoved")}`}
 						</p>
 					)}
 					<ul className="flex flex-col divide-y divide-(--omp-border-muted) rounded-xl border border-(--omp-border-muted)">
@@ -361,7 +361,7 @@ export function RunDetail({ run, taskTitle, actions }: { run: TaskRun; taskTitle
 							run.verification.state === "passed" ? "text-(--omp-success)" : "text-(--omp-error)",
 						)}
 					>
-						{t(`tasks.run.verify.${run.verification.state}`, { code: run.verification.exitCode ?? "—" })}
+						{t(`tasks.run.verify.${run.verification.state}`, { code: run.verification.exitCode ?? "-" })}
 					</p>
 					{run.verification.outputTail && (
 						<pre className="mt-2 max-h-64 overflow-auto rounded-lg border border-(--omp-border-muted) px-3 py-2 font-mono text-omp-sm leading-relaxed whitespace-pre-wrap text-(--omp-muted)">

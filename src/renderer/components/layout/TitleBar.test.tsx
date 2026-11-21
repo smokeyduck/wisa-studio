@@ -115,7 +115,7 @@ describe("TitleBar", () => {
 		// One readout of the figures that carry information; the exact cost and
 		// the cache rate are in its tooltip.
 		const metrics = container.querySelectorAll(".omp-session-metrics")[0] as unknown as HTMLElement | undefined;
-		expect(metrics?.textContent).toBe("1.5k tokens·$0.123·5.0s");
+		expect(metrics?.textContent).toBe("1.5k tokens-$0.123-5.0s");
 		expect(metrics?.getAttribute("title")).toContain("$0.1234");
 		expect(metrics?.getAttribute("title")).toContain("50%");
 		expect(container.querySelectorAll(".omp-signal-light")).toHaveLength(1);

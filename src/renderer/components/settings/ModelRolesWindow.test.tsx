@@ -135,7 +135,7 @@ describe("ModelRolesWindow", () => {
 		const trigger = [...document.body.querySelectorAll("button")].find(
 			button => button.getAttribute("aria-label") === "Model for Default",
 		);
-		expect(trigger?.textContent).toContain("Claude — anthropic/claude");
+		expect(trigger?.textContent).toContain("Claude - anthropic/claude");
 		await act(async () => trigger?.click());
 
 		const listbox = document.body.querySelector('[role="listbox"]');
@@ -304,7 +304,7 @@ describe("ModelRolesWindow thinking levels", () => {
 	it("shows a saved model as selected when its selector carries a level", async () => {
 		await mountLevelRoles();
 
-		expect(byLabel("Model for Fast")?.textContent).toContain("Thinker — acme/thinker");
+		expect(byLabel("Model for Fast")?.textContent).toContain("Thinker - acme/thinker");
 		expect((byLabel("Thinking level for Fast") as HTMLSelectElement | undefined)?.value).toBe("high");
 		await act(async () => byLabel("Model for Fast")?.click());
 		const selected = document.body.querySelector('[role="option"][aria-selected="true"]');

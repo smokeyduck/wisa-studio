@@ -42,7 +42,7 @@ const NOT_A_PATH = /[\s*?<>|"'`{}$,;=]/;
 //   run of two or more of that marker: the closing delimiter.
 
 /** CJK and full-width punctuation: prose, never an unescaped part of an address. */
-const ADDRESS_STOP = /[—‘’“”‥…、-〃〈-】〔-〟︐-︙︰-﹫！-／：-＠［-｀｛-･]/;
+const ADDRESS_STOP = /[-‘’“”‥…、-〃〈-】〔-〟︐-︙︰-﹫！-／：-＠［-｀｛-･]/;
 const CJK_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 /** Ends the host, as micromark's `unicodePunctuation` ends a GFM domain. */
 const PUNCTUATION = /[\p{P}\p{S}]/u;

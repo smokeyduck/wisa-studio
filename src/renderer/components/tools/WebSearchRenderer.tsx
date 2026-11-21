@@ -168,7 +168,7 @@ export function WebSearchRenderer({ args, result, isPartial }: ToolRendererProps
 									{(domain || age) && (
 										<div className="shrink-0 text-omp-xs text-[var(--omp-dim)]">
 											{domain && `(${domain})`}
-											{domain && age && " · "}
+											{domain && age && " - "}
 											{age}
 										</div>
 									)}
@@ -198,8 +198,8 @@ export function WebSearchRenderer({ args, result, isPartial }: ToolRendererProps
 							{authShort ? ` (${authShort})` : ""}
 						</span>
 					)}
-					{providerInfo && usageParts.length > 0 && " · "}
-					{usageParts.join(" · ")}
+					{providerInfo && usageParts.length > 0 && " - "}
+					{usageParts.join(" - ")}
 				</div>
 			)}
 

@@ -10,12 +10,21 @@ import { describe, expect, it, vi } from "vitest";
 
 // The module registers `app.on("open-url")` at import time; only the pure
 // decoder is under test here, so a stub is enough.
-vi.mock("electron", () => ({ app: { on: vi.fn(), isPackaged: false, setAsDefaultProtocolClient: vi.fn() } }));
+vi.mock("electron", () => ({
+	app: {
+		on: vi.fn(),
+		isPackaged: false,
+		setAsDefaultProtocolClient: vi.fn(),
+		getAppPath: () => "/repo",
+	},
+}));
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const { LINUX_DESKTOP_FILE, linuxDesktopEntry, parseDeepLink, setupDeepLinks } = await import("./deep-link");
+const { LINUX_DESKTOP_FILE, LINUX_DEV_DESKTOP_FILE, linuxDesktopEntry, parseDeepLink, setupDeepLinks } = await import(
+	"./deep-link"
+);
 
 describe("parseDeepLink", () => {
 	it("decodes a new-session link", () => {
@@ -84,6 +93,29 @@ describe("linuxDesktopEntry", () => {
 		expect(entry).toContain("MimeType=x-scheme-handler/omp;");
 		expect(entry).toContain("Type=Application");
 		expect(entry).toContain("Terminal=false");
+	});
+
+	it("labels a dev entry apart from the installed app", () => {
+		// Both builds are productName "WISA STUDIO", so an "Open With" list shows
+		// the same label twice; the dev entry must say which one it is.
+		const entry = linuxDesktopEntry("/repo/node_modules/electron/dist/electron", {
+			name: "WISA STUDIO (Dev)",
+			icon: "/repo/resources/icon.png",
+			execArgs: "/repo",
+		});
+		expect(entry).toContain("Name=WISA STUDIO (Dev)");
+		expect(entry).toContain("Icon=/repo/resources/icon.png");
+		expect(entry).toContain("Exec=/repo/node_modules/electron/dist/electron /repo %U");
+	});
+
+	it("quotes an Exec argument that contains a space", () => {
+		const entry = linuxDesktopEntry("/usr/bin/electron", { execArgs: '"/repo/My Apps/gui"' });
+		expect(entry).toContain('Exec=/usr/bin/electron "/repo/My Apps/gui" %U');
+	});
+
+	it("keeps the dev entry id distinct from the packaged one", () => {
+		expect(LINUX_DEV_DESKTOP_FILE).toBe("wisa-studio-dev.desktop");
+		expect(LINUX_DEV_DESKTOP_FILE).not.toBe(LINUX_DESKTOP_FILE);
 	});
 
 	it("registers under the id electron-builder actually installs", () => {

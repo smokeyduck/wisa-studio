@@ -31,6 +31,7 @@ import { isImeKeyEvent } from "../../lib/ime";
 import { parseComposerMode } from "../../lib/input-modes";
 import { effectiveOverrides, FOLLOW_UP_CHORD, isComposerShortcut, isFollowUpSend, onEscape } from "../../lib/keymap";
 import { abortActiveTurn } from "../../lib/messages";
+import { modelLabel } from "../../lib/model-label";
 import {
 	dropReferencedPastes,
 	expandPasteMarkers,
@@ -53,6 +54,7 @@ import { useSettingsStore } from "../../stores/settings";
 import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
+import { useTabIsWork } from "../../stores/workspace-mode";
 import { ContextMenu, type ContextMenuAnchor } from "../common/ContextMenu";
 import { FileAttachmentCard } from "../common/FileAttachmentCard";
 import { ZoomableImage } from "../common/ImageViewer";
@@ -91,12 +93,17 @@ export function InputArea() {
 	/** Chat tabs are tool-free: approval/mode chrome is meaningless there. */
 	const tabKind = useActiveTabKind();
 	const isChat = tabKind === "chat";
+	// Work sessions run in the GUI's own folder, so "build / explain / fix" (and
+	// the `/` command menu) describe a project that is not there.
+	const isWork = useTabIsWork(runtimeTabId);
 	const status = useSessionStore(s => s.status);
 	const isCompacting = useSessionStore(s => s.isCompacting);
 	const sessionId = useSessionStore(s => s.sessionId);
 	const queuedMessageCount = useSessionStore(s => s.queuedMessageCount);
 	const cwd = useSessionStore(s => s.cwd);
 	const model = useModelStore(s => s.model);
+	/** Display name for the model trigger: catalog name, else a prettified id. */
+	const modelName = modelLabel(model);
 	const fastModeActive = useModelStore(s => s.fastModeActive);
 	const modelPickerOpen = useUiStore(s => s.modelPickerOpen) && runtimeTabId === activeTabId;
 	/** Agent `stt.enabled` setting: microphone dictation button in the composer. */
@@ -990,7 +997,9 @@ export function InputArea() {
 											? t("input.placeholder.streaming", { chord: FOLLOW_UP_CHORD })
 											: isChat
 												? t("input.placeholder.chat")
-												: t("input.placeholder.idle")
+												: isWork
+													? t("input.placeholder.work")
+													: t("input.placeholder.idle")
 								}
 								className="max-h-[40vh] min-h-[44px] w-full resize-none bg-transparent text-omp-xl leading-[1.5] text-[var(--omp-text)] outline-none placeholder:truncate placeholder:text-[var(--omp-dim)]"
 							/>
@@ -1149,13 +1158,19 @@ export function InputArea() {
 									aria-controls={modelPickerOpen ? "omp-model-picker" : undefined}
 									aria-expanded={modelPickerOpen}
 									data-model-picker-trigger={runtimeTabId ?? ""}
-									aria-label={`${t("input.model")}: ${model?.id ?? t("input.chooseModel")}`}
-									title={`${t("input.model")}: ${model?.id ?? t("input.chooseModel")}`}
+									aria-label={`${t("input.model")}: ${modelName ?? t("input.chooseModel")}`}
+									// The label is the human name; the raw id stays in the tooltip so
+									// power users can still read the catalog key (issue: raw-id label).
+									title={
+										model && modelName
+											? `${t("input.model")}: ${modelName} (${model.id})`
+											: `${t("input.model")}: ${modelName ?? t("input.chooseModel")}`
+									}
 									className="omp-composer-model omp-pressable flex h-8 min-w-0 max-w-52 items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
 								>
 									<Box aria-hidden="true" size={14} className="omp-composer-model-icon shrink-0" />
 									<span className="omp-composer-model-label min-w-0 truncate">
-										{model?.id ?? t("input.chooseModel")}
+										{modelName ?? t("input.chooseModel")}
 									</span>
 									<ChevronDown aria-hidden="true" size={13} className="shrink-0 text-[var(--omp-dim)]" />
 								</button>

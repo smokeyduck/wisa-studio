@@ -12,6 +12,7 @@ import { Check, ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-reac
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { RpcResponse, RpcSessionState } from "../../../shared/rpc-types";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { loopLimitText, parseLoopLimit } from "../../lib/loop-mode";
@@ -67,7 +68,7 @@ export function ComposerModes() {
 	].filter((label): label is string => label !== null);
 	const triggerTitle =
 		activeModeLabels.length > 0
-			? t("input.modes.activeTitle", { modes: activeModeLabels.join(" · ") })
+			? t("input.modes.activeTitle", { modes: activeModeLabels.join(" - ") })
 			: t("input.modes.title");
 
 	useLayoutEffect(() => {
@@ -84,6 +85,7 @@ export function ComposerModes() {
 	useEffect(() => {
 		if (!menuOpen) return;
 		const onDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			const target = event.target as Node;
 			if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
 			setMenuOpen(false);

@@ -17,6 +17,8 @@ import type {
 	IpcBrowserActionPayload,
 	IpcBrowserViewportPayload,
 	IpcCloseTabPayload,
+	IpcCollabPhoneAutoStartPayload,
+	IpcCollabPhoneTabPayload,
 	IpcConversationSearchPayload,
 	IpcDeleteCustomThemeResult,
 	IpcExtensionUiRespondPayload,
@@ -35,6 +37,7 @@ import type {
 	IpcHostUriResultPayload,
 	IpcNotifyPayload,
 	IpcOpenPathResult,
+	IpcPhoneHubState,
 	IpcPluginInspectPayload,
 	IpcPrefsGetPayload,
 	IpcPrefsSetPayload,
@@ -52,9 +55,11 @@ import type {
 	IpcSetTabOrderPayload,
 	IpcSetTabViewPayload,
 	IpcSidecarRestartPayload,
+	IpcSkillsCommunityInstallPayload,
 	IpcSpawnTabPayload,
 	IpcStatsFetchPayload,
 	IpcStatsUrlResult,
+	IpcTemplateInstallPayload,
 	IpcUpdateLaunchProfilePayload,
 } from "../shared/ipc-types";
 import {
@@ -72,6 +77,7 @@ import { isSessionOutputPath } from "../shared/session-output";
 import { requestQuit } from "./app-quit";
 import { BenchmarkRunner } from "./benchmark-runner";
 import type { BrowserHost } from "./browser-host";
+import type { CollabPhoneHost } from "./collab-phone";
 import type { ConversationIndex } from "./conversation-index";
 import { type CustomThemesWatcher, deleteCustomTheme, readCustomThemes, saveCustomTheme } from "./custom-themes";
 import { ensureDefaultWorkspace } from "./default-workspace";
@@ -85,6 +91,7 @@ import type { MemoryWatcher } from "./memory-watcher";
 import { createMenu } from "./menu";
 import { deleteModelsProvider, listModelsProviders, modelsPath, upsertModelsProvider } from "./models-config";
 import { speakWithOsVoice } from "./os-speech";
+import type { PhoneHub } from "./phone-hub";
 import { preparePiper } from "./piper";
 import { PluginCatalog } from "./plugin-catalog";
 import { fetchRemoteImage } from "./remote-image";
@@ -96,9 +103,11 @@ import { resolveEditorCommand } from "./shell-env";
 import { applyWindowToggle, updateKeyboardLayout, windowToggleStatus } from "./shortcuts";
 import type { SidecarManager } from "./sidecar";
 import type { SidecarPool } from "./sidecar-pool";
+import { installSkill, searchSkills } from "./skills-community";
 import type { StatsClient } from "./stats-client";
 import type { Revive } from "./stats-restart-policy";
 import { spawnTabForWindow } from "./tab-spawn";
+import { installTemplate, readTemplatesCatalog } from "./templates";
 import { setTrayState } from "./tray";
 import { aggregateTrayStatus } from "./tray-labels";
 import { appVersion } from "./updater";
@@ -132,6 +141,10 @@ export interface IpcDeps {
 	initialCwd: () => string;
 	/** Scheduled tasks: owns `schedule_task` calls and hides run sessions from the sidebar. */
 	schedulerHost: SchedulerHost | null;
+	/** Phone access: auto-hosts tabs and answers the phone dialog's snapshot. */
+	collabPhone: CollabPhoneHost;
+	/** The one-link phone hub: one room listing every session (src/main/phone-hub.ts). */
+	phoneHub: PhoneHub;
 }
 
 /**
@@ -139,6 +152,11 @@ export interface IpcDeps {
  * `event.sender` (Electron guarantees it is the caller's webContents), never
  * from a client-supplied id. Null when the window has no sidecar bound yet.
  */
+/** The hub's state as the dialog reads it. */
+function phoneHubState(deps: IpcDeps): IpcPhoneHubState {
+	return { link: deps.phoneHub.link, live: deps.phoneHub.live, listeners: deps.phoneHub.listeners };
+}
+
 function sidecarFor(deps: IpcDeps, event: Electron.IpcMainInvokeEvent): SidecarManager | null {
 	const win = BrowserWindow.fromWebContents(event.sender);
 	if (!win) return null;
@@ -377,7 +395,7 @@ async function walkWorkspace(
 	try {
 		dirents = await fsp.readdir(dirAbs, { withFileTypes: true });
 	} catch {
-		return []; // Unreadable directory (permissions) — skip, don't fail the walk.
+		return []; // Unreadable directory (permissions) - skip, don't fail the walk.
 	}
 	const dirs: FsTreeEntry[] = [];
 	const files: FsTreeEntry[] = [];
@@ -762,7 +780,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	});
 
 	// Open a session (or a fresh project window) in a NEW parallel window with
-	// its own sidecar. The calling window's sidecar is left running untouched —
+	// its own sidecar. The calling window's sidecar is left running untouched -
 	// this is the explicit parallel action. Returns false when the window
 	// could not be created.
 	// F-OWN: when the session is already attached to a tab, focus the owner
@@ -1145,6 +1163,49 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		}
 	});
 
+	// Phone access (src/main/collab-phone.ts): the agent owns the rooms, main
+	// only relays its per-tab collab RPCs and applies `collab.autoStart` to GUI
+	// tabs — which `--mode rpc-ui` would otherwise ignore.
+	ipcMain.handle(IPC_COMMANDS.COLLAB_PHONE_SNAPSHOT, async event => {
+		const win = BrowserWindow.fromWebContents(event.sender);
+		if (!win) return { autoStart: deps.collabPhone.autoStart, tabs: [] };
+		return await deps.collabPhone.snapshot(win);
+	});
+	ipcMain.handle(IPC_COMMANDS.COLLAB_PHONE_START, async (event, payload: IpcCollabPhoneTabPayload) => {
+		const win = BrowserWindow.fromWebContents(event.sender);
+		if (!win) throw new Error("No window");
+		return await deps.collabPhone.start(win, payload.tabId);
+	});
+	ipcMain.handle(IPC_COMMANDS.COLLAB_PHONE_STOP, async (event, payload: IpcCollabPhoneTabPayload) => {
+		const win = BrowserWindow.fromWebContents(event.sender);
+		if (!win) throw new Error("No window");
+		return await deps.collabPhone.stop(win, payload.tabId);
+	});
+	ipcMain.handle(IPC_COMMANDS.COLLAB_PHONE_SET_AUTO_START, async (event, payload: IpcCollabPhoneAutoStartPayload) => {
+		const win = BrowserWindow.fromWebContents(event.sender);
+		if (!win) throw new Error("No window");
+		const mode = payload?.mode;
+		if (mode !== "off" && mode !== "view" && mode !== "control") throw new Error("Invalid collab.autoStart mode");
+		return await deps.collabPhone.setAutoStart(win, mode);
+	});
+
+	// Phone hub (src/main/phone-hub.ts): one link for every session. Off until
+	// the user turns it on, and every handler returns the full state so the
+	// dialog never has to guess whether a link is still live.
+	ipcMain.handle(IPC_COMMANDS.PHONE_HUB_START, async () => {
+		await deps.phoneHub.start();
+		return phoneHubState(deps);
+	});
+	ipcMain.handle(IPC_COMMANDS.PHONE_HUB_STOP, () => {
+		deps.phoneHub.stop();
+		return phoneHubState(deps);
+	});
+	ipcMain.handle(IPC_COMMANDS.PHONE_HUB_REVOKE, async () => {
+		await deps.phoneHub.revoke();
+		return phoneHubState(deps);
+	});
+	ipcMain.handle(IPC_COMMANDS.PHONE_HUB_STATE, () => phoneHubState(deps));
+
 	// Preferences
 	ipcMain.handle(IPC_COMMANDS.PREFS_GET, (_event, payload: IpcPrefsGetPayload) => {
 		if (payload.key) {
@@ -1452,6 +1513,22 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	ipcMain.handle(IPC_COMMANDS.PLUGIN_LOGO, (_event, owner: unknown) => pluginCatalog.logo(owner));
 	ipcMain.handle(IPC_COMMANDS.PLUGIN_INSPECT, (_event, payload: IpcPluginInspectPayload) =>
 		pluginCatalog.inspect(payload),
+	);
+
+	// Templates page: the catalog (live → cached → bundled) and installation.
+	ipcMain.handle(IPC_COMMANDS.TEMPLATES_CATALOG, () => readTemplatesCatalog());
+	ipcMain.handle(IPC_COMMANDS.TEMPLATES_INSTALL, (_event, payload: IpcTemplateInstallPayload) =>
+		installTemplate(String(payload?.id ?? "")),
+	);
+
+	// Community skills (skills.sh): search and one-click install into the user
+	// skills folder. Main does the fetching — the renderer never sees the host —
+	// and the installer writes files without running any of them.
+	ipcMain.handle(IPC_COMMANDS.SKILLS_COMMUNITY_SEARCH, (_event, payload: { query?: unknown }) =>
+		searchSkills(typeof payload?.query === "string" ? payload.query : ""),
+	);
+	ipcMain.handle(IPC_COMMANDS.SKILLS_COMMUNITY_INSTALL, (_event, payload: IpcSkillsCommunityInstallPayload) =>
+		installSkill(String(payload?.id ?? "")),
 	);
 
 	// Plan-mode document read — deliberately OFF the RPC bus: reading via the

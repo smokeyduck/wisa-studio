@@ -136,7 +136,7 @@ const ESCAPE_RE = /\x1b(?:\[[0-9;:?!<>]*[\x20-\x2f]*[@-~]|\][^\x07\x1b]*(?:\x07|
 
 /** Carriage-return overwrite semantics per line, so progress spinners keep
  * only their final frame. Replays with terminal semantics: text overwrites
- * positionally, escape sequences are zero-width, and CSI K erases forward —
+ * positionally, escape sequences are zero-width, and CSI K erases forward -
  * counting escape bytes as visible columns turned `Downloading\rDone\x1b[K`
  * into `Doneding` instead of `Done`. */
 function collapseCarriageReturns(input: string): string {
@@ -276,7 +276,7 @@ export function parseAnsi(input: string): AnsiSegment[] {
 	return segments;
 }
 
-/** Fast pre-check so renderers can keep a plain-text fast path. Any ESC —
+/** Fast pre-check so renderers can keep a plain-text fast path. Any ESC -
  * not just CSI — counts: OSC-only output (window titles, hyperlinks) and
  * stray C0 controls also need the parser to strip them. */
 const HAS_ANSI_RE = /\x1b|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;

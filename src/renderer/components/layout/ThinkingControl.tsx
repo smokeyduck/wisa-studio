@@ -6,8 +6,10 @@
  * an unspecified next value and offered no way to pick `auto` or go back.
  *
  * Data comes from the model store (`thinkingConfigured`, `availableThinkingLevels`,
- * hydrated from get_state and thinking_level_changed events); selection goes
- * through `set_thinking_level`, which the agent resolves/clamps per model.
+ * hydrated from get_state and thinking_level_changed events); the store derives
+ * the ladder from `model.thinking.efforts` because the sidecar never fills in
+ * the flat list. Selection goes through `set_thinking_level`, which the agent
+ * resolves/clamps per model.
  * The dropdown renders in a portal so the composer's overflow-hidden never
  * clips it (same pattern as ApprovalControl).
  */
@@ -16,7 +18,9 @@ import { Brain, Check, ChevronDown } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { type RpcThinkingLevelState, THINKING_LEVEL_VALUES, type ThinkingLevel } from "../../../shared/rpc-types";
+import { refreshModelState } from "../../hooks/session-hydration";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -29,10 +33,28 @@ import { toast } from "../../stores/toast";
 
 type ThinkingSelector = ThinkingLevel | "auto";
 
-/** Menu order: off, auto, then the model's ladder (already ascending). */
-function menuOptions(available: ThinkingLevel[]): ThinkingSelector[] {
-	// Defensive: keep only known levels, never offer a value the model rejected.
-	const ladder = THINKING_LEVEL_VALUES.filter(level => level !== "off" && available.includes(level));
+/** Levels that have a themed colour var (`--omp-thinking-*`); `max`/`inherit` do not. */
+const THEMED_LEVELS: Record<string, true> = {
+	off: true,
+	minimal: true,
+	low: true,
+	medium: true,
+	high: true,
+	xhigh: true,
+};
+
+/**
+ * The menu, from what the ACTIVE MODEL reports. `off` and `auto` are the two
+ * synthetic selectors the agent resolves itself (disable reasoning / let the
+ * agent pick), so they only appear for a model that reasons at all — a
+ * non-reasoning model gets the honest note instead of two dead rows. The
+ * ladder is whatever the sidecar listed for this model, in effort order: a
+ * level it never reported is never offered.
+ */
+export function menuOptions(available: readonly ThinkingLevel[]): ThinkingSelector[] {
+	const reported = new Set<string>(available);
+	const ladder = THINKING_LEVEL_VALUES.filter(level => level !== "off" && reported.has(level));
+	if (ladder.length === 0) return [];
 	return ["off", "auto", ...ladder];
 }
 
@@ -50,8 +72,26 @@ export function ThinkingControl() {
 	const menuRef = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
 
-	const current: ThinkingSelector = configured ?? thinkingLevel ?? "off";
-	const supportsThinking = available.length > 0;
+	const options = menuOptions(available);
+	const supportsThinking = options.length > 0;
+	// The trigger must advertise only what the menu can offer. A store that still
+	// carries `thinkingConfigured: "auto"` from an event (the sidecar reports the
+	// effective level, never the ladder) must not claim a selector the model does
+	// not expose: with an empty ladder the trigger reads as "off" and the menu
+	// shows the honest unsupported note.
+	const current: ThinkingSelector = supportsThinking ? (configured ?? thinkingLevel ?? "off") : "off";
+	// An unsupported model reads "off", and a level without a themed var (`max`) falls back to it.
+	const colorLevel = supportsThinking && thinkingLevel && THEMED_LEVELS[thinkingLevel] ? thinkingLevel : "off";
+
+	// Opening the menu re-reads the model state: the ladder belongs to the model,
+	// and a stale store (a switch whose event never arrived, a tab hydrated while
+	// another model was active) would otherwise offer the previous model's levels
+	// — or claim the model does not reason at all. The read is cheap and the
+	// store keeps the last good value if it fails.
+	useEffect(() => {
+		if (!open) return;
+		void refreshModelState(tabId ?? undefined);
+	}, [open, tabId]);
 
 	// Position the portal menu above the trigger whenever it opens.
 	useLayoutEffect(() => {
@@ -66,6 +106,7 @@ export function ThinkingControl() {
 	useEffect(() => {
 		if (!open) return;
 		const onDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			const target = event.target as Node;
 			if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
 			setOpen(false);
@@ -148,9 +189,13 @@ export function ThinkingControl() {
 				aria-expanded={open}
 				aria-haspopup="menu"
 				onClick={() => setOpen(value => !value)}
-				title={t("input.thinking", { level: t(`input.thinking.name.${current}`) })}
+				title={
+					supportsThinking
+						? t("input.thinking", { level: t(`input.thinking.name.${current}`) })
+						: t("input.thinking.unsupported")
+				}
 				className="omp-pressable flex h-8 items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium hover:bg-[var(--omp-selected-bg)]"
-				style={{ color: `var(--omp-thinking-${thinkingLevel ?? "off"})` }}
+				style={{ color: `var(--omp-thinking-${colorLevel})` }}
 			>
 				<Brain size={14} />
 				<span className="omp-composer-control-label hidden sm:inline">{t(`input.thinking.name.${current}`)}</span>
@@ -172,7 +217,7 @@ export function ThinkingControl() {
 							)}
 						>
 							{supportsThinking ? (
-								menuOptions(available).map(option => {
+								options.map(option => {
 									const active = option === current;
 									return (
 										<button
@@ -193,7 +238,9 @@ export function ThinkingControl() {
 														!active && "text-[var(--omp-muted)]",
 													)}
 													style={
-														option === "auto" ? undefined : { color: `var(--omp-thinking-${option})` }
+														option === "auto" || !THEMED_LEVELS[option]
+															? undefined
+															: { color: `var(--omp-thinking-${option})` }
 													}
 												>
 													{t(`input.thinking.name.${option}`)}

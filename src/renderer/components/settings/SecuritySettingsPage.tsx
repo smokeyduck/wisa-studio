@@ -25,7 +25,7 @@ const SEVERITY_CLASSES: Record<(typeof SEVERITIES)[number], string> = {
 };
 
 function formatWhen(value?: string): string {
-	if (!value) return "—";
+	if (!value) return "-";
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return value;
 	const delta = Date.now() - date.getTime();
@@ -42,7 +42,7 @@ function targetLabel(target: RpcSecurityTargetInput): string {
 }
 
 function findingPath(finding: RpcSecurityFindingInfo): string {
-	if (!finding.path) return "—";
+	if (!finding.path) return "-";
 	return finding.line ? `${finding.path}:${finding.line}` : finding.path;
 }
 
@@ -332,7 +332,7 @@ export function SecuritySettingsPage() {
 						<CircleAlert className="text-(--omp-warning)" size={12} />
 					)}
 					{dashboard?.modelReady
-						? t("security.ready.model", { model: dashboard.modelLabel ?? "—" })
+						? t("security.ready.model", { model: dashboard.modelLabel ?? "-" })
 						: t("security.ready.noModel")}
 				</span>
 				<span className="flex items-center gap-1.5 text-(--omp-muted)">
@@ -407,9 +407,9 @@ export function SecuritySettingsPage() {
 			<div className="mb-3 flex items-center gap-5 rounded-lg border border-(--omp-border-muted) px-3 py-2 text-omp-xs">
 				<span className="font-medium text-(--omp-text)">{t("security.repository")}</span>
 				<span className="min-w-0 flex-1 truncate font-mono text-(--omp-muted)">
-					{dashboard?.repositoryRoot ?? "—"}
+					{dashboard?.repositoryRoot ?? "-"}
 				</span>
-				<span className="text-(--omp-dim)">{dashboard?.revision ?? "—"}</span>
+				<span className="text-(--omp-dim)">{dashboard?.revision ?? "-"}</span>
 			</div>
 
 			{error && (
@@ -550,7 +550,7 @@ export function SecuritySettingsPage() {
 										)}
 									</span>
 									<span className="text-omp-xxs text-(--omp-dim)">
-										{scan.findingCount} · {formatWhen(scan.completedAt ?? scan.createdAt)}
+										{scan.findingCount} - {formatWhen(scan.completedAt ?? scan.createdAt)}
 									</span>
 								</button>
 							))}

@@ -72,7 +72,7 @@ function formatContentBlock(block: MessageContent, lines: string[]): void {
 			return;
 		}
 		case "toolCall":
-			lines.push(`- **Tool call:** \`${block.name}\` — ${summarizeArgs(block.arguments)}`, "");
+			lines.push(`- **Tool call:** \`${block.name}\` - ${summarizeArgs(block.arguments)}`, "");
 			return;
 		case "image":
 			lines.push("- [image]", "");

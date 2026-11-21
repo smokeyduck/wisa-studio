@@ -22,7 +22,7 @@ export function TaskEditorDialog() {
 		setDraft(editor?.initial ?? null);
 	}, [editor]);
 
-	const problems = useDraftProblems(draft ?? (editor?.initial as TaskDraft), editingId);
+	const problems = useDraftProblems(draft ?? editor?.initial ?? null, editingId);
 
 	const save = async () => {
 		if (!draft) return;

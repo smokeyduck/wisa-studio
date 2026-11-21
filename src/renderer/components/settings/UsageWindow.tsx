@@ -219,14 +219,14 @@ function ResetCreditRow({
 		<div className="flex items-center justify-between gap-2 py-1.5">
 			<div className="flex min-w-0 flex-col">
 				<span className="truncate text-omp-md font-medium text-[var(--omp-text)]">
-					{account.providerLabel} · {account.label}
+					{account.providerLabel} - {account.label}
 					{account.active && <Badge variant="muted">{t("usage.resetActive")}</Badge>}
 				</span>
 				<span className="text-omp-xs text-[var(--omp-dim)]">
 					{account.unavailableReason ??
 						account.error ??
 						t("usage.resetCounts", { redeemable: account.redeemableCount, available: account.availableCount })}
-					{expires ? ` · ${t("usage.resetExpires", { time: expires })}` : ""}
+					{expires ? ` - ${t("usage.resetExpires", { time: expires })}` : ""}
 				</span>
 			</div>
 			<Button size="sm" variant="secondary" disabled={!redeemable || busy} loading={busy} onClick={onRedeem}>
@@ -593,7 +593,7 @@ export function UsageWindow() {
 				title={t("usage.redeemReset")}
 				message={
 					pendingRedeem
-						? t("usage.redeemConfirm", { account: `${pendingRedeem.providerLabel} · ${pendingRedeem.label}` })
+						? t("usage.redeemConfirm", { account: `${pendingRedeem.providerLabel} - ${pendingRedeem.label}` })
 						: ""
 				}
 				confirmLabel={t("usage.redeem")}

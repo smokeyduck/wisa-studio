@@ -139,7 +139,7 @@ function BranchRow() {
 	const t = useT();
 	const { status } = useGitStatus();
 	const branch = !status
-		? "—"
+		? "-"
 		: !status.isRepo
 			? t("overview.workspace.noRepo")
 			: (status.branch ?? t("overview.workspace.detached"));
@@ -154,7 +154,7 @@ function WorkspaceCard({ withGit }: { withGit: boolean }) {
 	return (
 		<Card icon={FolderGit2} title={t("overview.workspace.title")}>
 			<div className="space-y-1.5">
-				<Row label={t("overview.workspace.folder")} title={cwd || undefined} value={cwd ? shortenPath(cwd) : "—"} />
+				<Row label={t("overview.workspace.folder")} title={cwd || undefined} value={cwd ? shortenPath(cwd) : "-"} />
 				{withGit && <BranchRow />}
 				<Row
 					label={t("overview.workspace.model")}
@@ -279,7 +279,7 @@ function RunningCard() {
 								{liveAgents.slice(0, RUNNING_PREVIEW).map(agent => (
 									<li className="truncate text-omp-sm text-(--omp-dim)" key={agent.id}>
 										<span className="text-(--omp-muted)">{agent.agent}</span>
-										{agent.description ? ` · ${agent.description}` : null}
+										{agent.description ? ` - ${agent.description}` : null}
 									</li>
 								))}
 								{liveAgents.length > RUNNING_PREVIEW && (

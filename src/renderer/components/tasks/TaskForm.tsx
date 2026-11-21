@@ -25,9 +25,17 @@ import { scheduleLabel, upcoming, weekdayName } from "./task-format";
 const VALIDATE_DEBOUNCE_MS = 200;
 
 /** Ask main what is wrong with a draft, debounced; [] while the first answer is pending. */
-export function useDraftProblems(draft: TaskDraft, editingId?: string): DraftProblem[] {
+export function useDraftProblems(draft: TaskDraft | null, editingId?: string): DraftProblem[] {
 	const [problems, setProblems] = useState<DraftProblem[]>([]);
 	useEffect(() => {
+		// The editor dialog mounts this hook before a draft exists (it starts
+		// null and is filled from `editor.initial`), and main's guard rejects a
+		// missing draft — asking anyway logged "Invalid task draft" on every
+		// open of the Tasks window.
+		if (!draft) {
+			setProblems([]);
+			return;
+		}
 		let live = true;
 		const timer = setTimeout(() => {
 			window.omp.scheduler.validate(draft, editingId).then(
@@ -377,7 +385,7 @@ function ScheduleField({
 				{next.length > 0 ? (
 					<>
 						<span className="text-(--omp-muted)">{scheduleLabel(t, schedule)}</span>
-						{" · "}
+						{" - "}
 						{t("tasks.form.nextRuns", { times: next.map(at => formatClock(at)).join(", ") })}
 						{schedule.kind === "cron" && <span className="ml-1.5 text-(--omp-dim)">({schedule.tz})</span>}
 					</>

@@ -87,7 +87,7 @@ export function OverviewRoute({ range, refreshKey }: { range: StatsRange; refres
 							label={t("stats.overview.speed")}
 							sub={t("stats.overview.ttftSub", { time: formatMs(overall.avgTtft) })}
 							value={
-								overall.avgTokensPerSecond !== null ? `${Math.round(overall.avgTokensPerSecond)} tok/s` : "—"
+								overall.avgTokensPerSecond !== null ? `${Math.round(overall.avgTokensPerSecond)} tok/s` : "-"
 							}
 						/>
 					</div>

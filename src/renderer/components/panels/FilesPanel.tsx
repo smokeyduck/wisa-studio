@@ -117,7 +117,7 @@ function ImagePreview({
 			/>
 			{(pixels || image.bytes !== undefined) && (
 				<span className="text-omp-xs text-(--omp-dim)">
-					{[pixels, image.bytes === undefined ? null : formatBytes(image.bytes)].filter(Boolean).join(" · ")}
+					{[pixels, image.bytes === undefined ? null : formatBytes(image.bytes)].filter(Boolean).join(" - ")}
 				</span>
 			)}
 		</div>

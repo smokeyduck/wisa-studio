@@ -13,9 +13,9 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import { useCompactionConfig } from "../../hooks/use-compaction-config";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
+import { ensureCompactionDefaults } from "../../lib/context-defaults";
 import {
 	CONTEXT_SETTING_PATHS,
-	type CompactionConfig,
 	compactionThreshold,
 	detectStrategy,
 	type ExpectedMethod,
@@ -23,14 +23,15 @@ import {
 	isLossless,
 	type ModelProfile,
 	modelProfile,
-	recommendStrategy,
 	STRATEGY_IDS,
 	type StrategyId,
 	strategyPatch,
 } from "../../lib/context-strategy";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx, formatTokens } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { onEscape } from "../../lib/keymap";
+import { providerBrand } from "../../lib/provider-brand";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
@@ -42,7 +43,7 @@ import { ContextUsagePopover } from "./ContextUsagePopover";
 
 const POPOVER_WIDTH = 400;
 const EDGE = 12;
-const THRESHOLD_CHOICES = [70, 80, 90];
+const THRESHOLD_CHOICES = [80, 60, 40, 20];
 const KEEP_RECENT_CHOICES = [20_000, 40_000, 80_000];
 
 export function Segmented<T extends number>({
@@ -176,6 +177,13 @@ export function ContextStrategyBar() {
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const popoverRef = useRef<HTMLDivElement>(null);
 
+	// One-time: an unset threshold becomes 20%, the number readers kept asking
+	// for. Guarded by a pref, so choosing Auto afterwards sticks.
+	useEffect(() => {
+		if (!ready || !config) return;
+		void ensureCompactionDefaults(config, write);
+	}, [ready, config, write]);
+
 	useLayoutEffect(() => {
 		if (!open || !triggerRef.current) return;
 		const rect = triggerRef.current.getBoundingClientRect();
@@ -192,6 +200,7 @@ export function ContextStrategyBar() {
 	useEffect(() => {
 		if (!open) return;
 		const onDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			const target = event.target as Node;
 			if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
 			setOpen(false);
@@ -210,14 +219,11 @@ export function ContextStrategyBar() {
 
 	const profile: ModelProfile = modelProfile(model);
 	const strategy = detectStrategy(config);
-	const recommended = recommendStrategy(profile);
 	const method = expectedMethod(config, profile);
 	const threshold = compactionThreshold(config, profile);
 	const modelName = model.name ?? model.id;
 	const methodName = t(`contextStrategy.method.${methodKey(method)}`);
 	const atText = threshold !== null ? t("contextStrategy.at", { tokens: formatTokens(threshold) }) : null;
-	// Nudge only a reader still on the defaults: someone who chose a strategy knows why.
-	const suggest = strategy === "balanced" && recommended.strategy !== "balanced";
 
 	const applyStrategy = async (id: StrategyId) => {
 		if (strategy === id) return;
@@ -252,24 +258,15 @@ export function ContextStrategyBar() {
 				<span className="shrink-0 font-medium text-(--omp-muted)">{t(`contextStrategy.strategy.${strategy}`)}</span>
 				{autoCompaction ? (
 					<span className="omp-context-bar-detail flex min-w-0 items-center gap-1.5">
-						<span aria-hidden>·</span>
+						<span aria-hidden>-</span>
 						<span className="truncate">{methodName}</span>
 						{atText && <span className="shrink-0 tabular-nums">{atText}</span>}
 					</span>
 				) : (
 					<span className="omp-context-bar-detail flex items-center gap-1.5 text-(--omp-warning)">
-						<span aria-hidden>·</span>
+						<span aria-hidden>-</span>
 						{t("contextStrategy.off")}
 					</span>
-				)}
-				{suggest && (
-					<span
-						role="img"
-						aria-label={t("contextStrategy.suggested", {
-							strategy: t(`contextStrategy.strategy.${recommended.strategy}`),
-						})}
-						className="size-1.5 shrink-0 rounded-full bg-(--omp-warning)"
-					/>
 				)}
 			</button>
 			<ContextUsagePopover autoCompactAt={autoCompaction ? threshold : null} />
@@ -289,7 +286,7 @@ export function ContextStrategyBar() {
 							closing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
 						)}
 					>
-						<ModelSummary name={modelName} provider={model.provider} profile={profile} />
+						<ModelSummary name={modelName} provider={model.provider} api={model.api} profile={profile} />
 
 						<div role="radiogroup" aria-label={t("contextStrategy.strategyLabel")} className="mt-3 space-y-1">
 							{STRATEGY_IDS.map(id => (
@@ -297,7 +294,6 @@ export function ContextStrategyBar() {
 									key={id}
 									id={id}
 									selected={strategy === id}
-									recommended={recommended.strategy === id}
 									disabled={saving}
 									onSelect={() => void applyStrategy(id)}
 								/>
@@ -316,12 +312,7 @@ export function ContextStrategyBar() {
 							)}
 						</div>
 
-						<Outcome
-							config={config}
-							method={method}
-							threshold={threshold}
-							suggestionKey={suggest ? recommended.reasonKey : null}
-						/>
+						<Outcome method={method} threshold={threshold} />
 
 						<div className="mt-3 space-y-2 border-t border-(--omp-border-muted) pt-3">
 							<Segmented
@@ -377,13 +368,25 @@ export function ContextStrategyBar() {
 	);
 }
 
-function ModelSummary({ name, provider, profile }: { name: string; provider: string; profile: ModelProfile }) {
+function ModelSummary({
+	name,
+	provider,
+	api,
+	profile,
+}: {
+	name: string;
+	provider: string;
+	api?: string;
+	profile: ModelProfile;
+}) {
 	const t = useT();
+	// The vendor name, not the gateway id: `wisa` reads `Wisa`.
+	const brand = providerBrand(provider, api);
 	return (
 		<div>
 			<div className="flex items-baseline justify-between gap-3">
 				<span className="min-w-0 truncate text-omp-md font-semibold text-(--omp-text)">{name}</span>
-				<span className="shrink-0 text-omp-xs text-(--omp-dim)">{provider}</span>
+				<span className="shrink-0 text-omp-xs font-semibold text-(--omp-muted)">{brand.label}</span>
 			</div>
 			<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
 				<span className="text-omp-xs tabular-nums text-(--omp-muted)">
@@ -391,12 +394,16 @@ function ModelSummary({ name, provider, profile }: { name: string; provider: str
 						? t("contextStrategy.window", { size: formatTokens(profile.windowTokens) })
 						: t("contextStrategy.windowUnknown")}
 				</span>
-				<Chip on={profile.vision}>
-					{t(profile.vision ? "contextStrategy.capability.vision" : "contextStrategy.capability.noVision")}
-				</Chip>
-				<Chip on={profile.nativeRemote}>
-					{t(profile.nativeRemote ? "contextStrategy.capability.native" : "contextStrategy.capability.noNative")}
-				</Chip>
+				<span className="ml-auto flex items-center gap-1.5">
+					<Chip on={profile.vision}>
+						{t(profile.vision ? "contextStrategy.capability.vision" : "contextStrategy.capability.noVision")}
+					</Chip>
+					<Chip on={profile.nativeRemote}>
+						{t(
+							profile.nativeRemote ? "contextStrategy.capability.native" : "contextStrategy.capability.noNative",
+						)}
+					</Chip>
+				</span>
 			</div>
 		</div>
 	);
@@ -405,13 +412,11 @@ function ModelSummary({ name, provider, profile }: { name: string; provider: str
 function StrategyRow({
 	id,
 	selected,
-	recommended,
 	disabled,
 	onSelect,
 }: {
 	id: StrategyId;
 	selected: boolean;
-	recommended: boolean;
 	disabled: boolean;
 	onSelect: () => void;
 }) {
@@ -440,11 +445,6 @@ function StrategyRow({
 			<span className="min-w-0 flex-1">
 				<span className="flex flex-wrap items-center gap-1.5">
 					<span className="text-omp-sm font-medium text-(--omp-text)">{t(`contextStrategy.strategy.${id}`)}</span>
-					{recommended && (
-						<span className="rounded-full border border-(--omp-border-accent) px-1.5 text-omp-xxs text-(--omp-accent)">
-							{t("contextStrategy.recommended")}
-						</span>
-					)}
 					{id === "notes" && (
 						<span className="rounded-full border border-(--omp-border-muted) px-1.5 text-omp-xxs text-(--omp-dim)">
 							{t("contextStrategy.experimental")}
@@ -460,17 +460,7 @@ function StrategyRow({
 }
 
 /** What will actually happen for this model under the current settings, in one sentence. */
-function Outcome({
-	config,
-	method,
-	threshold,
-	suggestionKey,
-}: {
-	config: CompactionConfig;
-	method: ExpectedMethod | null;
-	threshold: number | null;
-	suggestionKey: "native" | "vision" | "text" | null;
-}) {
+function Outcome({ method, threshold }: { method: ExpectedMethod | null; threshold: number | null }) {
 	const t = useT();
 	const key = methodKey(method);
 	return (
@@ -487,11 +477,6 @@ function Outcome({
 			{method !== null && (
 				<div className={cx("mt-1", isLossless(method) ? "text-(--omp-success)" : "text-(--omp-dim)")}>
 					{t(isLossless(method) ? "contextStrategy.lossless" : "contextStrategy.lossy")}
-				</div>
-			)}
-			{suggestionKey && config.methodOrder.length > 0 && (
-				<div className="mt-1.5 border-t border-(--omp-border-muted) pt-1.5 text-(--omp-warning)">
-					{t(`contextStrategy.reason.${suggestionKey}`)}
 				</div>
 			)}
 		</div>

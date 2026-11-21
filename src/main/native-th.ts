@@ -44,7 +44,7 @@ export const TH_MAIN_TEXT: Record<MainTextKey, string> = {
 	"menu.modes": "โหมด",
 	"menu.modelRoles": "บทบาทโมเดล",
 	"crash.body":
-		"renderer ของหน้าต่างนี้ขัดข้องซ้ำๆ จนกู้คืนเองไม่ได้ ความผิดพลาดถูกบันทึกไว้ใน runtime log ({logPath}) — การรีสตาร์ทอาจช่วยได้ และการรายงาน log ผ่านช่วยเหลือ → รายงานปัญหา จะช่วยให้เราแก้ไขได้",
+		"renderer ของหน้าต่างนี้ขัดข้องซ้ำๆ จนกู้คืนเองไม่ได้ ความผิดพลาดถูกบันทึกไว้ใน runtime log ({logPath}) - การรีสตาร์ทอาจช่วยได้ และการรายงาน log ผ่านช่วยเหลือ → รายงานปัญหา จะช่วยให้เราแก้ไขได้",
 	"crash.close": "ปิด",
 	"crash.title": "หน้าต่าง WISA STUDIO ขัดข้อง",
 	"menu.newChatTab": "แท็บ Chat ใหม่",

@@ -110,8 +110,8 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	immediate: "Сразу",
 	wait: "Ожидание",
 	Text: "Текст",
-	"Full mode name — NORMAL, INSERT, VISUAL, V-LINE, REPLACE":
-		"Полное название режима — NORMAL, INSERT, VISUAL, V-LINE, REPLACE",
+	"Full mode name - NORMAL, INSERT, VISUAL, V-LINE, REPLACE":
+		"Полное название режима - NORMAL, INSERT, VISUAL, V-LINE, REPLACE",
 	Icon: "Значок",
 	"Single compact glyph per mode": "Один компактный глиф для каждого режима",
 	Hidden: "Скрытый",
@@ -397,8 +397,8 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 		"Использовать поведение WebSocket по умолчанию для модели или провайдера",
 	"Disable websockets for OpenAI Codex models": "Отключить WebSocket для моделей OpenAI Codex",
 	"Force websockets for OpenAI Codex models": "Принудительно включить WebSocket для моделей OpenAI Codex",
-	"Provider default — Anthropic OAuth subscriber sessions default to 1h, API keys use 5m; PI_CACHE_RETENTION still applies":
-		"По умолчанию у провайдера — для сессий подписчиков Anthropic OAuth действует 1 ч, для API Key — 5 мин; PI_CACHE_RETENTION продолжает применяться",
+	"Provider default - Anthropic OAuth subscriber sessions default to 1h, API keys use 5m; PI_CACHE_RETENTION still applies":
+		"По умолчанию у провайдера - для сессий подписчиков Anthropic OAuth действует 1 ч, для API Key - 5 мин; PI_CACHE_RETENTION продолжает применяться",
 	"Short (5m)": "Короткий (5 мин)",
 	"Cheapest cache writes; pair with cache warming to keep short entries alive while idle":
 		"Самая дешёвая запись в кеш; сочетайте с прогревом кеша, чтобы короткие записи сохранялись во время простоя",
@@ -607,7 +607,7 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	MiniMax: "MiniMax",
 	"Use the MiniMax owned dialect.": "Использовать собственный диалект MiniMax.",
 	"Picks a shape tuned for the current model, falling back to its provider family.":
-		"Выбирает формат для текущей модели, а если он недоступен — для семейства её провайдера.",
+		"Выбирает формат для текущей модели, а если он недоступен - для семейства её провайдера.",
 	"8x8 repeated, black": "8×8, повторяющийся, чёрный",
 	"unscii square cell, black ink, every line printed twice with the copy on a pale highlight band.":
 		"Квадратная ячейка unscii, чёрный цвет; каждая строка печатается дважды, копия размещается на светлой полосе.",
@@ -621,8 +621,8 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Plain unscii square cell with sentence-hue ink.":
 		"Простая квадратная ячейка unscii с чернилами, меняющими оттенок на границах предложений.",
 	"6x6 dense, black": "6×6, плотный, чёрный",
-	"unscii squeezed to 6x6 — densest readable cell, fewest frames — in black ink.":
-		"unscii, сжатый до 6x6 — самая плотная читаемая ячейка и меньше всего кадров — чёрным цветом.",
+	"unscii squeezed to 6x6 - densest readable cell, fewest frames - in black ink.":
+		"unscii, сжатый до 6x6 - самая плотная читаемая ячейка и меньше всего кадров - чёрным цветом.",
 	"6x6 dense, sentence hues": "6×6, плотный, цвета по предложениям",
 	"Densest cell with sentence-hue ink.":
 		"Самая плотная ячейка с чернилами, меняющими оттенок на границах предложений.",
@@ -641,11 +641,11 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"8x13 glyphs on an 8x16 cell (extra leading), black ink.":
 		"Глифы 8x13 в ячейке 8x16 (увеличенный межстрочный интервал), чёрным цветом.",
 	"8x13 on 22px pitch (leading), black": "8×13 с шагом 22 px (межстрочный интервал), чёрный",
-	"8x13 glyphs on an 8x22 cell — extra line spacing so rows don't crowd. Default for OpenAI/Google.":
-		"Глифы 8x13 в ячейке 8x22 — увеличенный межстрочный интервал, чтобы строки не слипались. По умолчанию для OpenAI/Google.",
+	"8x13 glyphs on an 8x22 cell - extra line spacing so rows don't crowd. Default for OpenAI/Google.":
+		"Глифы 8x13 в ячейке 8x22 - увеличенный межстрочный интервал, чтобы строки не слипались. По умолчанию для OpenAI/Google.",
 	"8x13 on 11px advance (tracking), black": "8×13 с шагом символа 11 px (межбуквенный интервал), чёрный",
-	"8x13 glyphs on an 11x16 cell — extra letter spacing so characters don't merge. Default for Anthropic.":
-		"Глифы 8x13 в ячейке 11x16 — увеличенный интервал между буквами, чтобы символы не сливались. По умолчанию для Anthropic.",
+	"8x13 glyphs on an 11x16 cell - extra letter spacing so characters don't merge. Default for Anthropic.":
+		"Глифы 8x13 в ячейке 11x16 - увеличенный интервал между буквами, чтобы символы не сливались. По умолчанию для Anthropic.",
 	"Silver 16, CJK": "Silver 16, CJK",
 	"Embedded Silver TrueType font on a 16px grid for CJK and other non-Latin text.":
 		"Встроенный шрифт Silver TrueType в сетке 16px для текстов CJK и других нелатинских письменностей.",
@@ -687,10 +687,10 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 		"Использовать онлайн-модель tiny (роль TINY из /models, иначе @smol)",
 	Remote: "Удалённо",
 	"Use the Mnemopi remote LLM settings below": "Использовать приведённые ниже настройки удалённой LLM Mnemopi",
-	"One shared bank — every project sees the same memories":
-		"Один общий банк — все проекты видят одни и те же воспоминания",
-	"Isolated bank per cwd basename — projects cannot see each other's memories":
-		"Отдельный банк для каждого имени каталога cwd — проекты не видят воспоминания друг друга",
+	"One shared bank - every project sees the same memories":
+		"Один общий банк - все проекты видят одни и те же воспоминания",
+	"Isolated bank per cwd basename - projects cannot see each other's memories":
+		"Отдельный банк для каждого имени каталога cwd - проекты не видят воспоминания друг друга",
 	"Shared bank, retains tagged with project:<cwd>. Recall surfaces project + untagged global memories together":
 		"Общий банк; сохранённые данные помечаются project:<cwd>. При поиске показываются воспоминания проекта и общие записи без меток",
 	"Full session": "Вся сессия",
@@ -1007,8 +1007,8 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"GitHub Gist": "GitHub Gist",
 	"Push to a secret gist (needs authenticated gh), falling back to the share server":
 		"Отправить в секретный gist (нужна авторизация gh); при сбое использовать сервер публикации",
-	"Provider default — Anthropic uses 5m entries kept warm by idle keep-alive refreshes; PI_CACHE_RETENTION still applies":
-		"По умолчанию провайдера — Anthropic использует записи на 5 минут, которые поддерживаются в актуальном состоянии фоновыми запросами keep-alive; PI_CACHE_RETENTION продолжает действовать",
+	"Provider default - Anthropic uses 5m entries kept warm by idle keep-alive refreshes; PI_CACHE_RETENTION still applies":
+		"По умолчанию провайдера - Anthropic использует записи на 5 минут, которые поддерживаются в актуальном состоянии фоновыми запросами keep-alive; PI_CACHE_RETENTION продолжает действовать",
 	"Cheapest cache writes; Anthropic keeps the entry warm with bounded keep-alive refreshes while idle":
 		"Самая низкая стоимость записи в кеш; Anthropic поддерживает запись в актуальном состоянии ограниченными запросами keep-alive в режиме ожидания",
 	"1h TTL where the provider supports it; pricier writes, no keep-alive refresh requests":
@@ -1046,7 +1046,7 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Whisper large-v3-turbo, 99 languages. Widest language coverage; large download, slower.":
 		"Whisper large-v3-turbo, 99 языков. Самый широкий охват языков; большой объём загрузки и более низкая скорость.",
 	"Parakeet TDT v3 (SoTA)": "Parakeet TDT v3 (SoTA)",
-	"NVIDIA Parakeet TDT 0.6B v3, 25 languages. Open ASR Leaderboard leader — best accuracy and far fastest decoding. Default.":
+	"NVIDIA Parakeet TDT 0.6B v3, 25 languages. Open ASR Leaderboard leader - best accuracy and far fastest decoding. Default.":
 		"NVIDIA Parakeet TDT 0.6B v3, 25 языков. Лидер Open ASR Leaderboard: самая высокая точность и значительно более быстрое декодирование. По умолчанию.",
 	"Context-full": "Context-full",
 	"Summarize in-place and keep the current session": "Сжать контекст на месте и продолжить текущую сессию",
@@ -1065,8 +1065,8 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Three-quarters of a 200K window": "Три четверти окна на 200K токенов",
 	"Auto (only for models without vision)": "Автоматически (только для моделей без поддержки изображений)",
 	"5 seconds": "5 секунд",
-	"Default — adaptive 5s→5m, resets when you stop polling":
-		"По умолчанию — интервал меняется от 5 с до 5 мин и сбрасывается после прекращения опроса",
+	"Default - adaptive 5s→5m, resets when you stop polling":
+		"По умолчанию - интервал меняется от 5 с до 5 мин и сбрасывается после прекращения опроса",
 	"No isolation": "Без изоляции",
 	"Model decides when to delegate": "Модель решает, когда делегировать задачу",
 	Perplexity: "Perplexity",
@@ -1125,8 +1125,8 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"OPENAI_API_KEY (gpt-image-2) or active GPT model; falls back to a connected Codex subscription":
 		"OPENAI_API_KEY (gpt-image-2) или активная модель GPT; при сбое используется подключённая подписка Codex",
 	"OpenAI Codex (ChatGPT)": "OpenAI Codex (ChatGPT)",
-	"Uses a connected Codex / ChatGPT subscription — no OPENAI_API_KEY needed":
-		"Использует подключённую подписку Codex / ChatGPT — OPENAI_API_KEY не требуется",
+	"Uses a connected Codex / ChatGPT subscription - no OPENAI_API_KEY needed":
+		"Использует подключённую подписку Codex / ChatGPT - OPENAI_API_KEY не требуется",
 	Antigravity: "Antigravity",
 	"Requires google-antigravity OAuth": "Требуется OAuth google-antigravity",
 	"xAI Grok Imagine": "xAI Grok Imagine",
@@ -1142,8 +1142,8 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Requires xAI Grok OAuth or XAI_API_KEY; MP3 or WAV":
 		"Требуется OAuth xAI Grok или XAI_API_KEY; форматы MP3 или WAV",
 	"Kokoro-82M": "Kokoro-82M",
-	"Kokoro-82M neural TTS — SoTA on-device quality, multi-voice, fully local":
-		"Нейросетевой TTS Kokoro-82M — лучшее доступное качество на устройстве, несколько голосов, полностью локальная работа",
+	"Kokoro-82M neural TTS - SoTA on-device quality, multi-voice, fully local":
+		"Нейросетевой TTS Kokoro-82M - лучшее доступное качество на устройстве, несколько голосов, полностью локальная работа",
 	"Online (TINY role, else @smol)": "Online (TINY role, else @smol)",
 	"Online title generation: the TINY model role (set one in /models) when assigned, otherwise the online fallback (commit role, then @smol). No local download or on-device inference.":
 		"Создание заголовков онлайн: если назначена роль модели TINY (задайте её в /models), используется она; иначе используется резервная онлайн-модель (роль commit, затем @smol). Локальная загрузка и запуск модели на устройстве не требуются.",

@@ -138,7 +138,7 @@ function SourceRow({
 						</span>
 						<span className="flex items-center gap-2 text-omp-xs">
 							<span className="shrink-0 text-(--omp-dim)">{formatTimeAgo(iso(source.updatedAt))}</span>
-							<span className="text-(--omp-border-strong)">·</span>
+							<span className="text-(--omp-border-strong)">-</span>
 							<StateLine idleHours={idleHours} source={source} />
 						</span>
 					</span>

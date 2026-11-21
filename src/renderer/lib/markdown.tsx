@@ -475,7 +475,7 @@ const FENCE_LANGUAGE_RE = /(?:^|\s)language-(\S+)/;
 function Pre({ children }: ComponentPropsWithoutRef<"pre">) {
 	const showLineNumbers = useCodeLineNumbers();
 	const streaming = useContext(StreamingContent);
-	// A mermaid fence swaps the whole block for a diagram with its own chrome —
+	// A mermaid fence swaps the whole block for a diagram with its own chrome -
 	// skip the <pre> wrapper so the diagram is not boxed like code.
 	if (isMermaidCodeElement(children)) return <>{children}</>;
 	// Every other fence renders through the shared CodeBlock: same language

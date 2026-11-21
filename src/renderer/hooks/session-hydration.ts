@@ -29,6 +29,7 @@ import { ensureTabRuntime } from "../stores/tab-runtime";
 import { isTabClosed, useTabsStore } from "../stores/tabs";
 import { type TodoStore, todoHistoryFromMessages, useTodoStore } from "../stores/todo";
 import { type ToolsStore, useToolsStore } from "../stores/tools";
+import { rememberTranscript } from "../stores/transcript-cache";
 
 /** Apply the usage half of a snapshot; caller must already be runtime-scoped. */
 function writeUsage(state: RpcSessionState): void {
@@ -326,6 +327,7 @@ export async function hydrateLegacySession(fallbackName?: string, initialState?:
 				.hydrateMessages(useMessagesStore.getState().messages, { turnIsLive: stateIsStreaming });
 		// Only a live tab archives plan changes: a reopened one replays them.
 		useTodoStore.getState().seedHistory(todoHistoryFromMessages(useMessagesStore.getState().messages));
+		rememberTranscript(useSessionStore.getState().sessionFile, useMessagesStore.getState().messages);
 	}
 	await subagents;
 	await secondary;
@@ -376,6 +378,9 @@ export async function hydrateTabSession(tabId: string, fallbackName?: string): P
 	const beforeMessages = initialMessagesStore?.messages ?? [];
 	const beforeLiveMessages = initialMessagesStore?.liveMessages ?? [];
 	const beforeEventVersion = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion;
+	// Captured up front: a pending open clears this path as soon as the sidecar
+	// reports ready, and this is the key the transcript cache files it under.
+	const pendingSessionPath = useTabsStore.getState().tabs.find(tab => tab.id === tabId)?.pendingSessionPath;
 
 	const coreResult = Promise.allSettled([
 		runtime.command({ type: "get_state" }),
@@ -481,6 +486,13 @@ export async function hydrateTabSession(tabId: string, fallbackName?: string): P
 		sessionRuntimeStore<TodoStore>(tabId, "todo")
 			?.getState()
 			.seedHistory(todoHistoryFromMessages(messages?.getState().messages ?? []));
+		// Keep the painted transcript for the next open of this session (see
+		// stores/transcript-cache): a re-open can paint history instead of a
+		// spinner while the sidecar boots.
+		rememberTranscript(
+			sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionFile ?? pendingSessionPath,
+			messages?.getState().messages ?? [],
+		);
 	}
 
 	// Subagents and secondary chips do not hold the transcript hostage. Their

@@ -14,6 +14,15 @@
  *
  * No `endpoint`: the MCP sync target is an HTTP URL, and the renderer's CSP
  * pins `connect-src` to 'self'. Copy-to-clipboard works without it.
+ *
+ * Nothing here restyles the host. An earlier fix gave the host a real box
+ * (`display: block`, `z-index: 95`) to stop it covering the composer's model
+ * menu, but that box is also the containing block for the overlay's annotation
+ * layers, so numbered markers landed off-target and the whole overlay sank
+ * under the app's dialogs — it stopped being able to select them. The overlay
+ * must stay topmost and box-less. What actually made the menu unusable was the
+ * app dismissing its own popovers on the overlay's focus/pointer events, which
+ * `lib/dev-overlay.ts` now filters out.
  */
 import { Agentation } from "agentation";
 

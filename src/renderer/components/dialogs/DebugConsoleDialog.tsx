@@ -330,7 +330,7 @@ function SessionRow({
 				<span className="ml-auto font-mono text-omp-xs text-(--omp-dim)">{session.id}</span>
 			</div>
 			{details.length > 0 ? (
-				<div className="truncate text-omp-sm text-(--omp-dim)">{details.join(" · ")}</div>
+				<div className="truncate text-omp-sm text-(--omp-dim)">{details.join(" - ")}</div>
 			) : null}
 		</button>
 	);

@@ -125,8 +125,8 @@ function remainingLabel(lang: TrayLang, limit: Pick<TrayQuotaLimit, "fraction" |
 
 /** A quota row: the provider (and account), then remaining share by window. */
 export function quotaRowLabel(quota: TrayQuota, lang: TrayLang = "en"): string {
-	const name = quota.account ? `${quota.name} · ${truncateMiddle(quota.account, ACCOUNT_CHARS)}` : quota.name;
-	return `${name} — ${quota.windows.map(window => `${window.window} ${remainingLabel(lang, window)}`).join(", ")}`;
+	const name = quota.account ? `${quota.name} - ${truncateMiddle(quota.account, ACCOUNT_CHARS)}` : quota.name;
+	return `${name} - ${quota.windows.map(window => `${window.window} ${remainingLabel(lang, window)}`).join(", ")}`;
 }
 
 /** Quota rows the menu shows directly; the rest go under "More quotas". */
@@ -142,7 +142,7 @@ export function quotaLimitLabel(lang: TrayLang, limit: TrayQuotaLimit, now: numb
 	if (limit.exhausted) parts.push(t(lang, "quotaReached"));
 	if (limit.resetsAt && limit.resetsAt > now)
 		parts.push(fill(t(lang, "quotaResets"), { time: formatMenuTime(lang, limit.resetsAt, now) }));
-	return `${limit.label} — ${parts.join(" · ")}`;
+	return `${limit.label} - ${parts.join(" - ")}`;
 }
 
 export function quotaUpdatedLabel(lang: TrayLang, at: number, now: number): string {
@@ -174,7 +174,7 @@ export function formatTokens(n: number): string {
 /** Hover text: the icon itself stays a static template mark by design. */
 export function trayTooltip(state: TrayState | null): string {
 	if (!state) return "WISA STUDIO";
-	return `WISA STUDIO — ${state.projectName} · ${statusLabel(state.language, state.status)}`;
+	return `WISA STUDIO - ${state.projectName} - ${statusLabel(state.language, state.status)}`;
 }
 
 /**
@@ -185,14 +185,14 @@ export function trayTooltip(state: TrayState | null): string {
  * string) so token-level streaming stays out.
  */
 export function menuSignature(state: TrayState): string {
-	const percent = state.contextPercent === null ? "—" : String(Math.round(state.contextPercent));
-	const tokens = state.contextTokens === null ? "—" : formatTokens(state.contextTokens);
+	const percent = state.contextPercent === null ? "-" : String(Math.round(state.contextPercent));
+	const tokens = state.contextTokens === null ? "-" : formatTokens(state.contextTokens);
 	const workspaces = state.workspaces.map(ws => `${ws.cwd}\u0000${ws.name}\u0000${ws.current}`).join("\u0001");
 	return [
 		state.language,
 		state.status,
 		state.projectName,
-		state.modelId ?? "—",
+		state.modelId ?? "-",
 		state.thinkingLevel,
 		state.fastMode,
 		state.approvalMode,

@@ -68,7 +68,7 @@ function formatCost(total: number): string {
  */
 export function UsageRow({ message }: { message: UsageSource }) {
 	const t = useT();
-	// Honors the shared `display.showTokenUsage` setting (schema default off) —
+	// Honors the shared `display.showTokenUsage` setting (schema default off) -
 	// previously the GUI ignored it and always rendered usage.
 	const showTokenUsage = useDisplayPreference("showTokenUsage");
 	if (!showTokenUsage) return null;

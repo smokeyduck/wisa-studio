@@ -6,7 +6,7 @@ import identicalKeys from "./ru-identical.json";
 const placeholders = (text: string) =>
 	[...text.matchAll(/\{(\w+)\}/g)]
 		.map(match => match[1])
-		.filter(name => name !== "plural")
+		.filter(name => name !== "plural" && !name.endsWith("Plural"))
 		.sort();
 
 describe("Russian locale completeness", () => {

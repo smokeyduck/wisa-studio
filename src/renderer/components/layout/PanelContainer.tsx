@@ -159,10 +159,10 @@ export function PanelContainer() {
 			style={{ width: panelWidth }}
 		>
 			{/* One header row: the view switcher and the close control. The panel's
-	    name is announced, not printed — the tabs already say what it holds. */}
+	    name is announced, not printed - the tabs already say what it holds. */}
 			<div className="omp-inspector-header drag-region flex h-12 shrink-0 items-center gap-2 border-b border-[var(--omp-border-muted)] pl-3">
 				<h2 className="sr-only">
-					{t("panel.title")} — {t("panel.subtitle")}
+					{t("panel.title")} - {t("panel.subtitle")}
 				</h2>
 				<div className="omp-segmented omp-tab-scroller no-drag" onWheel={scrollStripOnWheel}>
 					<Glide activeKey={visiblePanelTab} selector='[aria-pressed="true"]' variant="thumb" />

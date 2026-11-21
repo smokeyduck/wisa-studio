@@ -292,7 +292,7 @@ describe("SessionTreeDialog", () => {
 		expect(nodeCards()).toHaveLength(4);
 		// Edges: root→a, a→b, b→c, b→d (the fork).
 		expect(edgePaths()).toHaveLength(4);
-		expect(document.body.textContent).toContain("4 messages · 1 fork");
+		expect(document.body.textContent).toContain("4 messages - 1 fork");
 		expect(document.body.textContent).toContain("experiment");
 		// Exactly one HEAD badge (Badge root span), and the off-branch card is dimmed.
 		expect(

@@ -130,6 +130,12 @@ export interface SidecarOptions {
 	packaged?: boolean;
 	/** Fresh GUI tabs must not inherit the CLI's persistent autoResume setting. */
 	fresh?: boolean;
+	/**
+	 * Whether this binary accepts `--no-auto-resume` (default true). A dev
+	 * fallback may be an older CLI that rejects it, which would fail every spawn
+	 * with "unknown flag"; the flag is then omitted rather than crash-looping.
+	 */
+	noAutoResume?: boolean;
 	/** Session kind: "agent" (default) or "chat" (tool-free conversation). Immutable per sidecar. */
 	kind?: "agent" | "chat";
 	/**
@@ -140,7 +146,7 @@ export interface SidecarOptions {
 	/** When set, spawn the workspace source CLI via bun instead of the installed binary. */
 	sourceCli?: string;
 	/**
-	 * Resolves proxy env vars (PI_PROXY / HTTPS_PROXY / …) injected at spawn —
+	 * Resolves proxy env vars (PI_PROXY / HTTPS_PROXY / …) injected at spawn -
 	 * the GUI proxy pref or the macOS system proxy. Finder-launched apps have
 	 * no shell env, so without this a proxy-only network (e.g. codex's
 	 * chatgpt.com backend behind a firewall) hangs every provider request.
@@ -361,7 +367,7 @@ export class SidecarManager extends EventEmitter {
 
 		const args = ["--mode", "rpc-ui"];
 		if (this.#resumeSessionPath) args.push("--session", this.#resumeSessionPath);
-		else if (this.#freshLaunchPending) args.push("--no-auto-resume");
+		else if (this.#freshLaunchPending && this.#options.noAutoResume !== false) args.push("--no-auto-resume");
 		if (this.#bootModelFallback) args.push("--model", DEFAULT_ROLE_MODEL_SELECTOR);
 		if (this.#options.kind === "chat") args.push("--chat");
 		const runPolicy = this.#options.runPolicy;
@@ -652,7 +658,7 @@ export class SidecarManager extends EventEmitter {
 	#attemptRestart(reason: string): void {
 		// The exit code alone is never the diagnosis; the spawn's stderr carries it.
 		const excerpt = stderrExcerpt(this.#lastStderr);
-		const detail = excerpt ? `${reason} — ${excerpt}` : reason;
+		const detail = excerpt ? `${reason} - ${excerpt}` : reason;
 		const exhausted = this.#restartCount >= MAX_RESTART_ATTEMPTS;
 		const attempt = exhausted ? MAX_RESTART_ATTEMPTS : this.#restartCount + 1;
 		this.#options.reportFailure?.({
@@ -688,7 +694,7 @@ export class SidecarManager extends EventEmitter {
 		if (this.#bootedThisSpawn || this.#bootModelFallback) return false;
 		const missing = parseModelRestoreFailure(this.#lastStderr.join("\n"));
 		if (!missing) return false;
-		console.warn(`[sidecar] session model ${missing} unavailable at boot — resuming on the default model`);
+		console.warn(`[sidecar] session model ${missing} unavailable at boot - resuming on the default model`);
 		this.#bootModelFallback = missing;
 		return true;
 	}

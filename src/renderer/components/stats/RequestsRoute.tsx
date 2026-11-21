@@ -53,7 +53,7 @@ function DetailDrawer({ row, onClose }: { row: RequestRow; onClose: () => void }
 			open
 			onClose={onClose}
 			size="lg"
-			title={`${row.model} · ${new Date(row.timestamp).toLocaleString(getFormattingLocale())}`}
+			title={`${row.model} - ${new Date(row.timestamp).toLocaleString(getFormattingLocale())}`}
 			bodyClassName="p-0"
 			panelClassName="ml-auto mr-0"
 		>

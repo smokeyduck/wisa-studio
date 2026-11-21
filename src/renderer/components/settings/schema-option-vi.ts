@@ -85,8 +85,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	immediate: "Ngay lập tức",
 	wait: "Chờ",
 	Text: "Văn bản",
-	"Full mode name — NORMAL, INSERT, VISUAL, V-LINE, REPLACE":
-		"Tên chế độ đầy đủ — NORMAL, INSERT, VISUAL, V-LINE, REPLACE",
+	"Full mode name - NORMAL, INSERT, VISUAL, V-LINE, REPLACE":
+		"Tên chế độ đầy đủ - NORMAL, INSERT, VISUAL, V-LINE, REPLACE",
 	Icon: "Biểu tượng",
 	"Single compact glyph per mode": "Một ký hiệu gọn cho mỗi chế độ",
 	Hidden: "Ẩn",
@@ -313,8 +313,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Use model/provider default websocket behavior": "Dùng hành vi WebSocket mặc định của mô hình/nhà cung cấp",
 	"Disable websockets for OpenAI Codex models": "Tắt WebSocket cho các mô hình OpenAI Codex",
 	"Force websockets for OpenAI Codex models": "Buộc dùng WebSocket cho các mô hình OpenAI Codex",
-	"Provider default — Anthropic OAuth subscriber sessions default to 1h, API keys use 5m; PI_CACHE_RETENTION still applies":
-		"Mặc định của nhà cung cấp — phiên người đăng ký Anthropic OAuth mặc định 1h, API key dùng 5m; PI_CACHE_RETENTION vẫn áp dụng",
+	"Provider default - Anthropic OAuth subscriber sessions default to 1h, API keys use 5m; PI_CACHE_RETENTION still applies":
+		"Mặc định của nhà cung cấp - phiên người đăng ký Anthropic OAuth mặc định 1h, API key dùng 5m; PI_CACHE_RETENTION vẫn áp dụng",
 	"Short (5m)": "Ngắn (5m)",
 	"Cheapest cache writes; pair with cache warming to keep short entries alive while idle":
 		"Ghi vào bộ nhớ đệm rẻ nhất; kết hợp với làm nóng bộ nhớ đệm để giữ các mục ngắn tồn tại khi rảnh",
@@ -484,8 +484,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"8x8, sentence hues": "8x8, màu theo câu",
 	"Plain unscii square cell with sentence-hue ink.": "Ô vuông unscii đơn giản với mực đổi màu theo câu.",
 	"6x6 dense, black": "6x6 dày đặc, đen",
-	"unscii squeezed to 6x6 — densest readable cell, fewest frames — in black ink.":
-		"unscii nén xuống 6x6 — ô đọc được dày đặc nhất, ít khung hình nhất — với mực đen.",
+	"unscii squeezed to 6x6 - densest readable cell, fewest frames - in black ink.":
+		"unscii nén xuống 6x6 - ô đọc được dày đặc nhất, ít khung hình nhất - với mực đen.",
 	"6x6 dense, sentence hues": "6x6 dày đặc, màu theo câu",
 	"Densest cell with sentence-hue ink.": "Ô dày đặc nhất với mực đổi màu theo câu.",
 	"5x8 legacy, black": "5x8 kiểu cũ, đen",
@@ -502,11 +502,11 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"8x13 glyphs on an 8x16 cell (extra leading), black ink.":
 		"Glyph 8x13 trong ô 8x16 (thêm khoảng cách dòng), mực đen.",
 	"8x13 on 22px pitch (leading), black": "8x13 với bước 22px (khoảng cách dòng), đen",
-	"8x13 glyphs on an 8x22 cell — extra line spacing so rows don't crowd. Default for OpenAI/Google.":
-		"Glyph 8x13 trong ô 8x22 — giãn dòng thêm để các hàng không bị chen chúc. Mặc định cho OpenAI/Google.",
+	"8x13 glyphs on an 8x22 cell - extra line spacing so rows don't crowd. Default for OpenAI/Google.":
+		"Glyph 8x13 trong ô 8x22 - giãn dòng thêm để các hàng không bị chen chúc. Mặc định cho OpenAI/Google.",
 	"8x13 on 11px advance (tracking), black": "8x13 với bước tiến 11px (tracking), màu đen",
-	"8x13 glyphs on an 11x16 cell — extra letter spacing so characters don't merge. Default for Anthropic.":
-		"Glyph 8x13 trong ô 11x16 — giãn chữ thêm để các ký tự không dính vào nhau. Mặc định cho Anthropic.",
+	"8x13 glyphs on an 11x16 cell - extra letter spacing so characters don't merge. Default for Anthropic.":
+		"Glyph 8x13 trong ô 11x16 - giãn chữ thêm để các ký tự không dính vào nhau. Mặc định cho Anthropic.",
 	"Embedded Silver TrueType font on a 16px grid for CJK and other non-Latin text.":
 		"Phông Silver TrueType nhúng trên lưới 16px cho văn bản CJK và các văn bản phi Latinh khác.",
 	"Doc 8on16, black": "Doc 8on16, màu đen",
@@ -542,10 +542,10 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 		"Dùng mô hình tiny trực tuyến (vai trò TINY từ /models, nếu không có thì @smol)",
 	Remote: "Từ xa",
 	"Use the Mnemopi remote LLM settings below": "Dùng cài đặt LLM từ xa của Mnemopi bên dưới",
-	"One shared bank — every project sees the same memories":
-		"Một ngân hàng dùng chung — mọi dự án thấy cùng những ký ức",
-	"Isolated bank per cwd basename — projects cannot see each other's memories":
-		"Ngân hàng riêng theo tên cơ sở của cwd — các dự án không thấy ký ức của nhau",
+	"One shared bank - every project sees the same memories":
+		"Một ngân hàng dùng chung - mọi dự án thấy cùng những ký ức",
+	"Isolated bank per cwd basename - projects cannot see each other's memories":
+		"Ngân hàng riêng theo tên cơ sở của cwd - các dự án không thấy ký ức của nhau",
 	"Shared bank, retains tagged with project:<cwd>. Recall surfaces project + untagged global memories together":
 		"Ngân hàng dùng chung, mục lưu giữ được gắn nhãn project:<cwd>. Truy hồi hiển thị cùng lúc ký ức của dự án và ký ức toàn cục không gắn nhãn",
 	"Full session": "Toàn bộ phiên",
@@ -784,8 +784,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 		"Tải lên máy chủ chia sẻ (không cần tài khoản GitHub; tránh giới hạn tần suất của gist API)",
 	"Push to a secret gist (needs authenticated gh), falling back to the share server":
 		"Đẩy lên gist bí mật (cần gh đã xác thực), nếu không được thì dùng máy chủ chia sẻ",
-	"Provider default — Anthropic uses 5m entries kept warm by idle keep-alive refreshes; PI_CACHE_RETENTION still applies":
-		"Mặc định của nhà cung cấp — Anthropic dùng các mục 5m được giữ ấm bằng các lần làm mới keep-alive khi nhàn rỗi; PI_CACHE_RETENTION vẫn được áp dụng",
+	"Provider default - Anthropic uses 5m entries kept warm by idle keep-alive refreshes; PI_CACHE_RETENTION still applies":
+		"Mặc định của nhà cung cấp - Anthropic dùng các mục 5m được giữ ấm bằng các lần làm mới keep-alive khi nhàn rỗi; PI_CACHE_RETENTION vẫn được áp dụng",
 	"Cheapest cache writes; Anthropic keeps the entry warm with bounded keep-alive refreshes while idle":
 		"Ghi bộ nhớ đệm rẻ nhất; Anthropic giữ mục luôn ấm bằng các lần làm mới keep-alive có giới hạn khi nhàn rỗi",
 	"1h TTL where the provider supports it; pricier writes, no keep-alive refresh requests":
@@ -821,8 +821,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Turbo (Whisper large-v3)": "Turbo (Whisper large-v3)",
 	"Whisper large-v3-turbo, 99 languages. Widest language coverage; large download, slower.":
 		"Whisper large-v3-turbo, 99 ngôn ngữ. Độ phủ ngôn ngữ rộng nhất; tải xuống lớn, chậm hơn.",
-	"NVIDIA Parakeet TDT 0.6B v3, 25 languages. Open ASR Leaderboard leader — best accuracy and far fastest decoding. Default.":
-		"NVIDIA Parakeet TDT 0.6B v3, 25 ngôn ngữ. Dẫn đầu Open ASR Leaderboard — độ chính xác tốt nhất và giải mã nhanh hơn nhiều. Mặc định.",
+	"NVIDIA Parakeet TDT 0.6B v3, 25 languages. Open ASR Leaderboard leader - best accuracy and far fastest decoding. Default.":
+		"NVIDIA Parakeet TDT 0.6B v3, 25 ngôn ngữ. Dẫn đầu Open ASR Leaderboard - độ chính xác tốt nhất và giải mã nhanh hơn nhiều. Mặc định.",
 	"Summarize in-place and keep the current session": "Tóm tắt tại chỗ và giữ phiên hiện tại",
 	"Generate handoff and continue in a new session": "Tạo Handoff và tiếp tục trong phiên mới",
 	"Drop heavy content (tool results + large blocks) in place; recover via artifact":
@@ -838,8 +838,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Three-quarters of a 200K window": "Ba phần tư cửa sổ 200K",
 	"Auto (only for models without vision)": "Tự động (chỉ cho mô hình không có khả năng thị giác)",
 	"5 seconds": "5 giây",
-	"Default — adaptive 5s→5m, resets when you stop polling":
-		"Mặc định — thích ứng 5 giây→5 phút, đặt lại khi bạn ngừng truy vấn định kỳ",
+	"Default - adaptive 5s→5m, resets when you stop polling":
+		"Mặc định - thích ứng 5 giây→5 phút, đặt lại khi bạn ngừng truy vấn định kỳ",
 	"No isolation": "Không cách ly",
 	"Model decides when to delegate": "Mô hình quyết định khi nào giao việc",
 	"Uses auth when configured; explicit selection falls back to anonymous search":
@@ -881,8 +881,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 		"Truy vấn song song mọi công cụ không cần thông tin xác thực và hợp nhất kết quả đã loại trùng",
 	"OPENAI_API_KEY (gpt-image-2) or active GPT model; falls back to a connected Codex subscription":
 		"OPENAI_API_KEY (gpt-image-2) hoặc mô hình GPT đang hoạt động; nếu không thì dùng gói đăng ký Codex đã kết nối",
-	"Uses a connected Codex / ChatGPT subscription — no OPENAI_API_KEY needed":
-		"Dùng gói đăng ký Codex / ChatGPT đã kết nối — không cần OPENAI_API_KEY",
+	"Uses a connected Codex / ChatGPT subscription - no OPENAI_API_KEY needed":
+		"Dùng gói đăng ký Codex / ChatGPT đã kết nối - không cần OPENAI_API_KEY",
 	"Requires google-antigravity OAuth": "Yêu cầu OAuth google-antigravity",
 	"Requires xAI Grok OAuth or XAI_API_KEY": "Yêu cầu OAuth xAI Grok hoặc XAI_API_KEY",
 	"Requires GEMINI_API_KEY": "Yêu cầu GEMINI_API_KEY",
@@ -892,8 +892,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"On-device neural TTS (Kokoro-82M); output is WAV/PCM16":
 		"TTS nơ-ron trên thiết bị (Kokoro-82M); đầu ra là WAV/PCM16",
 	"Requires xAI Grok OAuth or XAI_API_KEY; MP3 or WAV": "Yêu cầu OAuth xAI Grok hoặc XAI_API_KEY; MP3 hoặc WAV",
-	"Kokoro-82M neural TTS — SoTA on-device quality, multi-voice, fully local":
-		"TTS nơ-ron Kokoro-82M — chất lượng SoTA trên thiết bị, nhiều giọng, hoàn toàn cục bộ",
+	"Kokoro-82M neural TTS - SoTA on-device quality, multi-voice, fully local":
+		"TTS nơ-ron Kokoro-82M - chất lượng SoTA trên thiết bị, nhiều giọng, hoàn toàn cục bộ",
 	"Online title generation: the TINY model role (set one in /models) when assigned, otherwise the online fallback (commit role, then @smol). No local download or on-device inference.":
 		"Tạo tiêu đề trực tuyến: dùng vai trò mô hình TINY (đặt trong /models) nếu đã gán, nếu không thì dùng phương án trực tuyến dự phòng (vai trò commit, rồi @smol). Không tải xuống hay suy luận trên thiết bị.",
 	"Recommended local model; best speed/quality balance, about 212 MB cached.":

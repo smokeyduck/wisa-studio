@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useContextReport } from "../../hooks/use-context-report";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { contextSegments, contextUsageView, formatContextUsage } from "../../lib/context-usage";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx, formatTokens } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { useUiStore } from "../../stores/ui";
@@ -89,6 +90,7 @@ export function ContextUsagePopover({ autoCompactAt = null }: { autoCompactAt?: 
 		if (!open) return;
 		const onViewportChange = () => updateAnchor();
 		const onPointerDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			const target = event.target as Node | null;
 			if (buttonRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
 			dismiss();

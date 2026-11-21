@@ -200,7 +200,7 @@ it("closes at once when nothing changed, and asks once before dropping changes",
 	await enterColor("Accent", "#e06c75");
 	await click(buttons("Cancel")[0]);
 	expect(useUiStore.getState().themeEditor).not.toBeNull();
-	expect(document.querySelector('[role="status"]')?.textContent).toBe("Unsaved changes — close again to discard them");
+	expect(document.querySelector('[role="status"]')?.textContent).toBe("Unsaved changes - close again to discard them");
 
 	await click(buttons("Cancel")[0]);
 	expect(useUiStore.getState().themeEditor).toBeNull();

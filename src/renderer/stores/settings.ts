@@ -158,8 +158,25 @@ const DISPLAY_NUM_MAP: Record<string, "pasteMenuThreshold"> = {
 };
 const DISPLAY_NUM_KEYS = Object.keys(DISPLAY_NUM_MAP);
 const PINNED_AGENTS_PATH = "display.pinnedAgents";
-/** Speech settings seeded for a profile that has never chosen (see seedSpeechDefaults). */
-const SPEECH_SEED_KEYS = ["stt.enabled", "stt.language"];
+/**
+ * Defaults seeded for a profile that has never chosen (see seedSettingDefaults).
+ * The agent ships its own schema defaults; these are the ones the product wants
+ * instead, applied once and never rewritten.
+ */
+const SEED_DEFAULTS: ReadonlyArray<readonly [string, unknown]> = [
+	["stt.enabled", true],
+	// Empty = let the model detect the language (Whisper); English-only models ignore it.
+	["stt.language", ""],
+	// The emoji picker stays out of the composer until it is asked for.
+	["emojiAutocomplete", false],
+	// No emoji badge on the agent's bubble.
+	["tui.reactions", false],
+	// Plain session titles: no icon or short code.
+	["title.icons", "boring"],
+];
+const SEED_KEYS = SEED_DEFAULTS.map(([path]) => path);
+/** Every setting this sync needs: display reads plus the seed candidates, once each. */
+const SYNC_KEYS = [...new Set([...DISPLAY_SYNC_KEYS, ...DISPLAY_NUM_KEYS, PINNED_AGENTS_PATH, ...SEED_KEYS])];
 
 /**
  * Read the live display config settings into the store. Re-run on session
@@ -174,7 +191,7 @@ async function syncDisplaySettings(
 	try {
 		const res = await command({
 			type: "get_settings",
-			paths: [...DISPLAY_SYNC_KEYS, ...DISPLAY_NUM_KEYS, PINNED_AGENTS_PATH, ...SPEECH_SEED_KEYS],
+			paths: SYNC_KEYS,
 		});
 		if (!isCurrent()) return;
 		if (res.success) {
@@ -184,7 +201,7 @@ async function syncDisplaySettings(
 			const values = data?.values;
 			// Idempotent: only settings with no layer at all are written, so a
 			// seeded profile skips every write from then on.
-			const seeded = await seedSpeechDefaults(command, data?.provenance);
+			const seeded = await seedSettingDefaults(command, data?.provenance);
 			if (!isCurrent()) return;
 			if (values) Object.assign(values, seeded);
 			const partial: Partial<SettingsStore> = {};
@@ -207,24 +224,18 @@ async function syncDisplaySettings(
 }
 
 /**
- * Turn dictation on for a profile that has never chosen, and let the model
- * auto-detect the spoken language. Only a setting with no layer at all (no
- * global, project, overlay or runtime override) is touched, so a user's own
- * choice — including turning it off — is never overridden. Idempotent, so a
- * profile that already has a layer skips every write.
+ * Apply the product defaults above to a profile that has never chosen. Only a
+ * setting with no layer at all (no global, project, overlay or runtime
+ * override) is touched, so a user's own choice, including turning it off, is
+ * never overridden. Idempotent: a profile that already has a layer skips every
+ * write.
  */
-async function seedSpeechDefaults(
+async function seedSettingDefaults(
 	command: TabCommand,
 	provenance: Record<string, SettingProvenance> | undefined,
 ): Promise<Record<string, unknown>> {
-	const wanted: Array<[string, unknown]> = [
-		["stt.enabled", true],
-		// Empty = let the model detect the language (Whisper); English-only
-		// models ignore it.
-		["stt.language", ""],
-	];
 	const applied: Record<string, unknown> = {};
-	for (const [path, value] of wanted) {
+	for (const [path, value] of SEED_DEFAULTS) {
 		if ((provenance?.[path]?.layers.length ?? 1) !== 0) continue;
 		const res = await command({ type: "set_setting", path, value });
 		if (res.success) applied[path] = value;

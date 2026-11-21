@@ -211,7 +211,7 @@ export const createToolsStore = () => {
 			set({ activeTools: tools });
 		},
 		applyEvents: events => {
-			// Copy-on-first-write: batches without tool events (the common case —
+			// Copy-on-first-write: batches without tool events (the common case -
 			// text/thinking deltas) must not pay an O(tools) Map clone per batch.
 			let tools: Map<string, ToolEntry> | null = null;
 			const writable = () => (tools ??= new Map(get().activeTools));

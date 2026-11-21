@@ -23,10 +23,17 @@ export class StatsServerManager extends EventEmitter {
 	#disposed = false;
 	#port = DEFAULT_PORT;
 	readonly #binaryPath: string;
+	/**
+	 * Whether the binary accepts `stats --no-open`. A dev fallback may be an
+	 * older CLI without it; passing it anyway made every spawn exit 1 and burn
+	 * the restart budget, so the server came up "not ready" for the session.
+	 */
+	readonly #noOpen: boolean;
 
-	constructor(binaryPath: string) {
+	constructor(binaryPath: string, options: { noOpen?: boolean } = {}) {
 		super();
 		this.#binaryPath = binaryPath;
+		this.#noOpen = options.noOpen !== false;
 	}
 
 	get port(): number {
@@ -54,8 +61,11 @@ export class StatsServerManager extends EventEmitter {
 	#spawn(): void {
 		// The bundled omp registers this flag as --no-open (kebab-case, per
 		// `omp stats --help`), not the camelCase --noOpen the oclif property
-		// name suggests — the latter is rejected as an unknown option.
-		const args = ["stats", "--host", "127.0.0.1", "--port", String(DEFAULT_PORT), "--no-open"];
+		// name suggests — the latter is rejected as an unknown option. A dev
+		// fallback CLI predating the flag is spawned without it; it then opens a
+		// browser tab, which beats a server that never starts.
+		const args = ["stats", "--host", "127.0.0.1", "--port", String(DEFAULT_PORT)];
+		if (this.#noOpen) args.push("--no-open");
 		console.log(`[stats-server] spawning: ${this.#binaryPath} ${args.join(" ")}`);
 		let child: ChildProcess;
 		try {

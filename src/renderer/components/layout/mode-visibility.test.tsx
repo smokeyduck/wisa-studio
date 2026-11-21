@@ -119,7 +119,7 @@ describe("ComposerModes menu", () => {
 		});
 		await mount(<ComposerModes />);
 
-		const trigger = buttonByTitle("Active modes: Plan · Goal · Loop · Vibe");
+		const trigger = buttonByTitle("Active modes: Plan - Goal - Loop - Vibe");
 		expect(trigger).not.toBeNull();
 		expect(trigger?.className).toContain("bg-[var(--omp-accent-dim)]");
 		expect(trigger?.textContent).toContain("4");
@@ -130,9 +130,9 @@ describe("ComposerModes menu", () => {
 		await flush();
 
 		for (const title of [
-			"Plan mode — agent drafts a plan before acting",
-			"Goal mode — Ship the activity dock",
-			"Loop mode — 7 of 10 iterations left",
+			"Plan mode: agent drafts a plan before acting",
+			"Goal mode - Ship the activity dock",
+			"Loop mode - 7 of 10 iterations left",
 			"Route this session through persistent fast workers.",
 		]) {
 			const row = buttonByTitle(title);
@@ -155,7 +155,7 @@ describe("ComposerModes menu", () => {
 		});
 		await flush();
 
-		for (const title of ["Plan mode — agent drafts a plan before acting", "Loop mode — open the loop panel"]) {
+		for (const title of ["Plan mode: agent drafts a plan before acting", "Loop mode: open the loop panel"]) {
 			const row = buttonByTitle(title);
 			expect(row).not.toBeNull();
 			expect(row?.getAttribute("aria-pressed")).toBe("false");
@@ -171,7 +171,7 @@ describe("ComposerModes menu", () => {
 		});
 		await flush();
 		await act(async () => {
-			buttonByTitle("Loop mode — open the loop panel")?.click();
+			buttonByTitle("Loop mode: open the loop panel")?.click();
 		});
 		expect(useUiStore.getState().modesOpen).toBe(true);
 		expect(useUiStore.getState().modesTab).toBe("loop");

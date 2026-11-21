@@ -501,7 +501,7 @@ const RosterRow = memo(function RosterRow({
 	const { agent, activity } = row;
 	const title = subagentPrimaryLabel(agent);
 	const facts = subagentFacts(agent, t("sessionInfo.tokens"));
-	const factsText = [facts.kind, facts.model, facts.usage].filter(Boolean).join(" · ");
+	const factsText = [facts.kind, facts.model, facts.usage].filter(Boolean).join(" - ");
 	const elapsed = subagentElapsedMs(agent, now);
 	const time =
 		activity === "working" || activity === "done"

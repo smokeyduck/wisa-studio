@@ -944,6 +944,25 @@ export class SidecarPool {
 		return tabs;
 	}
 
+	/**
+	 * Every live tab in every window, each with the window it belongs to.
+	 *
+	 * The phone hub is window-agnostic (one link, one list), so it cannot use
+	 * {@link tabsForWindow}. Entries are returned in acquisition order and carry
+	 * the owning `BrowserWindow`, which the hub needs to spawn, host and command
+	 * the tab through the same routed calls the renderer uses.
+	 */
+	allTabs(): { win: BrowserWindow; tab: IpcTabInfo }[] {
+		const tabs: { win: BrowserWindow; tab: IpcTabInfo }[] = [];
+		for (const entry of this.#entries) {
+			// A window mid-teardown has destroyed webContents: skip it rather than
+			// hand the hub a handle whose every call throws.
+			if (entry.win.isDestroyed()) continue;
+			tabs.push({ win: entry.win, tab: tabStatusPayload(entry) });
+		}
+		return tabs;
+	}
+
 	/** What every live tab is doing right now — the ⌘Q guard's inventory. */
 	tabInventory(): WindowTabFact[] {
 		return [...this.#entries].map(entry => ({

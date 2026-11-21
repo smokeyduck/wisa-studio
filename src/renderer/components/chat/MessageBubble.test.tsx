@@ -269,7 +269,7 @@ describe("MessageBubble compaction summaries", () => {
 			</I18nProvider>,
 		);
 
-		expect(html).toContain("Remote compacted · 256.0k → 20.0k");
+		expect(html).toContain("Remote compacted - 256.0k → 20.0k");
 		expect(html).toContain("Kept the active work.");
 		expect(html).not.toContain("Long archived context details.");
 	});
@@ -290,7 +290,7 @@ describe("MessageBubble compaction summaries", () => {
 			</I18nProvider>,
 		);
 
-		expect(html).toContain("future · 0 → 12");
+		expect(html).toContain("future - 0 → 12");
 	});
 });
 

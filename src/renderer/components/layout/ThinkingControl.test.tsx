@@ -11,7 +11,7 @@ import { parseHTML } from "linkedom";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
-import type { RpcResponse } from "../../../shared/rpc-types";
+import type { RpcResponse, RpcSessionState } from "../../../shared/rpc-types";
 import { I18nProvider, translate } from "../../lib/i18n";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
@@ -278,5 +278,53 @@ describe("ThinkingControl", () => {
 			click(trigger);
 		});
 		expect(document.body.textContent).toContain("does not support reasoning");
+	});
+
+	// The bug: the sidecar reports `thinkingLevel: "high"` plus a
+	// `thinking_level_changed { configured: "auto" }`, but never a ladder, so the
+	// menu was empty while the trigger advertised "auto" — a selector that did
+	// not exist. With no ladder the trigger must read as "off".
+	it("does not advertise auto or a level on the trigger when the ladder is empty", async () => {
+		installMockOmp();
+		useModelStore.setState({ thinkingLevel: "high", thinkingConfigured: "auto", availableThinkingLevels: [] });
+		await mount(<ThinkingControl />);
+
+		const trigger = buttonWithMono(labelFor("off"));
+		expect(trigger).toBeDefined();
+		if (!trigger) return;
+		const text = trigger.textContent ?? "";
+		expect(text).toContain(labelFor("off"));
+		expect(text).not.toContain(labelFor("auto"));
+		expect(text).not.toContain(labelFor("high"));
+	});
+
+	it("advertises the derived ladder once get_state reports the model's efforts", async () => {
+		installMockOmp();
+		// Exactly what the real sidecar returns for minimax-m3.1-flash: the flat
+		// ladder is null, the efforts live on the model.
+		useModelStore.getState().setFromState({
+			model: {
+				provider: "minimax",
+				id: "minimax-m3.1-flash",
+				reasoning: true,
+				thinking: { mode: "effort", efforts: ["minimal", "low", "medium", "high", "xhigh"] },
+			},
+			thinkingLevel: "high",
+			thinkingConfigured: "auto",
+			availableThinkingLevels: null,
+		} as unknown as RpcSessionState);
+		await mount(<ThinkingControl />);
+
+		const trigger = buttonWithMono(labelFor("auto"));
+		expect(trigger).toBeDefined();
+		if (!trigger) return;
+		await act(async () => {
+			click(trigger);
+		});
+		const body = document.body.textContent ?? "";
+		for (const option of ["off", "auto", "minimal", "low", "medium", "high", "xhigh"]) {
+			expect(body).toContain(labelFor(option));
+		}
+		expect(body).not.toContain(labelFor("max"));
 	});
 });

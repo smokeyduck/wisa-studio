@@ -12,7 +12,7 @@ import { SettingsPageIntro } from "./SettingsPageIntro";
 
 function appLatest(status: UpdateStatus): string {
 	if ("version" in status) return status.version;
-	return "—";
+	return "-";
 }
 
 export type UpdateOverviewState = "checking" | "healthy" | "attention" | "error";
@@ -87,7 +87,7 @@ export function UpdatesSettingsPage() {
 	const errorMessage = [status.state === "error" ? status.message : undefined, coreError]
 		.filter(Boolean)
 		.map(describeError)
-		.join(" · ");
+		.join(" - ");
 
 	return (
 		<div>
@@ -137,12 +137,12 @@ export function UpdatesSettingsPage() {
 					</div>
 					<div className="updates-current">
 						<div className="text-omp-xxs text-(--omp-dim)">{t("updates.current")}</div>
-						<div className="mt-1 font-mono text-omp-sm text-(--omp-text)">{guiVersion ?? "—"}</div>
+						<div className="mt-1 font-mono text-omp-sm text-(--omp-text)">{guiVersion ?? "-"}</div>
 					</div>
 					<div className="updates-latest">
 						<div className="text-omp-xxs text-(--omp-dim)">{t("updates.latest")}</div>
 						<div className="mt-1 font-mono text-omp-sm text-(--omp-text)">
-							{guiVersion ? appLatest(status) : "—"}
+							{guiVersion ? appLatest(status) : "-"}
 						</div>
 					</div>
 					<div className="updates-action justify-self-end">
@@ -193,11 +193,11 @@ export function UpdatesSettingsPage() {
 					</div>
 					<div className="updates-current">
 						<div className="text-omp-xxs text-(--omp-dim)">{t("updates.current")}</div>
-						<div className="mt-1 font-mono text-omp-sm text-(--omp-text)">{core?.currentVersion ?? "—"}</div>
+						<div className="mt-1 font-mono text-omp-sm text-(--omp-text)">{core?.currentVersion ?? "-"}</div>
 					</div>
 					<div className="updates-latest">
 						<div className="text-omp-xxs text-(--omp-dim)">{t("updates.latest")}</div>
-						<div className="mt-1 font-mono text-omp-sm text-(--omp-text)">{core?.latestVersion ?? "—"}</div>
+						<div className="mt-1 font-mono text-omp-sm text-(--omp-text)">{core?.latestVersion ?? "-"}</div>
 					</div>
 					<div
 						className={`updates-action justify-self-end text-omp-sm ${

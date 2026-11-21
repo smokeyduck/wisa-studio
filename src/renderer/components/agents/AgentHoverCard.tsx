@@ -174,7 +174,7 @@ function AgentHoverCard({ target }: { target: HoverTarget }) {
 	const line = agentNowLine(agent);
 	const steps = (agent.progress?.recentTools ?? []).slice(-3);
 	const model = agent.progress?.resolvedModel;
-	const subline = [elapsed !== null ? formatElapsed(elapsed) : null, agent.agent, model].filter(Boolean).join(" · ");
+	const subline = [elapsed !== null ? formatElapsed(elapsed) : null, agent.agent, model].filter(Boolean).join(" - ");
 
 	return (
 		<div

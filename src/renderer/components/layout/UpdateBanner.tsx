@@ -53,7 +53,7 @@ export function UpdateBanner() {
 					<div className="mb-1 flex justify-between text-(--omp-text)">
 						<span>{status.mode === "manual" ? t("updater.downloadingInstaller") : t("updater.downloading")}</span>
 						<span className="tabular-nums text-(--omp-dim)">
-							{status.percent}% · {formatBytes(status.transferred)}/{formatBytes(status.total)}
+							{status.percent}% - {formatBytes(status.transferred)}/{formatBytes(status.total)}
 						</span>
 					</div>
 					<div

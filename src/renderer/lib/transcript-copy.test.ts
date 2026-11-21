@@ -24,7 +24,7 @@ describe("formatTranscriptMarkdown", () => {
 			},
 		];
 		const markdown = formatTranscriptMarkdown(messages);
-		expect(markdown).toContain('- **Tool call:** `read` — {"path":"src/a.ts"}');
+		expect(markdown).toContain('- **Tool call:** `read` - {"path":"src/a.ts"}');
 	});
 
 	it("folds thinking into a blockquote", () => {

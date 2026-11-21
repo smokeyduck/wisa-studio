@@ -103,7 +103,7 @@ export function LiveVoiceDialog() {
 					<span>{phaseLabel}</span>
 					{state.active && state.voice ? (
 						<span className="text-omp-xs font-normal text-(--omp-dim)">
-							· {t("live.voice", { voice: state.voice })}
+							- {t("live.voice", { voice: state.voice })}
 						</span>
 					) : null}
 				</div>

@@ -286,7 +286,7 @@ describe("device call headers", () => {
 	it("reads as the tool that ran instead of the device url", () => {
 		expect(
 			getToolSummary("write", { path: "xd://lsp", content: '{"action":"references","symbol":"buildTool"}' }),
-		).toBe("lsp · references buildTool");
+		).toBe("lsp - references buildTool");
 		// A half-streamed payload decodes to nothing but still names the device.
 		expect(getToolSummary("write", { path: "xd://security_scan", content: '{"act' })).toBe("security_scan");
 	});

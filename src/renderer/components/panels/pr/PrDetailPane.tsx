@@ -147,17 +147,17 @@ export function PrDetailPane({ onCreateOpen }: { onCreateOpen: () => void }) {
 				</div>
 				<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-omp-sm text-(--omp-dim)">
 					<span className="text-(--omp-muted)">@{detail.authorLogin}</span>
-					<span>·</span>
+					<span>-</span>
 					<GitBranch size={10} className="shrink-0" />
 					<span className="font-mono">{detail.headRefName}</span>
 					<span>→</span>
 					<span className="font-mono">{detail.baseRefName}</span>
-					<span>·</span>
+					<span>-</span>
 					<span className="text-(--omp-success)">+{detail.additions}</span>
 					<span className="text-(--omp-error)">-{detail.deletions}</span>
 					{detail.reviewDecision && (
 						<>
-							<span>·</span>
+							<span>-</span>
 							<span>{detail.reviewDecision.toLowerCase().replace(/_/g, " ")}</span>
 						</>
 					)}

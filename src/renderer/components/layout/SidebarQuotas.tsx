@@ -67,7 +67,7 @@ function QuotaRing({ window }: { window: TrayQuotaWindow }) {
 
 /** The row's tooltip and accessible name: every limit with its share and reset, then the reading's time. */
 export function quotaRowSummary(quota: TrayQuota, fetchedAt: number, t: Translate): string {
-	const lines = [quota.account ? `${quota.name} · ${quota.account}` : quota.name];
+	const lines = [quota.account ? `${quota.name} - ${quota.account}` : quota.name];
 	for (const window of quota.windows) {
 		for (const limit of window.limits) {
 			const parts = [
@@ -79,7 +79,7 @@ export function quotaRowSummary(quota: TrayQuota, fetchedAt: number, t: Translat
 			if (limit.exhausted) parts.push(t("sidebar.quotas.reached"));
 			if (limit.resetsAt && limit.resetsAt > Date.now())
 				parts.push(t("sidebar.quotas.resets", { time: formatClock(limit.resetsAt) }));
-			lines.push(parts.join(" · "));
+			lines.push(parts.join(" - "));
 		}
 	}
 	if (fetchedAt > 0) lines.push(t("sidebar.quotas.updated", { time: formatClock(fetchedAt) }));
@@ -101,7 +101,7 @@ function QuotaRow({ quota, fetchedAt }: { quota: TrayQuota; fetchedAt: number })
 			<span className="flex max-w-full min-w-0 flex-[1_0_auto] items-baseline text-omp-sm text-[var(--omp-text-secondary)]">
 				{/* The provider keeps its whole name while it fits the row; the account gives way first. */}
 				<span className="max-w-full shrink-0 truncate">{quota.name}</span>
-				{quota.account && <span className="min-w-0 truncate text-[var(--omp-muted)]">&nbsp;· {quota.account}</span>}
+				{quota.account && <span className="min-w-0 truncate text-[var(--omp-muted)]">&nbsp;- {quota.account}</span>}
 			</span>
 			<span className="ml-auto flex shrink-0 items-center gap-2 text-omp-xxs text-[var(--omp-muted)] tabular-nums">
 				{quota.windows.map(window => (

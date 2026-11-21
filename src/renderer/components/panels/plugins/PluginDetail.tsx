@@ -66,7 +66,7 @@ function NameList({ label, names }: { label: string; names: readonly string[] })
 	return (
 		<div className="flex flex-col gap-1">
 			<span className="text-omp-xs text-(--omp-dim)">
-				{label} · {names.length}
+				{label} - {names.length}
 			</span>
 			<div className="flex flex-wrap gap-1">
 				{names.map(name => (

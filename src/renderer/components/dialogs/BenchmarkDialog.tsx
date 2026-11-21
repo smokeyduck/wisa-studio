@@ -10,11 +10,11 @@ import { Button, Input, Modal } from "../common";
 import { ModelValueSelect } from "../settings/ModelValueSelect";
 
 function formatMetric(value: number, suffix = ""): string {
-	return Number.isFinite(value) ? `${value.toFixed(value >= 100 ? 0 : 1)}${suffix}` : "—";
+	return Number.isFinite(value) ? `${value.toFixed(value >= 100 ? 0 : 1)}${suffix}` : "-";
 }
 
 function resultError(report: IpcBenchmarkModelReport): string {
-	return report.results.find(result => !result.ok)?.error ?? "—";
+	return report.results.find(result => !result.ok)?.error ?? "-";
 }
 
 export function BenchmarkDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -215,18 +215,18 @@ export function BenchmarkDialog({ open, onClose }: { open: boolean; onClose: () 
 											</td>
 											<td className="px-3 py-2">{`${succeeded}/${report.results.length}`}</td>
 											<td className="px-3 py-2">
-												{report.stats ? formatMetric(report.stats.ttftMs.p50, " ms") : "—"}
+												{report.stats ? formatMetric(report.stats.ttftMs.p50, " ms") : "-"}
 											</td>
 											<td className="px-3 py-2">
-												{report.stats ? formatMetric(report.stats.prefillTps.p50, " tok/s") : "—"}
+												{report.stats ? formatMetric(report.stats.prefillTps.p50, " tok/s") : "-"}
 											</td>
 											<td className="px-3 py-2">
-												{report.stats ? formatMetric(report.stats.generationTps.p50, " tok/s") : "—"}
+												{report.stats ? formatMetric(report.stats.generationTps.p50, " tok/s") : "-"}
 											</td>
 											<td className="px-3 py-2">
-												{report.stats ? formatMetric(report.stats.tokensPerSecond.p50, " tok/s") : "—"}
+												{report.stats ? formatMetric(report.stats.tokensPerSecond.p50, " tok/s") : "-"}
 											</td>
-											<td className="px-3 py-2">{report.stats ? formatUsd(report.stats.cost) : "—"}</td>
+											<td className="px-3 py-2">{report.stats ? formatUsd(report.stats.cost) : "-"}</td>
 										</tr>
 									);
 								})}

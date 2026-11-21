@@ -77,7 +77,7 @@ export function handleGpuProcessGone(details: { type: string; reason: string; ex
 	}
 	writeRuntimeLog({
 		source: "gpu-fallback",
-		message: `GPU process exited (${details.reason}) — relaunching with software rendering`,
+		message: `GPU process exited (${details.reason}) - relaunching with software rendering`,
 		details: { reason: details.reason, exitCode: details.exitCode ?? null },
 	});
 	app.relaunch();

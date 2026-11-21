@@ -49,7 +49,7 @@ function targetText(host: RpcSshHostInfo): string {
 }
 
 function platformText(host: RpcSshHostInfo): string {
-	return [host.os, host.shell].filter(value => value && value !== "unknown").join(" · ") || "—";
+	return [host.os, host.shell].filter(value => value && value !== "unknown").join(" - ") || "-";
 }
 
 export function SshSettingsPage() {
@@ -519,7 +519,7 @@ export function SshSettingsPage() {
 								{tests[draft.name].ok
 									? [tests[draft.name].os, tests[draft.name].shell, tests[draft.name].transferShell]
 											.filter(Boolean)
-											.join(" · ")
+											.join(" - ")
 									: tests[draft.name].error}
 							</p>
 						</div>

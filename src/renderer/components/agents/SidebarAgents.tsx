@@ -205,11 +205,11 @@ function SidebarAgentRows({
 					)}
 					<span className="min-w-0 truncate">
 						{t("agents.sidebar.more", { count: cut.hidden })}
-						{cut.hiddenWorking > 0 && <> · {t("agents.sidebar.moreWorking", { count: cut.hiddenWorking })}</>}
+						{cut.hiddenWorking > 0 && <> - {t("agents.sidebar.moreWorking", { count: cut.hiddenWorking })}</>}
 						{cut.hiddenFailed > 0 && (
 							<span className="text-[var(--omp-error)]">
 								{" "}
-								· {t("agents.sidebar.moreFailed", { count: cut.hiddenFailed })}
+								- {t("agents.sidebar.moreFailed", { count: cut.hiddenFailed })}
 							</span>
 						)}
 					</span>

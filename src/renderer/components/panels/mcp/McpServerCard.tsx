@@ -15,6 +15,7 @@
 import { FlaskConical, KeyRound, Lock, MoreVertical, Power, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { RpcMcpServerInfo } from "../../../../shared/rpc-types";
+import { isDevOverlayEvent } from "../../../lib/dev-overlay";
 import { cx } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
 import { Badge, type BadgeVariant, Button, Spinner } from "../../common";
@@ -131,6 +132,7 @@ export function McpServerCard({
 	useEffect(() => {
 		if (!menuOpen) return;
 		const onPointerDown = (event: PointerEvent): void => {
+			if (isDevOverlayEvent(event)) return;
 			if (menuRef.current && !menuRef.current.contains(event.target as Node)) onMenuClose();
 		};
 		const onKeyDown = (event: KeyboardEvent): void => {

@@ -188,7 +188,7 @@ function argLine(args: Record<string, unknown>, keys: readonly string[]): string
 function xdevSummary(device: string, content: unknown): string {
 	const args = decodeXdevPayload(content);
 	const detail = [argLine(args, DEVICE_VERB_KEYS), argLine(args, DEVICE_OBJECT_KEYS)].filter(Boolean).join(" ");
-	return detail ? `${device} · ${detail}` : device;
+	return detail ? `${device} - ${detail}` : device;
 }
 
 /** Batch tools name their payload `items`; the first entry is the header. */

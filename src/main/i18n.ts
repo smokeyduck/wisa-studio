@@ -151,8 +151,8 @@ const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "th" | "vi">
 	"menu.modes": { en: "Modes", zh: "模式" },
 	"menu.modelRoles": { en: "Model Roles", zh: "模型角色" },
 	"crash.body": {
-		en: "This window's renderer has crashed repeatedly and cannot recover on its own. The failure was written to the runtime log ({logPath}) — restarting may help, and reporting the log via Help → Report an Issue helps us fix it.",
-		zh: "窗口渲染进程反复崩溃且无法自行恢复。故障已写入运行日志({logPath})——重启可能有用,也可以通过「帮助 → 反馈问题」把日志提交给我们。",
+		en: "This window's renderer has crashed repeatedly and cannot recover on its own. The failure was written to the runtime log ({logPath}) - restarting may help, and reporting the log via Help → Report an Issue helps us fix it.",
+		zh: "窗口渲染进程反复崩溃且无法自行恢复。故障已写入运行日志({logPath})- 重启可能有用,也可以通过「帮助 → 反馈问题」把日志提交给我们。",
 	},
 	"crash.close": { en: "Close", zh: "关闭" },
 	"crash.title": { en: "WISA STUDIO window crashed", zh: "WISA STUDIO 窗口崩溃" },

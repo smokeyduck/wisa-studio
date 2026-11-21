@@ -49,7 +49,7 @@ function BudgetMeter({ overview }: { overview: RpcMemoryOverview }) {
 							className={cx("h-full first:rounded-l-full", segment.className)}
 							key={segment.id}
 							style={{ width: `${Math.min(100, (segment.tokens / budget) * 100)}%` }}
-							title={`${segment.label} · ${compactTokens(segment.tokens)}`}
+							title={`${segment.label} - ${compactTokens(segment.tokens)}`}
 						/>
 					) : null,
 				)}

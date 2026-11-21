@@ -92,8 +92,8 @@ function StatusLine({ status }: { status: MemoryStatus }) {
 					<CheckCircle2 aria-hidden="true" className="shrink-0 text-(--omp-success)" size={13} />
 					<span className="truncate">
 						{t("memory.status.current", { count: status.sessions, plural: status.sessions === 1 ? "" : "s" })}
-						{status.updatedAt !== undefined && ` · ${formatTimeAgo(iso(status.updatedAt))}`}
-						{status.ready > 0 && ` · ${t("memory.status.ready", { count: status.ready })}`}
+						{status.updatedAt !== undefined && ` - ${formatTimeAgo(iso(status.updatedAt))}`}
+						{status.ready > 0 && ` - ${t("memory.status.ready", { count: status.ready })}`}
 					</span>
 				</span>
 			);

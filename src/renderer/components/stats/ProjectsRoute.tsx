@@ -73,7 +73,7 @@ export function ProjectsRoute({ range, refreshKey }: { range: StatsRange; refres
 				key: "speed",
 				label: t("stats.col.tps"),
 				align: "right",
-				render: row => (row.avgTokensPerSecond !== null ? Math.round(row.avgTokensPerSecond) : "—"),
+				render: row => (row.avgTokensPerSecond !== null ? Math.round(row.avgTokensPerSecond) : "-"),
 			},
 		],
 		[totalCost, t],

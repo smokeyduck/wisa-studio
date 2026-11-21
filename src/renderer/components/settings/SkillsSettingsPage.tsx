@@ -22,11 +22,14 @@ import { useSessionStore } from "../../stores/session";
 import { useSkillReviewStore } from "../../stores/skill-review";
 import { useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
-import { Button, Input, Spinner, TextArea } from "../common";
+import { Button, Input, Spinner, Tabs, TextArea } from "../common";
 import { SwitchTrack } from "../common/SwitchTrack";
 import { SettingsPageIntro } from "./SettingsPageIntro";
+import { SkillsCommunityTab } from "./SkillsCommunityTab";
 
 type SkillFilter = "all" | "enabled" | "disabled" | "managed" | "project" | "user";
+/** The page has two sources: skills already on disk, and the skills.sh index. */
+type SkillsTab = "installed" | "community";
 type EditorState = {
 	mode: "create" | "update";
 	name: string;
@@ -102,6 +105,7 @@ export function SkillsSettingsPage({ query }: { query: string }) {
 	const routeReady = useActiveTabRouteReady();
 	const routeKey = `${activeTabId ?? "none"}:${cwd}`;
 	const routeRef = useRef(routeKey);
+	const [tab, setTab] = useState<SkillsTab>("installed");
 	const [skills, setSkills] = useState<RpcSkillInfo[]>([]);
 	const [selectedName, setSelectedName] = useState<string | null>(null);
 	const [detail, setDetail] = useState<RpcSkillDetail | null>(null);
@@ -316,332 +320,363 @@ export function SkillsSettingsPage({ query }: { query: string }) {
 		<div className="flex min-h-0 flex-1 flex-col gap-5">
 			<SettingsPageIntro
 				actions={
-					<Button
-						disabled={!sidecarReady || !routeReady}
-						icon={<Plus size={13} />}
-						onClick={startCreate}
-						size="sm"
-						variant="primary"
-					>
-						{t("settings.skills.new")}
-					</Button>
+					tab === "installed" ? (
+						<Button
+							disabled={!sidecarReady || !routeReady}
+							icon={<Plus size={13} />}
+							onClick={startCreate}
+							size="sm"
+							variant="primary"
+						>
+							{t("settings.skills.new")}
+						</Button>
+					) : undefined
 				}
 				description={t("settings.skills.description")}
 			/>
 
-			<div className="flex flex-wrap items-center gap-1.5">
-				{filterOptions.map(option => (
-					<button
-						className={`rounded-md px-2.5 py-1 text-omp-xs font-medium transition-colors ${
-							filter === option
-								? "bg-(--omp-selected-bg) text-(--omp-text)"
-								: "text-(--omp-dim) hover:bg-(--omp-bg-tertiary) hover:text-(--omp-muted)"
-						}`}
-						key={option}
-						onClick={() => setFilter(option)}
-						type="button"
-					>
-						{t(`settings.skills.filter.${option}`)}
-					</button>
-				))}
-				<span className="ml-auto text-omp-xs tabular-nums text-(--omp-dim)">
-					{visible.length} / {skills.length}
-				</span>
-				<Button
-					disabled={!sidecarReady || bulkBusy || busyName !== null || !visible.some(skill => !skill.enabled)}
-					loading={bulkBusy}
-					onClick={() => void setAll(true)}
-					size="sm"
-					title={t("settings.skills.enableAllHint")}
-					variant="ghost"
-				>
-					{t("settings.skills.enableAll")}
-				</Button>
-				<Button
-					disabled={!sidecarReady || bulkBusy || busyName !== null || !visible.some(skill => skill.enabled)}
-					onClick={() => void setAll(false)}
-					size="sm"
-					title={t("settings.skills.disableAllHint")}
-					variant="ghost"
-				>
-					{t("settings.skills.disableAll")}
-				</Button>
-				<button
-					aria-label={t("settings.skills.refresh")}
-					className="rounded-md p-1.5 text-(--omp-dim) hover:bg-(--omp-bg-tertiary) hover:text-(--omp-text) disabled:opacity-40"
-					disabled={!sidecarReady || loading || !routeReady}
-					onClick={() => void loadSkills()}
-					title={!sidecarReady ? t("common.notConnected") : undefined}
-					type="button"
-				>
-					<RefreshCw className={loading ? "animate-spin" : ""} size={13} />
-				</button>
-			</div>
+			{/* Two sources: what is on disk, and what the skills.sh index offers. */}
+			<Tabs
+				activeId={tab}
+				ariaLabel={t("settings.skills.title")}
+				className="shrink-0"
+				onChange={next => setTab(next === "community" ? "community" : "installed")}
+				tabs={[
+					{ id: "installed", label: t("skills.tab.installed") },
+					{ id: "community", label: t("skills.tab.community") },
+				]}
+			/>
 
-			<div className="skills-master-detail overflow-hidden rounded-lg border border-(--omp-border-muted)">
-				<aside className="skills-list-pane min-h-0">
-					{/* A failed read outranks the empty list: an outage must not read as "no skills installed". */}
-					{error ? (
-						<div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center">
-							<AlertTriangle className="text-(--omp-warning)" size={20} />
-							<p className="text-omp-sm text-(--omp-muted)">{error}</p>
-							<Button
-								disabled={!sidecarReady}
-								onClick={() => void loadSkills()}
-								size="sm"
-								title={!sidecarReady ? t("common.notConnected") : undefined}
+			{tab === "community" && <SkillsCommunityTab onInstalled={() => void loadSkills()} />}
+
+			{tab === "installed" && (
+				<>
+					<div className="flex flex-wrap items-center gap-1.5">
+						{filterOptions.map(option => (
+							<button
+								className={`rounded-md px-2.5 py-1 text-omp-xs font-medium transition-colors ${
+									filter === option
+										? "bg-(--omp-selected-bg) text-(--omp-text)"
+										: "text-(--omp-dim) hover:bg-(--omp-bg-tertiary) hover:text-(--omp-muted)"
+								}`}
+								key={option}
+								onClick={() => setFilter(option)}
+								type="button"
 							>
-								{t("common.retry")}
-							</Button>
-						</div>
-					) : loading && skills.length === 0 ? (
-						<div className="flex h-full items-center justify-center">
-							<Spinner size="sm" />
-						</div>
-					) : visible.length === 0 ? (
-						<div className="flex h-full items-center justify-center px-5 text-center text-omp-sm text-(--omp-dim)">
-							{t("settings.skills.empty")}
-						</div>
-					) : (
-						<div className="h-full overflow-y-auto p-1.5">
-							{visible.map(skill => {
-								const active = skill.name === selectedName && editor?.mode !== "create";
-								return (
-									<div
-										aria-current={active ? "true" : undefined}
-										className={`group flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--omp-accent) ${
-											active ? "bg-(--omp-selected-bg)" : "hover:bg-(--omp-bg-tertiary)"
-										}`}
-										key={`${skill.provider}:${skill.name}`}
-										onClick={() => setSelectedName(skill.name)}
-										onKeyDown={event => {
-											if (event.key !== "Enter" && event.key !== " ") return;
-											event.preventDefault();
-											setSelectedName(skill.name);
-										}}
-										role="button"
-										tabIndex={0}
-									>
-										<span
-											className={`flex size-7 shrink-0 items-center justify-center ${skill.managed ? "text-(--omp-accent)" : "text-(--omp-muted)"}`}
-										>
-											<FileText size={13} />
-										</span>
-										<span className="min-w-0 flex-1">
-											<span className="block truncate font-mono text-omp-sm font-medium text-(--omp-text)">
-												{skill.name}
-											</span>
-											<span className="mt-0.5 block truncate text-omp-xxs text-(--omp-dim)">
-												{skill.providerName} · {t(`settings.skills.scope.${skill.level}`)}
-											</span>
-										</span>
-										<Toggle
-											checked={skill.enabled}
-											disabled={!sidecarReady || busyName !== null}
-											label={`${skill.name}: ${skill.enabled ? t("settings.skills.enabled") : t("settings.skills.disabled")}`}
-											onChange={() => void toggle(skill)}
-										/>
-										<ChevronRight
-											className={
-												active ? "text-(--omp-muted)" : "text-transparent group-hover:text-(--omp-dim)"
-											}
-											size={12}
-										/>
-									</div>
-								);
-							})}
-						</div>
-					)}
-				</aside>
+								{t(`settings.skills.filter.${option}`)}
+							</button>
+						))}
+						<span className="ml-auto text-omp-xs tabular-nums text-(--omp-dim)">
+							{visible.length} / {skills.length}
+						</span>
+						<Button
+							disabled={!sidecarReady || bulkBusy || busyName !== null || !visible.some(skill => !skill.enabled)}
+							loading={bulkBusy}
+							onClick={() => void setAll(true)}
+							size="sm"
+							title={t("settings.skills.enableAllHint")}
+							variant="ghost"
+						>
+							{t("settings.skills.enableAll")}
+						</Button>
+						<Button
+							disabled={!sidecarReady || bulkBusy || busyName !== null || !visible.some(skill => skill.enabled)}
+							onClick={() => void setAll(false)}
+							size="sm"
+							title={t("settings.skills.disableAllHint")}
+							variant="ghost"
+						>
+							{t("settings.skills.disableAll")}
+						</Button>
+						<button
+							aria-label={t("settings.skills.refresh")}
+							className="rounded-md p-1.5 text-(--omp-dim) hover:bg-(--omp-bg-tertiary) hover:text-(--omp-text) disabled:opacity-40"
+							disabled={!sidecarReady || loading || !routeReady}
+							onClick={() => void loadSkills()}
+							title={!sidecarReady ? t("common.notConnected") : undefined}
+							type="button"
+						>
+							<RefreshCw className={loading ? "animate-spin" : ""} size={13} />
+						</button>
+					</div>
 
-				<section className="skills-detail-pane min-w-0 overflow-y-auto p-5">
-					{editor ? (
-						<div className="space-y-4">
-							<div className="flex items-center justify-between">
-								<div>
-									<h3 className="text-omp-lg font-semibold text-(--omp-text)">
-										{t(`settings.skills.editor.${editor.mode}`)}
-									</h3>
-									<p className="mt-0.5 text-omp-xs text-(--omp-dim)">{t("settings.skills.editor.hint")}</p>
-								</div>
-								<button
-									aria-label={t("common.cancel")}
-									className="rounded-md p-1.5 text-(--omp-dim) hover:bg-(--omp-bg-tertiary) hover:text-(--omp-text)"
-									onClick={() => setEditor(null)}
-									type="button"
-								>
-									<X size={14} />
-								</button>
-							</div>
-							<Input
-								disabled={editor.mode === "update"}
-								label={t("settings.skills.field.name")}
-								mono
-								onChange={event =>
-									setEditor(current => (current ? { ...current, name: event.target.value } : null))
-								}
-								placeholder="my-skill"
-								spellCheck={false}
-								value={editor.name}
-							/>
-							<Input
-								label={t("settings.skills.field.description")}
-								onChange={event =>
-									setEditor(current => (current ? { ...current, description: event.target.value } : null))
-								}
-								placeholder={t("settings.skills.field.descriptionPlaceholder")}
-								value={editor.description}
-							/>
-							<TextArea
-								className="min-h-64"
-								label={t("settings.skills.field.body")}
-								mono
-								onChange={event =>
-									setEditor(current => (current ? { ...current, body: event.target.value } : null))
-								}
-								rows={14}
-								spellCheck={false}
-								value={editor.body}
-							/>
-							<div className="flex justify-end gap-2">
-								<Button onClick={() => setEditor(null)} size="sm">
-									{t("common.cancel")}
-								</Button>
-								<Button
-									disabled={
-										!sidecarReady || !editor.name.trim() || !editor.description.trim() || !editor.body.trim()
-									}
-									loading={busyName !== null}
-									onClick={() => void save()}
-									size="sm"
-									title={!sidecarReady ? t("common.notConnected") : undefined}
-									variant="primary"
-								>
-									{t("common.save")}
-								</Button>
-							</div>
-						</div>
-					) : selected ? (
-						<div className="flex min-h-full flex-col gap-5">
-							<header className="flex items-start gap-3 border-b border-(--omp-border-muted) pb-4">
-								<span
-									className={`flex size-9 shrink-0 items-center justify-center ${selected.managed ? "text-(--omp-accent)" : "text-(--omp-muted)"}`}
-								>
-									<BookOpen size={16} />
-								</span>
-								<div className="min-w-0 flex-1">
-									<div className="flex flex-wrap items-center gap-1.5">
-										<h3 className="font-mono text-omp-lg font-semibold text-(--omp-text)">{selected.name}</h3>
-										{selected.managed && <SkillBadge accent>{t("settings.skills.managed")}</SkillBadge>}
-										<SkillBadge>{t(`settings.skills.scope.${selected.level}`)}</SkillBadge>
-										{selected.hidden && <SkillBadge>{t("settings.skills.manualOnly")}</SkillBadge>}
-									</div>
-									<p className="mt-1 max-w-5xl text-omp-sm leading-relaxed text-(--omp-muted)">
-										{selected.description || t("settings.skills.noDescription")}
-									</p>
-								</div>
-								{selected.managed && (
-									<div className="flex gap-1">
-										<button
-											aria-label={t("common.edit")}
-											className="rounded-md p-1.5 text-(--omp-dim) hover:bg-(--omp-bg-tertiary) hover:text-(--omp-text)"
-											disabled={!sidecarReady || !detail}
-											onClick={startEdit}
-											title={!sidecarReady ? t("common.notConnected") : undefined}
-											type="button"
-										>
-											<Pencil size={13} />
-										</button>
-										<button
-											aria-label={t("common.delete")}
-											className="rounded-md p-1.5 text-(--omp-dim) hover:bg-(--omp-error-dim) hover:text-(--omp-error)"
-											disabled={!sidecarReady}
-											onClick={() => setDeleteArmed(true)}
-											title={!sidecarReady ? t("common.notConnected") : undefined}
-											type="button"
-										>
-											<Trash2 size={13} />
-										</button>
-									</div>
-								)}
-							</header>
-
-							{deleteArmed && (
-								<div className="flex items-center gap-3 rounded-lg border border-[color-mix(in_srgb,var(--omp-error)_35%,transparent)] bg-transparent px-3 py-2.5">
-									<p className="min-w-0 flex-1 text-omp-xs text-(--omp-error)">
-										{t("settings.skills.deleteConfirm")}
-									</p>
-									<Button onClick={() => setDeleteArmed(false)} size="sm">
-										{t("common.cancel")}
-									</Button>
+					<div className="skills-master-detail overflow-hidden rounded-lg border border-(--omp-border-muted)">
+						<aside className="skills-list-pane min-h-0">
+							{/* A failed read outranks the empty list: an outage must not read as "no skills installed". */}
+							{error ? (
+								<div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center">
+									<AlertTriangle className="text-(--omp-warning)" size={20} />
+									<p className="text-omp-sm text-(--omp-muted)">{error}</p>
 									<Button
 										disabled={!sidecarReady}
-										loading={busyName !== null}
-										onClick={() => void remove()}
+										onClick={() => void loadSkills()}
 										size="sm"
 										title={!sidecarReady ? t("common.notConnected") : undefined}
-										variant="danger"
 									>
-										{t("common.delete")}
+										{t("common.retry")}
 									</Button>
 								</div>
+							) : loading && skills.length === 0 ? (
+								<div className="flex h-full items-center justify-center">
+									<Spinner size="sm" />
+								</div>
+							) : visible.length === 0 ? (
+								<div className="flex h-full items-center justify-center px-5 text-center text-omp-sm text-(--omp-dim)">
+									{t("settings.skills.empty")}
+								</div>
+							) : (
+								<div className="h-full overflow-y-auto p-1.5">
+									{visible.map(skill => {
+										const active = skill.name === selectedName && editor?.mode !== "create";
+										return (
+											<div
+												aria-current={active ? "true" : undefined}
+												className={`group flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--omp-accent) ${
+													active ? "bg-(--omp-selected-bg)" : "hover:bg-(--omp-bg-tertiary)"
+												}`}
+												key={`${skill.provider}:${skill.name}`}
+												onClick={() => setSelectedName(skill.name)}
+												onKeyDown={event => {
+													if (event.key !== "Enter" && event.key !== " ") return;
+													event.preventDefault();
+													setSelectedName(skill.name);
+												}}
+												role="button"
+												tabIndex={0}
+											>
+												<span
+													className={`flex size-7 shrink-0 items-center justify-center ${skill.managed ? "text-(--omp-accent)" : "text-(--omp-muted)"}`}
+												>
+													<FileText size={13} />
+												</span>
+												<span className="min-w-0 flex-1">
+													<span className="block truncate font-mono text-omp-sm font-medium text-(--omp-text)">
+														{skill.name}
+													</span>
+													<span className="mt-0.5 block truncate text-omp-xxs text-(--omp-dim)">
+														{skill.providerName} - {t(`settings.skills.scope.${skill.level}`)}
+													</span>
+												</span>
+												<Toggle
+													checked={skill.enabled}
+													disabled={!sidecarReady || busyName !== null}
+													label={`${skill.name}: ${skill.enabled ? t("settings.skills.enabled") : t("settings.skills.disabled")}`}
+													onChange={() => void toggle(skill)}
+												/>
+												<ChevronRight
+													className={
+														active
+															? "text-(--omp-muted)"
+															: "text-transparent group-hover:text-(--omp-dim)"
+													}
+													size={12}
+												/>
+											</div>
+										);
+									})}
+								</div>
 							)}
+						</aside>
 
-							<div className="grid grid-cols-[90px_minmax(0,1fr)] gap-x-3 gap-y-2 text-omp-xs">
-								<span className="text-(--omp-dim)">{t("settings.skills.provider")}</span>
-								<span className="text-(--omp-muted)">{selected.providerName}</span>
-								<span className="text-(--omp-dim)">{t("settings.skills.location")}</span>
-								<span className="truncate font-mono text-(--omp-muted)" title={selected.location}>
-									{shortenPath(selected.location)}
-								</span>
-								<span className="text-(--omp-dim)">{t("settings.skills.status")}</span>
-								<span
-									className={`flex items-center gap-1 ${selected.enabled ? "text-(--omp-success)" : "text-(--omp-muted)"}`}
-								>
-									{selected.enabled && <Check size={11} />}
-									{selected.enabled ? t("settings.skills.enabled") : t("settings.skills.disabled")}
-								</span>
-							</div>
-
-							<div className="flex min-h-48 flex-1 flex-col">
-								<h4 className="mb-2 text-omp-xs font-semibold text-(--omp-dim)">
-									{t("settings.skills.preview")}
-								</h4>
-								{detailLoading ? (
-									<div className="flex justify-center py-12">
-										<Spinner size="sm" />
+						<section className="skills-detail-pane min-w-0 overflow-y-auto p-5">
+							{editor ? (
+								<div className="space-y-4">
+									<div className="flex items-center justify-between">
+										<div>
+											<h3 className="text-omp-lg font-semibold text-(--omp-text)">
+												{t(`settings.skills.editor.${editor.mode}`)}
+											</h3>
+											<p className="mt-0.5 text-omp-xs text-(--omp-dim)">
+												{t("settings.skills.editor.hint")}
+											</p>
+										</div>
+										<button
+											aria-label={t("common.cancel")}
+											className="rounded-md p-1.5 text-(--omp-dim) hover:bg-(--omp-bg-tertiary) hover:text-(--omp-text)"
+											onClick={() => setEditor(null)}
+											type="button"
+										>
+											<X size={14} />
+										</button>
 									</div>
-								) : detailError ? (
-									<div className="flex flex-col items-start gap-2">
-										<p className="rounded-lg border border-[color-mix(in_srgb,var(--omp-error)_35%,transparent)] bg-transparent px-3 py-2 text-omp-sm text-(--omp-error)">
-											{detailError}
-										</p>
+									<Input
+										disabled={editor.mode === "update"}
+										label={t("settings.skills.field.name")}
+										mono
+										onChange={event =>
+											setEditor(current => (current ? { ...current, name: event.target.value } : null))
+										}
+										placeholder="my-skill"
+										spellCheck={false}
+										value={editor.name}
+									/>
+									<Input
+										label={t("settings.skills.field.description")}
+										onChange={event =>
+											setEditor(current =>
+												current ? { ...current, description: event.target.value } : null,
+											)
+										}
+										placeholder={t("settings.skills.field.descriptionPlaceholder")}
+										value={editor.description}
+									/>
+									<TextArea
+										className="min-h-64"
+										label={t("settings.skills.field.body")}
+										mono
+										onChange={event =>
+											setEditor(current => (current ? { ...current, body: event.target.value } : null))
+										}
+										rows={14}
+										spellCheck={false}
+										value={editor.body}
+									/>
+									<div className="flex justify-end gap-2">
+										<Button onClick={() => setEditor(null)} size="sm">
+											{t("common.cancel")}
+										</Button>
 										<Button
-											disabled={!sidecarReady}
-											icon={<RefreshCw size={12} />}
-											onClick={() => setDetailAttempt(attempt => attempt + 1)}
+											disabled={
+												!sidecarReady ||
+												!editor.name.trim() ||
+												!editor.description.trim() ||
+												!editor.body.trim()
+											}
+											loading={busyName !== null}
+											onClick={() => void save()}
 											size="sm"
 											title={!sidecarReady ? t("common.notConnected") : undefined}
-											variant="secondary"
+											variant="primary"
 										>
-											{t("common.retry")}
+											{t("common.save")}
 										</Button>
 									</div>
-								) : detail ? (
-									<div className="skills-preview-pane min-h-0 flex-1 overflow-y-auto border-t border-(--omp-border-muted) pt-3 text-omp-md">
-										<MarkdownRenderer content={detail.body} />
+								</div>
+							) : selected ? (
+								<div className="flex min-h-full flex-col gap-5">
+									<header className="flex items-start gap-3 border-b border-(--omp-border-muted) pb-4">
+										<span
+											className={`flex size-9 shrink-0 items-center justify-center ${selected.managed ? "text-(--omp-accent)" : "text-(--omp-muted)"}`}
+										>
+											<BookOpen size={16} />
+										</span>
+										<div className="min-w-0 flex-1">
+											<div className="flex flex-wrap items-center gap-1.5">
+												<h3 className="font-mono text-omp-lg font-semibold text-(--omp-text)">
+													{selected.name}
+												</h3>
+												{selected.managed && <SkillBadge accent>{t("settings.skills.managed")}</SkillBadge>}
+												<SkillBadge>{t(`settings.skills.scope.${selected.level}`)}</SkillBadge>
+												{selected.hidden && <SkillBadge>{t("settings.skills.manualOnly")}</SkillBadge>}
+											</div>
+											<p className="mt-1 max-w-5xl text-omp-sm leading-relaxed text-(--omp-muted)">
+												{selected.description || t("settings.skills.noDescription")}
+											</p>
+										</div>
+										{selected.managed && (
+											<div className="flex gap-1">
+												<button
+													aria-label={t("common.edit")}
+													className="rounded-md p-1.5 text-(--omp-dim) hover:bg-(--omp-bg-tertiary) hover:text-(--omp-text)"
+													disabled={!sidecarReady || !detail}
+													onClick={startEdit}
+													title={!sidecarReady ? t("common.notConnected") : undefined}
+													type="button"
+												>
+													<Pencil size={13} />
+												</button>
+												<button
+													aria-label={t("common.delete")}
+													className="rounded-md p-1.5 text-(--omp-dim) hover:bg-(--omp-error-dim) hover:text-(--omp-error)"
+													disabled={!sidecarReady}
+													onClick={() => setDeleteArmed(true)}
+													title={!sidecarReady ? t("common.notConnected") : undefined}
+													type="button"
+												>
+													<Trash2 size={13} />
+												</button>
+											</div>
+										)}
+									</header>
+
+									{deleteArmed && (
+										<div className="flex items-center gap-3 rounded-lg border border-[color-mix(in_srgb,var(--omp-error)_35%,transparent)] bg-transparent px-3 py-2.5">
+											<p className="min-w-0 flex-1 text-omp-xs text-(--omp-error)">
+												{t("settings.skills.deleteConfirm")}
+											</p>
+											<Button onClick={() => setDeleteArmed(false)} size="sm">
+												{t("common.cancel")}
+											</Button>
+											<Button
+												disabled={!sidecarReady}
+												loading={busyName !== null}
+												onClick={() => void remove()}
+												size="sm"
+												title={!sidecarReady ? t("common.notConnected") : undefined}
+												variant="danger"
+											>
+												{t("common.delete")}
+											</Button>
+										</div>
+									)}
+
+									<div className="grid grid-cols-[90px_minmax(0,1fr)] gap-x-3 gap-y-2 text-omp-xs">
+										<span className="text-(--omp-dim)">{t("settings.skills.provider")}</span>
+										<span className="text-(--omp-muted)">{selected.providerName}</span>
+										<span className="text-(--omp-dim)">{t("settings.skills.location")}</span>
+										<span className="truncate font-mono text-(--omp-muted)" title={selected.location}>
+											{shortenPath(selected.location)}
+										</span>
+										<span className="text-(--omp-dim)">{t("settings.skills.status")}</span>
+										<span
+											className={`flex items-center gap-1 ${selected.enabled ? "text-(--omp-success)" : "text-(--omp-muted)"}`}
+										>
+											{selected.enabled && <Check size={11} />}
+											{selected.enabled ? t("settings.skills.enabled") : t("settings.skills.disabled")}
+										</span>
 									</div>
-								) : null}
-							</div>
-						</div>
-					) : (
-						<div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-							<BookOpen className="text-(--omp-dim)" size={24} strokeWidth={1.4} />
-							<p className="text-omp-sm text-(--omp-dim)">{t("settings.skills.selectHint")}</p>
-						</div>
-					)}
-				</section>
-			</div>
+
+									<div className="flex min-h-48 flex-1 flex-col">
+										<h4 className="mb-2 text-omp-xs font-semibold text-(--omp-dim)">
+											{t("settings.skills.preview")}
+										</h4>
+										{detailLoading ? (
+											<div className="flex justify-center py-12">
+												<Spinner size="sm" />
+											</div>
+										) : detailError ? (
+											<div className="flex flex-col items-start gap-2">
+												<p className="rounded-lg border border-[color-mix(in_srgb,var(--omp-error)_35%,transparent)] bg-transparent px-3 py-2 text-omp-sm text-(--omp-error)">
+													{detailError}
+												</p>
+												<Button
+													disabled={!sidecarReady}
+													icon={<RefreshCw size={12} />}
+													onClick={() => setDetailAttempt(attempt => attempt + 1)}
+													size="sm"
+													title={!sidecarReady ? t("common.notConnected") : undefined}
+													variant="secondary"
+												>
+													{t("common.retry")}
+												</Button>
+											</div>
+										) : detail ? (
+											<div className="skills-preview-pane min-h-0 flex-1 overflow-y-auto border-t border-(--omp-border-muted) pt-3 text-omp-md">
+												<MarkdownRenderer content={detail.body} />
+											</div>
+										) : null}
+									</div>
+								</div>
+							) : (
+								<div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+									<BookOpen className="text-(--omp-dim)" size={24} strokeWidth={1.4} />
+									<p className="text-omp-sm text-(--omp-dim)">{t("settings.skills.selectHint")}</p>
+								</div>
+							)}
+						</section>
+					</div>
+				</>
+			)}
 		</div>
 	);
 }

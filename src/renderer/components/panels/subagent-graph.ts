@@ -181,7 +181,7 @@ export function subagentFacts(agent: SubagentSnapshot, tokensWord: string): Suba
 		model: progress?.resolvedModel,
 		usage:
 			progress && (progress.requests > 0 || progress.tokens > 0 || progress.cost > 0)
-				? `${formatTokens(progress.tokens)} ${tokensWord} · ${formatCost(progress.cost)}`
+				? `${formatTokens(progress.tokens)} ${tokensWord} - ${formatCost(progress.cost)}`
 				: undefined,
 	};
 }

@@ -257,7 +257,7 @@ export function goalStatusVariant(status: string | undefined): BadgeVariant {
 }
 
 function goalStatusLabel(t: (key: string) => string, status: string | undefined): string {
-	if (!status) return "—";
+	if (!status) return "-";
 	const key = GOAL_STATUS_KEY[status];
 	return key ? t(key) : status;
 }

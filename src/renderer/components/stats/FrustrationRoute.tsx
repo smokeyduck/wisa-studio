@@ -13,7 +13,7 @@ import type { StatsRange } from "./StatsDashboard";
 import { MetricCard, RouteFrame, SectionTitle, type StatColumn, StatTable } from "./shared";
 
 function rate(part: number, whole: number): string {
-	return whole > 0 ? formatPercent((part / whole) * 100) : "—";
+	return whole > 0 ? formatPercent((part / whole) * 100) : "-";
 }
 
 export function FrustrationRoute({ range, refreshKey }: { range: StatsRange; refreshKey: number }) {

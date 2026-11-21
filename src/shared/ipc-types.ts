@@ -4,11 +4,27 @@
  */
 
 import type { KeyEventLike } from "./chord";
+import type { CollabAutoStartMode, CollabPhoneEntry, CollabPhoneSnapshot } from "./collab-phone";
 import type { DocumentPreviewResult } from "./document-preview";
 import type { Language } from "./languages";
 import type { LaunchProfile } from "./launch-profile";
 import type { SessionModelOverride } from "./model-restore";
 import type { PluginEffects } from "./plugin-effects";
+import type {
+	IpcSkillsCommunityInstallPayload,
+	IpcSkillsCommunityInstallResult,
+	IpcSkillsCommunitySearchResult,
+} from "./skills-community";
+import type { IpcTemplateInstallPayload, IpcTemplateInstallResult, IpcTemplatesCatalogResult } from "./templates";
+
+export type {
+	CommunitySkill,
+	IpcSkillsCommunityInstallPayload,
+	IpcSkillsCommunityInstallResult,
+	IpcSkillsCommunitySearchResult,
+} from "./skills-community";
+export type { IpcTemplateInstallPayload, IpcTemplateInstallResult, IpcTemplatesCatalogResult };
+
 import type { DroppedProxy } from "./proxy";
 import type {
 	AgentSessionEvent,
@@ -242,6 +258,22 @@ export const IPC_COMMANDS = {
 	THEMES_SAVE: "themes:save",
 	/** Move a custom theme file to the trash ({ fileName } → IpcDeleteCustomThemeResult) */
 	THEMES_DELETE: "themes:delete",
+	/** Phone access: every tab's live collab state (→ CollabPhoneSnapshot) */
+	COLLAB_PHONE_SNAPSHOT: "collab-phone:snapshot",
+	/** Phone access: host one tab's room (IpcCollabPhoneTabPayload → CollabPhoneEntry) */
+	COLLAB_PHONE_START: "collab-phone:start",
+	/** Phone access: stop hosting one tab's room (IpcCollabPhoneTabPayload → CollabPhoneEntry) */
+	COLLAB_PHONE_STOP: "collab-phone:stop",
+	/** Phone access: set collab.autoStart and host the open tabs (→ CollabPhoneSnapshot) */
+	COLLAB_PHONE_SET_AUTO_START: "collab-phone:set-auto-start",
+	/** Phone hub: start hosting the one-link room, or reuse it (→ IpcPhoneHubState) */
+	PHONE_HUB_START: "phone-hub:start",
+	/** Phone hub: stop hosting, so every link already handed out dies (→ IpcPhoneHubState) */
+	PHONE_HUB_STOP: "phone-hub:stop",
+	/** Phone hub: rotate the room and key, revoking old links (→ IpcPhoneHubState) */
+	PHONE_HUB_REVOKE: "phone-hub:revoke",
+	/** Phone hub: current state without changing it (→ IpcPhoneHubState) */
+	PHONE_HUB_STATE: "phone-hub:state",
 	/** Get GUI preferences */
 	PREFS_GET: "prefs:get",
 	/** Set GUI preferences */
@@ -286,6 +318,14 @@ export const IPC_COMMANDS = {
 	PLUGIN_LOGO: "plugin-catalog:logo",
 	/** Preview what installing a plugin would add, from its GitHub repository */
 	PLUGIN_INSPECT: "plugin-catalog:inspect",
+	/** The web-template catalog (remote, cached, or bundled snapshot) */
+	TEMPLATES_CATALOG: "templates:catalog",
+	/** Download and unpack one template into the Work workspace */
+	TEMPLATES_INSTALL: "templates:install",
+	/** Search the skills.sh community index (main-process fetch, no renderer network) */
+	SKILLS_COMMUNITY_SEARCH: "skills-community:search",
+	/** Download one community skill into the user skills folder (files only, nothing executed) */
+	SKILLS_COMMUNITY_INSTALL: "skills-community:install",
 	/** Open a session (or a fresh window) in a new parallel window with its own sidecar */
 	SESSION_OPEN_NEW_WINDOW: "session:open-new-window",
 	/** Fresh window pulls the session it was opened for (one-shot) */
@@ -1161,6 +1201,32 @@ export interface IpcSpawnTabPayload {
 	worktree?: IpcTabWorktree;
 }
 
+/** Phone access: which tab a host/stop request targets. */
+export interface IpcCollabPhoneTabPayload {
+	tabId: string;
+}
+
+/** Phone access: persist `collab.autoStart`. */
+export interface IpcCollabPhoneAutoStartPayload {
+	mode: CollabAutoStartMode;
+}
+
+/**
+ * Phone hub state, for the dialog that shows the one link.
+ *
+ * `link` is the whole feature: one URL a phone scans, granting every session.
+ * It is null until the user turns the hub on, and changes whenever the room is
+ * rotated, so the dialog must render whatever it is told rather than cache it.
+ */
+export interface IpcPhoneHubState {
+	/** The URL to encode as a QR, or null when the hub is off. */
+	link: string | null;
+	/** The relay socket is up right now. */
+	live: boolean;
+	/** How many phones are attached. */
+	listeners: number;
+}
+
 /** Owner of a session file: the tab (and its window) currently attached to it. */
 export interface IpcSessionOwner {
 	tabId: string;
@@ -1743,6 +1809,34 @@ export interface OmpApi {
 		delete(fileName: string): Promise<IpcDeleteCustomThemeResult>;
 		onChanged(callback: (themes: IpcCustomThemes) => void): () => void;
 	};
+	/**
+	 * Phone access: read every tab's collab room, host/stop one tab, and set the
+	 * auto-host setting. Backed by the agent's own collab RPCs — see
+	 * src/main/collab-phone.ts.
+	 */
+	collabPhone: {
+		snapshot(): Promise<CollabPhoneSnapshot>;
+		/** Hosts a control-access room; the entry carries both its links. */
+		start(payload: IpcCollabPhoneTabPayload): Promise<CollabPhoneEntry>;
+		stop(payload: IpcCollabPhoneTabPayload): Promise<CollabPhoneEntry>;
+		/** Persists `collab.autoStart` and hosts the tabs already open when it turns on. */
+		setAutoStart(payload: IpcCollabPhoneAutoStartPayload): Promise<CollabPhoneSnapshot>;
+	};
+	/**
+	 * The one-link phone hub: a single room listing every session, so a phone
+	 * can start, watch and switch sessions instead of holding one link per tab.
+	 * See src/main/phone-hub.ts.
+	 */
+	phoneHub: {
+		/** Current state; never starts hosting. */
+		state(): Promise<IpcPhoneHubState>;
+		/** Start hosting, or reuse the running room. */
+		start(): Promise<IpcPhoneHubState>;
+		/** Stop hosting: every link already handed out stops working. */
+		stop(): Promise<IpcPhoneHubState>;
+		/** Rotate the room and key, revoking links without turning the hub off. */
+		revoke(): Promise<IpcPhoneHubState>;
+	};
 	prefs: {
 		get(key?: string): Promise<unknown>;
 		set(key: string, value: unknown): Promise<void>;
@@ -1787,6 +1881,14 @@ export interface OmpApi {
 	pluginCatalog: {
 		logo(owner: string): Promise<string | null>;
 		inspect(payload: IpcPluginInspectPayload): Promise<IpcPluginInspection>;
+	};
+	templates: {
+		catalog(): Promise<IpcTemplatesCatalogResult>;
+		install(payload: IpcTemplateInstallPayload): Promise<IpcTemplateInstallResult>;
+	};
+	skillsCommunity: {
+		search(payload: { query: string }): Promise<IpcSkillsCommunitySearchResult>;
+		install(payload: IpcSkillsCommunityInstallPayload): Promise<IpcSkillsCommunityInstallResult>;
 	};
 	editor: {
 		openExternal(content: string): Promise<{

@@ -2156,7 +2156,7 @@ export async function refreshPluginThemes(): Promise<void> {
 			return;
 		}
 	} catch {
-		return; // sidecar down — keep whatever is already applied
+		return; // sidecar down - keep whatever is already applied
 	}
 	if (requestId !== pluginThemeRequestId || !acceptsActiveTabEvents()) return;
 	applyPluginThemeOverlay(merged);

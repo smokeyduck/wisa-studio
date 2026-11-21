@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import { type ChatConfig, chatHistoryLimit, useChatConfig } from "../../hooks/use-chat-config";
 import { useAutoCompactAt } from "../../hooks/use-compaction-config";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -68,6 +69,7 @@ export function ChatContextBar() {
 	useEffect(() => {
 		if (!open) return;
 		const onDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			const target = event.target as Node;
 			if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
 			setOpen(false);
@@ -108,7 +110,7 @@ export function ChatContextBar() {
 				<span className="shrink-0 font-medium text-(--omp-muted)">{historyText(config, t)}</span>
 				{customPrompt && (
 					<span className="omp-context-bar-detail flex min-w-0 items-center gap-1.5">
-						<span aria-hidden>·</span>
+						<span aria-hidden>-</span>
 						<span className="truncate">{t("chatContext.customPrompt")}</span>
 					</span>
 				)}

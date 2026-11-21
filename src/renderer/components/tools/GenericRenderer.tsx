@@ -6,7 +6,7 @@ import { ZoomableImage } from "../common/ImageViewer";
 import type { ToolRendererProps } from "./ToolCard";
 
 function toJson(value: unknown): string {
-	if (value == null) return "—";
+	if (value == null) return "-";
 	if (typeof value === "string") return value;
 	try {
 		return JSON.stringify(value, null, 2);
@@ -19,7 +19,7 @@ function toJson(value: unknown): string {
 const INLINE_VALUE_MAX_CHARS = 120;
 
 function primitiveText(value: unknown): string {
-	if (value == null) return "—";
+	if (value == null) return "-";
 	if (typeof value === "string") return value;
 	return String(value);
 }
@@ -70,7 +70,7 @@ function KeyValueView({ value }: { value: Record<string, unknown> }) {
 			{entries.map(([key, val]) => (
 				<div key={key} className="flex items-start gap-2">
 					<span className="shrink-0 select-none text-[var(--omp-dim)]">{key}</span>
-					<span className="shrink-0 select-none text-[var(--omp-border-strong)]">·</span>
+					<span className="shrink-0 select-none text-[var(--omp-border-strong)]">-</span>
 					<span className="min-w-0 flex-1">
 						<ValueView value={val} />
 					</span>
@@ -128,7 +128,7 @@ export function GenericRenderer({ args, result, isError, isPartial, partialResul
 						)}
 					>
 						{/* Unmapped tools commonly return captured subprocess output. */}
-						{body ? <OutputText text={body} /> : "—"}
+						{body ? <OutputText text={body} /> : "-"}
 					</pre>
 				)}
 			</div>

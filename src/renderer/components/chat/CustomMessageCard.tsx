@@ -247,7 +247,7 @@ function AdvisorCard({ message }: { message: AgentMessage }) {
 					{blockers > 0 && (
 						<span className="text-[var(--omp-error)]">
 							{" "}
-							· {t("chat.custom.blockers", { count: blockers, plural: blockers === 1 ? "" : "s" })}
+							- {t("chat.custom.blockers", { count: blockers, plural: blockers === 1 ? "" : "s" })}
 						</span>
 					)}
 				</span>
@@ -367,7 +367,7 @@ function AsyncResultCard({ message, inProcess }: { message: AgentMessage; inProc
 					job.durationMs != null ? formatDuration(job.durationMs) : undefined,
 				]
 					.filter(Boolean)
-					.join(" · ");
+					.join(" - ");
 				return (
 					<CompletionRow
 						failed={false}
@@ -405,7 +405,7 @@ function LaunchCompletionCard({ message, inProcess }: { message: AgentMessage; i
 					duration,
 				]
 					.filter(Boolean)
-					.join(" · ");
+					.join(" - ");
 				return <CompletionRow failed={failed} key={daemon.name} label={daemon.name} meta={meta} />;
 			})}
 		</CompletionRows>
@@ -636,7 +636,7 @@ function SkillCard({ message }: { message: AgentMessage }) {
 			{(path || lineCount != null) && (
 				<div className="mt-1 flex items-center gap-1.5 font-mono text-omp-xs">
 					{path && <span className="min-w-0 truncate text-[var(--omp-accent)]">{path}</span>}
-					{path && lineCount != null && <span className="text-[var(--omp-dim)]">·</span>}
+					{path && lineCount != null && <span className="text-[var(--omp-dim)]">-</span>}
 					{lineCount != null && (
 						<span className="shrink-0 text-[var(--omp-muted)]">
 							{t("chat.custom.skillLines", { count: lineCount, plural: lineCount === 1 ? "" : "s" })}

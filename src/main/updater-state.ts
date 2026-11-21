@@ -73,7 +73,7 @@ export function settleIncompleteUpdateCheck(
 const PARTIAL_SUFFIX = ".partial";
 /**
  * Only names the updater itself could have written: `wisa-studio-<version>-<arch>[ (n)].dmg`
- * plus a partial suffix. Downloads is the user's directory, so anything else —
+ * plus a partial suffix. Downloads is the user's directory, so anything else -
  * including a lookalike like `holiday.dmg.partial` — must survive the sweep.
  * The pre-rename `omp-<version>[-arm64].dmg` shape stays here so an interrupted
  * download from an older build is still cleaned up.

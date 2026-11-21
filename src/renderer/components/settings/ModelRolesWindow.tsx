@@ -11,6 +11,7 @@ import {
 	useState,
 } from "react";
 import type { ModelRoleCandidate, ModelRoleEntry, ModelRolesResult, ThinkingLevel } from "../../../shared/rpc-types";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { useTabRpc } from "../../lib/tab-rpc";
@@ -139,6 +140,7 @@ function RoleRow({
 	useEffect(() => {
 		if (!open) return;
 		const onPointerDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
 		};
 		document.addEventListener("pointerdown", onPointerDown);
@@ -159,7 +161,7 @@ function RoleRow({
 		providerGroups.set(model.provider, group);
 	}
 	const currentLabel = currentCandidate
-		? `${currentCandidate.name} — ${currentCandidate.provider}/${currentCandidate.id}`
+		? `${currentCandidate.name} - ${currentCandidate.provider}/${currentCandidate.id}`
 		: savedOnly
 			? role.model
 			: role.model

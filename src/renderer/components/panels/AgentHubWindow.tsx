@@ -165,7 +165,7 @@ function DefinitionDetails({
 		],
 		[
 			t("agentHub.defs.detail.effectiveResolved"),
-			[entry.effectiveResolved, entry.effectiveThinkingLevel].filter(Boolean).join(" · ") || undefined,
+			[entry.effectiveResolved, entry.effectiveThinkingLevel].filter(Boolean).join(" - ") || undefined,
 		],
 		[t("agentHub.defs.detail.prewalk"), prewalkProjection],
 		[t("agentHub.defs.detail.thinking"), entry.thinkingLevel],
@@ -287,7 +287,7 @@ const DefinitionRow = memo(function DefinitionRow({
 						<>
 							{/* One field-like control: the value is what you click to change it. */}
 							<button
-								aria-label={`${t("agentHub.defs.modelLabel")}: ${override ?? t("agentHub.defs.modelSession")} — ${t("agentHub.defs.modelEdit")}`}
+								aria-label={`${t("agentHub.defs.modelLabel")}: ${override ?? t("agentHub.defs.modelSession")} - ${t("agentHub.defs.modelEdit")}`}
 								className={cx(
 									AGENT_FIELD_BUTTON,
 									override ? "font-mono text-(--omp-text)" : "text-(--omp-muted)",
@@ -585,7 +585,7 @@ const HubRow = memo(function HubRow({
 					<span className="shrink-0 font-mono text-omp-xs text-(--omp-dim) tabular-nums">#{agent.index}</span>
 					<span className="min-w-0 truncate text-omp-md font-medium text-(--omp-text)">{title}</span>
 					<span className="ml-auto shrink-0 text-omp-xs text-(--omp-dim) tabular-nums">
-						{elapsed !== null ? formatElapsed(elapsed) : "—"}
+						{elapsed !== null ? formatElapsed(elapsed) : "-"}
 					</span>
 				</button>
 				{/* 查看消息 opens the transcript slide-over; abort/revive are the TUI

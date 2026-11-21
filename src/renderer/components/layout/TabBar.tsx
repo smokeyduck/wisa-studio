@@ -182,7 +182,7 @@ function TabChip({
 					onKeyboardNavigate(event.key);
 				}
 			}}
-			title={`${label} — ${workspaceLabel}${tab.worktree ? ` — ${tab.worktree.branch}` : ""}`}
+			title={`${label} - ${workspaceLabel}${tab.worktree ? ` - ${tab.worktree.branch}` : ""}`}
 			className={cx(
 				"no-drag group relative flex shrink cursor-pointer items-center gap-2 overflow-hidden text-omp-md select-none",
 				CHIP_WIDTH[width],
@@ -646,7 +646,7 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 						{
 							tabId,
 							labels: unit.tabs.map(labelOf),
-							detail: [...new Set(unit.tabs.map(workspaceOf))].join(" · "),
+							detail: [...new Set(unit.tabs.map(workspaceOf))].join(" - "),
 							axis: unit.group?.axis,
 							current: unit.tabs.some(tab => tab.id === activeTabId),
 						},

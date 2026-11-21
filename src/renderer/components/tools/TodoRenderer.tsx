@@ -74,7 +74,7 @@ function normalizeTodoOps(args: Record<string, unknown>): TodoArgOp[] {
 }
 
 /**
- * Phases the latest update touched, plus the active (in_progress) phase —
+ * Phases the latest update touched, plus the active (in_progress) phase -
  * port of the TUI's computeTouchedPhases. `null` = no usable signal.
  */
 function computeTouchedPhases(
@@ -183,7 +183,7 @@ export function TodoRenderer({ args, result, isError, isPartial, partialResult }
 			<div className="flex items-center gap-1.5 text-omp-sm text-[var(--omp-muted)]">
 				<ListTodo size={12} className="text-[var(--omp-dim)]" />
 				{t("tools.todo.phases", { count: phases.length, plural: phases.length === 1 ? "" : "s" })}
-				<span className="text-[var(--omp-dim)]">·</span>
+				<span className="text-[var(--omp-dim)]">-</span>
 				{t("tools.todo.tasks", { count: totalTasks, plural: totalTasks === 1 ? "" : "s" })}
 				{isPartial && <span className="text-[var(--omp-accent)]">{t("tools.todo.updating")}</span>}
 			</div>

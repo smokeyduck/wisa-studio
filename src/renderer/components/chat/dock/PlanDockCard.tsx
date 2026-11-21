@@ -312,7 +312,7 @@ export function PlanDockCard() {
 		setStepFeedback({ ...stepFeedback, sending: true });
 		const target = displayPath ?? "the plan";
 		const ok = await sendPlanMessage(
-			`Feedback on plan step ${stepFeedback.step.index} — “${truncate(stepFeedback.step.text, 80)}” (${target}):\n${text}`,
+			`Feedback on plan step ${stepFeedback.step.index}: “${truncate(stepFeedback.step.text, 80)}” (${target}):\n${text}`,
 			t,
 			rpc,
 			isStreaming,

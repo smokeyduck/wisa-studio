@@ -344,7 +344,7 @@ function VibeView({ op, args, result, isError, isPartial, partialResult }: ToolR
 			case "spawn": {
 				const cli = typeof args.cli === "string" ? args.cli : "?";
 				const name = typeof args.name === "string" ? args.name : null;
-				return t("tools.vibe.call.spawn", { cli }) + (name ? ` · ${name}` : "");
+				return t("tools.vibe.call.spawn", { cli }) + (name ? ` - ${name}` : "");
 			}
 			case "send":
 				return t("tools.vibe.call.send", { session: sessionArg || "?" });

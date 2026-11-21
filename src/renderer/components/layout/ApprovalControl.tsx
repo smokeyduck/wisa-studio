@@ -11,6 +11,7 @@ import { Check, ChevronDown, ShieldCheck } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -42,6 +43,7 @@ export function ApprovalControl() {
 	useEffect(() => {
 		if (!open) return;
 		const onDown = (event: PointerEvent) => {
+			if (isDevOverlayEvent(event)) return;
 			const target = event.target as Node;
 			if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
 			setOpen(false);

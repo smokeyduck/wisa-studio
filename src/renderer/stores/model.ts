@@ -1,19 +1,48 @@
 import { createStore } from "zustand/vanilla";
-import type {
-	AvailableModelsResult,
-	ModelCatalogUpdateFrame,
-	ModelInfo,
-	ProviderDiscoveryState,
-	ProviderInfo,
-	ProvidersResult,
-	RpcSessionState,
-	ThinkingLevel,
+import {
+	type AvailableModelsResult,
+	type ModelCatalogUpdateFrame,
+	type ModelInfo,
+	type ProviderDiscoveryState,
+	type ProviderInfo,
+	type ProvidersResult,
+	type RpcSessionState,
+	THINKING_LEVEL_VALUES,
+	type ThinkingLevel,
 } from "../../shared/rpc-types";
 import { translate } from "../lib/i18n";
 import { activeTabCommand, createScopedStoreHook, type TabCommand } from "./session-runtime-context";
 import { toast } from "./toast";
 
 export type ModelSpeed = "standard" | "fast" | "ultrafast";
+
+/**
+ * The ladder the composer picker may offer for one `get_state` snapshot.
+ *
+ * `availableThinkingLevels` is the documented carrier, but the sidecar never
+ * fills it in (it is `null` for every model), so the real ladder lives in
+ * `model.thinking.efforts`. Prefer the explicit field when a sidecar does send
+ * one, else derive from the model's efforts — and always intersect with
+ * `THINKING_LEVEL_VALUES` in effort order, so an unknown effort string from the
+ * wire can never reach the menu. A model that does not reason
+ * (`reasoning === false` or no thinking config) yields `[]`.
+ */
+export function deriveThinkingLevels(state: {
+	availableThinkingLevels?: readonly string[] | null;
+	model?: ModelInfo | null;
+}): ThinkingLevel[] {
+	/** Effort order, minus the synthetic `off` selector, minus anything the wire invented. */
+	const order = (reported: readonly string[]): ThinkingLevel[] => {
+		const known = new Set<string>(reported);
+		return THINKING_LEVEL_VALUES.filter(level => level !== "off" && known.has(level));
+	};
+	const explicit = state.availableThinkingLevels ?? [];
+	if (explicit.length > 0) return order(explicit);
+	// A non-reasoning model reports `{"reasoning":false,"thinking":null}`: nothing to pick.
+	if (state.model?.reasoning === false) return [];
+	// The real ladder: `{"thinking":{"mode":"effort","efforts":[…]}}`.
+	return order(state.model?.thinking?.efforts ?? []);
+}
 
 export interface ModelStore {
 	model: ModelInfo | null;
@@ -127,7 +156,7 @@ export const createModelStore = (command: TabCommand = activeTabCommand) =>
 					model: state.model ?? null,
 					thinkingLevel: state.thinkingLevel,
 					thinkingConfigured: state.thinkingConfigured,
-					availableThinkingLevels: state.availableThinkingLevels ?? [],
+					availableThinkingLevels: deriveThinkingLevels(state),
 					fastModeEnabled: state.fastModeEnabled,
 					fastModeActive: state.fastModeActive,
 					fastModeUltrafast: state.fastModeUltrafast === true,

@@ -521,7 +521,7 @@ export function SessionTreeDialog() {
 	};
 
 	// Independent new session from this node (fork_from): writes a new session
-	// file containing only the path to this node and opens it in a NEW WINDOW —
+	// file containing only the path to this node and opens it in a NEW WINDOW -
 	// the attached session stays untouched, so the dialog stays open.
 	const forkFromNode = async (entryId: string) => {
 		if (!sidecarReady || branching !== null) return;
@@ -763,11 +763,11 @@ export function SessionTreeDialog() {
 										total: model?.entries.length ?? 0,
 									})}
 							{layout.forkCount > 0 &&
-								` · ${t("sessionTree.forkCount", {
+								` - ${t("sessionTree.forkCount", {
 									count: layout.forkCount,
 									plural: layout.forkCount === 1 ? "" : "s",
 								})}`}
-							{model?.source === "chain" && ` · ${t("sessionTree.lineageView")}`}
+							{model?.source === "chain" && ` - ${t("sessionTree.lineageView")}`}
 						</span>
 					)}
 				</div>

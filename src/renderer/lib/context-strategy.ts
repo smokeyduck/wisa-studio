@@ -149,24 +149,6 @@ export function strategyPatch(id: StrategyId): Array<{ path: string; value: unkn
 	];
 }
 
-export interface Recommendation {
-	strategy: StrategyId;
-	/** Locale key for the one-line reason. */
-	reasonKey: "native" | "vision" | "text";
-}
-
-/**
- * The strategy that suits this model. A server-compacting provider already
- * handles long history well, so the defaults stand. Without it the defaults
- * fall to an image archive (vision models) or plain summaries (text-only), both
- * of which cut old tool output — the preserve strategy avoids that. Notes-backed
- * windows are experimental and never recommended automatically.
- */
-export function recommendStrategy(profile: ModelProfile): Recommendation {
-	if (profile.nativeRemote) return { strategy: "balanced", reasonKey: "native" };
-	return { strategy: "preserve", reasonKey: profile.vision ? "vision" : "text" };
-}
-
 // ── Prediction ──────────────────────────────────────────────────────────────
 
 export type ExpectedMethod = CompactionMethod | "notes";

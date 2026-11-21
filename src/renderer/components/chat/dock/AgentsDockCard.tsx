@@ -139,8 +139,8 @@ const SubagentRow = memo(function SubagentRow({
 							<span className="mt-1 flex min-w-0 items-center gap-1 text-omp-xxs text-(--omp-dim)">
 								<Bot className="shrink-0 text-(--omp-status-subagents)" size={10} />
 								<span className="shrink-0 tabular-nums">{facts.kind}</span>
-								{facts.model && <span className="min-w-0 truncate">· {facts.model}</span>}
-								{facts.usage && <span className="shrink-0 tabular-nums">· {facts.usage}</span>}
+								{facts.model && <span className="min-w-0 truncate">- {facts.model}</span>}
+								{facts.usage && <span className="shrink-0 tabular-nums">- {facts.usage}</span>}
 								{elapsed !== null && (
 									<span className="ml-auto shrink-0 tabular-nums">{formatElapsed(elapsed)}</span>
 								)}

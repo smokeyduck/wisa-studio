@@ -32,12 +32,18 @@ const setSetting = vi.fn(async (path: string, value: unknown) => {
 });
 const setAutoCompaction = vi.fn(async () => ok());
 const getState = vi.fn(async () => ok({}));
+const prefStore = new Map<string, unknown>();
 (window as unknown as { omp: unknown }).omp = {
 	rpc: { getSettings, setSetting, setAutoCompaction, getState },
 	events: { onConfigUpdate: () => () => {} },
+	prefs: {
+		get: async (key: string) => prefStore.get(key),
+		set: async (key: string, value: unknown) => void prefStore.set(key, value),
+	},
 };
 
 const { createRoot } = await import("react-dom/client");
+const { resetCompactionDefaultsCheck } = await import("../../lib/context-defaults");
 const { ContextStrategyBar } = await import("./ContextStrategyBar");
 
 let container: HTMLElement;
@@ -61,7 +67,9 @@ const gpt: ModelInfo = {
 	contextWindow: 400_000,
 };
 
-async function mount(model: ModelInfo): Promise<void> {
+/** `migrate` lets the one-time 20% default run; every other test pins the threshold. */
+async function mount(model: ModelInfo, options: { migrate?: boolean } = {}): Promise<void> {
+	if (!options.migrate) prefStore.set("compactionDefaults", true);
 	useModelStore.setState({ model });
 	useSessionStore.setState({ status: "ready", sessionId: "s1" });
 	container = document.createElement("div") as unknown as HTMLElement;
@@ -91,6 +99,8 @@ afterEach(async () => {
 	container?.remove();
 	for (const node of [...document.querySelectorAll("[role='dialog']")]) node.remove();
 	values = {};
+	prefStore.clear();
+	resetCompactionDefaultsCheck();
 	vi.clearAllMocks();
 	useModelStore.getState().reset();
 	useSessionStore.getState().reset();
@@ -108,15 +118,12 @@ describe("ContextStrategyBar", () => {
 		expect(row).toContain("Image archive");
 		// 262,144 less the 15% reserve.
 		expect(row).toContain("at 222.8k");
-		// A defaults user on a model the defaults serve poorly is nudged, quietly.
-		expect(container.querySelector("[role='img']")?.getAttribute("aria-label")).toContain("Preserve detail");
 	});
 
-	it("keeps the defaults for a server-compacting model without a nudge", async () => {
+	it("names the method for a server-compacting model", async () => {
 		await mount(gpt);
 
 		expect(container.textContent).toContain("Server compaction");
-		expect(container.querySelector("[role='img']")).toBeNull();
 	});
 
 	it("reserves its row without content until the sidecar is ready", async () => {
@@ -151,8 +158,6 @@ describe("ContextStrategyBar", () => {
 		]);
 		expect(container.textContent).toContain("Preserve detail");
 		expect(container.textContent).toContain("Shake");
-		// The strategy matches the recommendation now: the nudge is gone.
-		expect(container.querySelector("[role='img']")).toBeNull();
 	});
 
 	it("labels a setup that matches no strategy as custom instead of picking one", async () => {
@@ -184,6 +189,29 @@ describe("ContextStrategyBar", () => {
 
 		expect(container.textContent).toContain("No runnable method");
 		expect(document.body.textContent).toContain("nothing will compact automatically");
+	});
+
+	it("sets the threshold to 20% once, then leaves the reader's choice alone", async () => {
+		await mount(kimi, { migrate: true });
+		expect(setSetting.mock.calls).toEqual([["compaction.thresholdPercent", 20]]);
+		expect(container.textContent).toContain("at 52.4k");
+
+		await act(async () => root.unmount());
+		container.remove();
+		values = { "compaction.thresholdPercent": -1 };
+		setSetting.mockClear();
+		await mount(kimi, { migrate: true });
+
+		expect(setSetting).not.toHaveBeenCalled();
+	});
+
+	it("names the vendor, capitalised, in the popover's model summary", async () => {
+		await mount({ ...kimi, provider: "wisa" });
+		await openPopover();
+
+		const summary = document.querySelector("[role='dialog']")?.textContent ?? "";
+		expect(summary).toContain("Wisa");
+		expect(summary).not.toContain("wisa");
 	});
 
 	it("closes on Escape and unmounts after its exit animation", async () => {

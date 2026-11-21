@@ -12,18 +12,20 @@ import type { SessionKind } from "../shared/ipc-types";
 import { installQuitGuard, requestQuit } from "./app-quit";
 import { BrowserHost } from "./browser-host";
 import { bundledOmpFilename, resolveOmpCandidate } from "./bundled-omp-path";
+import { CollabPhoneHost } from "./collab-phone";
 import { type ConversationIndex, openConversationIndex } from "./conversation-index";
 import { CustomThemesWatcher } from "./custom-themes";
 import { setupDeepLinks, startupFolder } from "./deep-link";
 import { ensureDefaultWorkspace } from "./default-workspace";
 import { applyDevProfile } from "./dev-profile";
-import { resolveDevSidecar } from "./dev-sidecar";
+import { FULL_CAPABILITIES, resolveDevSidecar } from "./dev-sidecar";
 import { applyGpuFallbackIfNeeded, handleGpuProcessGone } from "./gpu-fallback";
 import { firstUsableCwd } from "./initial-cwd";
 import { registerIpcHandlers } from "./ipc";
 import { LogWatcher } from "./log-watcher";
 import { MemoryWatcher } from "./memory-watcher";
 import { createMenu } from "./menu";
+import { PhoneHub } from "./phone-hub";
 import { dropUnsupportedProxies, type ProxyResolution, resolveProxyForSpawn } from "./proxy-env";
 import { writeRuntimeLog } from "./runtime-log";
 import { SchedulerHost } from "./scheduler/host";
@@ -35,6 +37,7 @@ import { SidecarPool } from "./sidecar-pool";
 import { StatsClient } from "./stats-client";
 import { StatsServerManager } from "./stats-server";
 import { type PersistedTabLayout, sanitizePersistedTabLayouts } from "./tab-layout";
+import { spawnTabForWindow } from "./tab-spawn";
 import { createTray, destroyTray } from "./tray";
 import { setupUpdater } from "./updater";
 import { WindowManager } from "./window";
@@ -204,6 +207,8 @@ let memoryWatcher: MemoryWatcher | undefined;
 let customThemesWatcher: CustomThemesWatcher | undefined;
 let conversationIndex: ConversationIndex | null = null;
 let schedulerHost: SchedulerHost | null = null;
+let collabPhone: CollabPhoneHost | null = null;
+let phoneHub: PhoneHub | null = null;
 
 function errorMessage(value: unknown): { message: string; stack?: string } {
 	if (value instanceof Error) return { message: value.message, stack: value.stack };
@@ -329,11 +334,21 @@ app.whenReady().then(() => {
 	const bundledSidecar = resolveBundledOmp();
 	const devFallback = bundledSidecar || app.isPackaged ? null : resolveDevSidecar();
 	const bundledOmp = bundledSidecar ?? devFallback?.path ?? null;
+	// A pinned sidecar accepts every flag the GUI passes; a dev fallback may not,
+	// and the spawn sites below omit what it would refuse.
+	const capabilities = devFallback?.capabilities ?? FULL_CAPABILITIES;
 	if (devFallback) {
 		const what = devFallback.kind === "bundle" ? "installed app sidecar" : "installed omp CLI";
-		console.log(`[dev] no resources/omp — using ${what}: ${devFallback.path}`);
-		if (devFallback.kind === "cli") {
-			console.warn("[dev] that CLI is not the pinned sidecar; flags may mismatch — run build:omp for parity");
+		console.log(`[dev] no resources/omp - using ${what}: ${devFallback.path}`);
+		if (!capabilities.noAutoResume || !capabilities.statsNoOpen) {
+			const missing = [
+				capabilities.noAutoResume ? null : "--no-auto-resume",
+				capabilities.statsNoOpen ? null : "stats --no-open",
+			].filter((flag): flag is string => flag !== null);
+			console.warn(
+				`[dev] that binary does not accept ${missing.join(" or ")} - omitting it for this run; ` +
+					"run build:omp for a pinned sidecar at parity with this GUI",
+			);
 		}
 	}
 	const sourceCli = resolveSourceCli();
@@ -366,6 +381,7 @@ app.whenReady().then(() => {
 			cwd,
 			kind,
 			fresh,
+			noAutoResume: capabilities.noAutoResume,
 			proxyEnv: resolveProxyEnvForSpawn,
 			shellEnv: shellSpawnEnv,
 			reportFailure: reportSidecarFailure,
@@ -395,13 +411,44 @@ app.whenReady().then(() => {
 	const host = new BrowserHost();
 	browserHost = host;
 	sidecarPool.uiResponder = (sidecar, request) => schedulerHost?.answerToolPrompt(sidecar, request) ?? false;
+	// Phone access: honor `collab.autoStart` for GUI tabs (the agent only applies
+	// it in TUI mode) and answer the phone dialog's per-tab snapshot.
+	collabPhone = new CollabPhoneHost(sidecarPool);
+	// The one-link phone hub. Spawning from the phone goes through the same
+	// `spawnTabForWindow` the renderer uses, so a session started from a phone
+	// is an ordinary tab: it appears in the tab strip, in the sidebar, and in
+	// the saved layout like any other.
+	const phoneCollabHost = collabPhone;
+	phoneHub = new PhoneHub({
+		pool: sidecarPool,
+		collabPhone: { start: (win, tabId) => phoneCollabHost.start(win, tabId) },
+		spawn: async (win, cwd) => {
+			const result = await spawnTabForWindow(
+				{
+					sidecarPool,
+					sessionIndex,
+					fallbackCwd: () => cwd ?? resolveInitialCwd(),
+					defaultWorkspace: ensureDefaultWorkspace,
+				},
+				win,
+				{ cwd: cwd ?? ensureDefaultWorkspace() },
+			);
+			return result?.tabId ?? null;
+		},
+		// The agent's own relay default, so the hub and the tabs it links to
+		// share one relay and one `collab.relayUrl` override applies to both.
+		relayUrl: () => process.env.OMP_COLLAB_RELAY_URL ?? "wss://my.omp.sh",
+		hubName: () => app.getName(),
+	});
 	sidecarPool.sidecarLifecycle = {
 		ready: tab => {
 			if (tab.kind === "agent") void host.link(tab);
 			schedulerHost?.tabReady(tab);
+			void collabPhone?.ready(tab.tabId, tab.sidecar);
 		},
 		down: tabId => {
 			host.unlink(tabId);
+			collabPhone?.down(tabId);
 		},
 		released: tabId => host.release(tabId),
 	};
@@ -422,6 +469,7 @@ app.whenReady().then(() => {
 					cwd: spec.cwd,
 					kind: "agent",
 					fresh: true,
+					noAutoResume: capabilities.noAutoResume,
 					runPolicy: { flags: spec.flags, deny: spec.deny },
 					proxyEnv: resolveProxyEnvForSpawn,
 					shellEnv: shellSpawnEnv,
@@ -441,7 +489,7 @@ app.whenReady().then(() => {
 	// Built-in stats dashboard: spawned from the SAME bundled binary. No
 	// external `omp stats` process is required (closed loop).
 	if (bundledOmp) {
-		statsServer = new StatsServerManager(bundledOmp);
+		statsServer = new StatsServerManager(bundledOmp, { noOpen: capabilities.statsNoOpen });
 		statsServer.on("ready", (port: number) => {
 			statsClient.port = port;
 		});
@@ -478,6 +526,8 @@ app.whenReady().then(() => {
 		spawnWindow,
 		initialCwd: resolveInitialCwd,
 		schedulerHost,
+		collabPhone,
+		phoneHub,
 	});
 	schedulerHost?.start();
 

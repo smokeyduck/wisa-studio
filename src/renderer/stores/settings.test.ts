@@ -123,12 +123,22 @@ describe("speech defaults seeding", () => {
 			success: true,
 			data: {
 				values: { "stt.enabled": false, "stt.language": "en" },
-				provenance: { "stt.enabled": { layers: [] }, "stt.language": { layers: [] } },
+				provenance: {
+					"stt.enabled": { layers: [] },
+					"stt.language": { layers: [] },
+					emojiAutocomplete: { layers: [] },
+					"tui.reactions": { layers: [] },
+					"title.icons": { layers: [] },
+				},
 			},
 		});
 		await useSettingsStore.getState().syncDisplaySettings();
 		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "stt.enabled", value: true });
 		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "stt.language", value: "" });
+		// The display defaults travel with the same seed pass.
+		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "emojiAutocomplete", value: false });
+		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "tui.reactions", value: false });
+		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "title.icons", value: "boring" });
 		// The seeded values land on the store without waiting for another sync.
 		expect(useSettingsStore.getState().sttEnabled).toBe(true);
 

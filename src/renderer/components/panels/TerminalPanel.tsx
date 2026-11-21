@@ -37,7 +37,7 @@ function TerminalChip({
 	const agent = terminal.kind !== "shell";
 	const Icon = agent ? Bot : SquareTerminal;
 	const ref = useActiveChipInView<HTMLDivElement>(active);
-	const where = [terminal.title, terminal.host && `ssh ${terminal.host}`, terminal.cwd].filter(Boolean).join(" — ");
+	const where = [terminal.title, terminal.host && `ssh ${terminal.host}`, terminal.cwd].filter(Boolean).join(" - ");
 	// A session shows what it is doing: running the agent's command, or waiting for the user.
 	const busy = terminal.running && (terminal.state === "busy" || terminal.state === "starting");
 	const asking = terminal.running && terminal.state === "input";

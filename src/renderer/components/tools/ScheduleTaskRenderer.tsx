@@ -64,13 +64,13 @@ export function ScheduleTaskRenderer({ args, result, isError, isPartial }: ToolR
 				<span className="min-w-0 truncate font-semibold text-(--omp-text)">
 					{title || t("tools.scheduleTask.title")}
 				</span>
-				{schedule && <span className="shrink-0 text-(--omp-muted)">· {scheduleLabel(t, schedule)}</span>}
+				{schedule && <span className="shrink-0 text-(--omp-muted)">- {scheduleLabel(t, schedule)}</span>}
 			</div>
 			<p className={isPartial ? "omp-shimmer-text text-omp-sm" : "text-omp-sm text-(--omp-dim)"}>
 				{status}
 				{firstRun !== null && ` ${t("tools.scheduleTask.firstRun", { time: formatClock(firstRun) })}`}
-				{model && ` · ${model}`}
-				{depth?.kind && ` · ${depthLabel(t, depth)}`}
+				{model && ` - ${model}`}
+				{depth?.kind && ` - ${depthLabel(t, depth)}`}
 			</p>
 			{isError && (
 				<p className="text-omp-sm break-words whitespace-pre-wrap text-(--omp-muted)">

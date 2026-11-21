@@ -434,7 +434,7 @@ function PluginRow({
 					{plugin.id && plugin.id !== plugin.name && <span className="truncate font-mono">{plugin.id}</span>}
 				</div>
 			</div>
-			{/* The toggle keeps its own click target — the row click opens the drawer. */}
+			{/* The toggle keeps its own click target - the row click opens the drawer. */}
 			<span onClick={event => event.stopPropagation()}>
 				<PluginToggle busy={busy} disabled={disabled} enabled={enabled} onToggle={onToggle} />
 			</span>

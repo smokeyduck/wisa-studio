@@ -1604,6 +1604,12 @@ export interface ModelInfo {
 	serviceTiers?: readonly string[];
 	/** Input modalities; `image` means snapcompact can archive history for this model. */
 	input?: string[];
+	/** Whether the model reasons at all. A non-reasoning model reports `false` and no ladder. */
+	reasoning?: boolean;
+	/** Structured thinking config as `get_state` reports it. This is the only
+	 * carrier of the effort ladder: the flat `availableThinkingLevels` field is
+	 * never populated by the sidecar, so the picker derives from `efforts`. */
+	thinking?: { mode?: string; efforts?: readonly string[] } | null;
 	/** Catalog-resolved quirks (an opaque bag here); the context strategy reads only `supportsServerCompaction`. */
 	compat?: object;
 }
@@ -1614,8 +1620,10 @@ export interface RpcSessionState {
 	thinkingLevel: ThinkingLevel | undefined;
 	/** Configured selector: "auto" while auto mode is active, else the effective level. */
 	thinkingConfigured?: ThinkingLevel | "auto";
-	/** Levels the active model supports (empty = no reasoning); the picker must not offer unsupported values. */
-	availableThinkingLevels?: ThinkingLevel[];
+	/** Levels the active model supports (empty = no reasoning); the picker must not offer unsupported values.
+	 * The sidecar currently sends `null` for every model — the real ladder is
+	 * `model.thinking.efforts` — so consumers derive rather than trust this alone. */
+	availableThinkingLevels?: ThinkingLevel[] | null;
 	isStreaming: boolean;
 	isCompacting: boolean;
 	isBackgroundCompacting?: boolean;

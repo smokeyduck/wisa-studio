@@ -427,7 +427,7 @@ function ProgressAgentRow({ row, depth, ctx }: { row: Record<string, unknown>; d
 						</span>
 						{elapsed > 5000 && (
 							<span className="shrink-0 text-[var(--omp-warning)] tabular-nums">
-								· {formatDuration(elapsed)}
+								- {formatDuration(elapsed)}
 							</span>
 						)}
 					</div>
@@ -566,7 +566,7 @@ function ResultAgentRow({ row, depth, ctx }: { row: Record<string, unknown>; dep
 					}}
 				/>
 				<span className="shrink-0 font-mono text-omp-xxs text-[var(--omp-dim)] tabular-nums">
-					· {formatDuration(asNumber(row.durationMs) ?? 0)}
+					- {formatDuration(asNumber(row.durationMs) ?? 0)}
 				</span>
 				{row.truncated === true && (
 					<span className="shrink-0 font-mono text-omp-xxs text-[var(--omp-warning)]">
@@ -822,7 +822,7 @@ export function TaskRenderer({ args, result, isError, isPartial, partialResult }
 					{summaryParts.map((part, i) => (
 						<span key={i}>
 							{part}
-							{i < summaryParts.length - 1 && " · "}
+							{i < summaryParts.length - 1 && " - "}
 						</span>
 					))}
 					]

@@ -26,6 +26,7 @@ import { LiveVoiceDialog } from "./components/dialogs/LiveVoiceDialog";
 import { LogsDialog } from "./components/dialogs/LogsDialog";
 import { ModelPicker } from "./components/dialogs/ModelPicker";
 import { ModelRestoreDialog } from "./components/dialogs/ModelRestoreDialog";
+import { PhoneDialog } from "./components/dialogs/PhoneDialog";
 import { PlanApprovalDialog } from "./components/dialogs/PlanApprovalDialog";
 import { RenameSessionDialog } from "./components/dialogs/RenameSessionDialog";
 import { SessionInfoDialog } from "./components/dialogs/SessionInfoDialog";
@@ -60,6 +61,7 @@ import { restartSidecarFromGui, retryFailedTurn, runSessionCommand } from "./lib
 import {
 	hydrateDisplayPreferences,
 	readDisplayPreference,
+	saveGuiPreference,
 	setDisplayPreference,
 	useDisplayPreference,
 } from "./lib/display-preferences";
@@ -130,6 +132,10 @@ const PrCenterWindow = lazy(() =>
 	import("./components/panels/PrCenterWindow").then(m => ({ default: m.PrCenterWindow })),
 );
 const PluginsWindow = lazy(() => import("./components/panels/PluginsWindow").then(m => ({ default: m.PluginsWindow })));
+const TemplatesWindow = lazy(() =>
+	import("./components/panels/TemplatesWindow").then(m => ({ default: m.TemplatesWindow })),
+);
+const SkillsWindow = lazy(() => import("./components/panels/SkillsWindow").then(m => ({ default: m.SkillsWindow })));
 const TasksWindow = lazy(() => import("./components/tasks/TasksWindow").then(m => ({ default: m.TasksWindow })));
 const TaskEditorDialog = lazy(() =>
 	import("./components/tasks/TaskEditorDialog").then(m => ({ default: m.TaskEditorDialog })),
@@ -318,6 +324,10 @@ export function App() {
 					!changedPreferences.has("transcriptDetail")
 				) {
 					useUiStore.setState({ transcriptDetail: prefs.transcriptDetail });
+				} else if (!changedPreferences.has("transcriptDetail")) {
+					// Never chosen: the full transcript is the product default. The
+					// write is the marker, so a later Compact pick survives restarts.
+					void saveGuiPreference("transcriptDetail", "full", () => {});
 				}
 				if (
 					(prefs.tabWidth === "compact" || prefs.tabWidth === "default" || prefs.tabWidth === "wide") &&
@@ -343,7 +353,14 @@ export function App() {
 					typeof prefs.defaultPanelTab === "string" &&
 					["diff", "files"].includes(prefs.defaultPanelTab)
 				) {
-					useUiStore.setState({ panelTab: prefs.defaultPanelTab as PanelTab });
+					useUiStore.setState({
+						panelTab: prefs.defaultPanelTab as PanelTab,
+						defaultPanelTab: prefs.defaultPanelTab as PanelTab,
+					});
+				} else if (!changedPreferences.has("panelTab")) {
+					// Never chosen: Changes is the product default, and the stored
+					// preference is the marker, so a later Files pick survives.
+					void saveGuiPreference("defaultPanelTab", "diff", () => {});
 				}
 			})
 			.catch(() => {})
@@ -907,6 +924,8 @@ export function App() {
 				modelRolesOpen: <ModelRolesWindow />,
 				modesOpen: <ModesPanel open={modesOpen} onClose={closeModes} initialTab={modesTab} />,
 				pluginsOpen: <PluginsWindow />,
+				skillsOpen: <SkillsWindow />,
+				templatesOpen: <TemplatesWindow />,
 				prCenterOpen: <PrCenterWindow />,
 				providersOpen: <ProvidersWindow />,
 				sessionInfoOpen: <SessionInfoDialog />,
@@ -972,6 +991,7 @@ export function App() {
 			<BranchPickerDialog />
 			<BtwDialog />
 			<CollabDialog />
+			<PhoneDialog />
 			<LiveVoiceDialog />
 			<CopySelectorDialog />
 			<ShareSessionDialog />

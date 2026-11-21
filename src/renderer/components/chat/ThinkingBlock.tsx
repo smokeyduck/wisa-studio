@@ -181,7 +181,7 @@ export function ThinkingBlock({ text, live = false, startTime, endTime, level }:
 	const trimmed = formatted.trim();
 	const words = trimmed ? trimmed.split(/\s+/).length : 0;
 	const lines = formatted.split("\n").length;
-	const countLabel = `${t("chat.thinking.words", { count: words.toLocaleString(), plural: words === 1 ? "" : "s" })} · ${t("chat.thinking.lines", { count: lines.toLocaleString(), plural: lines === 1 ? "" : "s" })}`;
+	const countLabel = `${t("chat.thinking.words", { count: words.toLocaleString(), plural: words === 1 ? "" : "s" })} - ${t("chat.thinking.lines", { count: lines.toLocaleString(), plural: lines === 1 ? "" : "s" })}`;
 
 	return (
 		<div

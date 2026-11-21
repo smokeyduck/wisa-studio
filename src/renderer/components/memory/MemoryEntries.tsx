@@ -129,7 +129,7 @@ export function AddNote({
 				text.length > 0 && (
 					<p className="text-omp-xs text-(--omp-dim)">
 						{t("memory.notes.enterHint")}
-						{text.length > 800 && ` · ${text.length}/1000`}
+						{text.length > 800 && ` - ${text.length}/1000`}
 					</p>
 				)
 			)}

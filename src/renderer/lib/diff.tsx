@@ -214,7 +214,7 @@ const TAB_MARKER = `${" ".repeat(Math.floor(TAB_WIDTH / 2))}→${" ".repeat(Math
 function indentGlyphs(content: string): { glyphs: string; width: number } {
 	const indent = /^[ \t]+/.exec(content)?.[0] ?? "";
 	let glyphs = "";
-	for (const ch of indent) glyphs += ch === "\t" ? TAB_MARKER : "·";
+	for (const ch of indent) glyphs += ch === "\t" ? TAB_MARKER : "-";
 	return { glyphs, width: indent.length };
 }
 
@@ -298,7 +298,7 @@ function highlightContextRows(rows: DiffRow[], hljs: HLJSApi, lang: string): Map
 					if (html !== undefined) map.set(runIndices[k]!, html);
 				}
 			} catch {
-				// Grammar edge — fall back to plain context rendering.
+				// Grammar edge · fall back to plain context rendering.
 			}
 		}
 		runIndices = [];
@@ -379,7 +379,7 @@ const INTRA_STYLES: Record<"add" | "remove", string> = {
 
 interface DiffViewProps {
 	diff: string;
-	/** Path of the edited file — infers the context-line highlight language. */
+	/** Path of the edited file · infers the context-line highlight language. */
 	filePath?: string;
 	className?: string;
 }
@@ -398,7 +398,7 @@ export function DiffView({ diff, filePath, className }: DiffViewProps) {
 	 * three thousand DOM nodes on first expand.
 	 */
 	const [rowBudget, setRowBudget] = useState(INITIAL_RENDER_ROWS);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a new `diff` is a new patch (the panel's file selector, a re-keyed tool card), so its first paint must be cheap again — the effect body deliberately only resets state.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new `diff` is a new patch (the panel's file selector, a re-keyed tool card), so its first paint must be cheap again · the effect body deliberately only resets state.
 	useEffect(() => setRowBudget(INITIAL_RENDER_ROWS), [diff]);
 	const rendered = Math.min(rowBudget, allRows.length, MAX_RENDER_ROWS);
 	const rows = useMemo(() => allRows.slice(0, rendered), [allRows, rendered]);
@@ -434,7 +434,7 @@ export function DiffView({ diff, filePath, className }: DiffViewProps) {
 	/** Rows the budget still hides, and the part of them one click reveals. */
 	const hiddenRows = allRows.length - rendered;
 	const revealRows = Math.min(hiddenRows, MORE_RENDER_ROWS);
-	/** Rows no budget paints — an ellipsis row reports them instead. */
+	/** Rows no budget paints · an ellipsis row reports them instead. */
 	const unreachableRows = Math.max(0, allRows.length - MAX_RENDER_ROWS);
 	const viewRows = useMemo(() => buildViewRows(rows, rows.length), [rows]);
 	const gutterWidth = useMemo(() => {

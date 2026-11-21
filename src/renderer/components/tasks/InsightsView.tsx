@@ -163,7 +163,7 @@ export function InsightsView() {
 			/>
 		);
 	}
-	const rate = (value: number | null) => (value === null ? "—" : formatPercent(value * 100, 0));
+	const rate = (value: number | null) => (value === null ? "-" : formatPercent(value * 100, 0));
 	const maxCost = Math.max(0.0001, ...insights.costByTask.map(entry => entry.costUsd));
 	const charted = trimLeadingEmptyDays(insights.perDay);
 
@@ -204,7 +204,7 @@ export function InsightsView() {
 					<Kpi label={t("tasks.insights.cost")} value={formatCost(insights.costUsd, 2)} />
 					<Kpi
 						label={t("tasks.insights.medianDuration")}
-						value={insights.medianDurationMs === null ? "—" : formatDuration(insights.medianDurationMs)}
+						value={insights.medianDurationMs === null ? "-" : formatDuration(insights.medianDurationMs)}
 					/>
 				</div>
 				<section className="rounded-xl border border-(--omp-border-muted) px-4 py-4">
@@ -238,7 +238,7 @@ export function InsightsView() {
 												{entry.title}
 											</button>
 											<span className="shrink-0 tabular-nums text-(--omp-muted)">
-												{formatCost(entry.costUsd, 2)} ·{" "}
+												{formatCost(entry.costUsd, 2)} -{" "}
 												{t("tasks.insights.runsCount", { count: entry.runs })}
 											</span>
 										</div>

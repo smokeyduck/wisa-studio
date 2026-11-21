@@ -8,7 +8,6 @@ import {
 	type ModelProfile,
 	modelProfile,
 	parseCompactionConfig,
-	recommendStrategy,
 	STRATEGIES,
 	strategyPatch,
 } from "./context-strategy";
@@ -80,17 +79,6 @@ describe("detectStrategy", () => {
 			for (const { path, value } of strategyPatch(id)) values[path] = value;
 			expect(detectStrategy(parseCompactionConfig(values))).toBe(id);
 		}
-	});
-});
-
-describe("recommendStrategy", () => {
-	it("keeps the defaults where the provider compacts server-side", () => {
-		expect(recommendStrategy(native)).toEqual({ strategy: "balanced", reasonKey: "native" });
-	});
-
-	it("steers other models away from a lossy default, with the reason that applies to them", () => {
-		expect(recommendStrategy(vision)).toEqual({ strategy: "preserve", reasonKey: "vision" });
-		expect(recommendStrategy(textOnly)).toEqual({ strategy: "preserve", reasonKey: "text" });
 	});
 });
 

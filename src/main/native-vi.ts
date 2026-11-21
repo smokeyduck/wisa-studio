@@ -44,7 +44,7 @@ export const VI_MAIN_TEXT: Record<MainTextKey, string> = {
 	"menu.modes": "Chế độ",
 	"menu.modelRoles": "Vai trò mô hình",
 	"crash.body":
-		"Bộ render của cửa sổ này đã liên tục gặp sự cố và không thể tự phục hồi. Lỗi đã được ghi vào nhật ký runtime ({logPath}) — khởi động lại có thể giúp ích, và báo cáo nhật ký qua Trợ giúp → Báo cáo sự cố sẽ giúp chúng tôi khắc phục.",
+		"Bộ render của cửa sổ này đã liên tục gặp sự cố và không thể tự phục hồi. Lỗi đã được ghi vào nhật ký runtime ({logPath}) - khởi động lại có thể giúp ích, và báo cáo nhật ký qua Trợ giúp → Báo cáo sự cố sẽ giúp chúng tôi khắc phục.",
 	"crash.close": "Đóng",
 	"crash.title": "Cửa sổ WISA STUDIO gặp sự cố",
 	"menu.newChatTab": "Thẻ Chat mới",

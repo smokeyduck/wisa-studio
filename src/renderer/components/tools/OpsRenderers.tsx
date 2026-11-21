@@ -142,7 +142,7 @@ export function LearnRenderer({ args, result, isError, isPartial, partialResult 
 		<OpCard
 			icon={GraduationCap}
 			title={t("tools.learn.title")}
-			subtitle={[scope === "global" ? t("tools.learn.scopeGlobal") : "", skillLine].filter(Boolean).join(" · ")}
+			subtitle={[scope === "global" ? t("tools.learn.scopeGlobal") : "", skillLine].filter(Boolean).join(" - ")}
 			isError={isError}
 			body={body}
 		/>
@@ -191,7 +191,7 @@ export function SecurityScanRenderer({ args, result, isError, isPartial, partial
 	const action = text(details?.action) || text(args.action);
 	const operation = details?.operation as Record<string, unknown> | undefined;
 	const status = text(operation?.status) || text(operation?.phase) || (details?.cancelled === true ? "cancelled" : "");
-	const subtitle = [action, status].filter(Boolean).join(" · ");
+	const subtitle = [action, status].filter(Boolean).join(" - ");
 	// Cross-system references are how the scan is revisited later (Codex cloud
 	// ids, the local operation id) — they stay visible instead of sinking into
 	// a JSON dump.
@@ -202,7 +202,7 @@ export function SecurityScanRenderer({ args, result, isError, isPartial, partial
 	const plan = details?.plan as Record<string, unknown> | undefined;
 	const planRef = text(plan?.id) ? `plan_id ${text(plan?.id)}` : "";
 	if (planRef && !refs.some(ref => ref === planRef)) refs.push(planRef);
-	const body = [refs.join(" · "), resultBodyText(effective).trim()].filter(Boolean).join("\n");
+	const body = [refs.join(" - "), resultBodyText(effective).trim()].filter(Boolean).join("\n");
 	return (
 		<OpCard
 			icon={ShieldCheck}

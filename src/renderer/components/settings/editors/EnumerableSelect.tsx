@@ -8,6 +8,7 @@
 
 import { Check, ChevronDown } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import { isDevOverlayEvent } from "../../../lib/dev-overlay";
 import { cx } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
 import { isImeKeyEvent } from "../../../lib/ime";
@@ -120,6 +121,7 @@ export function EnumerableSelect({
 	useEffect(() => {
 		if (!open) return;
 		const onDown = (e: MouseEvent) => {
+			if (isDevOverlayEvent(e)) return;
 			if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
 		};
 		const onKey = (e: KeyboardEvent) => {

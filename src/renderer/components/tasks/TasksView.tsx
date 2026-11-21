@@ -149,7 +149,7 @@ function TaskStats({ task, runs }: { task: ScheduledTask; runs: TaskRun[] }) {
 			<dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
 				<Stat
 					label={t("tasks.detail.lastRun")}
-					value={latest ? formatClock(latest.startedAt ?? latest.scheduledFor ?? latest.createdAt) : "—"}
+					value={latest ? formatClock(latest.startedAt ?? latest.scheduledFor ?? latest.createdAt) : "-"}
 					detail={
 						latestOutcome && (
 							<span className="flex items-center gap-1.5">
@@ -166,11 +166,11 @@ function TaskStats({ task, runs }: { task: ScheduledTask; runs: TaskRun[] }) {
 				/>
 				<Stat
 					label={t("tasks.insights.successRate")}
-					value={insights.successRate === null ? "—" : formatPercent(insights.successRate * 100, 0)}
+					value={insights.successRate === null ? "-" : formatPercent(insights.successRate * 100, 0)}
 				/>
 				<Stat
 					label={t("tasks.insights.medianDuration")}
-					value={insights.medianDurationMs === null ? "—" : formatDuration(insights.medianDurationMs)}
+					value={insights.medianDurationMs === null ? "-" : formatDuration(insights.medianDurationMs)}
 				/>
 				<Stat label={t("tasks.insights.cost")} value={formatCost(insights.costUsd, 2)} />
 			</dl>
@@ -287,7 +287,7 @@ function TaskDetail({ task, runs }: { task: ScheduledTask; runs: TaskRun[] }) {
 						{scheduleLabel(t, task.schedule)}
 						{task.nextFireAt !== null && (
 							<span className="text-(--omp-dim)">
-								{" · "}
+								{" - "}
 								{t("tasks.detail.next", { when: formatClock(task.nextFireAt) })}
 							</span>
 						)}
@@ -404,7 +404,7 @@ function TaskDetail({ task, runs }: { task: ScheduledTask; runs: TaskRun[] }) {
 					<Setting label={t("tasks.detail.origin")}>
 						{t(task.origin.createdBy === "agent" ? "tasks.detail.originAgent" : "tasks.detail.originUser")}
 						<span className="text-(--omp-dim)">
-							{" · "}
+							{" - "}
 							{t("tasks.detail.revision", { revision: task.revision })}
 						</span>
 					</Setting>
@@ -456,7 +456,7 @@ function TaskDetail({ task, runs }: { task: ScheduledTask; runs: TaskRun[] }) {
 								<span className="w-8 shrink-0 tabular-nums text-(--omp-dim)">r{revision.revision}</span>
 								<span className="tabular-nums">{formatClock(revision.createdAt)}</span>
 								<span className="min-w-0 truncate text-(--omp-dim)">
-									· {scheduleLabel(t, revision.config.schedule)}
+									- {scheduleLabel(t, revision.config.schedule)}
 								</span>
 							</li>
 						))}

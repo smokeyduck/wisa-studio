@@ -142,7 +142,7 @@ export function hasDisplayableThinking(
  */
 export const THINKING_GLYPH_FRAMES = ["✻", "✼", "❉", "❊", "✺", "✹", "✸", "✶"] as const;
 
-/** Pulse cadence bounds (ms) — see {@link thinkingGlyphFrameDelay}. */
+/** Pulse cadence bounds (ms) · see {@link thinkingGlyphFrameDelay}. */
 export const THINKING_GLYPH_FRAME_MS_MIN = 70;
 export const THINKING_GLYPH_FRAME_MS_MAX = 230;
 
@@ -163,7 +163,7 @@ export const SPEED_MAX = 200;
 
 /**
  * Streaming-speed gauge (TUI SpeedTracker port). Accumulates instantaneous
- * tok/s observations and reports their windowed average — smoothing the jumpy
+ * tok/s observations and reports their windowed average · smoothing the jumpy
  * per-delta numbers. Fed with deltas (not cumulative totals), so a fresh
  * block restarting its count at zero never produces a spike. The GUI observes
  * thinking-buffer character growth (the wire carries no per-delta reasoning

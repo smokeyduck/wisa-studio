@@ -586,7 +586,7 @@ export function ModelCompare({ open, onClose }: ModelCompareProps) {
 										{row.quota ? (
 											<span
 												className="block"
-												title={`${row.quota.limit.label}${row.quota.limit.windowLabel ? ` · ${row.quota.limit.windowLabel}` : ""}`}
+												title={`${row.quota.limit.label}${row.quota.limit.windowLabel ? ` - ${row.quota.limit.windowLabel}` : ""}`}
 											>
 												<ProgressBar
 													height={4}

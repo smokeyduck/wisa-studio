@@ -124,7 +124,7 @@ function MessageError({ message, repeats = 1 }: { message: AgentMessage; repeats
 				<Square aria-hidden size={10} className="shrink-0 fill-current" />
 				<span className="min-w-0 truncate" title={reason ?? undefined}>
 					{t("chat.stopped")}
-					{reason && <span className="text-[var(--omp-muted)]"> · {describeProviderError(reason)}</span>}
+					{reason && <span className="text-[var(--omp-muted)]"> - {describeProviderError(reason)}</span>}
 				</span>
 				{retryButton}
 			</div>
@@ -309,7 +309,7 @@ function ContextBubble({ message }: { message: AgentMessage }) {
 							>
 								<summary className="cursor-pointer px-3 py-2 font-mono text-omp-sm text-[var(--omp-status-path)]">
 									{file.path}
-									{file.skippedReason ? ` — ${file.skippedReason}` : ""}
+									{file.skippedReason ? ` - ${file.skippedReason}` : ""}
 								</summary>
 								<pre
 									className={cx(

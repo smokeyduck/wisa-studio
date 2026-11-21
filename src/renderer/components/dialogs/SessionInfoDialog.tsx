@@ -97,7 +97,7 @@ export function SessionInfoDialog() {
 		const status = t(`sessionInfo.cache.warming.${cacheWarming.outcome ?? "active"}`);
 		const method = t(`sessionInfo.cache.warming.${cacheWarming.method}`);
 		const cost = typeof cacheWarming.cost === "number" ? formatCost(cacheWarming.cost) : null;
-		cacheRows.push({ label: method, value: cost ? `${status} · ${cost}` : status });
+		cacheRows.push({ label: method, value: cost ? `${status} - ${cost}` : status });
 	}
 
 	return (

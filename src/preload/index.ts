@@ -18,6 +18,8 @@ import type {
 	IpcBrowserKeyPayload,
 	IpcBrowserState,
 	IpcBrowserViewportPayload,
+	IpcCollabPhoneAutoStartPayload,
+	IpcCollabPhoneTabPayload,
 	IpcConversationSearchPayload,
 	IpcCustomThemes,
 	IpcDeleteCustomThemeResult,
@@ -32,6 +34,7 @@ import type {
 	IpcFsSaveEditPayload,
 	IpcMemoryChange,
 	IpcOpenPathResult,
+	IpcPhoneHubState,
 	IpcPluginInspection,
 	IpcPluginInspectPayload,
 	IpcResolvedPath,
@@ -42,12 +45,18 @@ import type {
 	IpcSetTabViewPayload,
 	IpcSidecarRestartPayload,
 	IpcSidecarStatusPayload,
+	IpcSkillsCommunityInstallPayload,
+	IpcSkillsCommunityInstallResult,
+	IpcSkillsCommunitySearchResult,
 	IpcSpawnTabPayload,
 	IpcSpawnTabResult,
 	IpcStatsUrlResult,
 	IpcTabGroup,
 	IpcTabInfo,
 	IpcTabStatusPayload,
+	IpcTemplateInstallPayload,
+	IpcTemplateInstallResult,
+	IpcTemplatesCatalogResult,
 	IpcTerminalFramePayload,
 	IpcWindowToggleStatus,
 	LogBatch,
@@ -428,6 +437,25 @@ const api: OmpApi = {
 		onChanged: callback => subscribe<IpcCustomThemes>(IPC_EVENTS.THEMES_CHANGED, callback),
 	},
 
+	// Phone access: the agent's own collab rooms, per tab (src/main/collab-phone.ts).
+	collabPhone: {
+		snapshot: () => ipcRenderer.invoke(IPC_COMMANDS.COLLAB_PHONE_SNAPSHOT),
+		start: (payload: IpcCollabPhoneTabPayload) => ipcRenderer.invoke(IPC_COMMANDS.COLLAB_PHONE_START, payload),
+		stop: (payload: IpcCollabPhoneTabPayload) => ipcRenderer.invoke(IPC_COMMANDS.COLLAB_PHONE_STOP, payload),
+		setAutoStart: (payload: IpcCollabPhoneAutoStartPayload) =>
+			ipcRenderer.invoke(IPC_COMMANDS.COLLAB_PHONE_SET_AUTO_START, payload),
+	},
+
+	// Phone hub: one link for every session (src/main/phone-hub.ts). Every call
+	// answers the full state, so the dialog renders what main says rather than
+	// assuming a start() produced a live link.
+	phoneHub: {
+		state: () => ipcRenderer.invoke(IPC_COMMANDS.PHONE_HUB_STATE) as Promise<IpcPhoneHubState>,
+		start: () => ipcRenderer.invoke(IPC_COMMANDS.PHONE_HUB_START) as Promise<IpcPhoneHubState>,
+		stop: () => ipcRenderer.invoke(IPC_COMMANDS.PHONE_HUB_STOP) as Promise<IpcPhoneHubState>,
+		revoke: () => ipcRenderer.invoke(IPC_COMMANDS.PHONE_HUB_REVOKE) as Promise<IpcPhoneHubState>,
+	},
+
 	prefs: {
 		onLanguageChanged: callback => subscribe<Language>(IPC_EVENTS.LANGUAGE_CHANGED, callback),
 		onKeymapChanged: callback => subscribe<void>(IPC_EVENTS.KEYMAP_CHANGED, () => callback()),
@@ -501,6 +529,21 @@ const api: OmpApi = {
 		logo: (owner: string) => ipcRenderer.invoke(IPC_COMMANDS.PLUGIN_LOGO, owner) as Promise<string | null>,
 		inspect: (payload: IpcPluginInspectPayload) =>
 			ipcRenderer.invoke(IPC_COMMANDS.PLUGIN_INSPECT, payload) as Promise<IpcPluginInspection>,
+	},
+
+	templates: {
+		catalog: () => ipcRenderer.invoke(IPC_COMMANDS.TEMPLATES_CATALOG) as Promise<IpcTemplatesCatalogResult>,
+		install: (payload: IpcTemplateInstallPayload) =>
+			ipcRenderer.invoke(IPC_COMMANDS.TEMPLATES_INSTALL, payload) as Promise<IpcTemplateInstallResult>,
+	},
+
+	// Community skills (skills.sh). Main does the fetching: the renderer has no
+	// network access to that host, and the installer only ever writes files.
+	skillsCommunity: {
+		search: (payload: { query: string }) =>
+			ipcRenderer.invoke(IPC_COMMANDS.SKILLS_COMMUNITY_SEARCH, payload) as Promise<IpcSkillsCommunitySearchResult>,
+		install: (payload: IpcSkillsCommunityInstallPayload) =>
+			ipcRenderer.invoke(IPC_COMMANDS.SKILLS_COMMUNITY_INSTALL, payload) as Promise<IpcSkillsCommunityInstallResult>,
 	},
 
 	editor: {

@@ -14,10 +14,10 @@ import { createTabRpc } from "./tab-rpc";
  *
  * Affordance kinds:
  * - `action`      — fire an RPC command or store action immediately
- * - `toggle`      — boolean state toggle with live on/off status
+ * - `toggle` — boolean state toggle with live on/off status
  * - `picker`      — open a picker dialog (model, thinking level)
  * - `window`      — open a dedicated window (usage, providers, settings)
- * - `submenu`     — expand into subcommands (mcp, marketplace, security…)
+ * - `submenu` — expand into subcommands (mcp, marketplace, security…)
  * - `prompt`      — send the command text as a prompt (text-mode fallback)
  * - `unavailable` — non-text command lacking a native GUI affordance
  */
@@ -329,7 +329,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 
 	const restartSidecar = restartSidecarFromGui;
 
-	/** /advisor on|off — set_setting live-applies advisor.enabled and reports activation state. */
+	/** /advisor on|off · set_setting live-applies advisor.enabled and reports activation state. */
 	const setAdvisor = async (enabled: boolean): Promise<void> => {
 		const res = await boundRpc.setSetting("advisor.enabled", enabled);
 		if (!res.success) throw new Error(res.error);
@@ -353,7 +353,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		if (!res.success) throw new Error(res.error);
 	};
 
-	/** /pin: the sidebar pin — local prefs plus the sidecar's resume-list sync. */
+	/** /pin: the sidebar pin · local prefs plus the sidecar's resume-list sync. */
 	const pinCurrentSession = async (pinned: boolean): Promise<void> => {
 		const { sessionId, sessionFile } = useSessionStore.getState();
 		if (!sessionId || !sessionFile) {
@@ -489,7 +489,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 	// SESSION
 	// ═══════════════════════════════════════════════════════════════════
 	// /new and /clear replace the session server-side and would silently abort
-	// an in-flight run — block while busy, same guard as the menu/deep-link
+	// an in-flight run · block while busy, same guard as the menu/deep-link
 	// paths and the WorkspaceDialog actions.
 	const newSessionGuarded = (): Promise<unknown> | undefined => {
 		const { isStreaming, isCompacting } = useSessionStore.getState();
@@ -499,7 +499,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		}
 		return ctx.rpc.newSession();
 	};
-	// /clear drops context in place (clear_context RPC) — the server refuses
+	// /clear drops context in place (clear_context RPC) · the server refuses
 	// while streaming; guard client-side with the same busy toast.
 	const clearContextGuarded = (): Promise<boolean> | undefined => {
 		const { isStreaming, isCompacting } = useSessionStore.getState();
@@ -509,7 +509,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		}
 		return clearSessionContext();
 	};
-	// /fresh rotates provider stream state (fresh RPC) — same busy boundary as
+	// /fresh rotates provider stream state (fresh RPC) · same busy boundary as
 	// /clear, so it gets the same client-side guard.
 	const freshGuarded = (): Promise<void> | undefined => {
 		const { isStreaming, isCompacting } = useSessionStore.getState();
@@ -587,7 +587,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 					category: "extensions",
 					affordance: { kind: "window", open: ctx.openSessionInfo },
 				},
-				// /session delete + /session pin stay forwarded — need dedicated RPC (P1).
+				// /session delete + /session pin stay forwarded · need dedicated RPC (P1).
 				sub("session delete", "/session delete"),
 				sub("session pin", "/session pin ", "[account]"),
 			],
@@ -720,7 +720,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 	});
 	// /queue focuses the composer prefilled with the yield-queue shorthand
 	// ("-> ") via the same omp:fill-composer channel the starter cards and the
-	// session-tree draft restore use — the composer submits the queue over RPC.
+	// session-tree draft restore use · the composer submits the queue over RPC.
 	add({
 		name: "queue",
 		label: t("cmd.queue"),
@@ -831,7 +831,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 			items: [
 				subAction("advisor on", () => setAdvisor(true)),
 				subAction("advisor off", () => setAdvisor(false)),
-				// The TUI advisor-config overlay hosted in a terminal (rpc tui_open) —
+				// The TUI advisor-config overlay hosted in a terminal (rpc tui_open) -
 				// chat tabs hide the terminal panel, so the surface has nowhere to show.
 				...(ctx.tabKind === "chat" ? [] : [subAction("advisor configure", () => openTuiSurface("advisor_config"))]),
 				// Text reports stay forwarded until a structured RPC exists (contract).
@@ -1054,7 +1054,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 			kind: "submenu",
 			items: [
 				subAction("todo edit", () => {
-					// The dock card self-hides with no todos — say so instead of no-oping.
+					// The dock card self-hides with no todos · say so instead of no-oping.
 					const hasTodos = useTodoStore.getState().phases.some(phase => phase.tasks.length > 0);
 					if (!hasTodos) {
 						toast({ variant: "info", message: translate("todoPanel.empty") });
@@ -1068,7 +1068,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 			],
 		},
 	});
-	// /cleanse: the parallel-fix diagnostic runner is a full-screen TUI flow —
+	// /cleanse: the parallel-fix diagnostic runner is a full-screen TUI flow ·
 	// the bundled `omp cleanse` runs it inside a revealed terminal.
 	add({
 		name: "cleanse",
@@ -1445,7 +1445,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 					category: "workspace",
 					affordance: { kind: "window", open: () => useUiStore.getState().setPanelTab("diff") },
 				},
-				// The real `/git`: staging + commit composer — the bundled `omp git`
+				// The real `/git`: staging + commit composer · the bundled `omp git`
 				// runs the full TUI in a revealed terminal.
 				{
 					name: "git tui",
@@ -1608,6 +1608,15 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		category: "other",
 		affordance: { kind: "action", run: () => leaveCollab() },
 	});
+	// Phone access: every tab's room, one QR each · the "code from your phone"
+	// surface built on the same collab feature as `/collab`.
+	add({
+		name: "phone",
+		label: t("cmd.phone"),
+		description: t("cmd.phone.desc"),
+		category: "view",
+		affordance: { kind: "window", open: () => useUiStore.getState().openPhone() },
+	});
 
 	// ═══════════════════════════════════════════════════════════════════
 	// NATIVE INTERACTIVE SURFACES
@@ -1711,7 +1720,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		affordance: {
 			kind: "action",
 			run: () => {
-				// The dock card only renders while plan mode is on — point at the toggle otherwise.
+				// The dock card only renders while plan mode is on · point at the toggle otherwise.
 				if (!useSessionStore.getState().planModeEnabled) {
 					toast({ variant: "info", message: translate("planPanel.statusOff") });
 					return;
@@ -1735,7 +1744,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 	});
 
 	// Merge sidecar-advertised commands not already covered. A name claimed by
-	// a native item — as its name OR one of its aliases — is dropped: `/models`
+	// a native item · as its name OR one of its aliases · is dropped: `/models`
 	// and `/modes` must not appear as dead rows next to the working picker.
 	for (const cmd of ctx.availableCommands) {
 		if (claimed.has(cmd.name)) continue;

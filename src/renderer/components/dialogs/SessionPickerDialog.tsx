@@ -337,8 +337,8 @@ export function SessionPickerDialog() {
 											{title}
 										</span>
 										<span className="block truncate text-omp-xs text-(--omp-muted)">
-											{effectiveShowPath && session.cwd ? session.cwd : basename(session.cwd)} ·{" "}
-											{t("sessionPicker.messageCount", { count: session.messageCount })} ·{" "}
+											{effectiveShowPath && session.cwd ? session.cwd : basename(session.cwd)} -{" "}
+											{t("sessionPicker.messageCount", { count: session.messageCount })} -{" "}
 											{formatTimeAgo(session.modified)}
 										</span>
 									</span>

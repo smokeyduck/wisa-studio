@@ -496,6 +496,26 @@ if (process.argv.includes("stats")) {
 			case "get_collab_state":
 				ok(state.collab ?? { role: null, readOnly: false, participants: [] });
 				break;
+			case "collab_start":
+				// A real room is a relay connection; the fixture hands back the shape
+				// the GUI renders (both browser links, one participant).
+				state.collab = {
+					role: "host",
+					readOnly: false,
+					link: "omp://relay.test/room#key",
+					viewLink: "omp://relay.test/room",
+					webLink: "https://my.omp.sh/#fixture-room-key",
+					webViewLink: "https://my.omp.sh/#",
+					participants: [{ name: "fixture", role: "host", readOnly: false }],
+				};
+				ok(state.collab);
+				write({ type: "collab_state", state: state.collab });
+				break;
+			case "collab_leave":
+				state.collab = undefined;
+				ok({ role: null, readOnly: false, participants: [] });
+				write({ type: "collab_state", state: { role: null, readOnly: false, participants: [] } });
+				break;
 			case "bash": {
 				if (command.command === "fixture:progress") {
 					ok({ chunks: streamChunks });
