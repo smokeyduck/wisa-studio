@@ -202,7 +202,6 @@ export type Row =
 	| { kind: "streaming"; message: AgentMessage }
 	| { kind: "pending" }
 	| { kind: "turnChanges"; since: number; summary: TurnChangeSummary }
-	| { kind: "expander"; count: number }
 	| { kind: "queued"; item: RpcQueuedMessage; lane: QueueLane };
 function messageKey(message: AgentMessage): string {
 	const identity = messageIdentity(message);
@@ -237,8 +236,6 @@ function transcriptRowBaseKey(row: Row): string {
 			return row.kind;
 		case "turnChanges":
 			return `turn-changes-${row.since}`;
-		case "expander":
-			return "pre-compaction-expander";
 	}
 }
 
@@ -414,10 +411,10 @@ function summarizeProcess(messages: AgentMessage[]): ProcessMeta {
 }
 
 /**
- * Build finalized transcript rows. Compact mode groups a run's reasoning and
- * tool-call messages into one visual phase while preserving the final answer.
- * A final assistant message containing both thinking and text is split: only
- * the thinking fragment joins the process row.
+ * Build finalized transcript rows. Tool calls fold into one process row per
+ * phase in both details, because a command is the model's work, not its answer:
+ * full detail keeps the prose and reasoning around them, compact detail folds
+ * that narration in too and leaves only the final answer.
  */
 export function buildHistoryRows(
 	messages: AgentMessage[],
@@ -460,13 +457,7 @@ export function buildHistoryRows(
 			processMessages.push(message);
 			continue;
 		}
-		if (
-			detail !== "compact" ||
-			message.role !== "assistant" ||
-			message.errorMessage ||
-			message.steering ||
-			!Array.isArray(message.content)
-		) {
+		if (message.role !== "assistant" || message.errorMessage || message.steering || !Array.isArray(message.content)) {
 			flushProcess();
 			// Auto-retry leaves one failed reply per attempt. The same bare error
 			// back to back reads as one card with an attempt count, not a stack.
@@ -488,18 +479,39 @@ export function buildHistoryRows(
 		const hasToolCall = message.content.some(block => block.type === "toolCall");
 		const hasImage = message.content.some(block => block.type === "image");
 		if (hasToolCall && !hasImage) {
-			// Text accompanying a tool call is intermediate narration. Keep every
-			// narrated phase in the same disclosure until the API delivers the final
-			// answer, so a long run leaves one activity summary instead of a stack of
-			// nearly identical completed rows.
-			processMessages.push(message);
+			// Commands are not the answer: the model's words stay in the transcript
+			// and its tool calls fold into one disclosure per phase, so a long run
+			// reads as prose with "Ran 9 commands ›" between the paragraphs instead
+			// of a wall of shell headers. Compact detail folds the narration in too.
+			if (detail === "compact") {
+				processMessages.push(message);
+				continue;
+			}
+			const prose: AgentMessage = {
+				...message,
+				content: message.content.filter(
+					b =>
+						(b.type === "thinking" && isRenderableMessageText(b.thinking)) ||
+						(b.type === "text" && isRenderableMessageText(b.text)),
+				),
+			};
+			// Prose first, then the commands it introduced, so the run reads as the
+			// model's paragraph followed by one collapsed activity line.
+			if (isVisibleTranscriptMessage(prose)) {
+				flushProcess();
+				rows.push({ kind: "message", message: prose });
+			}
+			processMessages.push({ ...message, content: message.content.filter(b => b.type === "toolCall") });
 			continue;
 		}
 
-		const thinking = message.content.filter(
-			block => block.type === "thinking" && isRenderableMessageText(block.thinking),
-		);
+		const thinking =
+			detail === "compact"
+				? message.content.filter(block => block.type === "thinking" && isRenderableMessageText(block.thinking))
+				: [];
 		if (thinking.length > 0) {
+			// Compact folds the reasoning into the phase with its tools; full keeps it
+			// in the reply, where the message renders as one block with its text.
 			processMessages.push({ ...message, content: thinking });
 			const coreMessage: AgentMessage = {
 				...message,
@@ -552,10 +564,9 @@ export function mergeTodoSnapshots(rows: readonly HistoryRow[], snapshots: reado
 }
 
 /**
- * Map finalized history rows onto semantic timeline phases. Full detail keeps
- * every tool message visible, but punctuation-only continuations share the
- * phase's first marker and timestamp. Tool state is aggregated so a later
- * running/error call still updates that one marker.
+ * Map finalized history rows onto semantic timeline phases. Punctuation-only
+ * continuations share the phase's first marker and timestamp, and tool state is
+ * aggregated so a later running/error call still updates that one marker.
  */
 export function buildTimelineMarkers(rows: readonly HistoryRow[]): Array<TimelineMarkerSeed | null> {
 	const markers: Array<TimelineMarkerSeed | null> = rows.map(() => null);

@@ -729,7 +729,7 @@
 }
 
 .omp-transcript-editorial .omp-assistant-turn {
-	padding: 10px var(--omp-editorial-edge) 6px var(--omp-editorial-inset) !important;
+	padding: 8px var(--omp-editorial-edge) 4px var(--omp-editorial-inset) !important;
 }
 
 .omp-transcript-editorial .omp-assistant-turn--compact {
@@ -1100,10 +1100,6 @@
 	justify-content: flex-start;
 }
 
-.omp-transcript-editorial .omp-history-expander {
-	margin: 8px var(--omp-editorial-edge) 8px var(--omp-editorial-inset) !important;
-}
-
 .omp-transcript-editorial .omp-read-group {
 	position: relative;
 	padding: 4px var(--omp-editorial-edge) 6px var(--omp-editorial-inset) !important;
@@ -1196,7 +1192,7 @@
 .omp-transcript-editorial .omp-assistant-turn .omp-streaming-tail,
 .omp-transcript-editorial .omp-streaming-turn > .markdown-body {
 	font-size: calc(var(--gui-font-size, 15px) * 15 / 15);
-	line-height: 1.7;
+	line-height: 1.62;
 	color: var(--omp-text);
 }
 
@@ -1235,7 +1231,7 @@
 }
 
 .omp-transcript-editorial .markdown-body p {
-	margin-block: 0.7em;
+	margin-block: 0.5em;
 }
 
 .omp-transcript-editorial .markdown-body :is(h1, h2, h3) {

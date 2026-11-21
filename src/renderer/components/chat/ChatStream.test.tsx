@@ -215,13 +215,21 @@ describe("full transcript rows", () => {
 		expect(failed.message.content).toEqual([{ type: "text", text: "Partial reply" }]);
 	});
 
-	it("keeps individual process messages but removes standalone tool-result transport rows", () => {
+	it("keeps the model's prose and folds its commands into one disclosure per phase", () => {
 		const rows = buildHistoryRows(toolRun, "full");
-		expect(rows.map(row => row.kind)).toEqual(["message", "message", "message"]);
-		for (const row of rows) {
-			if (row.kind !== "message") throw new Error("full mode unexpectedly folded a process row");
-			expect(row.message.role).toBe("assistant");
-		}
+		expect(rows.map(row => row.kind)).toEqual(["message", "process", "message"]);
+
+		const prose = rows[0];
+		if (prose?.kind !== "message") throw new Error("narration row missing");
+		expect(prose.message.content).toEqual([{ type: "text", text: "I will inspect the source." }]);
+
+		const process = rows[1];
+		if (process?.kind !== "process") throw new Error("process row missing");
+		expect(process.toolNames).toEqual(["read", "write"]);
+
+		const answer = rows[2];
+		if (answer?.kind !== "message") throw new Error("final answer row missing");
+		expect(answer.message.content).toEqual([{ type: "text", text: "Implemented and verified." }]);
 	});
 
 	it("renders one marker per narrated phase and aggregates continuation tool state", () => {
@@ -254,9 +262,9 @@ describe("full transcript rows", () => {
 		);
 
 		const markers = buildTimelineMarkers(phaseRows);
-		expect(markers.map(marker => marker?.state ?? null)).toEqual(["done", null, "done", null, null, "launch"]);
-		expect(markers[0]?.toolIds).toEqual(["call-check", "call-format"]);
-		expect(markers[2]?.toolIds).toEqual(["call-build", "call-hub", "call-write"]);
+		expect(markers.map(marker => marker?.state ?? null)).toEqual([null, "done", null, "done", "launch"]);
+		expect(markers[1]?.toolIds).toEqual(["call-check", "call-format"]);
+		expect(markers[3]?.toolIds).toEqual(["call-build", "call-hub", "call-write"]);
 	});
 });
 

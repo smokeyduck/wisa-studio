@@ -35,8 +35,10 @@ import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
 import { type TodoSnapshot, useTodoStore } from "../../stores/todo";
 import { type ToolEntry, toolEntryKey, useToolsStore } from "../../stores/tools";
+import { cachedTranscript } from "../../stores/transcript-cache";
 import { TRANSCRIPT_FOCUS_TTL_MS, useTranscriptFocusStore } from "../../stores/transcript-focus";
 import { useUiStore } from "../../stores/ui";
+import { useTabIsWork } from "../../stores/workspace-mode";
 import { LongTaskStatus, WisaLogo } from "../common";
 import { buildEditCandidates } from "../panels/DiffPanel";
 import { DiffStat } from "../panels/workspace-ui";
@@ -102,9 +104,24 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	const tabId = useRuntimeTabId();
 	// A subagent page: someone else's history, with nothing to start or review.
 	const readOnly = useReadOnlyTranscript();
+	const status = useSessionStore(s => s.status);
 	const messages = useMessagesStore(s => s.messages);
 	const liveMessages = useMessagesStore(s => s.liveMessages);
-	const displayMessages = useMemo(() => [...messages, ...liveMessages], [messages, liveMessages]);
+	// Opening a session spawns or resumes a sidecar and only then fetches the
+	// transcript, so the row click sat on a spinner for seconds — worst on a
+	// parked tab whose runtime was torn down, and on a slow host. The last
+	// painted transcript is kept per session file (stores/transcript-cache): it
+	// paints at once and the fetch replaces it. Only while the sidecar is not
+	// ready, and only when this tab has nothing of its own — a live or hydrated
+	// transcript always wins, so the cache can never mask real content. It also
+	// stays up through "ready" until the fetch commits, so the re-open does not
+	// flash an empty canvas in between.
+	const sessionKey = useTabsStore(state => state.tabs.find(tab => tab.id === tabId)?.sessionPath ?? null);
+	const cachedMessages = useMemo(() => cachedTranscript(sessionKey), [sessionKey]);
+	const displayMessages = useMemo(() => {
+		if (messages.length === 0 && liveMessages.length === 0 && cachedMessages) return cachedMessages;
+		return [...messages, ...liveMessages];
+	}, [messages, liveMessages, cachedMessages]);
 	const streamingMessage = useMessagesStore(s => s.streamingMessage);
 	const hasStreamingText = useMessagesStore(s => isRenderableMessageText(s.streamingText));
 	const hasStreamingThinking = useMessagesStore(s => isRenderableMessageText(s.streamingThinking));
@@ -128,7 +145,6 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	const compactionInfo = useSessionStore(s => s.compactionInfo);
 	const manualMaintenance = useSessionStore(s => s.manualMaintenance);
 	const warmingCache = useSessionStore(s => s.cacheWarming !== null && s.cacheWarming.outcome === undefined);
-	const status = useSessionStore(s => s.status);
 	const sessionId = useSessionStore(s => s.sessionId);
 	// Shared agent compaction preference and GUI-local transcript detail.
 	const collapseCompacted = useDisplayPreference("collapseCompacted");
@@ -159,6 +175,14 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	const lastCompactionIndex = displayMessages.findLastIndex(message => message.role === "compactionSummary");
 	const hiddenCount = collapseCompacted && !preCompactionOpen && lastCompactionIndex > 0 ? lastCompactionIndex : 0;
 	const todoHistory = useTodoStore(s => s.history);
+	// Folded history hides the todo snapshots archived before the compaction
+	// point too: they belong to the turns the divider replaced, and interleaving
+	// them below it read as noise left over from the cleared screen.
+	const visibleTodoHistory = useMemo(() => {
+		if (hiddenCount === 0) return todoHistory;
+		const boundary = messageTimestampMs(displayMessages[hiddenCount]!);
+		return todoHistory.filter(snapshot => snapshot.ts >= boundary);
+	}, [todoHistory, hiddenCount, displayMessages]);
 	const historyRows = useMemo<HistoryRow[]>(() => {
 		const built = buildHistoryRows(
 			hiddenCount > 0 ? displayMessages.slice(hiddenCount) : displayMessages,
@@ -170,8 +194,8 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 		// ALL consecutive tool work, so a second fold would nest redundantly.
 		const grouped = transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
 		// Archived todo changes interleave by timestamp (transcript archive rows).
-		return mergeTodoSnapshots(grouped, todoHistory);
-	}, [displayMessages, hiddenCount, transcriptDetail, todoHistory, expandedProcessKeys]);
+		return mergeTodoSnapshots(grouped, visibleTodoHistory);
+	}, [displayMessages, hiddenCount, transcriptDetail, visibleTodoHistory, expandedProcessKeys]);
 
 	// What the latest run changed on disk, once it has settled: closes the turn
 	// with one line leading to the review drawer. Tool events stream in at a high
@@ -222,9 +246,6 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	// a long transcript does not get rebuilt for every token.
 	const { rows, rowKeys } = useMemo(() => {
 		const nextRows: Row[] = [];
-		if (hiddenCount > 0) {
-			nextRows.push({ kind: "expander", count: hiddenCount });
-		}
 		nextRows.push(...historyRows);
 		if (turnChanges && lastPromptAt !== null && !isStreaming && !showStatusRow) {
 			nextRows.push({ kind: "turnChanges", since: lastPromptAt, summary: turnChanges });
@@ -246,7 +267,6 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 			rowKeys: buildTranscriptRowKeys(nextRows),
 		};
 	}, [
-		hiddenCount,
 		historyRows,
 		turnChanges,
 		lastPromptAt,
@@ -285,9 +305,22 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 		{ icon: Lightbulb, title: t("chat.starter.brainstorm.title"), prompt: t("chat.starter.brainstorm.prompt") },
 		{ icon: Languages, title: t("chat.starter.translate.title"), prompt: t("chat.starter.translate.prompt") },
 	] as const;
+	// Work sessions have no project to read, run or review, so the project
+	// starters ("Understand the project", "Review changes") would point at
+	// something that is not there. These ask for the work the workspace is for.
+	const WORK_STARTERS = [
+		{ icon: PenLine, title: t("chat.starter.write.title"), prompt: t("chat.starter.write.prompt") },
+		{ icon: ListTodo, title: t("chat.starter.plan.title"), prompt: t("chat.starter.plan.prompt") },
+		{ icon: SearchCode, title: t("chat.starter.research.title"), prompt: t("chat.starter.research.prompt") },
+		{ icon: FileDiff, title: t("chat.starter.analyze.title"), prompt: t("chat.starter.analyze.prompt") },
+	] as const;
 	/** Chat tabs get a conversation-oriented empty state (agent starters imply tools). */
 	const isChat = useActiveTabKind() === "chat";
-	const starters = isChat ? CHAT_STARTERS : STARTERS;
+	// The Work lane runs the full agent in the GUI's own folder: no repo, no
+	// build. Its empty state says so and offers the work that folder is for, so
+	// the two lanes are told apart by what they show, not only by a filter.
+	const isWork = useTabIsWork(tabId);
+	const starters = isChat ? CHAT_STARTERS : isWork ? WORK_STARTERS : STARTERS;
 	// A fresh tab has no transcript to wait for: its start screen can show while
 	// the sidecar boots instead of a spinner on a blank page. A tab resuming a
 	// session keeps the spinner, so the start screen never flashes before history.
@@ -321,7 +354,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 			const kind = rows[i]?.kind;
 			if (kind === "streaming") return 80;
 			if (kind === "pending" || kind === "queued" || kind === "turnChanges") return 56;
-			if (kind === "expander" || kind === "process" || kind === "todoSnapshot") return 48;
+			if (kind === "process" || kind === "todoSnapshot") return 48;
 			if (kind === "message") return 72;
 			return 160;
 		},
@@ -768,7 +801,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	});
 	useEffect(() => () => paintFindHighlights([], null), []);
 
-	// Messages hydrate via hydrateSession (use-rpc-events) on sidecar ready —
+	// Messages hydrate via hydrateSession (use-rpc-events) on sidecar ready -
 	// no separate fetch here (that would double-download the transcript).
 
 	return (
@@ -811,11 +844,19 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 							<div className="omp-empty-logo mb-6 flex items-center justify-center">
 								<WisaLogo size={56} />
 							</div>
-							<h1 className="font-display text-omp-display font-semibold leading-tight tracking-[-0.025em] text-[var(--omp-text)]">
-								{isChat ? t("chat.empty.title.chat") : t("chat.empty.title")}
+							<h1 className="text-center font-display text-omp-display font-semibold leading-tight tracking-[-0.025em] text-[var(--omp-text)]">
+								{isChat
+									? t("chat.empty.title.chat")
+									: isWork
+										? t("chat.empty.title.work")
+										: t("chat.empty.title")}
 							</h1>
-							<p className="mt-2 max-w-2xl text-omp-xl leading-relaxed text-[var(--omp-muted)]">
-								{isChat ? t("chat.empty.subtitle.chat") : t("chat.empty.subtitle")}
+							<p className="mx-auto mt-2 max-w-2xl text-center text-omp-xl leading-relaxed text-[var(--omp-muted)]">
+								{isChat
+									? t("chat.empty.subtitle.chat")
+									: isWork
+										? t("chat.empty.subtitle.work")
+										: t("chat.empty.subtitle")}
 							</p>
 							<div className="omp-starter-grid mt-8 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
 								{starters.map(({ icon: Icon, title, prompt }) => (
@@ -895,14 +936,6 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 											<TodoSnapshotCard entry={row.entry} />
 										) : row.kind === "turnChanges" ? (
 											<TurnChangesRow summary={row.summary} />
-										) : row.kind === "expander" ? (
-											<button
-												type="button"
-												onClick={() => setPreCompactionOpen(true)}
-												className="omp-history-expander omp-pressable ml-(--omp-editorial-inset) mr-(--omp-editorial-edge) my-2 flex items-center gap-2 rounded-lg border border-[var(--omp-border)] px-3 py-1.5 text-omp-sm font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-bg-tertiary)] hover:text-[var(--omp-text)]"
-											>
-												{t("chat.compaction.showEarlier", { count: row.count })}
-											</button>
 										) : (
 											<TurnStatusRow />
 										)}
@@ -1103,7 +1136,17 @@ export function StreamingRows({
 				    thinking deltas accumulate in the streamingThinking buffer, which
 				    ThinkingBlock reads itself when live. */}
 					{hasThinking ? <ThinkingBlock live /> : null}
-					{toolCards}
+					{toolCalls.length + liveTools.length > 0 ? (
+						<ExecutionGroup
+							expanded={expanded}
+							live
+							onExpandedChange={onExpandedChange}
+							stepCount={toolCalls.length + liveTools.length}
+							toolCallIds={allCards.map(card => card.id)}
+						>
+							<div className="omp-process-group omp-process-group--live">{toolCards}</div>
+						</ExecutionGroup>
+					) : null}
 					<StreamingText />
 				</div>
 			</div>
