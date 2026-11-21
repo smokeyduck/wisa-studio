@@ -816,6 +816,8 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"All Commands": "Все команды",
 	"Inline help for every mounted command.": "Встраивать справку каждой подключённой команды.",
 	"Built-ins Only": "Только встроенные",
+	"Inline built-in help; MCP and extension help on demand.":
+		"Встраивать справку встроенных инструментов; справку MCP и расширений загружать по запросу.",
 	"Inline built-in docs; fetch MCP and extension docs on demand.":
 		"Встраивать документацию встроенных инструментов; документацию MCP и расширений загружать по запросу.",
 	"Catalog Only": "Только каталог",
@@ -1269,7 +1271,14 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"IDA Pro via idalib; analysis disabled when no install is found":
 		"IDA Pro via idalib; analysis disabled when no install is found",
 	"IDA Pro when an install with idalib is found, otherwise Ghidra":
-		"IDA Pro when an install with idalib is found, otherwise Ghidra",
+		"IDA Pro, если найдена установка с idalib, иначе Ghidra",
+	"IDA Pro when an install with idalib is found, otherwise Ghidra; never Binary Ninja":
+		"IDA Pro, если найдена установка с idalib, иначе Ghidra; Binary Ninja не выбирается",
+	"Binary Ninja": "Binary Ninja",
+	"Binary Ninja via its headless Python API (needs a headless-capable licence); never chosen by Auto; analysis disabled when no install is found":
+		"Binary Ninja через безголовый Python API (нужна лицензия с поддержкой безголового режима); Auto не выбирает этот вариант; анализ отключается, когда установка не найдена",
+	"Enable when the first usable judge is native": "Включать, когда первый пригодный судья работает локально",
+	magic: "magic",
 	"Isolated subagents use ovnfs checkouts when ovnfs is found; otherwise (and for worktrees) the PAL picks the best available backend":
 		"Isolated subagents use ovnfs checkouts when ovnfs is found; otherwise (and for worktrees) the PAL picks the best available backend",
 	"Keep nudging with a doubling gap: after 12, 24, 48, 96, then every 192 edits or commands":

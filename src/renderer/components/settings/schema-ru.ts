@@ -46,6 +46,7 @@ export const RU_GROUP_TITLES: Record<string, string> = {
 	Execution: "Выполнение",
 	GitHub: "GitHub",
 	"Discovery & MCP": "Обнаружение и MCP",
+	"Binary Ninja": "Binary Ninja",
 	Developer: "Разработчик",
 	LSP: "LSP",
 	Bash: "Bash",
@@ -1408,6 +1409,35 @@ export const RU_SETTINGS: Record<string, { label?: string; description?: string 
 		label: "Автоматически исправлять ошибки разбора",
 		description:
 			"Если файл после изменения не проходит разбор AST, просить модель smol исправить проблемный участок (проверять повторным разбором; при неудаче выводить предупреждение)",
+	},
+	"pty.notify": {
+		label: "Уведомление консоли",
+		description: "Уведомлять, когда интерактивная консоль (bash `pty`) ждёт вашего ввода",
+	},
+	"edit.magic.model": {
+		label: "Модель Magic Edit",
+		description:
+			"Селектор модели или псевдоним роли (@slow) для модели, применяющей изменения в режиме magic; пусто - роль smol",
+	},
+	"mcp.shared": {
+		label: "Общие серверы MCP",
+		description:
+			"Запускать серверы MCP через демон, чтобы все экземпляры omp использовали один процесс на сервер и общий кэш каталога инструментов. Серверы, удерживающие сессию, получают отдельный процесс на экземпляр (при недоступности демона используются частные серверы)",
+	},
+	"mcp.idleStopMinutes": {
+		label: "Остановка MCP при простое",
+		description:
+			"Останавливать общий сервер MCP после стольких минут без использования; он перезапустится при следующем запросе",
+	},
+	"binja.installDir": {
+		label: "Каталог установки Binary Ninja",
+		description:
+			"Каталог с основной библиотекой Binary Ninja или пакет .app в macOS; пусто - берётся $BN_INSTALL_DIR, файл lastrun в пользовательской папке Binary Ninja, затем стандартные пути установки",
+	},
+	"binja.python": {
+		label: "Python Binary Ninja",
+		description:
+			"Интерпретатор Python 3, загружающий API Binary Ninja из каталога python установки; пусто - определяется автоматически",
 	},
 	"tools.artifactSpillThreshold": {
 		label: "Порог переноса вывода инструмента в артефакт (КБ)",

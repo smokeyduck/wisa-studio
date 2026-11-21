@@ -663,6 +663,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"All Commands": "Mọi lệnh",
 	"Inline help for every mounted command.": "Nhúng trợ giúp cho mọi lệnh được gắn.",
 	"Built-ins Only": "Chỉ bản tích hợp sẵn",
+	"Inline built-in help; MCP and extension help on demand.":
+		"Nhúng trợ giúp của công cụ tích hợp sẵn; trợ giúp MCP và tiện ích mở rộng tải theo yêu cầu.",
 	"Inline built-in docs; fetch MCP and extension docs on demand.":
 		"Nhúng tài liệu tích hợp sẵn; tải tài liệu MCP và tiện ích mở rộng theo yêu cầu.",
 	"Catalog Only": "Chỉ danh mục",
@@ -1249,7 +1251,14 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"IDA Pro via idalib; analysis disabled when no install is found":
 		"IDA Pro via idalib; analysis disabled when no install is found",
 	"IDA Pro when an install with idalib is found, otherwise Ghidra":
-		"IDA Pro when an install with idalib is found, otherwise Ghidra",
+		"IDA Pro khi tìm thấy bản cài có idalib, nếu không thì Ghidra",
+	"IDA Pro when an install with idalib is found, otherwise Ghidra; never Binary Ninja":
+		"IDA Pro khi tìm thấy bản cài có idalib, nếu không thì Ghidra; không bao giờ chọn Binary Ninja",
+	"Binary Ninja": "Binary Ninja",
+	"Binary Ninja via its headless Python API (needs a headless-capable licence); never chosen by Auto; analysis disabled when no install is found":
+		"Binary Ninja qua API Python không giao diện (cần giấy phép hỗ trợ chạy không giao diện); Auto không bao giờ chọn mục này; tắt phân tích khi không tìm thấy bản cài",
+	"Enable when the first usable judge is native": "Bật khi bộ đánh giá khả dụng đầu tiên chạy cục bộ",
+	magic: "magic",
 	"Isolated subagents use ovnfs checkouts when ovnfs is found; otherwise (and for worktrees) the PAL picks the best available backend":
 		"Isolated subagents use ovnfs checkouts when ovnfs is found; otherwise (and for worktrees) the PAL picks the best available backend",
 	"Keep nudging with a doubling gap: after 12, 24, 48, 96, then every 192 edits or commands":

@@ -46,6 +46,7 @@ export const VI_GROUP_TITLES: Record<string, string> = {
 	Execution: "Thực thi",
 	GitHub: "GitHub",
 	"Discovery & MCP": "Khám phá & MCP",
+	"Binary Ninja": "Binary Ninja",
 	Developer: "Nhà phát triển",
 	LSP: "LSP",
 	Bash: "Bash",
@@ -1393,6 +1394,34 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		label: "Tự động sửa lỗi phân tích cú pháp",
 		description:
 			"Nếu tệp sau khi chỉnh sửa không vượt qua phân tích AST, yêu cầu mô hình smol sửa đoạn bị lỗi (kiểm tra bằng cách phân tích lại; nếu không được thì hiển thị cảnh báo)",
+	},
+	"pty.notify": {
+		label: "Thông báo cửa sổ dòng lệnh",
+		description: "Thông báo khi một cửa sổ dòng lệnh tương tác (bash `pty`) đang chờ bạn",
+	},
+	"edit.magic.model": {
+		label: "Mô hình Magic Edit",
+		description:
+			"Bộ chọn mô hình hoặc bí danh vai trò (@slow) cho mô hình thực hiện thay đổi ở chế độ magic; để trống là dùng vai trò smol",
+	},
+	"mcp.shared": {
+		label: "Máy chủ MCP dùng chung",
+		description:
+			"Chạy máy chủ MCP qua daemon để mọi phiên bản omp dùng chung một tiến trình cho mỗi máy chủ và dùng chung danh mục công cụ đã lưu đệm. Máy chủ cần giữ phiên vẫn có một tiến trình riêng cho mỗi phiên bản (tự quay về máy chủ riêng khi không khả dụng)",
+	},
+	"mcp.idleStopMinutes": {
+		label: "Dừng MCP khi nhàn rỗi",
+		description: "Dừng máy chủ MCP dùng chung sau số phút không dùng; máy chủ khởi động lại ở yêu cầu kế tiếp",
+	},
+	"binja.installDir": {
+		label: "Thư mục cài Binary Ninja",
+		description:
+			"Thư mục chứa thư viện lõi Binary Ninja, hoặc gói .app trên macOS; để trống thì dùng $BN_INSTALL_DIR, tệp lastrun trong thư mục người dùng Binary Ninja, rồi đến các vị trí cài mặc định",
+	},
+	"binja.python": {
+		label: "Python của Binary Ninja",
+		description:
+			"Trình thông dịch Python 3 nạp được API Binary Ninja từ thư mục python của bản cài; để trống thì tự dò",
 	},
 	"tools.artifactSpillThreshold": {
 		label: "Ngưỡng chuyển đầu ra công cụ sang artifact (KB)",
