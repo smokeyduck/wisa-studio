@@ -7,6 +7,8 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+## [0.9.49] - 2026-11-21
+
 ### Added
 
 - **Phone access (`/phone`).** Every tab's collab room in one dialog: one QR code

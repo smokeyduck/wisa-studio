@@ -10,10 +10,10 @@ Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding age
 
 | Platform | Package |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-0.9.48-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.48) |
-| macOS Intel | `wisa-studio-0.9.48.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.48) |
-| Windows x64 | [`wisa-studio-0.9.48-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.48/wisa-studio-0.9.48-setup.exe) |
-| Linux x64 | [`wisa-studio-0.9.48.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.48/wisa-studio-0.9.48.AppImage) |
+| macOS Apple Silicon | `wisa-studio-0.9.49-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.49) |
+| macOS Intel | `wisa-studio-0.9.49.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.49) |
+| Windows x64 | [`wisa-studio-0.9.49-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.49/wisa-studio-0.9.49-setup.exe) |
+| Linux x64 | [`wisa-studio-0.9.49.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.49/wisa-studio-0.9.49.AppImage) |
 
 [All releases](https://github.com/smokeyduck/wisa-studio/releases) · [Install guide (vi)](docs/vi/cai-dat.md)
 
