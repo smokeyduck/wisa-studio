@@ -736,6 +736,40 @@
 	padding: 1px var(--omp-editorial-edge) 1px var(--omp-editorial-inset) !important;
 }
 
+/* A step that is nothing but reasoning sits between two step chips. Its row
+   keeps the hover footer, but that footer floats over the empty trailing edge
+   of the disclosure line instead of reserving 24px below it, so the whole run
+   reads as one stack: chip, reasoning, chip. */
+.omp-transcript-editorial .omp-assistant-turn--reasoning {
+	padding: 2px var(--omp-editorial-edge) 2px var(--omp-editorial-inset) !important;
+}
+
+.omp-transcript-editorial .omp-assistant-turn--reasoning .omp-thinking-block {
+	margin: 0;
+}
+
+.omp-transcript-editorial .omp-assistant-turn--reasoning .omp-transcript-content {
+	position: relative;
+}
+
+.omp-transcript-editorial .omp-assistant-turn--reasoning .omp-message-actions {
+	position: absolute;
+	/* Level with the disclosure line, so an expanded reasoning body or a
+	   usage footer below never ends up under the buttons. */
+	inset-block-start: 4px;
+	inset-inline-end: 0;
+	height: 20px;
+	margin-top: 0;
+	padding-inline-start: 6px;
+	background: var(--omp-bg-primary);
+	border-radius: 6px;
+}
+
+.omp-transcript-editorial .omp-assistant-turn--reasoning .omp-message-actions > button {
+	height: 20px;
+	width: 20px;
+}
+
 .omp-transcript-editorial .omp-process-group {
 	position: relative;
 	padding-block: 1px 3px;

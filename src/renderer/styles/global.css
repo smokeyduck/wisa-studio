@@ -1264,7 +1264,7 @@ kbd,
 [data-density="tight"] .omp-transcript-editorial .omp-user-bubble {
 	padding: 8px 12px;
 }
-[data-density="tight"] .omp-transcript-editorial .omp-assistant-turn {
+[data-density="tight"] .omp-transcript-editorial .omp-assistant-turn:not(.omp-assistant-turn--reasoning) {
 	padding-block: 8px !important;
 }
 [data-density="tight"] .settings-field-row {

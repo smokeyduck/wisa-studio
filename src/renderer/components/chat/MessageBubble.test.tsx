@@ -452,6 +452,24 @@ describe("MessageBubble noise filtering", () => {
 		expect(html).toContain("omp-assistant-turn--compact");
 	});
 
+	it("tightens a reasoning-only step but keeps its copy/branch footer", () => {
+		const thinkingOnly: AgentMessage = {
+			role: "assistant",
+			content: [{ type: "thinking", thinking: "Weigh the two approaches before editing." }],
+			timestamp: at,
+		};
+		const html = renderToStaticMarkup(
+			<I18nProvider>
+				<MessageBubble message={thinkingOnly} />
+			</I18nProvider>,
+		);
+		// Full-density transcripts draw this step between two process chips; the
+		// row keeps the footer so copy/branch still apply to the step itself.
+		expect(html).toContain("omp-assistant-turn--reasoning");
+		expect(html).toContain("Copy message text");
+		expect(html).not.toContain("omp-assistant-turn--compact");
+	});
+
 	it("uses the full-width transcript content surface for assistant output", () => {
 		const html = renderToStaticMarkup(
 			<I18nProvider>

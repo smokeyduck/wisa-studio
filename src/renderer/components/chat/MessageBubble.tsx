@@ -609,6 +609,10 @@ export const MessageBubble = memo(function MessageBubble({
 	// Assistant / system: render block by block.
 	const blocks: ReactNode[] = [];
 	let sawNonToolBlock = false;
+	// Stays true only while the message's whole visible payload is reasoning:
+	// full-density transcripts render such a step as its own row between two
+	// step chips, so its chrome tightens to keep the run reading as one stack.
+	let thinkingOnly = true;
 	let thinking: string[] = [];
 	const flushThinking = () => {
 		if (thinking.length === 0) return;
@@ -627,17 +631,20 @@ export const MessageBubble = memo(function MessageBubble({
 			case "text": {
 				blocks.push(<MarkdownRenderer key={blocks.length} content={block.text} />);
 				sawNonToolBlock = true;
+				thinkingOnly = false;
 				break;
 			}
 			case "toolCall": {
 				blocks.push(
 					<ToolCardWithResult key={toolEntryKey(block)} call={block} runningIndicator={runningIndicator} />,
 				);
+				thinkingOnly = false;
 				break;
 			}
 			case "image": {
 				blocks.push(<InlineImage key={blocks.length} image={block} />);
 				sawNonToolBlock = true;
+				thinkingOnly = false;
 				break;
 			}
 		}
@@ -650,11 +657,24 @@ export const MessageBubble = memo(function MessageBubble({
 	// don't need the 28px hover footer plus py-3 padding. Tool-only copy would
 	// be empty; the Process disclosure owns the grouped chrome and branch point.
 	const compactChrome = compact || (!sawNonToolBlock && !message.errorMessage && !customLabel && !isSteering);
+	// A lone reasoning disclosure keeps the hover footer (copy / branch still
+	// apply to the step) but gets tight, symmetric chrome so the chips above
+	// and below sit one line away instead of 20/45px away (see components.css).
+	const reasoningOnly =
+		!compact &&
+		!compactChrome &&
+		thinkingOnly &&
+		blocks.length > 0 &&
+		!customLabel &&
+		!isSteering &&
+		!message.errorMessage &&
+		message.stopReason !== "aborted";
 
 	return (
 		<div
 			className={cx(
 				"group flex px-6",
+				reasoningOnly && "omp-assistant-turn--reasoning",
 				!compactChrome && "omp-assistant-turn",
 				compactChrome && "omp-assistant-turn--compact",
 				compactChrome ? "py-1.5" : "py-3",

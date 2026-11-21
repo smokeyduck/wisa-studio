@@ -982,7 +982,7 @@ function ProcessGroup({
 	row: Extract<HistoryRow, { kind: "process" }>;
 }) {
 	return (
-		<div className="ps-(--omp-editorial-inset) pe-(--omp-editorial-edge) py-2">
+		<div className="ps-(--omp-editorial-inset) pe-(--omp-editorial-edge) py-1">
 			<ExecutionGroup
 				expanded={expanded}
 				failureCount={row.failedEvents}
