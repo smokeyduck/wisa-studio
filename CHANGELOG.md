@@ -9,6 +9,15 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [0.9.50] - 2026-11-21
 
+### Added
+
+- **macOS builds come from CI.** `.github/workflows/release-macos.yml` builds
+  both architectures on a macOS runner, checks that each DMG bundles the
+  sidecar for its own architecture, verifies the app seal, launches the packaged
+  app to prove the renderer starts, and attaches both DMGs, both ZIPs and a
+  `latest-mac.yml` listing both architectures. Releases before this one carried
+  no macOS asset at all, so the updater had no feed to read.
+
 ### Changed
 
 - **Mounted tools run as commands and still render as themselves.** The sidecar

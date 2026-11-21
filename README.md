@@ -11,7 +11,7 @@ GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một
 | Nền tảng | Gói |
 |---|---|
 | macOS Apple Silicon | `wisa-studio-0.9.50-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.50) |
-| macOS Intel | `wisa-studio-0.9.50.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.50) |
+| macOS Intel | `wisa-studio-0.9.50-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.50) |
 | Windows x64 | [`wisa-studio-0.9.50-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.50/wisa-studio-0.9.50-setup.exe) |
 | Linux x64 | [`wisa-studio-0.9.50.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.50/wisa-studio-0.9.50.AppImage) |
 
@@ -100,7 +100,7 @@ bun run build
 
 ```bash
 bun run package:mac:arm64 -- --publish never   # dist/wisa-studio-<ver>-arm64.dmg
-bun run package:mac:x64   -- --publish never   # dist/wisa-studio-<ver>.dmg
+bun run package:mac:x64   -- --publish never   # dist/wisa-studio-<ver>-x64.dmg
 bun run package:win       -- --publish never   # NSIS + portable
 bun run package:linux     -- --publish never   # AppImage + deb
 ```

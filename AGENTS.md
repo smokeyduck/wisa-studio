@@ -135,7 +135,7 @@ bun run package:win       -- --publish never
 Inspect every artifact before publishing:
 
 - Mount each DMG; verify the seal: `codesign --verify --deep --strict --verbose=2 "<path>/WISA STUDIO.app"`.
-- `file "<path>/WISA STUDIO.app/Contents/Resources/omp"` — the bundled sidecar arch must match the DMG (`wisa-studio-X.Y.Z-arm64.dmg` = arm64; `wisa-studio-X.Y.Z.dmg` = Intel).
+- `file "<path>/WISA STUDIO.app/Contents/Resources/omp"` — the bundled sidecar arch must match the DMG (`wisa-studio-X.Y.Z-arm64.dmg` = arm64; `wisa-studio-X.Y.Z-x64.dmg` = Intel).
 - Launch each package on a compatible host: sidecar reaches `ready`, `get_settings` RPC succeeds, one settings toggle persists. From an agent shell, launch with `env -u ELECTRON_RUN_AS_NODE …/Contents/MacOS/omp --user-data-dir=/tmp/<dir>`: a leaked `ELECTRON_RUN_AS_NODE=1` makes Electron exit 0 silently, and a separate user-data dir avoids the single-instance lock of an installed copy.
 - Windows: `file win-unpacked/resources/omp.exe` (arch must be x86-64). Preferred path is CI: `.github/workflows/release-windows.yml` (windows-latest) runs on release publish — or dispatch it for an existing tag — and reproduces the sidecar from `sidecar-source.json`'s monorepo pin (repo + commit; a pin naming any repository other than `smokeyduck/oh-my-pi` fails the build), smoke-tests it (sidecar RPC handshake + packaged-GUI launch with no renderer crash, plus the locale-pak regression guard), then attaches the setup/portable installers + `latest.yml` itself. Local `bun run package:win -- --publish never` remains available on a Windows host.
 - Linux is built by CI, not locally: `.github/workflows/release-linux.yml` (ubuntu-latest) runs on release publish — or dispatch it for an existing tag — and reproduces the sidecar from `sidecar-source.json`'s monorepo pin (repo + commit; a pin naming any repository other than `smokeyduck/oh-my-pi` fails the build), smoke-tests it, then attaches AppImage + deb + `latest-linux.yml` itself.
@@ -144,7 +144,7 @@ Inspect every artifact before publishing:
 
 Create the GitHub Release on tag `vX.Y.Z` with:
 
-- `wisa-studio-X.Y.Z-arm64.dmg` and `wisa-studio-X.Y.Z.dmg`, plus both macOS ZIPs
+- `wisa-studio-X.Y.Z-arm64.dmg` and `wisa-studio-X.Y.Z-x64.dmg`, plus both macOS ZIPs
 - `wisa-studio-X.Y.Z-setup.exe` and `wisa-studio-X.Y.Z-portable.exe`
 - All generated update metadata — critically, a `latest-mac.yml` covering **both** architectures (the built-in updater resolves DMGs from it; a release without it, or with only one architecture's entries, breaks update checks)
 - The changelog as the release body; record the monorepo commit the sidecars were built from, especially when it isn't upstream `main`

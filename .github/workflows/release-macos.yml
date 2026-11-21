@@ -1,0 +1,321 @@
+name: Release macOS builds
+
+# Builds both macOS artifacts (arm64 + Intel DMGs and ZIPs, plus the
+# latest-mac.yml feed both updaters resolve) on macOS runners and attaches them
+# to the release. Until this workflow existed, every DMG came from a hand-run
+# local `package:mac:*`, which is why releases shipped without any macOS asset
+# and the updater had no feed to read.
+#
+# Like the Linux and Windows workflows, the bundled sidecar must come from the
+# monorepo fork — upstream lacks the GUI-only flags — so this checks out BOTH
+# repos: the GUI at the selected ref and the monorepo repository and commit
+# recorded in that GUI revision's sidecar-source.json.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach artifacts to (e.g. v0.9.50)"
+        required: true
+      gui_ref:
+        description: "GUI checkout ref (default: the tag; use main to backfill an old tag)"
+        required: false
+      monorepo_sha:
+        description: "Monorepo commit override (default: sidecar-source.json pin)"
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  GUI_REPO: smokeyduck/wisa-studio
+
+jobs:
+  macos:
+    # arm64 runners build the arm64 artifacts natively and cross-compile the
+    # Intel sidecar; both DMGs are signed ad-hoc (`identity: "-"`), so no
+    # Developer ID certificate is needed and `notarize: false` stands.
+    runs-on: macos-15
+    steps:
+      - name: Resolve release tag
+        id: refs
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+            echo "gui_ref=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "gui_ref=${{ inputs.gui_ref || inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Read the Core pin from the selected GUI commit
+        uses: actions/checkout@v6
+        with:
+          repository: smokeyduck/wisa-studio
+          ref: ${{ steps.refs.outputs.gui_ref }}
+          path: gui-pin
+          sparse-checkout: sidecar-source.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Resolve the sidecar source
+        id: sidecar
+        shell: bash
+        env:
+          MONOREPO_SHA: ${{ inputs.monorepo_sha }}
+        run: |
+          repo="smokeyduck/oh-my-pi"
+          commit="main"
+          if [ -f gui-pin/sidecar-source.json ]; then
+            # Shape-guard both fields: a malformed pin must fail here, not as a
+            # confusing checkout error three steps later.
+            repo="$(jq -er '(.repo // "smokeyduck/oh-my-pi") | strings | select(test("^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$"))' gui-pin/sidecar-source.json)"
+            commit="$(jq -er '.commit | strings | select(test("^[a-fA-F0-9]{40}$"))' gui-pin/sidecar-source.json)"
+          fi
+          # Release binaries build only from the project's own Core repository: a
+          # pin naming anywhere else fails the build instead of shipping it.
+          if [ "$repo" != "smokeyduck/oh-my-pi" ]; then
+            echo "sidecar-source.json names $repo; release sidecars build only from smokeyduck/oh-my-pi" >&2
+            exit 1
+          fi
+          ref="${MONOREPO_SHA:-$commit}"
+          if [[ "$ref" == *$'\n'* || "$ref" == *$'\r'* ]]; then
+            echo "Invalid monorepo ref" >&2
+            exit 1
+          fi
+          gui_sha="$(git -C gui-pin rev-parse HEAD)"
+          printf 'repo=%s\nref=%s\ngui_sha=%s\n' "$repo" "$ref" "$gui_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the pinned monorepo
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ steps.sidecar.outputs.repo }}
+          ref: ${{ steps.sidecar.outputs.ref }}
+          path: oh-my-pi
+          persist-credentials: false
+
+      - name: Checkout GUI source at the same commit
+        uses: actions/checkout@v6
+        with:
+          repository: smokeyduck/wisa-studio
+          ref: ${{ steps.sidecar.outputs.gui_sha }}
+          path: oh-my-pi/packages/gui
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          # The sidecar build requires the monorepo's exact Bun (packageManager),
+          # so follow the pinned checkout instead of a hard-coded version.
+          bun-version-file: oh-my-pi/package.json
+
+      - name: Install dependencies
+        working-directory: oh-my-pi
+        run: bun install
+
+      - name: Provision natives addons (source build when the npm leaf lags)
+        working-directory: oh-my-pi
+        shell: bash
+        # build:omp downloads @oh-my-pi/pi-natives-<platform>@<ver> from npm,
+        # but upstream's publish can lag the monorepo version bump — when the
+        # leaf is absent, compile the addons from crates/pi-natives instead
+        # (rust-toolchain.toml pins the toolchain; rustup installs it on first
+        # cargo invocation). Both architectures are built here so the arm64
+        # sidecar and the Intel cross-build each find their own addon.
+        run: |
+          VER=$(jq -r .version packages/natives/package.json)
+          missing=0
+          for leaf in darwin-arm64 darwin-x64; do
+            if npm view "@oh-my-pi/pi-natives-$leaf@$VER" version >/dev/null 2>&1; then
+              echo "npm leaf @oh-my-pi/pi-natives-$leaf@$VER published — build:omp will download it"
+            else
+              echo "@oh-my-pi/pi-natives-$leaf@$VER not on npm — building addons from source"
+              missing=1
+            fi
+          done
+          if [ "$missing" = 1 ]; then
+            bun scripts/bazel-natives.ts darwin-all --dest packages/natives/native
+          fi
+
+      - name: Build the bundled arm64 sidecar
+        working-directory: oh-my-pi
+        run: bun --cwd=packages/gui run build:omp
+
+      - name: Build the bundled Intel sidecar
+        working-directory: oh-my-pi
+        run: bun --cwd=packages/gui run build:omp:x64
+
+      - name: Smoke-test the sidecars (RPC handshake + settings round-trip)
+        working-directory: oh-my-pi/packages/gui
+        run: |
+          bun scripts/smoke-sidecar.mjs resources/omp
+          # The Intel binary is a cross-build; on an arm64 host it runs under
+          # Rosetta when available, so smoke-test it there too rather than
+          # trusting the compile alone.
+          if /usr/bin/arch -x86_64 /usr/bin/true 2>/dev/null; then
+            bun scripts/smoke-sidecar.mjs resources/omp.x64
+          else
+            echo "Rosetta unavailable; Intel sidecar smoke test skipped"
+          fi
+
+      - name: Verify ru + vi cover every bundled setting
+        working-directory: oh-my-pi/packages/gui
+        run: bun run check:locale
+
+      - name: Verify sidecar architectures
+        working-directory: oh-my-pi/packages/gui
+        shell: bash
+        run: |
+          for file in resources/omp resources/omp.x64; do
+            printf '%s: ' "$file"
+            file -b "$file"
+          done
+          file -b resources/omp | grep -q arm64
+          file -b resources/omp.x64 | grep -q x86_64
+
+      # The workflows check out the release tag, so a tag whose packaging config
+      # is invalid ships nothing and reports the failure deep in the build log.
+      # Validate the config up front instead — electron-builder rejects unknown
+      # root keys outright (a stray `zip:` aborted every run once).
+      - name: Validate the packaging config before building
+        working-directory: oh-my-pi/packages/gui
+        shell: bash
+        run: |
+          node -e '
+            const { validateConfiguration } = require("app-builder-lib/out/util/config/config.js");
+            const yaml = require("js-yaml");
+            const fs = require("fs");
+            for (const file of ["electron-builder.yml", "electron-builder.x64.yml", "electron-builder.win.yml"]) {
+              const config = yaml.load(fs.readFileSync(file, "utf8"));
+              validateConfiguration(config);
+              console.log(`${file}: valid`);
+            }
+          '
+
+      - name: Build GUI + arm64 packages
+        working-directory: oh-my-pi/packages/gui
+        # NOTE: invoke electron-builder through bun — the bunx shim falls back
+        # to Node, which crashes on ESM deps under Node < 22 (see issue #10).
+        # The monorepo's bun install hoists deps to the workspace root, so the
+        # cli.js lives two levels up, not in packages/gui/node_modules.
+        run: |
+          bun run build
+          bun ../../node_modules/electron-builder/cli.js \
+            --config electron-builder.yml --mac --arm64 --publish never
+          # Each electron-builder run rewrites latest-mac.yml for its own
+          # architecture only, so hold the arm64 feed aside; the merge step
+          # below combines both before anything is uploaded.
+          cp dist/latest-mac.yml dist/latest-mac-arm64.yml
+
+      - name: Build GUI + Intel packages
+        working-directory: oh-my-pi/packages/gui
+        # The x64 config points extraResources at resources/omp.x64; building
+        # Intel from the default config would ship the arm64 sidecar.
+        run: |
+          bun ../../node_modules/electron-builder/cli.js \
+            --config electron-builder.x64.yml --mac --x64 --publish never
+
+      - name: Merge both architectures into latest-mac.yml
+        working-directory: oh-my-pi/packages/gui
+        shell: bash
+        # The updater resolves DMGs from one latest-mac.yml and picks the file
+        # whose name matches the host architecture, so the feed must list both
+        # DMGs. electron-builder writes one feed per run; merge them here.
+        run: |
+          node -e '
+            const { load, dump } = require("js-yaml");
+            const fs = require("fs");
+            const arm = load(fs.readFileSync("dist/latest-mac-arm64.yml", "utf8"));
+            const x64 = load(fs.readFileSync("dist/latest-mac.yml", "utf8"));
+            const seen = new Set();
+            const files = [...(x64.files ?? []), ...(arm.files ?? [])].filter(file => {
+              if (seen.has(file.url)) return false;
+              seen.add(file.url);
+              return true;
+            });
+            if (!files.some(file => file.url.includes("arm64"))) throw new Error("no arm64 entry in the merged feed");
+            if (!files.some(file => !file.url.includes("arm64"))) throw new Error("no Intel entry in the merged feed");
+            const merged = { ...x64, files };
+            fs.writeFileSync("dist/latest-mac.yml", dump(merged));
+            console.log("latest-mac.yml:", files.map(file => file.url).join(", "));
+          '
+
+      - name: Verify the bundled sidecar matches each DMG's architecture
+        working-directory: oh-my-pi/packages/gui
+        shell: bash
+        run: |
+          mount_dir=$(mktemp -d)
+          for dmg in dist/*.dmg; do
+            case "$dmg" in
+              *-arm64.dmg) want=arm64 ;;
+              *) want=x86_64 ;;
+            esac
+            /usr/bin/hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_dir" >/dev/null
+            app=$(find "$mount_dir" -maxdepth 1 -name "*.app" | head -1)
+            got=$(file -b "$app/Contents/Resources/omp")
+            /usr/bin/hdiutil detach "$mount_dir" >/dev/null
+            echo "$dmg: $got (want $want)"
+            case "$got" in
+              *"$want"*) ;;
+              *) echo "::error::$dmg bundles the wrong sidecar architecture"; exit 1 ;;
+            esac
+          done
+          rmdir "$mount_dir"
+
+      - name: Verify the app bundle seal
+        working-directory: oh-my-pi/packages/gui
+        shell: bash
+        run: |
+          find dist -maxdepth 2 -name "*.app" -type d | while read -r app; do
+            echo "verifying $app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+          done
+
+      - name: Smoke-test the packaged GUI (launch, no renderer crash)
+        working-directory: oh-my-pi/packages/gui
+        shell: bash
+        # Launch the real unpacked build exactly as a user would, from a
+        # throwaway user-data dir so the single-instance lock of any installed
+        # copy cannot block it, and with ELECTRON_RUN_AS_NODE cleared — a leaked
+        # one makes Electron exit 0 before any window exists.
+        run: |
+          app=$(find dist/mac-arm64 dist/mac -maxdepth 1 -name "*.app" | head -1)
+          echo "launching $app"
+          profile=$(mktemp -d)
+          env -u ELECTRON_RUN_AS_NODE "$app/Contents/MacOS/$(basename "$app" .app)" \
+            --user-data-dir="$profile" >/tmp/gui.log 2>&1 &
+          pid=$!
+          renderer_up=0
+          for _ in $(seq 1 40); do
+            sleep 3
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            if pgrep -P "$pid" -f -- "--type=renderer" >/dev/null 2>&1; then renderer_up=1; break; fi
+          done
+          sleep 10
+          alive=0
+          kill -0 "$pid" 2>/dev/null && alive=1
+          echo "main-alive=$alive renderer-up=$renderer_up"
+          tail -20 /tmp/gui.log || true
+          kill "$pid" 2>/dev/null || true
+          if [ "$alive" != 1 ]; then echo "::error::GUI main process exited during smoke test"; exit 1; fi
+          if [ "$renderer_up" != 1 ]; then echo "::error::GUI renderer never spawned"; exit 1; fi
+
+      - name: Upload macOS assets to the release
+        working-directory: oh-my-pi/packages/gui/dist
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          # Artifact names are pinned in electron-builder.yml / .x64.yml:
+          # wisa-studio-<ver>-arm64.dmg and wisa-studio-<ver>-x64.dmg, plus the
+          # zips the updater actually downloads. latest-mac.yml carries both
+          # architectures, so both DMGs must exist before it is uploaded.
+          rm -f latest-mac-arm64.yml
+          files=(*.dmg *.zip latest-mac.yml)
+          printf 'uploading: %s\n' "${files[@]}"
+          gh release upload "${{ steps.refs.outputs.tag }}" \
+            "${files[@]}" --repo "$GUI_REPO" --clobber
