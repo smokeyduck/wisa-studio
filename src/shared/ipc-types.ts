@@ -11,17 +11,25 @@ import type { LaunchProfile } from "./launch-profile";
 import type { SessionModelOverride } from "./model-restore";
 import type { PluginEffects } from "./plugin-effects";
 import type {
+	IpcSkillsCommunityCatalogResult,
+	IpcSkillsCommunityCatalogUpdate,
 	IpcSkillsCommunityInstallPayload,
 	IpcSkillsCommunityInstallResult,
-	IpcSkillsCommunitySearchResult,
+	IpcSkillsCommunityPreviewPayload,
+	IpcSkillsCommunityPreviewResult,
 } from "./skills-community";
 import type { IpcTemplateInstallPayload, IpcTemplateInstallResult, IpcTemplatesCatalogResult } from "./templates";
 
 export type {
+	CommunityBoard,
+	CommunityBoardState,
 	CommunitySkill,
+	IpcSkillsCommunityCatalogResult,
+	IpcSkillsCommunityCatalogUpdate,
 	IpcSkillsCommunityInstallPayload,
 	IpcSkillsCommunityInstallResult,
-	IpcSkillsCommunitySearchResult,
+	IpcSkillsCommunityPreviewPayload,
+	IpcSkillsCommunityPreviewResult,
 } from "./skills-community";
 export type { IpcTemplateInstallPayload, IpcTemplateInstallResult, IpcTemplatesCatalogResult };
 
@@ -98,6 +106,8 @@ export const IPC_EVENTS = {
 	EXTENSION_UI: "extension-ui:request",
 	/** Scheduled tasks (plan/23): the ledger or a task changed. */
 	SCHEDULER_SNAPSHOT: "scheduler:snapshot",
+	/** One board of the skills.sh catalogue grew after the background pager fetched a page. */
+	SKILLS_COMMUNITY_CATALOG_UPDATE: "skills-community:catalog-update",
 	/** A live scheduled run's progress (turns, last tool). */
 	SCHEDULER_PROGRESS: "scheduler:progress",
 	/** Open the Tasks window at a task or run (notification click). */
@@ -322,8 +332,12 @@ export const IPC_COMMANDS = {
 	TEMPLATES_CATALOG: "templates:catalog",
 	/** Download and unpack one template into the Work workspace */
 	TEMPLATES_INSTALL: "templates:install",
-	/** Search the skills.sh community index (main-process fetch, no renderer network) */
-	SKILLS_COMMUNITY_SEARCH: "skills-community:search",
+	/** The cached skills.sh catalogue: every board, paged in by main */
+	SKILLS_COMMUNITY_CATALOG: "skills-community:catalog",
+	/** Re-fetch the first page of every board, discarding the cached ranking */
+	SKILLS_COMMUNITY_REFRESH: "skills-community:refresh",
+	/** Read one skill's instructions and file list without installing it */
+	SKILLS_COMMUNITY_PREVIEW: "skills-community:preview",
 	/** Download one community skill into the user skills folder (files only, nothing executed) */
 	SKILLS_COMMUNITY_INSTALL: "skills-community:install",
 	/** Open a session (or a fresh window) in a new parallel window with its own sidecar */
@@ -1887,7 +1901,10 @@ export interface OmpApi {
 		install(payload: IpcTemplateInstallPayload): Promise<IpcTemplateInstallResult>;
 	};
 	skillsCommunity: {
-		search(payload: { query: string }): Promise<IpcSkillsCommunitySearchResult>;
+		catalog(): Promise<IpcSkillsCommunityCatalogResult>;
+		refresh(): Promise<IpcSkillsCommunityCatalogResult>;
+		preview(payload: IpcSkillsCommunityPreviewPayload): Promise<IpcSkillsCommunityPreviewResult>;
+		onCatalogUpdate(callback: (update: IpcSkillsCommunityCatalogUpdate) => void): () => void;
 		install(payload: IpcSkillsCommunityInstallPayload): Promise<IpcSkillsCommunityInstallResult>;
 	};
 	editor: {

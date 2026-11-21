@@ -12,12 +12,21 @@ import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { isCommunitySkillId } from "../shared/skills-community";
 import { agentDir } from "./agent-paths";
 import { safeJoin } from "./install-safety";
-import { communitySkillsDir, installSkill, parseCommunitySkill, searchSkills, skillsApiUrl } from "./skills-community";
+import {
+	communitySkillsDir,
+	installSkill,
+	parseCommunitySkill,
+	previewSkill,
+	readCatalog,
+	resetCatalogState,
+	setCatalogPacingForTests,
+	skillsApiUrl,
+} from "./skills-community";
 
 const ID = "anthropics/skills/pdf";
-const SEARCH_URL = "https://skills.sh/api/search";
 const DOWNLOAD_URL = `https://skills.sh/api/download/${ID}`;
 
 function json(body: unknown, status = 200): Response {
@@ -92,12 +101,13 @@ describe("parseCommunitySkill", () => {
 		});
 	});
 
-	it("drops rows whose id could never be a folder, and fills missing fields from it", () => {
-		expect(parseCommunitySkill({ id: "../../etc/passwd" })).toBeNull();
-		expect(parseCommunitySkill({ id: "owner/repo" })).toBeNull();
-		expect(parseCommunitySkill({ id: "owner/repo/a/b" })).toBeNull();
+	it("drops rows that could walk out of a path, and fills missing fields from the slug", () => {
+		expect(parseCommunitySkill({ source: "..", skillId: "etc" })).toBeNull();
+		expect(parseCommunitySkill({ source: "owner/repo", skillId: ".." })).toBeNull();
+		expect(parseCommunitySkill({ source: "", skillId: "pdf" })).toBeNull();
 		expect(parseCommunitySkill({})).toBeNull();
-		expect(parseCommunitySkill({ id: ID, installs: -5 })).toMatchObject({
+		expect(parseCommunitySkill({ source: "anthropics/skills", skillId: "pdf", installs: -5 })).toMatchObject({
+			id: ID,
 			name: "pdf",
 			source: "anthropics/skills",
 			installs: 0,
@@ -105,55 +115,161 @@ describe("parseCommunitySkill", () => {
 	});
 });
 
-describe("searchSkills", () => {
+describe("readCatalog", () => {
+	const tempDirs: string[] = [];
+
+	beforeEach(async () => {
+		const dir = await mkdtemp(path.join(tmpdir(), "omp-community-catalog-"));
+		tempDirs.push(dir);
+		vi.stubEnv("PI_CODING_AGENT_DIR", path.join(dir, "agent"));
+		// The catalogue is process-wide; each case starts from nothing, and pages
+		// arrive instantly rather than at the index's 30-a-minute pace.
+		resetCatalogState();
+		setCatalogPacingForTests(0);
+	});
+
+	afterEach(() => {
+		resetCatalogState();
+		vi.unstubAllEnvs();
+		vi.unstubAllGlobals();
+	});
+
+	afterAll(async () => {
+		await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+	});
+
+	it("fetches page 1 of every board and reports each board's own total", async () => {
+		const fetchMock = vi.fn(async (url: URL) => {
+			const parts = String(url).split("/");
+			const board = parts.at(-2);
+			const page = Number(parts.at(-1));
+			return json({
+				skills:
+					page === 1
+						? [{ skillId: `${board}-skill`, name: `${board}-skill`, source: "owner/repo", installs: 5 }]
+						: [],
+				total: 4000,
+				hasMore: page === 1,
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const result = await readCatalog();
+		expect(result.status).toBe("ok");
+		if (result.status !== "ok") return;
+		expect(Object.keys(result.boards).sort()).toEqual(["all-time", "hot", "trending"]);
+		for (const board of ["all-time", "trending", "hot"] as const) {
+			expect(result.boards[board].skills.map(skill => skill.id)).toEqual([`owner/repo/${board}-skill`]);
+			expect(result.boards[board].total).toBe(4000);
+		}
+		expect(result.root).toBe(communitySkillsDir());
+		// The page waits for page 1 of every board; later pages arrive behind it.
+		const first = fetchMock.mock.calls.slice(0, 3).map(call => String(call[0]));
+		expect(first).toEqual([
+			"https://skills.sh/api/skills/all-time/1",
+			"https://skills.sh/api/skills/trending/1",
+			"https://skills.sh/api/skills/hot/1",
+		]);
+		const [, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+		expect(init.credentials).toBe("omit");
+		expect(init.redirect).toBe("error");
+	});
+
+	it("drops rows that could not become a folder, and reports what is installed", async () => {
+		await mkdir(path.join(communitySkillsDir(), "pdf"), { recursive: true });
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () =>
+				json({
+					skills: [
+						{ skillId: "pdf", name: "pdf", source: "anthropics/skills", installs: 10 },
+						{ skillId: "a:b", name: "colon", source: "owner/repo" },
+						{ skillId: "x", name: "two-segment", source: "owner" },
+						{ skillId: "../../etc", name: "hostile", source: "owner/repo" },
+					],
+					total: 4,
+					hasMore: false,
+				}),
+			),
+		);
+
+		const result = await readCatalog();
+		expect(result.status).toBe("ok");
+		if (result.status !== "ok") return;
+		// Browsable, because the catalogue is the index's and its counts should add
+		// up; only the clean id can be installed.
+		expect(result.boards["all-time"].skills.map(skill => skill.id)).toEqual([
+			"anthropics/skills/pdf",
+			"owner/repo/a:b",
+			"owner/x",
+		]);
+		expect(
+			result.boards["all-time"].skills.filter(skill => isCommunitySkillId(skill.id)).map(skill => skill.id),
+		).toEqual(["anthropics/skills/pdf"]);
+		expect(result.boards["all-time"].complete).toBe(true);
+		expect(result.installed).toEqual({ pdf: path.join(communitySkillsDir(), "pdf") });
+	});
+
+	it("answers with an error rather than an empty catalogue when the index is unreachable", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				throw new Error("offline");
+			}),
+		);
+		await expect(readCatalog()).resolves.toMatchObject({ status: "error" });
+	});
+
+	it("keeps the cached catalogue when the index answers with nothing usable", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () =>
+				json({ skills: [{ skillId: "pdf", name: "pdf", source: "anthropics/skills" }], total: 1, hasMore: false }),
+			),
+		);
+		await expect(readCatalog()).resolves.toMatchObject({ status: "ok" });
+
+		// A fresh process reads the cache instead of the network.
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		const result = await readCatalog();
+		expect(result.status).toBe("ok");
+		if (result.status !== "ok") return;
+		expect(result.boards["all-time"].skills.map(skill => skill.id)).toEqual(["anthropics/skills/pdf"]);
+	});
+});
+
+describe("previewSkill", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
 	});
 
-	it("refuses a query shorter than the API's minimum before touching the network", async () => {
+	it("returns the skill's instructions and its file list without writing anything", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => download(skillFiles())),
+		);
+		const result = await previewSkill(ID);
+		expect(result).toMatchObject({ status: "ok", id: ID, files: ["SKILL.md", "FORMS.md", "scripts/fill.py"] });
+		if (result.status !== "ok") return;
+		expect(result.skillMd).toContain("Fill forms");
+	});
+
+	it("refuses an id that would walk out of its path, before touching the network", async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(searchSkills("a")).resolves.toMatchObject({ status: "error" });
-		await expect(searchSkills("  ")).resolves.toMatchObject({ status: "error" });
+		for (const id of ["", "pdf", "../etc/passwd", "owner/repo/../../x", "owner//pdf"]) {
+			await expect(previewSkill(id), id).resolves.toMatchObject({ status: "error" });
+		}
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it("asks skills.sh only, dedupes rows, and reports what is already installed", async () => {
-		const dir = await mkdtemp(path.join(tmpdir(), "omp-community-search-"));
-		vi.stubEnv("PI_CODING_AGENT_DIR", path.join(dir, "agent"));
-		await mkdir(path.join(dir, "agent", "skills", "pdf"), { recursive: true });
-		const fetchMock = vi.fn(async () =>
-			json({
-				skills: [
-					{ id: ID, skillId: "pdf", name: "pdf", installs: 233721, source: "anthropics/skills" },
-					{ id: ID, skillId: "pdf", name: "pdf", installs: 233721, source: "anthropics/skills" },
-					{ id: "../../evil", name: "evil" },
-				],
-			}),
-		);
-		vi.stubGlobal("fetch", fetchMock);
-
-		const result = await searchSkills("pdf");
-		expect(result.status).toBe("ok");
-		if (result.status !== "ok") return;
-		expect(result.skills.map(skill => skill.id)).toEqual([ID]);
-		expect(result.skills[0].installs).toBe(233721);
-		expect(result.installed?.pdf).toBe(path.join(dir, "agent", "skills", "pdf"));
-
-		const [url] = fetchMock.mock.calls[0] as unknown as [URL];
-		expect(String(url)).toBe(`${SEARCH_URL}?q=pdf`);
-		expect(url.hostname).toBe("skills.sh");
-		expect(url.protocol).toBe("https:");
-		await rm(dir, { recursive: true, force: true });
-		vi.unstubAllEnvs();
-	});
-
-	it("reports an oversized answer as an error instead of buffering it", async () => {
+	it("reports an unusable download as an error", async () => {
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async () => json({ skills: [], padding: "x".repeat(3 * 1024 * 1024) })),
+			vi.fn(async () => json({ files: [] })),
 		);
-		await expect(searchSkills("pdf")).resolves.toMatchObject({ status: "error" });
+		await expect(previewSkill(ID)).resolves.toMatchObject({ status: "error" });
 	});
 });
 

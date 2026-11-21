@@ -56,6 +56,7 @@ import type {
 	IpcSetTabViewPayload,
 	IpcSidecarRestartPayload,
 	IpcSkillsCommunityInstallPayload,
+	IpcSkillsCommunityPreviewPayload,
 	IpcSpawnTabPayload,
 	IpcStatsFetchPayload,
 	IpcStatsUrlResult,
@@ -103,7 +104,7 @@ import { resolveEditorCommand } from "./shell-env";
 import { applyWindowToggle, updateKeyboardLayout, windowToggleStatus } from "./shortcuts";
 import type { SidecarManager } from "./sidecar";
 import type { SidecarPool } from "./sidecar-pool";
-import { installSkill, searchSkills } from "./skills-community";
+import { installSkill, onCatalogUpdate, previewSkill, readCatalog, refreshCatalog } from "./skills-community";
 import type { StatsClient } from "./stats-client";
 import type { Revive } from "./stats-restart-policy";
 import { spawnTabForWindow } from "./tab-spawn";
@@ -1521,15 +1522,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		installTemplate(String(payload?.id ?? "")),
 	);
 
-	// Community skills (skills.sh): search and one-click install into the user
-	// skills folder. Main does the fetching — the renderer never sees the host —
-	// and the installer writes files without running any of them.
-	ipcMain.handle(IPC_COMMANDS.SKILLS_COMMUNITY_SEARCH, (_event, payload: { query?: unknown }) =>
-		searchSkills(typeof payload?.query === "string" ? payload.query : ""),
+	// Community skills (skills.sh): the cached catalogue, a preview, and
+	// one-click install into the user skills folder. Main does the fetching -
+	// the renderer never sees the host - and the installer writes files without
+	// running any of them. The catalogue pages itself in behind the first
+	// screenful and pushes each board as it grows, so one open costs one IPC
+	// round trip rather than a poll.
+	ipcMain.handle(IPC_COMMANDS.SKILLS_COMMUNITY_CATALOG, () => readCatalog());
+	ipcMain.handle(IPC_COMMANDS.SKILLS_COMMUNITY_REFRESH, () => refreshCatalog());
+	ipcMain.handle(IPC_COMMANDS.SKILLS_COMMUNITY_PREVIEW, (_event, payload: IpcSkillsCommunityPreviewPayload) =>
+		previewSkill(String(payload?.id ?? "")),
 	);
 	ipcMain.handle(IPC_COMMANDS.SKILLS_COMMUNITY_INSTALL, (_event, payload: IpcSkillsCommunityInstallPayload) =>
 		installSkill(String(payload?.id ?? "")),
 	);
+	// Registered once per process, beside the handlers: the pager lives in the
+	// main module and every window shows the same catalogue.
+	onCatalogUpdate(update => broadcast(windowManager, IPC_EVENTS.SKILLS_COMMUNITY_CATALOG_UPDATE, update));
 
 	// Plan-mode document read — deliberately OFF the RPC bus: reading via the
 	// bash RPC injected the plan into the model context and appended

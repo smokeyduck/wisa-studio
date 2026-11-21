@@ -45,9 +45,12 @@ import type {
 	IpcSetTabViewPayload,
 	IpcSidecarRestartPayload,
 	IpcSidecarStatusPayload,
+	IpcSkillsCommunityCatalogResult,
+	IpcSkillsCommunityCatalogUpdate,
 	IpcSkillsCommunityInstallPayload,
 	IpcSkillsCommunityInstallResult,
-	IpcSkillsCommunitySearchResult,
+	IpcSkillsCommunityPreviewPayload,
+	IpcSkillsCommunityPreviewResult,
 	IpcSpawnTabPayload,
 	IpcSpawnTabResult,
 	IpcStatsUrlResult,
@@ -540,8 +543,14 @@ const api: OmpApi = {
 	// Community skills (skills.sh). Main does the fetching: the renderer has no
 	// network access to that host, and the installer only ever writes files.
 	skillsCommunity: {
-		search: (payload: { query: string }) =>
-			ipcRenderer.invoke(IPC_COMMANDS.SKILLS_COMMUNITY_SEARCH, payload) as Promise<IpcSkillsCommunitySearchResult>,
+		catalog: () =>
+			ipcRenderer.invoke(IPC_COMMANDS.SKILLS_COMMUNITY_CATALOG) as Promise<IpcSkillsCommunityCatalogResult>,
+		refresh: () =>
+			ipcRenderer.invoke(IPC_COMMANDS.SKILLS_COMMUNITY_REFRESH) as Promise<IpcSkillsCommunityCatalogResult>,
+		preview: (payload: IpcSkillsCommunityPreviewPayload) =>
+			ipcRenderer.invoke(IPC_COMMANDS.SKILLS_COMMUNITY_PREVIEW, payload) as Promise<IpcSkillsCommunityPreviewResult>,
+		onCatalogUpdate: (callback: (update: IpcSkillsCommunityCatalogUpdate) => void) =>
+			subscribe<IpcSkillsCommunityCatalogUpdate>(IPC_EVENTS.SKILLS_COMMUNITY_CATALOG_UPDATE, callback),
 		install: (payload: IpcSkillsCommunityInstallPayload) =>
 			ipcRenderer.invoke(IPC_COMMANDS.SKILLS_COMMUNITY_INSTALL, payload) as Promise<IpcSkillsCommunityInstallResult>,
 	},

@@ -1,16 +1,21 @@
 /**
  * Community skills: the shapes the Skills page's Community tab renders.
  *
- * The catalog lives at skills.sh (a public, unauthenticated index of agent
- * skills published in public repositories). Main fetches it; the renderer never
+ * The catalogue lives at skills.sh (a public, unauthenticated index of agent
+ * skills published in public repositories). Main fetches it, keeps it on disk,
+ * and streams the rest of each board in the background; the renderer never
  * talks to the network. Everything below is validated in main before it crosses
- * IPC, so a hostile or malformed answer can only ever produce a shorter list —
+ * IPC, so a hostile or malformed answer can only ever produce a shorter list -
  * never a row that installs something the user did not pick.
  */
 
-/** One search hit, as the page needs it: a name, a provenance, and a quality signal. */
+/** The three boards skills.sh ranks skills by. */
+export const COMMUNITY_BOARDS = ["all-time", "trending", "hot"] as const;
+export type CommunityBoard = (typeof COMMUNITY_BOARDS)[number];
+
+/** One catalogue row: a name, a provenance, and the quality signals the index exposes. */
 export interface CommunitySkill {
-	/** `owner/repo/slug` — the stable id used to download and to dedupe rows. */
+	/** `owner/repo/slug` - the stable id used to download and to dedupe rows. */
 	id: string;
 	/** The slug inside its repository, which is also the install folder name. */
 	skillId: string;
@@ -18,25 +23,58 @@ export interface CommunitySkill {
 	name: string;
 	/** `owner/repo`, shown as the provenance line under the name. */
 	source: string;
-	/** Install count from skills.sh — the only quality signal the index exposes. */
+	/** Install count from skills.sh - the only quality signal the index exposes. */
 	installs: number;
+	/** skills.sh's own "official" mark, when the index sets one. */
+	official?: boolean;
 }
 
-export type IpcSkillsCommunitySearchResult =
+/** One board as the page needs it: rows in rank order, plus how much is loaded. */
+export interface CommunityBoardState {
+	skills: CommunitySkill[];
+	/** The index's own row count for this board, so the page can say "of N". */
+	total: number;
+	/** Whether every page has been fetched. */
+	complete: boolean;
+}
+
+export type IpcSkillsCommunityCatalogResult =
 	| {
 			status: "ok";
-			/** The query these rows answer, so a late answer cannot overwrite a newer one. */
-			query: string;
-			skills: CommunitySkill[];
-			/** Absolute user skills folder every install lands in — the page shows it. */
+			boards: Record<CommunityBoard, CommunityBoardState>;
+			/** Absolute user skills folder every install lands in - the page shows it. */
 			root: string;
-			/** Slug → folder, for skills already on disk (the row says "Installed"). */
-			installed?: Record<string, string>;
+			/** Slug -> folder, for skills already on disk (the row says "Installed"). */
+			installed: Record<string, string>;
+			/** When the cached catalogue was last refreshed, ISO 8601. */
+			fetchedAt: string;
+	  }
+	| { status: "error"; error: string };
+
+/** One board's answer after the background pager fetched another page. */
+export interface IpcSkillsCommunityCatalogUpdate {
+	board: CommunityBoard;
+	state: CommunityBoardState;
+}
+
+export interface IpcSkillsCommunityPreviewPayload {
+	/** `owner/repo/slug`, exactly as a catalogue row reported it. */
+	id: string;
+}
+
+export type IpcSkillsCommunityPreviewResult =
+	| {
+			status: "ok";
+			id: string;
+			/** Every file the skill ships, relative to its folder. */
+			files: string[];
+			/** The skill's instructions, which is what a reader is previewing. */
+			skillMd: string;
 	  }
 	| { status: "error"; error: string };
 
 export interface IpcSkillsCommunityInstallPayload {
-	/** `owner/repo/slug`, exactly as a search row reported it. */
+	/** `owner/repo/slug`, exactly as a catalogue row reported it. */
 	id: string;
 }
 
@@ -58,13 +96,12 @@ export type IpcSkillsCommunityInstallResult =
 	  }
 	| { status: "error"; error: string };
 
-/** skills.sh answers HTTP 400 for anything shorter, so the page does not ask. */
-export const COMMUNITY_QUERY_MIN_LENGTH = 2;
-
 /**
  * Whether a string is the `owner/repo/slug` shape this module accepts. Every
  * segment is a plain slug: no dots, no separators, nothing that could become a
- * path once it is used as a folder name.
+ * path once it is used as a folder name. The catalogue carries rows that do not
+ * fit (`site.tld/slug`, `owner/repo/a:b`); those are browsable and previewable
+ * but never installed.
  */
 export function isCommunitySkillId(value: unknown): value is string {
 	if (typeof value !== "string") return false;

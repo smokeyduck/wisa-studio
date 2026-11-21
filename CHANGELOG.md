@@ -30,10 +30,15 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
   the CSP allows no remote images and the page has to work offline · and the
   screenshot (or the title under it) opens the template's live demo in the
   built-in browser window.
-- **Skills → Community.** A tab over the skills.sh directory: search it, see
-  each skill's install count, and install one in a click. Installs go through the
-  same `npx skills add` path the CLI uses, so what lands on disk is what the
-  directory advertises.
+- **Skills → Community.** The whole skills.sh catalogue, browsable offline. The
+  three boards (all time, trending, hot) are cached on disk and listed with each
+  skill's rank and install count; the first page of every board arrives at once
+  and the rest pages in behind it at the index's rate limit, so the tab fills in
+  while it is already usable. Filtering is local, a row can be previewed
+  (its `SKILL.md` and file list) before installing, and installing writes the
+  files into `~/.omp/agent/skills/<slug>` without running anything. Installs go
+  through the index's download API, so what lands on disk is what the directory
+  advertises.
 
 ### Changed
 
