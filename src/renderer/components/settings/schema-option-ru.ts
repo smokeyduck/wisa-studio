@@ -811,14 +811,13 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"3 operations": "3 операции",
 	"4 operations": "4 операции",
 	"No limit": "Без ограничений",
-	"All Devices": "Все устройства",
-	"Inline docs and schemas for every mounted device.": "Встраивать документацию и схемы всех подключённых устройств.",
+	"All Commands": "Все команды",
+	"Inline help for every mounted command.": "Встраивать справку каждой подключённой команды.",
 	"Built-ins Only": "Только встроенные",
 	"Inline built-in docs; fetch MCP and extension docs on demand.":
 		"Встраивать документацию встроенных инструментов; документацию MCP и расширений загружать по запросу.",
 	"Catalog Only": "Только каталог",
-	"List every device; fetch all docs on demand.":
-		"Показывать все устройства в списке; всю документацию загружать по запросу.",
+	"List every command; run `--help` on demand.": "Показывать все команды в списке; запускать `--help` по запросу.",
 	unset: "unset",
 	granted: "granted",
 	denied: "denied",

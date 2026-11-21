@@ -69,7 +69,7 @@ import { useUiStore } from "../stores/ui";
  * user action. Only their info-level notices are dropped; warnings/errors and
  * notices from any other source still surface as toasts.
  */
-const QUIET_NOTICE_SOURCES = new Set(["vision", "xdev"]);
+const QUIET_NOTICE_SOURCES = new Set(["vision", "toolCommands"]);
 
 /** Schema defaults for the agent's notify settings (settings-schema.ts). */
 const NOTIFY_DEFAULTS = { completion: "on", error: "off", ask: "on" } as const;
@@ -573,8 +573,8 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							break;
 						}
 						case "notice": {
-							// Suppress routine informational churn from chatty sources — vision/xdev
-							// mount/unmount notices fire on every model switch and need no action,
+							// Suppress routine informational churn from chatty sources — vision and
+							// tool-command mount notices fire on every model switch and need no action,
 							// flooding the toast stack. Warnings/errors and other sources still toast.
 							// The hosted advisor editor reports saves as notices; the roster may have changed.
 							if (event.source === "advisor") void refreshAdvisorStatus(tabId);

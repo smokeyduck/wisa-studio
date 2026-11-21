@@ -1541,7 +1541,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"generate_image.enabled": {
 		label: "Tạo hình ảnh",
 		description:
-			"Bật công cụ generate_image để tạo và chỉnh sửa hình ảnh từ mô tả văn bản. Khi bật tools.xdev, công cụ này khả dụng dưới dạng thiết bị xd://.",
+			"Bật công cụ generate_image để tạo và chỉnh sửa hình ảnh từ mô tả văn bản. Công cụ này được gắn dưới dạng lệnh công cụ khi bật tools.commands.",
 	},
 	"computer.enabled": {
 		label: "Máy tính",
@@ -1657,25 +1657,25 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"async.maxJobs": {
 		label: "async.maxJobs",
 	},
-	"tools.xdev": {
-		label: "Công cụ xd://",
+	"tools.commands": {
+		label: "Lệnh công cụ",
 		description:
-			"Kết nối các công cụ phát hiện được ít dùng dưới dạng thiết bị qua URL xd://, được điều khiển bằng read/write, thay vì gửi schema của chúng trong mỗi yêu cầu. Trong các phiên mà danh sách công cụ rõ ràng cho phép read nhưng không cho write, thiết bị được kết nối qua transport chỉ ghi cho thiết bị (ngoài thiết bị, chỉ vùng local:// là có thể ghi). Tắt để hiển thị mọi công cụ được bật ở cấp cao nhất.",
+			"Gắn các công cụ ít dùng (phát hiện được) thành lệnh bash kèm `--help` sinh từ schema, thay vì gửi schema của chúng trong mỗi yêu cầu. Cần công cụ bash: phiên không có bash vẫn giữ mọi công cụ được bật ở cấp cao nhất. Tắt để hiển thị mọi công cụ được bật ở cấp cao nhất.",
 	},
-	"tools.xdevDocs": {
-		label: "Tài liệu câu lệnh xd://",
+	"tools.commandDocs": {
+		label: "Tài liệu câu lệnh công cụ",
 		description:
-			"Chọn tài liệu và schema của những thiết bị đã kết nối nào sẽ được nhúng vào câu lệnh hệ thống. Ở chế độ Built-ins, các công cụ chính vẫn được nhúng, còn tài liệu MCP và tiện ích mở rộng được tải theo yêu cầu.",
+			"Chọn những lệnh đã gắn nào có phần `--help` được nhúng vào câu lệnh hệ thống. Ở chế độ Chỉ bản tích hợp sẵn, các công cụ chính vẫn được nhúng, còn MCP và tiện ích mở rộng được tải theo yêu cầu.",
 	},
-	"tools.xdevInlineDevices": {
-		label: "Thiết bị nhúng xd://",
+	"tools.commandInline": {
+		label: "Trợ giúp nhúng của lệnh công cụ",
 		description:
-			"Nếu tài liệu câu lệnh xd:// được đặt thành «Chỉ nhúng», hãy nhúng các thiết bị động có tên khớp với các mẫu glob này (ví dụ mcp__context_mode_*). Chế độ «Chỉ danh mục» bỏ qua cài đặt này.",
+			"Khi Tài liệu câu lệnh công cụ là Chỉ bản tích hợp sẵn, nhúng thêm các lệnh động có tên khớp với các mẫu glob này (ví dụ mcp__context_mode_*). Chế độ Chỉ danh mục bỏ qua cài đặt này.",
 	},
 	"dev.autoqa": {
 		label: "QA tự động",
 		description:
-			"Tự động gửi báo cáo sự cố công cụ (xd://report_issue). Mặc định bật; lần gửi đầu tiên sẽ hỏi ý kiến. Từ chối sẽ tắt việc gửi cho đến khi được bật lại rõ ràng.",
+			"Tự động gửi báo cáo sự cố công cụ (lệnh report_issue). Mặc định bật; lần gửi đầu tiên sẽ hỏi ý kiến. Từ chối sẽ tắt việc gửi cho đến khi được bật lại rõ ràng.",
 	},
 	"dev.autoqaPush.endpoint": {
 		label: "Địa chỉ gửi Auto QA",
@@ -2672,10 +2672,10 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		description:
 			'Các thư mục mà mọi thao tác đọc, ghi, sửa, tìm kiếm hoặc lệnh đều cần phê duyệt rõ ràng, bất kể chế độ phê duyệt hay quyền đã ghi nhớ. Thư mục và mọi thứ bên trong đều bị hạn chế; lệnh được khớp theo thư mục mà chúng chạy trong đó. Một danh sách JSON các đường dẫn, ví dụ ["~/secrets"].',
 	},
-	"tools.xdevNotices": {
-		label: "Thông báo gắn kết xd://",
+	"tools.commandNotices": {
+		label: "Thông báo gắn lệnh công cụ",
 		description:
-			"Hiển thị thông báo `xd://: mounted …` khi các công cụ MCP hoặc extension được gắn hoặc gỡ. Model vẫn biết về thay đổi này ở lệnh nhắc tiếp theo.",
+			"Hiển thị thông báo khi các công cụ MCP hoặc extension được gắn hoặc gỡ dưới dạng lệnh; model vẫn biết về thay đổi này ở câu lệnh nhắc tiếp theo.",
 	},
 	"tui.colorfulMarkdown": {
 		label: "Markdown nhiều màu",
@@ -2743,7 +2743,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"mcp.evalNamespaces": {
 		label: "Không gian tên MCP trong eval",
 		description:
-			"Hiển thị mỗi máy chủ MCP thành một đối tượng toàn cục của eval (github.create_issue(...)) thay vì công cụ cấp cao nhất hay xd://",
+			"Hiển thị mỗi máy chủ MCP thành một đối tượng toàn cục của eval (github.create_issue(...)) thay vì công cụ cấp cao nhất hay lệnh công cụ",
 	},
 	"providers.cacheWarmingStrategy": {
 		label: "Chiến lược làm nóng bộ nhớ đệm",

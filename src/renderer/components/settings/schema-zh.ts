@@ -831,7 +831,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	},
 	"generate_image.enabled": {
 		label: "生成图片",
-		description: "启用 generate_image 工具（文生图与图片编辑）。tools.xdev 开启时以 xd:// 设备形式暴露。",
+		description: "启用 generate_image 工具（文生图与图片编辑）。tools.commands 开启时以工具命令形式挂载。",
 	},
 	"computer.enabled": { label: "桌面控制", description: "启用原生桌面截图与输入，用于 OpenAI computer use" },
 	"computer.backend": { label: "桌面控制后端", description: "选择自动或显式指定平台原生的桌面捕获与输入" },
@@ -911,20 +911,24 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 		label: "IRC 超时",
 		description: "hub 消息等待（以及 send await:true）的默认超时（毫秒）；0 表示禁用超时",
 	},
-	"tools.xdev": {
-		label: "xd:// 工具",
+	"tools.commands": {
+		label: "工具命令",
 		description:
-			"把不常用（可发现）的工具挂载到 xd:// 设备 URL 下，通过 read/write 驱动，而不是每次请求都携带它们的 schema。禁用则把所有已启用工具顶层暴露。",
+			"把不常用（可发现）的工具挂载为带 schema 派生 `--help` 的 bash 命令，而不是每次请求都携带它们的 schema。需要 bash 工具：没有 bash 的会话仍把所有已启用工具顶层暴露。禁用则把所有已启用工具顶层暴露。",
 	},
-	"tools.xdevDocs": {
-		label: "xd:// 提示词文档",
+	"tools.commandDocs": {
+		label: "工具命令提示词文档",
 		description:
-			"选择哪些挂载设备的文档与 schema 内联进系统提示词。Built-ins 保持核心工具内联，MCP 与扩展工具保持按需。",
+			"选择哪些已挂载命令的 `--help` 文本内联进系统提示词。Built-ins 保持核心工具内联，MCP 与扩展工具保持按需。",
 	},
-	"tools.xdevInlineDevices": {
-		label: "xd:// 内联设备",
+	"tools.commandInline": {
+		label: "工具命令内联帮助",
 		description:
-			"当 xd:// 提示词文档为“仅内置”时，内联名称匹配这些 glob 模式的动态设备（例如 mcp__context_mode_*）。“仅目录”忽略此设置。",
+			"当工具命令提示词文档为“仅内置”时，内联名称匹配这些 glob 模式的动态命令（例如 mcp__context_mode_*）。“仅目录”忽略此设置。",
+	},
+	"tools.commandNotices": {
+		label: "工具命令挂载通知",
+		description: "当 MCP 或扩展工具以命令形式挂载或卸载时显示通知；模型仍会在下一次提示中获知该变化。",
 	},
 	"mcp.enableProjectConfig": { label: "MCP 项目配置", description: "从项目根加载 .mcp.json/mcp.json" },
 	"mcp.renderMarkdownResults": {
@@ -937,7 +941,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	"dev.autoqa": {
 		label: "自动 QA",
 		description:
-			"自动工具问题上报（xd://report_issue）。默认开启；首次上报会征求同意，拒绝则停止上报，直到显式重新启用",
+			"自动工具问题上报（report_issue 命令）。默认开启；首次上报会征求同意，拒绝则停止上报，直到显式重新启用",
 	},
 	"dev.autoqaPush.endpoint": {
 		label: "自动 QA 推送端点",
@@ -1975,8 +1979,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	},
 	"mcp.evalNamespaces": {
 		label: "MCP eval 命名空间",
-		description:
-			"把每个 MCP 服务器作为 eval 全局对象暴露（如 github.create_issue(...)），而不是顶层工具或 xd:// 工具",
+		description: "把每个 MCP 服务器作为 eval 全局对象暴露（如 github.create_issue(...)），而不是顶层工具或工具命令",
 	},
 	"providers.cacheWarmingStrategy": {
 		label: "缓存保温策略",

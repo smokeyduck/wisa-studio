@@ -10,7 +10,7 @@ import type { ToolRendererProps } from "./ToolCard";
  * flag, parse errors, and the pre-formatted `displayContent` change tree.
  * The change tree is rendered as per-file groups of styled +/- lines, mirroring
  * the TUI renderer (packages/coding-agent/src/tools/ast-edit.ts). A `proposed`
- * badge marks the staged (not-yet-applied) state; xd://resolve applies it.
+ * badge marks the staged (not-yet-applied) state; the resolve tool applies it.
  */
 
 type ChangeRow =

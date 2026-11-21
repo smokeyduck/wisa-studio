@@ -1,6 +1,12 @@
 import type { ComponentType } from "react";
-import { sanitizeToolText } from "../../lib/format";
-import { decodeXdevPayload, xdevDispatch, xdevInnerResult, xdevWriteTarget } from "../../lib/xdev";
+import { resultText, sanitizeToolText } from "../../lib/format";
+import {
+	isSoleToolCommand,
+	type ToolCommandDispatch,
+	toolCommandDispatches,
+	toolCommandInnerResult,
+	toolCommandLabel,
+} from "../../lib/tool-commands";
 import { AskRenderer } from "./AskRenderer";
 import { AstEditRenderer } from "./AstEditRenderer";
 import { AstGrepRenderer } from "./AstGrepRenderer";
@@ -60,55 +66,99 @@ function clipCardText(text: string): string {
 }
 
 /**
- * `write` carries two different things: a file write, and the device call the
- * sidecar routes through it (`write xd://<tool>`, see `lib/xdev`). A device call
- * must render as the tool that ran — otherwise a plan resolution, a security
- * scan or an MCP call shows up as a file write with a line count and the
- * outcome disappears entirely.
+ * One dispatched command inside a shell run, rendered by the tool it wrapped.
+ * `output` is the call's text only when the command was the whole call, so a
+ * command sharing the run with other lines gets its details and no body text.
  */
-function WriteRendererOrDevice(props: ToolRendererProps) {
-	const { args, result, isError, isPartial, partialResult, interrupted } = props;
-	const device = xdevWriteTarget(args);
-	if (!device) return <WriteRenderer {...props} />;
-
-	const envelope = isPartial ? partialResult : result;
-	const dispatch = xdevDispatch(envelope);
-	// No dispatch metadata: the payload is still streaming, or the write failed
-	// before reaching a device. Show the request as key/value rows rather than a
-	// file-write card — the wrapped tool has produced no verdict to render.
-	if (!dispatch) {
-		const raw = typeof args.content === "string" ? args.content : "";
-		const decoded = decodeXdevPayload(raw);
-		return (
-			<GenericRenderer
-				args={Object.keys(decoded).length > 0 ? decoded : { content: clipCardText(raw) }}
+function ToolCommandView({
+	dispatch,
+	output,
+	isPartial,
+}: {
+	dispatch: ToolCommandDispatch;
+	output: string | undefined;
+	isPartial: boolean;
+}) {
+	// A command that wraps the transport itself would recurse back into this card.
+	const Renderer =
+		dispatch.mode === "execute" && dispatch.tool !== "bash" ? getToolRenderer(dispatch.tool) : GenericRenderer;
+	const inner = toolCommandInnerResult(dispatch, output);
+	const summary = dispatch.mode === "help" ? "--help" : getToolSummary(dispatch.tool, dispatch.args ?? {});
+	return (
+		<div className="flex flex-col gap-1 border-l border-(--omp-border-muted) pl-2">
+			<div className="flex items-baseline gap-1.5 font-mono text-omp-sm">
+				<span className="font-semibold text-[var(--omp-text)]">
+					{sanitizeToolText(toolCommandLabel(dispatch.tool))}
+				</span>
+				{summary && <span className="min-w-0 truncate text-[var(--omp-muted)]">{summary}</span>}
+				{dispatch.exitCode !== 0 && (
+					<span className="ml-auto shrink-0 rounded bg-[var(--omp-error)]/15 px-1 py-px text-omp-xxs font-semibold tabular-nums text-[var(--omp-error)]">
+						{dispatch.exitCode}
+					</span>
+				)}
+			</div>
+			<Renderer
+				args={dispatch.args ?? {}}
+				isError={dispatch.exitCode !== 0}
 				isPartial={isPartial}
-				result={envelope}
+				partialResult={inner}
+				result={inner}
+			/>
+		</div>
+	);
+}
+
+/**
+ * `bash` carries two different things: a shell run, and the tool commands the
+ * sidecar mounts into it (`<tool> args`, see `lib/tool-commands`). A dispatched
+ * command must render as the tool that ran, otherwise a plan resolution, a
+ * security scan or an MCP call shows up as a shell run and the outcome
+ * disappears. A call that ran exactly one executed command *is* that command, so
+ * its card replaces the shell card; anything else keeps the shell card and
+ * lists the nested command cards under it.
+ */
+function BashRendererOrToolCommands(props: ToolRendererProps) {
+	const { args, result, isPartial, partialResult } = props;
+	const envelope = isPartial ? partialResult : result;
+	const dispatches = toolCommandDispatches("bash", envelope);
+	if (dispatches.length === 0) return <BashRenderer {...props} />;
+
+	const command = typeof args.command === "string" ? args.command : undefined;
+	const only = dispatches.length === 1 ? dispatches[0] : undefined;
+	if (only?.mode === "execute" && isSoleToolCommand(command, only.tool)) {
+		const inner = toolCommandInnerResult(only, resultText(envelope));
+		const Renderer = only.tool === "bash" ? GenericRenderer : getToolRenderer(only.tool);
+		return (
+			<Renderer
+				args={only.args ?? {}}
+				isError={props.isError || only.exitCode !== 0}
+				isPartial={isPartial}
+				partialResult={inner}
+				result={inner}
 			/>
 		);
 	}
-	if (dispatch.mode === "help") return <GenericRenderer args={{}} result={envelope} />;
 
-	const name = dispatch.tool || device;
-	// `xd://write` dispatches the write tool itself; delegating would recurse.
-	const Renderer = name === "write" ? GenericRenderer : getToolRenderer(name);
-	const inner = xdevInnerResult(envelope, dispatch);
 	return (
-		<Renderer
-			args={dispatch.args ?? decodeXdevPayload(args.content)}
-			interrupted={interrupted}
-			isError={isError}
-			isPartial={isPartial}
-			partialResult={inner}
-			result={inner}
-		/>
+		<div className="flex flex-col gap-1.5">
+			<BashRenderer {...props} />
+			{dispatches.map((dispatch, index) => (
+				<ToolCommandView
+					// Commands have no id of their own; order is stable within a result.
+					key={index}
+					dispatch={dispatch}
+					isPartial={Boolean(isPartial) && index === dispatches.length - 1}
+					output={undefined}
+				/>
+			))}
+		</div>
 	);
 }
 
 /**
  * Tool name → renderer. Every name the sidecar can emit for a top-level call
- * belongs here or in `GENERIC_TOOL_NAMES` below; `xd://` device names resolve
- * through this table too (see `WriteRendererOrDevice`). Anything unmapped falls
+ * belongs here or in `GENERIC_TOOL_NAMES` below; a mounted tool command resolves
+ * through this table too (see `BashRendererOrToolCommands`). Anything unmapped falls
  * back to GenericRenderer, which is a lossy view, not a broken one.
  */
 const REGISTRY: Record<string, ComponentType<ToolRendererProps>> = {
@@ -117,8 +167,8 @@ const REGISTRY: Record<string, ComponentType<ToolRendererProps>> = {
 	ast_edit: AstEditRenderer,
 	apply_patch: EditRenderer,
 	goal: GoalRenderer,
-	write: WriteRendererOrDevice,
-	bash: BashRenderer,
+	write: WriteRenderer,
+	bash: BashRendererOrToolCommands,
 	grep: GrepRenderer,
 	find: FindRenderer,
 	glob: GlobRenderer,
@@ -169,26 +219,12 @@ export function getToolRenderer(name: string): ComponentType<ToolRendererProps> 
 	return REGISTRY[name] ?? GenericRenderer;
 }
 
-/** Keys tried in order for a device call's header: the verb, then its object. */
-const DEVICE_VERB_KEYS = ["action", "op", "command"] as const;
-const DEVICE_OBJECT_KEYS = ["query", "symbol", "path", "file", "pattern", "url", "name"] as const;
-
 function argLine(args: Record<string, unknown>, keys: readonly string[]): string {
 	for (const key of keys) {
 		const value = args[key];
 		if (typeof value === "string" && value.length > 0) return sanitizeToolText(value.split("\n", 1)[0] ?? "");
 	}
 	return "";
-}
-
-/**
- * `LSP · references foo` instead of `xd://lsp`, so a collapsed device call
- * reads as the tool that ran (parity with the TUI's activity summary).
- */
-function xdevSummary(device: string, content: unknown): string {
-	const args = decodeXdevPayload(content);
-	const detail = [argLine(args, DEVICE_VERB_KEYS), argLine(args, DEVICE_OBJECT_KEYS)].filter(Boolean).join(" ");
-	return detail ? `${device} - ${detail}` : device;
 }
 
 /** Batch tools name their payload `items`; the first entry is the header. */
@@ -204,14 +240,11 @@ function firstItemContent(args: Record<string, unknown>): string {
  * One-line header for a collapsed card, computed from call arguments only —
  * the result may not exist yet. Lives next to the renderer table because the
  * header and the body describe the same call; a `switch` in the transcript
- * layer is what let `find`, `checkpoint` and every device call show nothing.
+ * layer is what let `find`, `checkpoint` and every dispatched command show nothing.
  */
 const SUMMARIES: Record<string, (args: Record<string, unknown>) => string> = {
 	read: args => argLine(args, ["path", "file"]),
-	write: args => {
-		const device = xdevWriteTarget(args);
-		return device ? xdevSummary(device, args.content) : argLine(args, ["path", "file"]);
-	},
+	write: args => argLine(args, ["path", "file"]),
 	edit: editArgumentSummary,
 	apply_patch: editArgumentSummary,
 	bash: args => argLine(args, ["command", "cmd"]),

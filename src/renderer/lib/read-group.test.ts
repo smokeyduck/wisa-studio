@@ -26,12 +26,12 @@ function thinking(value: string) {
 }
 
 describe("collapsibleReadTarget", () => {
-	it("collapses plain fs paths and xd:// targets", () => {
+	it("collapses plain fs paths", () => {
 		expect(collapsibleReadTarget({ path: "src/a.ts" })).toEqual({ path: "src/a.ts" });
-		expect(collapsibleReadTarget({ path: "xd://lsp" })).toEqual({ path: "xd://lsp" });
 	});
 
 	it("does not collapse scheme URLs the router handles", () => {
+		expect(collapsibleReadTarget({ path: "local://PLAN.md" })).toBeNull();
 		expect(collapsibleReadTarget({ path: "skill://agent-reach" })).toBeNull();
 		expect(collapsibleReadTarget({ path: "agent://abc" })).toBeNull();
 		expect(collapsibleReadTarget({ path: "memory://m" })).toBeNull();
@@ -44,10 +44,6 @@ describe("collapsibleReadTarget", () => {
 			selector: "5-16,960-973",
 		});
 		expect(collapsibleReadTarget({ path: "src/a.ts:50+150" })).toEqual({ path: "src/a.ts", selector: "50+150" });
-	});
-
-	it("keeps scheme colons out of the selector split", () => {
-		expect(collapsibleReadTarget({ path: "xd://lsp" })).toEqual({ path: "xd://lsp" });
 	});
 
 	it("tolerates the legacy file_path alias and rejects missing paths", () => {

@@ -52,9 +52,9 @@ const SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 const SELECTOR_RE = /:(\d+(?:[-+]\d+)?(?:,\d+(?:[-+]\d+)?)*)$/;
 
 /**
- * Collapse predicate (readArgsCollapseIntoGroup parity): `xd://` targets and
- * anything the internal-URL router would NOT handle collapse; scheme URLs
- * (skill://, agent://, …) render full. Unknown/missing path → not collapsible.
+ * Collapse predicate (readArgsCollapseIntoGroup parity): anything the
+ * internal-URL router would NOT handle collapses; scheme URLs (skill://,
+ * agent://, …) render full. Unknown/missing path → not collapsible.
  */
 export function collapsibleReadTarget(args: unknown): { path: string; selector?: string } | null {
 	if (args === null || typeof args !== "object") return null;
@@ -63,7 +63,7 @@ export function collapsibleReadTarget(args: unknown): { path: string; selector?:
 	const target =
 		typeof record.path === "string" ? record.path : typeof record.file_path === "string" ? record.file_path : null;
 	if (!target) return null;
-	if (SCHEME_RE.test(target) && !target.startsWith("xd://")) return null;
+	if (SCHEME_RE.test(target)) return null;
 	const selectorMatch = SELECTOR_RE.exec(target);
 	if (selectorMatch) {
 		return { path: target.slice(0, selectorMatch.index), selector: selectorMatch[1] };

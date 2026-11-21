@@ -391,7 +391,7 @@ export interface RpcActiveTool {
 	source: RpcToolSource;
 }
 
-/** Result of get_active_tools: active top-level tools, then xd:// mounted entries. */
+/** Result of get_active_tools: active top-level tools, then tool commands. */
 export interface RpcActiveToolsResult {
 	tools: RpcActiveTool[];
 }

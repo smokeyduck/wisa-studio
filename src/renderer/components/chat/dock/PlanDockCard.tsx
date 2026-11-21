@@ -12,7 +12,7 @@
  * against the session cwd; when the configured path is absent the main
  * process falls back to the newest `*plan.md` in the local root.
  *
- * Structured plan approval (the TUI's `xd://propose` popup with its three
+ * Structured plan approval (the TUI's plan-proposal popup with its three
  * execute options) is NOT installed by the RPC host — approve / request
  * changes here send prompt/steer messages instead, and the footer says so.
  */

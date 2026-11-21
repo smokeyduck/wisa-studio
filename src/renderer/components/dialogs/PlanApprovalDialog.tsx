@@ -1,7 +1,7 @@
 import { useTabRpc } from "../../lib/tab-rpc";
 /**
  * Structured plan-approval dialog. The agent submits a plan by writing to
- * `xd://propose` while plan mode is active; the sidecar emits a
+ * `propose` command while plan mode is active; the sidecar emits a
  * `plan_proposal` frame, silently stops the proposal turn, and waits for the
  * host's `plan_approval` answer. This dialog renders the proposal as
  * scrollable markdown with one approve button per advertised option:

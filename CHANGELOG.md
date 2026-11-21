@@ -85,6 +85,14 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - **The model picker's vendor groups read as index dividers:** a rule, the
   vendor mark and name, then a rule, so the collapsed list scans as sections
   instead of a run of rows.
+- **Mounted tools run as commands and still render as themselves.** The sidecar
+  no longer routes a discoverable tool through `write xd://<tool>`: it mounts it
+  as a bash command, and the transcript's one `bash` call carries the wrapped
+  invocation in `details.toolCommands`. A call that ran exactly one executed
+  command now renders through that tool's own card (a plan resolution as the
+  resolve card, an MCP call as its MCP card) instead of as a shell run; a run
+  that piped the command or bundled several keeps the shell card and lists each
+  dispatched command under it with its own header, exit status and body.
 - **Full detail no longer prints every command it ran.** A reply's shell and tool
   calls fold into one activity line per phase ("9 steps complete ›") in both
   details, so the transcript reads as the model's prose and reasoning with a

@@ -4,7 +4,7 @@ import { resultBodyText, resultDetails } from "./result";
 import type { ToolRendererProps } from "./ToolCard";
 
 /**
- * xd://resolve + xd://reject (resolution device): outcome of applying or
+ * resolve + reject: outcome of applying or
  * discarding a staged proposal. Live results carry ResolveDetails
  * ({ action, reason, sourceToolName?, label?, sourceResultDetails? });
  * hydrated history falls back to the content text.

@@ -103,7 +103,7 @@ const SAMPLE_ARGS: Record<string, Record<string, unknown>> = {
 	github: { action: "pr_view" },
 	glob: { pattern: "**/*.ts" },
 	goal: { objective: "ship it" },
-	grep: { pattern: "xdev" },
+	grep: { pattern: "toolCommands" },
 	hub: { op: "jobs" },
 	wait: {},
 	learn: { memory: "releases need a clean checkout" },
@@ -148,11 +148,12 @@ function bodyText(): string {
 	return containers.map(container => container.textContent ?? "").join("");
 }
 
-/** A `write xd://<tool>` call, as the tools store sees it. */
-function deviceCall(toolCallId: string, args: Record<string, unknown>, result: unknown): void {
+/** A `bash` call that dispatched one tool command, as the tools store sees it. */
+function commandCall(toolCallId: string, command: string, result: unknown): void {
+	const args = { command };
 	useToolsStore.getState().applyEvents([
-		{ type: "tool_execution_start", toolCallId, toolName: "write", args },
-		{ type: "tool_execution_end", toolCallId, toolName: "write", result, isError: false },
+		{ type: "tool_execution_start", toolCallId, toolName: "bash", args },
+		{ type: "tool_execution_end", toolCallId, toolName: "bash", result, isError: false },
 	]);
 }
 
@@ -206,88 +207,133 @@ describe("tool registry coverage", () => {
 	});
 });
 
-describe("device calls routed through write", () => {
-	it("renders the scan outcome instead of a file write", async () => {
-		const args = { path: "xd://security_scan", content: '{"action":"start","plan_id":"p-1"}' };
-		deviceCall("scan", args, {
+describe("tool commands dispatched through bash", () => {
+	it("renders the scan outcome instead of a shell run", async () => {
+		const command = "security_scan --action start --plan_id p-1";
+		commandCall("scan", command, {
 			content: [{ type: "text", text: "Security scan scan-9 started as op-3." }],
 			details: {
-				xdev: {
-					tool: "security_scan",
-					mode: "execute",
-					args: { action: "start", plan_id: "p-1" },
-					inner: { action: "start", operation: { scanId: "scan-9", phase: "reviewing", findingCount: 0 } },
-				},
+				exitCode: 0,
+				toolCommands: [
+					{
+						tool: "security_scan",
+						mode: "execute",
+						exitCode: 0,
+						args: { action: "start", plan_id: "p-1" },
+						inner: { action: "start", operation: { scanId: "scan-9", phase: "reviewing", findingCount: 0 } },
+					},
+				],
 			},
 		});
-		await mountCard("scan", "write", args);
+		await mountCard("scan", "bash", { command });
 
 		expect(bodyText()).toContain("Security scan scan-9 started as op-3.");
 		expect(bodyText()).toContain("plan_id");
-		// The payload is a JSON request, not a file: a line count would be fiction.
-		expect(bodyText()).not.toMatch(/\d+ lines?\b/);
+		// The body stands for the command, not for the shell run around it.
+		expect(bodyText()).not.toContain("$ ");
 	});
 
 	it("renders a plan resolution through the resolve card", async () => {
-		const args = { path: "xd://resolve", content: '{"action":"apply"}' };
-		deviceCall("res", args, {
+		const command = "resolve 'apply the staged rename'";
+		commandCall("res", command, {
 			content: [{ type: "text", text: "Applied 3 ops." }],
 			details: {
-				xdev: {
-					tool: "resolve",
-					mode: "execute",
-					args: { action: "apply" },
-					inner: {
-						action: "apply",
-						label: "ast_edit: rename the flag",
-						sourceToolName: "ast_edit",
-						sourceResultDetails: { ops: [{}, {}, {}] },
+				exitCode: 0,
+				toolCommands: [
+					{
+						tool: "resolve",
+						mode: "execute",
+						exitCode: 0,
+						args: { reason: "apply the staged rename" },
+						inner: {
+							action: "apply",
+							label: "ast_edit: rename the flag",
+							sourceToolName: "ast_edit",
+							sourceResultDetails: { ops: [{}, {}, {}] },
+						},
 					},
-				},
+				],
 			},
 		});
-		await mountCard("res", "write", args);
+		await mountCard("res", "bash", { command });
 
 		expect(bodyText()).toContain("Applied");
 		expect(bodyText()).toContain("3 ops");
 		expect(bodyText()).toContain("rename the flag");
 	});
 
-	it("does not claim a verdict for a device call that never returned", async () => {
-		useToolsStore.getState().applyEvents([
-			{
-				type: "tool_execution_start",
-				toolCallId: "live",
-				toolName: "write",
-				args: { path: "xd://grep", content: '{"pattern":"dispatchXdevTool"' },
-			},
-		]);
-		await mountCard("live", "write", { path: "xd://grep", content: '{"pattern":"dispatchXdevTool"' });
+	it("does not claim a verdict for a command that never returned", async () => {
+		const args = { command: "grep --pattern dispatchToolCommand" };
+		useToolsStore
+			.getState()
+			.applyEvents([{ type: "tool_execution_start", toolCallId: "live", toolName: "bash", args }]);
+		await mountCard("live", "bash", args);
 
 		// GrepRenderer reads a missing result as zero matches.
 		expect(bodyText()).not.toContain("No matches");
-		expect(bodyText()).toContain("dispatchXdevTool");
+		expect(bodyText()).toContain("dispatchToolCommand");
+	});
+
+	it("keeps a shell run that piped the command on the bash card", async () => {
+		const command = "lsp references buildTool | head -20";
+		commandCall("pipe", command, {
+			content: [{ type: "text", text: "src/app.ts:12" }],
+			details: {
+				exitCode: 0,
+				toolCommands: [{ tool: "lsp", mode: "execute", exitCode: 0, args: { action: "references" }, inner: {} }],
+			},
+		});
+		await mountCard("pipe", "bash", { command });
+
+		expect(bodyText()).toContain(command);
+		expect(bodyText()).toContain("src/app.ts:12");
+	});
+
+	it("lists every dispatched command under a shell run that bundled them", async () => {
+		const command = "grep --pattern dispatch && lsp references buildTool";
+		commandCall("multi", command, {
+			content: [{ type: "text", text: "grep: 2 matches" }],
+			details: {
+				exitCode: 0,
+				toolCommands: [
+					{ tool: "grep", mode: "execute", exitCode: 0, args: { pattern: "dispatch" }, inner: {} },
+					{
+						tool: "mcp__docs_search",
+						mode: "execute",
+						exitCode: 2,
+						args: { query: "buildTool" },
+						inner: { error: "server unavailable" },
+					},
+				],
+			},
+		});
+		await mountCard("multi", "bash", { command });
+
+		expect(bodyText()).toContain(command);
+		expect(bodyText()).toContain("grep");
+		// An MCP command reads as `server/tool`, and its exit status is visible.
+		expect(bodyText()).toContain("docs/search");
+		expect(bodyText()).toContain("server unavailable");
 	});
 
 	it("keeps a real file write on the write card", async () => {
 		const args = { path: "src/app.ts", content: "export const a = 1;" };
-		deviceCall("file", args, {
-			content: [{ type: "text", text: "Successfully wrote 21 bytes to src/app.ts" }],
-			details: {},
-		});
+		useToolsStore.getState().applyEvents([
+			{ type: "tool_execution_start", toolCallId: "file", toolName: "write", args },
+			{
+				type: "tool_execution_end",
+				toolCallId: "file",
+				toolName: "write",
+				result: {
+					content: [{ type: "text", text: "Successfully wrote 21 bytes to src/app.ts" }],
+					details: {},
+				},
+				isError: false,
+			},
+		]);
 		await mountCard("file", "write", args);
 
 		expect(bodyText()).toContain("src/app.ts");
 		expect(bodyText()).toContain("1 line");
-	});
-});
-
-describe("device call headers", () => {
-	it("reads as the tool that ran instead of the device url", () => {
-		expect(
-			getToolSummary("write", { path: "xd://lsp", content: '{"action":"references","symbol":"buildTool"}' }),
-		).toBe("lsp - references buildTool");
-		// A half-streamed payload decodes to nothing but still names the device.
-		expect(getToolSummary("write", { path: "xd://security_scan", content: '{"act' })).toBe("security_scan");
 	});
 });

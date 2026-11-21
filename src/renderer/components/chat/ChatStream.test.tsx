@@ -254,7 +254,7 @@ describe("full transcript rows", () => {
 				]),
 				assistant([
 					{ type: "text", text: "." },
-					{ type: "toolCall", id: "call-write", name: "write", arguments: { path: "xd://browser" } },
+					{ type: "toolCall", id: "call-write", name: "write", arguments: { path: "src/app.ts" } },
 				]),
 				{ role: "custom", customType: "launch-completion", content: "gui-final exited with code 0", timestamp: at },
 			],
