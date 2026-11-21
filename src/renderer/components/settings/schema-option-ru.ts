@@ -145,6 +145,10 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"N-gram": "N-грамма",
 	"Learns your vocabulary from prompt history": "Изучает ваш словарь по истории промптов",
 	SmolLM: "SmolLM",
+	// Core appends this option on darwin only; the macOS release check reads the
+	// real schema, so the tables must carry it even on a Linux checkout.
+	Apple: "Apple",
+	"macOS dictionary completions": "Дополнение слов словарём macOS",
 	"Small on-device language model blended with N-gram (downloads weights on first use)":
 		"Небольшая локальная языковая модель в сочетании с N-граммами (веса загружаются при первом использовании)",
 	"100 lines": "100 строк",

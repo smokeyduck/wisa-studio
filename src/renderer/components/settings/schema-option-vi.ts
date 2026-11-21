@@ -119,6 +119,10 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"N-gram (nothing to download)": "N-gram (không cần tải xuống)",
 	"N-gram": "N-gram",
 	"Learns your vocabulary from prompt history": "Học vốn từ của bạn từ lịch sử câu lệnh",
+	// Core appends this option on darwin only, so a Linux dev checkout never
+	// shows it; the macOS release check reads the real schema and fails without it.
+	Apple: "Apple",
+	"macOS dictionary completions": "Hoàn thành từ bằng từ điển macOS",
 	"Small on-device language model blended with N-gram (downloads weights on first use)":
 		"Mô hình ngôn ngữ nhỏ chạy trên thiết bị, kết hợp với N-gram (tải trọng số trong lần dùng đầu)",
 	"100 lines": "100 dòng",
