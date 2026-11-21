@@ -64,6 +64,22 @@ const child = spawn(sidecar, ["--mode", "rpc-ui"], {
 	env: { ...process.env, PI_CODING_AGENT_DIR: temporary, PI_NO_PTY: "1", PI_NOTIFICATIONS: "off" },
 	stdio: ["pipe", "pipe", "pipe"],
 });
+/**
+ * The Core schema is authored upstream and its option text carries em dashes
+ * (`cell — extra spacing`); this project's tables are keyed with hyphens, since
+ * no keyboard produces an em dash. Normalize before every lookup so a Core
+ * update that adds a dashed description reports a real gap, not a spelling one.
+ */
+function normalize(text: string): string {
+	return text.replace(/[\u2014\u2013\u00b7]/g, "-");
+}
+
+/** Exact key first, then the dash-normalized one. */
+function translate(table: Record<string, string>, key: string | undefined): string | undefined {
+	if (!key) return undefined;
+	return table[key] ?? table[normalize(key)];
+}
+
 const missing = new Set<string>();
 let diagnostics = "";
 child.stderr.on("data", data => {
@@ -106,8 +122,9 @@ try {
 		if (entry.description && !translated?.description) missing.add(`description:${entry.path}`);
 		if (entry.group && !locale.groups[entry.group]) missing.add(`group:${entry.group}`);
 		for (const option of entry.options ?? []) {
-			if (option.label && !locale.options[option.label]) missing.add(`option:${option.label}`);
-			if (option.description && !locale.options[option.description]) missing.add(`option:${option.description}`);
+			if (option.label && !translate(locale.options, option.label)) missing.add(`option:${option.label}`);
+			if (option.description && !translate(locale.options, option.description))
+				missing.add(`option:${option.description}`);
 		}
 	}
 	if (missing.size) throw new Error(`Missing ${locale.name} schema translations:\n${[...missing].join("\n")}`);
