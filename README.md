@@ -10,10 +10,10 @@ GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một
 
 | Nền tảng | Gói |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-0.9.49-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.49) |
-| macOS Intel | `wisa-studio-0.9.49.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.49) |
-| Windows x64 | [`wisa-studio-0.9.49-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.49/wisa-studio-0.9.49-setup.exe) |
-| Linux x64 | [`wisa-studio-0.9.49.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.49/wisa-studio-0.9.49.AppImage) |
+| macOS Apple Silicon | `wisa-studio-0.9.50-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.50) |
+| macOS Intel | `wisa-studio-0.9.50.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.50) |
+| Windows x64 | [`wisa-studio-0.9.50-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.50/wisa-studio-0.9.50-setup.exe) |
+| Linux x64 | [`wisa-studio-0.9.50.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.50/wisa-studio-0.9.50.AppImage) |
 
 [Tất cả bản phát hành](https://github.com/smokeyduck/wisa-studio/releases) · [Hướng dẫn cài đặt](docs/vi/cai-dat.md)
 
