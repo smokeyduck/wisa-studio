@@ -137,6 +137,12 @@ jobs:
             fi
           done
           if [ "$missing" = 1 ]; then
+            # Explicit darwin targets build through Bazel, which no stock macOS
+            # runner image carries (the monorepo's own CI runs on a custom image
+            # that has bazelisk baked in).
+            if ! command -v bazelisk >/dev/null 2>&1; then
+              brew install bazelisk
+            fi
             bun scripts/bazel-natives.ts darwin-all --dest packages/natives/native
           fi
 
