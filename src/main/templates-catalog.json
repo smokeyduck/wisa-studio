@@ -1,0 +1,1769 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-01T07:59:17.853Z",
+  "templates": [
+    {
+      "id": "houses-boutique",
+      "name": "Houses Boutique",
+      "nameVi": "Houses Boutique",
+      "description": {
+        "en": "Real estate agency theme with a full-width photo hero, listings and an agent block.",
+        "vi": "Mẫu trang môi giới bất động sản: ảnh mở đầu tràn màn hình, danh sách nhà và phần môi giới."
+      },
+      "category": "real-estate",
+      "tags": ["astro", "tailwind", "bất động sản", "nhà đất"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "amozo-es/houses-boutique",
+        "ref": "5137f3a60a2729474f941a1c4192a09ff99b98a0",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/amozo-es/houses-boutique/blob/5137f3a60a2729474f941a1c4192a09ff99b98a0/LICENSE",
+        "attribution": "Houses Boutique by Amozo"
+      },
+      "demoUrl": "https://houses-boutique.vercel.app/",
+      "thumbnail": "/templates/houses-boutique.webp",
+      "featured": true,
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/amozo-es/houses-boutique/tar.gz/5137f3a60a2729474f941a1c4192a09ff99b98a0",
+        "stripPrefix": "houses-boutique-5137f3a60a2729474f941a1c4192a09ff99b98a0"
+      }
+    },
+    {
+      "id": "marby-astro",
+      "name": "Marby",
+      "nameVi": "Marby",
+      "description": {
+        "en": "Editorial-style real estate site built around property photos and listings.",
+        "vi": "Mẫu nhà đất phong cách tạp chí, tập trung vào hình ảnh và thông tin từng căn."
+      },
+      "category": "real-estate",
+      "tags": ["astro", "tailwind", "nhà đất", "bất động sản"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "agnilem/marby-astro",
+        "ref": "4722d38cfc4a4e70da37a29ffef5e9eccda41bc4",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/agnilem/marby-astro/blob/4722d38cfc4a4e70da37a29ffef5e9eccda41bc4/LICENSE",
+        "attribution": "Marby by agnilem"
+      },
+      "demoUrl": "https://marby.startfrom.co",
+      "thumbnail": "/templates/marby-astro.webp",
+      "featured": true,
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/agnilem/marby-astro/tar.gz/4722d38cfc4a4e70da37a29ffef5e9eccda41bc4",
+        "stripPrefix": "marby-astro-4722d38cfc4a4e70da37a29ffef5e9eccda41bc4"
+      }
+    },
+    {
+      "id": "astropie",
+      "name": "AstroPie",
+      "nameVi": "AstroPie",
+      "description": {
+        "en": "Warm restaurant site with menu, chef story and reservation call to action.",
+        "vi": "Trang nhà hàng ấm cúng với thực đơn, câu chuyện đầu bếp và nút đặt bàn."
+      },
+      "category": "restaurant-cafe",
+      "tags": ["astro", "tailwind", "nhà hàng", "ẩm thực"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "wpinfusion/AstroPie",
+        "ref": "4df6cd75e2a1704db491a5ea4db3f5a5525dc78d",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/wpinfusion/AstroPie/blob/4df6cd75e2a1704db491a5ea4db3f5a5525dc78d/LICENSE",
+        "attribution": "AstroPie by wpinfusion"
+      },
+      "demoUrl": "https://astropie.pages.dev",
+      "thumbnail": "/templates/astropie.webp",
+      "featured": true,
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/wpinfusion/AstroPie/tar.gz/4df6cd75e2a1704db491a5ea4db3f5a5525dc78d",
+        "stripPrefix": "AstroPie-4df6cd75e2a1704db491a5ea4db3f5a5525dc78d"
+      }
+    },
+    {
+      "id": "screwfast",
+      "name": "ScrewFast",
+      "nameVi": "ScrewFast",
+      "description": {
+        "en": "Dark, fast SaaS and product landing page with a big hero, feature grid and pricing.",
+        "vi": "Trang đích SaaS nền tối, chữ lớn, có khối tính năng và bảng giá sẵn để sửa nội dung."
+      },
+      "category": "saas-landing",
+      "tags": ["astro", "tailwind", "saas", "nền tối"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "mearashadowfax/ScrewFast",
+        "ref": "86b25a9a8c6706c65d337f381a9a5f499618a4c9",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/mearashadowfax/ScrewFast/blob/86b25a9a8c6706c65d337f381a9a5f499618a4c9/LICENSE",
+        "attribution": "ScrewFast by Meara Shadowfax"
+      },
+      "demoUrl": "https://screwfast.uk/",
+      "thumbnail": "/templates/screwfast.webp",
+      "featured": true,
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/mearashadowfax/ScrewFast/tar.gz/86b25a9a8c6706c65d337f381a9a5f499618a4c9",
+        "stripPrefix": "ScrewFast-86b25a9a8c6706c65d337f381a9a5f499618a4c9"
+      }
+    },
+    {
+      "id": "astro-paper",
+      "name": "AstroPaper",
+      "nameVi": "AstroPaper",
+      "description": {
+        "en": "Minimal, fast personal blog with search, tags and dark mode.",
+        "vi": "Blog cá nhân tối giản, chữ to rõ, tối ưu tìm kiếm và tốc độ tải."
+      },
+      "category": "blog-magazine",
+      "tags": ["astro", "tailwind", "blog", "cá nhân"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "satnaing/astro-paper",
+        "ref": "0e9d6e5edb2441537981d02a7a83e4690d2bb94d",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/satnaing/astro-paper/blob/0e9d6e5edb2441537981d02a7a83e4690d2bb94d/LICENSE",
+        "attribution": "AstroPaper by Sat Naing"
+      },
+      "demoUrl": "https://astro-paper.pages.dev/",
+      "thumbnail": "/templates/astro-paper.webp",
+      "featured": true,
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/satnaing/astro-paper/tar.gz/0e9d6e5edb2441537981d02a7a83e4690d2bb94d",
+        "stripPrefix": "astro-paper-0e9d6e5edb2441537981d02a7a83e4690d2bb94d"
+      }
+    },
+    {
+      "id": "evento-astro",
+      "name": "Evento",
+      "nameVi": "Evento",
+      "description": {
+        "en": "Conference and event site with speakers, agenda, tickets and venue details.",
+        "vi": "Trang hội nghị và sự kiện: diễn giả, chương trình, vé và thông tin địa điểm."
+      },
+      "category": "wedding-event",
+      "tags": ["astro", "tailwind", "sự kiện", "hội nghị"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "99points/astrojs-event-template",
+        "ref": "ed952e1bf47b0b7549f0e269f0b1cb10c660896f",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/99points/astrojs-event-template/blob/ed952e1bf47b0b7549f0e269f0b1cb10c660896f/LICENSE",
+        "attribution": "Evento by 99points"
+      },
+      "demoUrl": "https://astro-event-template.netlify.app/",
+      "thumbnail": "/templates/evento-astro.webp",
+      "featured": true,
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/99points/astrojs-event-template/tar.gz/ed952e1bf47b0b7549f0e269f0b1cb10c660896f",
+        "stripPrefix": "astrojs-event-template-ed952e1bf47b0b7549f0e269f0b1cb10c660896f"
+      }
+    },
+    {
+      "id": "photo-nextjs",
+      "name": "Carlos Reyes",
+      "nameVi": "Carlos Reyes",
+      "description": {
+        "en": "Photography portfolio with full-bleed galleries, project stories and an about page.",
+        "vi": "Hồ sơ nhiếp ảnh: thư viện ảnh tràn màn hình, câu chuyện từng bộ ảnh và trang giới thiệu."
+      },
+      "category": "photography",
+      "tags": ["nextjs", "tailwind", "nhiếp ảnh", "thư viện ảnh"],
+      "stack": "nextjs",
+      "source": {
+        "provider": "github",
+        "repo": "JuanR-Git/photography-portfolio",
+        "ref": "49177cf8f849fe4c83da1260cac2a26750d2e0de",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/JuanR-Git/photography-portfolio/blob/49177cf8f849fe4c83da1260cac2a26750d2e0de/LICENSE",
+        "attribution": "Photography Portfolio by Juan R"
+      },
+      "demoUrl": "https://photography-portfolio-two-omega.vercel.app/",
+      "thumbnail": "/templates/photo-nextjs.webp",
+      "featured": true,
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/JuanR-Git/photography-portfolio/tar.gz/49177cf8f849fe4c83da1260cac2a26750d2e0de",
+        "stripPrefix": "photography-portfolio-49177cf8f849fe4c83da1260cac2a26750d2e0de"
+      }
+    },
+    {
+      "id": "astrowind",
+      "name": "AstroWind",
+      "nameVi": "AstroWind",
+      "description": {
+        "en": "Versatile marketing landing page with hero, features, pricing and blog sections.",
+        "vi": "Trang đích đa năng cho sản phẩm và dịch vụ, bố cục thoáng, dễ thay nội dung và màu sắc."
+      },
+      "category": "landing-generic",
+      "tags": ["astro", "tailwind", "trang đích", "marketing"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "arthelokyo/astrowind",
+        "ref": "14e1a691f80548dcc36370847b1a02c0d0b12821",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/arthelokyo/astrowind/blob/14e1a691f80548dcc36370847b1a02c0d0b12821/LICENSE.md",
+        "attribution": "AstroWind by onwidget / arthelokyo"
+      },
+      "demoUrl": "https://astrowind.netlify.app",
+      "thumbnail": "/templates/astrowind.webp",
+      "featured": true,
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/arthelokyo/astrowind/tar.gz/14e1a691f80548dcc36370847b1a02c0d0b12821",
+        "stripPrefix": "astrowind-14e1a691f80548dcc36370847b1a02c0d0b12821"
+      }
+    },
+    {
+      "id": "nookwell",
+      "name": "Nookwell",
+      "nameVi": "Nookwell",
+      "description": {
+        "en": "Real estate site with property filters and listing cards.",
+        "vi": "Trang môi giới nhà đất với bộ lọc và danh sách căn."
+      },
+      "category": "real-estate",
+      "tags": ["html", "css", "nhà đất", "bất động sản"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "usmankhairdin/nookwell",
+        "ref": "8c8062abba6872878c8861746328d94026ed3636",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/usmankhairdin/nookwell/blob/8c8062abba6872878c8861746328d94026ed3636/LICENSE",
+        "attribution": "Nookwell by Usman Khairdin"
+      },
+      "demoUrl": "https://store.usmankhairdin.com/nookwell/",
+      "thumbnail": "/templates/nookwell.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/usmankhairdin/nookwell/tar.gz/8c8062abba6872878c8861746328d94026ed3636",
+        "stripPrefix": "nookwell-8c8062abba6872878c8861746328d94026ed3636"
+      }
+    },
+    {
+      "id": "shoal-realty",
+      "name": "Shoal",
+      "nameVi": "Shoal",
+      "description": {
+        "en": "Real estate agent theme with a photo hero, service tiles and featured listings.",
+        "vi": "Mẫu trang cho môi giới nhà đất: ảnh mở đầu, các ô dịch vụ và danh sách tin nổi bật."
+      },
+      "category": "real-estate",
+      "tags": ["astro", "tailwind", "nhà đất", "môi giới"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "formgong/shoal-astro-theme",
+        "ref": "d7debc924040accd6c48c971b114315e2ca39e3b",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/formgong/shoal-astro-theme/blob/d7debc924040accd6c48c971b114315e2ca39e3b/LICENSE",
+        "attribution": "Shoal by Formgong"
+      },
+      "demoUrl": "https://shoal.formgong.com/",
+      "thumbnail": "/templates/shoal-realty.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/formgong/shoal-astro-theme/tar.gz/d7debc924040accd6c48c971b114315e2ca39e3b",
+        "stripPrefix": "shoal-astro-theme-d7debc924040accd6c48c971b114315e2ca39e3b"
+      }
+    },
+    {
+      "id": "anchorbreath",
+      "name": "AnchorBreath",
+      "nameVi": "AnchorBreath",
+      "description": {
+        "en": "Calm breathing and meditation page with ocean imagery, suited to spa and wellness.",
+        "vi": "Trang thiền và thở chậm với hình biển, phù hợp spa và wellness."
+      },
+      "category": "spa-wellness",
+      "tags": ["html", "css", "spa", "thiền"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "rithin-0769/AnchorBreath",
+        "ref": "625d22eeee686e54ffdfa97c4b89304b199d8eb4",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/rithin-0769/AnchorBreath/blob/625d22eeee686e54ffdfa97c4b89304b199d8eb4/LICENSE",
+        "attribution": "AnchorBreath by Rithin"
+      },
+      "demoUrl": "https://rithin-0769.github.io/AnchorBreath/",
+      "thumbnail": "/templates/anchorbreath.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/rithin-0769/AnchorBreath/tar.gz/625d22eeee686e54ffdfa97c4b89304b199d8eb4",
+        "stripPrefix": "AnchorBreath-625d22eeee686e54ffdfa97c4b89304b199d8eb4"
+      }
+    },
+    {
+      "id": "yoga-studio",
+      "name": "Yoga Studio",
+      "nameVi": "Yoga Studio",
+      "description": {
+        "en": "Calm yoga studio site with a class timetable, instructors and pricing.",
+        "vi": "Trang phòng tập yoga nhẹ nhàng: thời khoá biểu lớp, huấn luyện viên và bảng giá."
+      },
+      "category": "spa-wellness",
+      "tags": ["astro", "tailwind", "yoga", "wellness"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "NiveskZ/yoga-studio-template",
+        "ref": "214c140424194e7b0c2a6e87dc5ae8c746dc5fdf",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/NiveskZ/yoga-studio-template/blob/214c140424194e7b0c2a6e87dc5ae8c746dc5fdf/LICENSE",
+        "attribution": "Yoga Studio by NiveskZ"
+      },
+      "demoUrl": "https://yoga-studio-template.netlify.app/",
+      "thumbnail": "/templates/yoga-studio.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/NiveskZ/yoga-studio-template/tar.gz/214c140424194e7b0c2a6e87dc5ae8c746dc5fdf",
+        "stripPrefix": "yoga-studio-template-214c140424194e7b0c2a6e87dc5ae8c746dc5fdf"
+      }
+    },
+    {
+      "id": "astro-chalet",
+      "name": "Astro Chalet",
+      "nameVi": "Astro Chalet",
+      "description": {
+        "en": "Artisan bakery site with warm photography, a product list and an order section.",
+        "vi": "Trang tiệm bánh thủ công: ảnh ấm áp, danh sách bánh và phần nhận đặt hàng."
+      },
+      "category": "restaurant-cafe",
+      "tags": ["astro", "tailwind", "tiệm bánh", "cà phê"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "M4xKey/astro-chalet",
+        "ref": "8d554311930332c6b29b6785291e074838e34336",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/M4xKey/astro-chalet/blob/8d554311930332c6b29b6785291e074838e34336/LICENSE",
+        "attribution": "Astro Chalet by M4xKey"
+      },
+      "demoUrl": "https://astro-chalet.vercel.app/",
+      "thumbnail": "/templates/astro-chalet.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/M4xKey/astro-chalet/tar.gz/8d554311930332c6b29b6785291e074838e34336",
+        "stripPrefix": "astro-chalet-8d554311930332c6b29b6785291e074838e34336"
+      }
+    },
+    {
+      "id": "ombra-restaurant",
+      "name": "Ombra",
+      "nameVi": "Ombra",
+      "description": {
+        "en": "Dark editorial restaurant theme with a tasting menu, chef story and reservation block.",
+        "vi": "Trang nhà hàng nền tối kiểu tạp chí: thực đơn nếm thử, chuyện đầu bếp và phần đặt bàn."
+      },
+      "category": "restaurant-cafe",
+      "tags": ["astro", "tailwind", "nhà hàng", "nền tối"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "xocothemes/ombra",
+        "ref": "3d005a7eef5b9fd624e6af2861e1a32fb8997599",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/xocothemes/ombra/blob/3d005a7eef5b9fd624e6af2861e1a32fb8997599/LICENSE",
+        "attribution": "Ombra by Xoco Themes"
+      },
+      "demoUrl": "https://ombra-lemon.vercel.app/",
+      "thumbnail": "/templates/ombra-restaurant.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/xocothemes/ombra/tar.gz/3d005a7eef5b9fd624e6af2861e1a32fb8997599",
+        "stripPrefix": "ombra-3d005a7eef5b9fd624e6af2861e1a32fb8997599"
+      }
+    },
+    {
+      "id": "quiet-bar",
+      "name": "Quiet Bar",
+      "nameVi": "Quiet Bar",
+      "description": {
+        "en": "Moody neighbourhood bar site with a drink list, opening hours and events.",
+        "vi": "Trang quán bar trong xóm: danh sách đồ uống, giờ mở cửa và lịch sự kiện."
+      },
+      "category": "restaurant-cafe",
+      "tags": ["astro", "tailwind", "bar", "đồ uống"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "larry-xue/quiet-bar",
+        "ref": "8e69f22e4051572f1229b1a1b42836cb0f55479b",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/larry-xue/quiet-bar/blob/8e69f22e4051572f1229b1a1b42836cb0f55479b/LICENSE",
+        "attribution": "Quiet Bar by Larry Xue"
+      },
+      "demoUrl": "https://quiet-bar-theme.yujay.dev/",
+      "thumbnail": "/templates/quiet-bar.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/larry-xue/quiet-bar/tar.gz/8e69f22e4051572f1229b1a1b42836cb0f55479b",
+        "stripPrefix": "quiet-bar-8e69f22e4051572f1229b1a1b42836cb0f55479b"
+      }
+    },
+    {
+      "id": "solenne-hotel",
+      "name": "Solenne",
+      "nameVi": "Solenne",
+      "description": {
+        "en": "Boutique hotel one-pager with a booking bar, rooms and a location section.",
+        "vi": "Trang khách sạn boutique một trang: thanh đặt phòng, danh sách phòng và phần vị trí."
+      },
+      "category": "hotel-travel",
+      "tags": ["astro", "tailwind", "khách sạn", "đặt phòng"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "Sv3nskie/astro-theme-solenne",
+        "ref": "f7d0b69373249d55d5cc8dfff5fb118db27eb3ea",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/Sv3nskie/astro-theme-solenne/blob/f7d0b69373249d55d5cc8dfff5fb118db27eb3ea/LICENSE",
+        "attribution": "Solenne by Sv3nskie"
+      },
+      "demoUrl": "https://sv3nskie.github.io/astro-theme-solenne/",
+      "thumbnail": "/templates/solenne-hotel.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/Sv3nskie/astro-theme-solenne/tar.gz/f7d0b69373249d55d5cc8dfff5fb118db27eb3ea",
+        "stripPrefix": "astro-theme-solenne-f7d0b69373249d55d5cc8dfff5fb118db27eb3ea"
+      }
+    },
+    {
+      "id": "venue-kit",
+      "name": "Venue Kit",
+      "nameVi": "Venue Kit",
+      "description": {
+        "en": "Beach club and venue booking page with day beds, prices and a photo gallery.",
+        "vi": "Trang đặt chỗ cho bãi biển và địa điểm tổ chức: giường tắm nắng, giá và thư viện ảnh."
+      },
+      "category": "hotel-travel",
+      "tags": ["astro", "tailwind", "du lịch", "đặt chỗ"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "NikoAuso/venue-landing-kit",
+        "ref": "fcda771a7e3521fba92c6083f2476febc85d8982",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/NikoAuso/venue-landing-kit/blob/fcda771a7e3521fba92c6083f2476febc85d8982/LICENSE",
+        "attribution": "Venue Landing Kit by Niko Auso"
+      },
+      "demoUrl": "https://nikoauso.github.io/venue-landing-kit/",
+      "thumbnail": "/templates/venue-kit.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/NikoAuso/venue-landing-kit/tar.gz/fcda771a7e3521fba92c6083f2476febc85d8982",
+        "stripPrefix": "venue-landing-kit-fcda771a7e3521fba92c6083f2476febc85d8982"
+      }
+    },
+    {
+      "id": "physio-astro",
+      "name": "AstroFisio",
+      "nameVi": "AstroFisio",
+      "description": {
+        "en": "Physiotherapy clinic site with services, team, prices and an appointment form.",
+        "vi": "Trang phòng khám vật lý trị liệu: dịch vụ, đội ngũ, bảng giá và form đặt lịch."
+      },
+      "category": "clinic-health",
+      "tags": ["astro", "tailwind", "phòng khám", "đặt lịch"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "javiermartins/astro-physiotherapy-theme",
+        "ref": "5f066b58fceb29f3b374bafd8200f9efd7393085",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/javiermartins/astro-physiotherapy-theme/blob/5f066b58fceb29f3b374bafd8200f9efd7393085/LICENSE",
+        "attribution": "AstroFisio by Javier Martins"
+      },
+      "demoUrl": "https://astro-physiotherapy-theme.netlify.app/",
+      "thumbnail": "/templates/physio-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/javiermartins/astro-physiotherapy-theme/tar.gz/5f066b58fceb29f3b374bafd8200f9efd7393085",
+        "stripPrefix": "astro-physiotherapy-theme-5f066b58fceb29f3b374bafd8200f9efd7393085"
+      }
+    },
+    {
+      "id": "keystone-dental",
+      "name": "Keystone Lite Dental",
+      "nameVi": "Nha khoa Keystone Lite",
+      "description": {
+        "en": "Accessible one-page dental practice site with services and booking.",
+        "vi": "Trang nha khoa một trang, rõ ràng và thân thiện với người bệnh."
+      },
+      "category": "clinic-health",
+      "tags": ["html", "css", "nha khoa", "phòng khám"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "Stephen-Psaradellis/dentist-website-template",
+        "ref": "2371178c578e11724b94942644ff0e0eda07d4a0",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/Stephen-Psaradellis/dentist-website-template/blob/2371178c578e11724b94942644ff0e0eda07d4a0/LICENSE",
+        "attribution": "Keystone Lite Dental by Stephen Psaradellis"
+      },
+      "demoUrl": "https://stephen-psaradellis.github.io/dentist-website-template/",
+      "thumbnail": "/templates/keystone-dental.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/Stephen-Psaradellis/dentist-website-template/tar.gz/2371178c578e11724b94942644ff0e0eda07d4a0",
+        "stripPrefix": "dentist-website-template-2371178c578e11724b94942644ff0e0eda07d4a0"
+      }
+    },
+    {
+      "id": "fitzone-astro",
+      "name": "FitZone",
+      "nameVi": "FitZone",
+      "description": {
+        "en": "Gym site with class schedules, trainer profiles, membership plans and testimonials.",
+        "vi": "Trang phòng gym: lịch lớp, hồ sơ huấn luyện viên, gói hội viên và nhận xét học viên."
+      },
+      "category": "fitness",
+      "tags": ["astro", "tailwind", "gym", "thể hình"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "sudeep2003/Astro-Gym-Fitness-Website",
+        "ref": "b6d27aeabb5dbc3e9a536dc8f4f1b30ecef8bc54",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/sudeep2003/Astro-Gym-Fitness-Website/blob/b6d27aeabb5dbc3e9a536dc8f4f1b30ecef8bc54/LICENSE",
+        "attribution": "FitZone by Sudeep"
+      },
+      "demoUrl": "https://astro-gym-fitness-website.vercel.app/",
+      "thumbnail": "/templates/fitzone-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/sudeep2003/Astro-Gym-Fitness-Website/tar.gz/b6d27aeabb5dbc3e9a536dc8f4f1b30ecef8bc54",
+        "stripPrefix": "Astro-Gym-Fitness-Website-b6d27aeabb5dbc3e9a536dc8f4f1b30ecef8bc54"
+      }
+    },
+    {
+      "id": "beauty-salon-astro",
+      "name": "Beauty Salon",
+      "nameVi": "Salon làm đẹp",
+      "description": {
+        "en": "Astro salon site with services, pricing and photo gallery.",
+        "vi": "Salon làm đẹp với dịch vụ, bảng giá và thư viện ảnh."
+      },
+      "category": "beauty-salon",
+      "tags": ["astro", "tailwind", "salon", "làm đẹp"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "MartinXCVI/beauty-salon",
+        "ref": "f1f2357309513aee13208cbfbf4732d8968f7ca0",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/MartinXCVI/beauty-salon/blob/f1f2357309513aee13208cbfbf4732d8968f7ca0/LICENSE",
+        "attribution": "Beauty Salon by MartinXCVI"
+      },
+      "demoUrl": "https://beauty-salon-rd.vercel.app/",
+      "thumbnail": "/templates/beauty-salon-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/MartinXCVI/beauty-salon/tar.gz/f1f2357309513aee13208cbfbf4732d8968f7ca0",
+        "stripPrefix": "beauty-salon-f1f2357309513aee13208cbfbf4732d8968f7ca0"
+      }
+    },
+    {
+      "id": "salon-leo",
+      "name": "LeoMartinK Studio",
+      "nameVi": "LeoMartinK Studio",
+      "description": {
+        "en": "Salon and studio site with a service menu, gallery and booking call to action.",
+        "vi": "Trang salon và studio: bảng dịch vụ, thư viện ảnh và nút đặt lịch."
+      },
+      "category": "beauty-salon",
+      "tags": ["astro", "tailwind", "salon", "làm đẹp"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "LeoMartinK/beauty-salon-astro-template",
+        "ref": "21aeb79829a26841a2acb3d92f752c0afa740151",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/LeoMartinK/beauty-salon-astro-template/blob/21aeb79829a26841a2acb3d92f752c0afa740151/LICENSE",
+        "attribution": "Beauty Salon Astro Template by LeoMartinK"
+      },
+      "demoUrl": "https://lmkstudio.pages.dev",
+      "thumbnail": "/templates/salon-leo.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/LeoMartinK/beauty-salon-astro-template/tar.gz/21aeb79829a26841a2acb3d92f752c0afa740151",
+        "stripPrefix": "beauty-salon-astro-template-21aeb79829a26841a2acb3d92f752c0afa740151"
+      }
+    },
+    {
+      "id": "arch-3dinterior",
+      "name": "3D Interior",
+      "nameVi": "3D Interior",
+      "description": {
+        "en": "Architecture and design studio theme with a project gallery, services and contact block.",
+        "vi": "Mẫu trang cho studio kiến trúc và nội thất: thư viện dự án, dịch vụ và phần liên hệ."
+      },
+      "category": "construction",
+      "tags": ["astro", "tailwind", "kiến trúc", "nội thất"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "nearmelab/3dinterior",
+        "ref": "3f8b3ae59ae9a064a17d5e9fd1e6572e53f1c26a",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/nearmelab/3dinterior/blob/3f8b3ae59ae9a064a17d5e9fd1e6572e53f1c26a/LICENSE",
+        "attribution": "3D Interior by Near Me Lab"
+      },
+      "demoUrl": "https://3dinterior.mail-nearmelab.workers.dev/",
+      "thumbnail": "/templates/arch-3dinterior.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/nearmelab/3dinterior/tar.gz/3f8b3ae59ae9a064a17d5e9fd1e6572e53f1c26a",
+        "stripPrefix": "3dinterior-3f8b3ae59ae9a064a17d5e9fd1e6572e53f1c26a"
+      }
+    },
+    {
+      "id": "keystone-legal",
+      "name": "Keystone Lite Legal",
+      "nameVi": "Luật Keystone Lite",
+      "description": {
+        "en": "Accessible one-page law firm site for a small practice.",
+        "vi": "Trang luật sư một trang, phù hợp văn phòng nhỏ hoặc luật sư tự do."
+      },
+      "category": "legal-finance",
+      "tags": ["html", "css", "luật", "tư vấn"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "Stephen-Psaradellis/law-firm-website-template",
+        "ref": "51783a5439d691bb93c263118f1c8e8711e46917",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/Stephen-Psaradellis/law-firm-website-template/blob/51783a5439d691bb93c263118f1c8e8711e46917/LICENSE",
+        "attribution": "Keystone Lite Legal by Stephen Psaradellis"
+      },
+      "demoUrl": "https://stephen-psaradellis.github.io/law-firm-website-template/",
+      "thumbnail": "/templates/keystone-legal.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/Stephen-Psaradellis/law-firm-website-template/tar.gz/51783a5439d691bb93c263118f1c8e8711e46917",
+        "stripPrefix": "law-firm-website-template-51783a5439d691bb93c263118f1c8e8711e46917"
+      }
+    },
+    {
+      "id": "mw-lawyer",
+      "name": "MW Law Office",
+      "nameVi": "Văn phòng luật MW",
+      "description": {
+        "en": "Professional law office site with practice areas and contact details.",
+        "vi": "Trang văn phòng luật chuyên nghiệp, có phần dịch vụ và liên hệ."
+      },
+      "category": "legal-finance",
+      "tags": ["react", "vite", "luật", "văn phòng"],
+      "stack": "vite-react",
+      "source": {
+        "provider": "github",
+        "repo": "LauraKraus777/MW-lawyer-website",
+        "ref": "40df410c3ed56203c174a4549f01033762360bd2",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/LauraKraus777/MW-lawyer-website/blob/40df410c3ed56203c174a4549f01033762360bd2/LICENSE.md",
+        "attribution": "MW Law Office by Laura Kraus"
+      },
+      "demoUrl": "https://martyna-winiarska.vercel.app",
+      "thumbnail": "/templates/mw-lawyer.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/LauraKraus777/MW-lawyer-website/tar.gz/40df410c3ed56203c174a4549f01033762360bd2",
+        "stripPrefix": "MW-lawyer-website-40df410c3ed56203c174a4549f01033762360bd2"
+      }
+    },
+    {
+      "id": "nepaledu",
+      "name": "NepalEdu",
+      "nameVi": "NepalEdu",
+      "description": {
+        "en": "Education platform site with course cards, notes, quizzes and a sign-up section.",
+        "vi": "Trang nền tảng học tập: thẻ khoá học, ghi chú, bài kiểm tra và phần đăng ký."
+      },
+      "category": "education",
+      "tags": ["html", "tailwind", "giáo dục", "khoá học"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "lisus18ikrak/nepaledu-template",
+        "ref": "4a447fa8422509732d8497e4ff5d25ccca7b0c3b",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/lisus18ikrak/nepaledu-template/blob/4a447fa8422509732d8497e4ff5d25ccca7b0c3b/LICENSE",
+        "attribution": "NepalEdu by Lisus Shrestha"
+      },
+      "demoUrl": "https://nepaledu-template.vercel.app/",
+      "thumbnail": "/templates/nepaledu.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/lisus18ikrak/nepaledu-template/tar.gz/4a447fa8422509732d8497e4ff5d25ccca7b0c3b",
+        "stripPrefix": "nepaledu-template-4a447fa8422509732d8497e4ff5d25ccca7b0c3b"
+      }
+    },
+    {
+      "id": "nerdford-school",
+      "name": "NerdFord School",
+      "nameVi": "Trường học NerdFord",
+      "description": {
+        "en": "One-page school site with courses, campuses and contact.",
+        "vi": "Trang trường học một trang với khóa học, cơ sở và liên hệ."
+      },
+      "category": "education",
+      "tags": ["html", "css", "trường học", "giáo dục"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "Okafor-Chiagozie/NerdFord",
+        "ref": "bca6969dfda28697eb43eda501d420c9436dce5c",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/Okafor-Chiagozie/NerdFord/blob/bca6969dfda28697eb43eda501d420c9436dce5c/LICENSE",
+        "attribution": "NerdFord by Okafor Chiagozie"
+      },
+      "demoUrl": "https://okafor-chiagozie.github.io/NerdFord/",
+      "thumbnail": "/templates/nerdford-school.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/Okafor-Chiagozie/NerdFord/tar.gz/bca6969dfda28697eb43eda501d420c9436dce5c",
+        "stripPrefix": "NerdFord-bca6969dfda28697eb43eda501d420c9436dce5c"
+      }
+    },
+    {
+      "id": "youdemi",
+      "name": "Youdemi",
+      "nameVi": "Youdemi",
+      "description": {
+        "en": "Education center site with courses, instructors and news.",
+        "vi": "Trang trung tâm giáo dục với khóa học, giảng viên và tin tức."
+      },
+      "category": "education",
+      "tags": ["html", "css", "giáo dục", "khóa học"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "codewithsadee/youdemi",
+        "ref": "e262fa81fe26cc92675eb355c99ab5d431119b53",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/codewithsadee/youdemi/blob/e262fa81fe26cc92675eb355c99ab5d431119b53/LICENSE",
+        "attribution": "Youdemi by codewithsadee"
+      },
+      "demoUrl": "https://codewithsadee.github.io/youdemi/",
+      "thumbnail": "/templates/youdemi.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/codewithsadee/youdemi/tar.gz/e262fa81fe26cc92675eb355c99ab5d431119b53",
+        "stripPrefix": "youdemi-e262fa81fe26cc92675eb355c99ab5d431119b53"
+      }
+    },
+    {
+      "id": "astro-shopify",
+      "name": "Astro Shopify",
+      "nameVi": "Astro Shopify",
+      "description": {
+        "en": "Storefront starter with product grid, product pages, cart and Shopify wiring.",
+        "vi": "Bộ khung cửa hàng: lưới sản phẩm, trang chi tiết, giỏ hàng và sẵn kết nối Shopify."
+      },
+      "category": "ecommerce",
+      "tags": ["astro", "tailwind", "bán hàng", "shopify"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "thomasKn/astro-shopify",
+        "ref": "cf8abda8643682289b9cfd8bf06d11c3cbfc3d54",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/thomasKn/astro-shopify/blob/cf8abda8643682289b9cfd8bf06d11c3cbfc3d54/LICENSE",
+        "attribution": "Astro Shopify by Thomas Kn"
+      },
+      "demoUrl": "https://astro-shopify.frontvibe.com/",
+      "thumbnail": "/templates/astro-shopify.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/thomasKn/astro-shopify/tar.gz/cf8abda8643682289b9cfd8bf06d11c3cbfc3d54",
+        "stripPrefix": "astro-shopify-cf8abda8643682289b9cfd8bf06d11c3cbfc3d54"
+      }
+    },
+    {
+      "id": "nordic-store",
+      "name": "Nordic Store",
+      "nameVi": "Nordic Store",
+      "description": {
+        "en": "Minimal Nordic-style storefront with product grid and cart.",
+        "vi": "Cửa hàng tối giản phong cách Bắc Âu, có lưới sản phẩm và giỏ hàng."
+      },
+      "category": "ecommerce",
+      "tags": ["html", "tailwind", "cửa hàng", "tối giản"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "tailwindtoolbox/Nordic-Store",
+        "ref": "b64edb872ec70d40297eb3aacb1fb4dfbb3a68c3",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/tailwindtoolbox/Nordic-Store/blob/b64edb872ec70d40297eb3aacb1fb4dfbb3a68c3/LICENSE",
+        "attribution": "Nordic Store by Tailwind Toolbox"
+      },
+      "demoUrl": "https://tailwindtoolbox.github.io/Nordic-Store",
+      "thumbnail": "/templates/nordic-store.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/tailwindtoolbox/Nordic-Store/tar.gz/b64edb872ec70d40297eb3aacb1fb4dfbb3a68c3",
+        "stripPrefix": "Nordic-Store-b64edb872ec70d40297eb3aacb1fb4dfbb3a68c3"
+      }
+    },
+    {
+      "id": "odyssey-storefront",
+      "name": "Odyssey",
+      "nameVi": "Odyssey",
+      "description": {
+        "en": "Storefront marketing theme with a product showcase, collections and editorial blocks.",
+        "vi": "Mẫu trang giới thiệu cửa hàng: khu trưng bày sản phẩm, bộ sưu tập và các khối nội dung."
+      },
+      "category": "ecommerce",
+      "tags": ["astro", "tailwind", "cửa hàng", "sản phẩm"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "treefarmstudio/odyssey-theme",
+        "ref": "d191e5715a2519e25be4629b933189c421b30a1a",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/treefarmstudio/odyssey-theme/blob/d191e5715a2519e25be4629b933189c421b30a1a/LICENSE",
+        "attribution": "Odyssey by Tree Farm Studio"
+      },
+      "demoUrl": "https://odyssey-theme.vercel.app/",
+      "thumbnail": "/templates/odyssey-storefront.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/treefarmstudio/odyssey-theme/tar.gz/d191e5715a2519e25be4629b933189c421b30a1a",
+        "stripPrefix": "odyssey-theme-d191e5715a2519e25be4629b933189c421b30a1a"
+      }
+    },
+    {
+      "id": "astrofy",
+      "name": "Astrofy",
+      "nameVi": "Astrofy",
+      "description": {
+        "en": "One-page personal portfolio with blog, projects and contact sections.",
+        "vi": "Hồ sơ cá nhân một trang cho người làm sáng tạo, có blog và phần giới thiệu."
+      },
+      "category": "portfolio",
+      "tags": ["astro", "tailwind", "hồ sơ", "portfolio"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "manuelernestog/astrofy",
+        "ref": "9398dea0f2c048efe2ba4680b12308d5ff01e427",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/manuelernestog/astrofy/blob/9398dea0f2c048efe2ba4680b12308d5ff01e427/LICENSE",
+        "attribution": "Astrofy by Manuel Ernesto"
+      },
+      "demoUrl": "https://astrofy-template.netlify.app/",
+      "thumbnail": "/templates/astrofy.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/manuelernestog/astrofy/tar.gz/9398dea0f2c048efe2ba4680b12308d5ff01e427",
+        "stripPrefix": "astrofy-9398dea0f2c048efe2ba4680b12308d5ff01e427"
+      }
+    },
+    {
+      "id": "bloomfolio",
+      "name": "Bloomfolio",
+      "nameVi": "Bloomfolio",
+      "description": {
+        "en": "Warm, friendly portfolio with rounded cards, a services list and a blog.",
+        "vi": "Hồ sơ cá nhân thân thiện, thẻ bo tròn, có phần dịch vụ và blog đi kèm."
+      },
+      "category": "portfolio",
+      "tags": ["astro", "tailwind", "hồ sơ", "blog"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "lauroguedes/bloomfolio",
+        "ref": "741fddede68653c689090f96784ebaf71f18373b",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/lauroguedes/bloomfolio/blob/741fddede68653c689090f96784ebaf71f18373b/LICENSE",
+        "attribution": "Bloomfolio by Lauro Guedes"
+      },
+      "demoUrl": "https://bloomfolio-astro.vercel.app/",
+      "thumbnail": "/templates/bloomfolio.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/lauroguedes/bloomfolio/tar.gz/741fddede68653c689090f96784ebaf71f18373b",
+        "stripPrefix": "bloomfolio-741fddede68653c689090f96784ebaf71f18373b"
+      }
+    },
+    {
+      "id": "devscard",
+      "name": "Devscard",
+      "nameVi": "Devscard",
+      "description": {
+        "en": "One-page CV site for a developer with timeline, skills and contact links.",
+        "vi": "Trang CV một trang cho lập trình viên: quá trình làm việc, kỹ năng và liên hệ."
+      },
+      "category": "portfolio",
+      "tags": ["astro", "cv", "hồ sơ", "một trang"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "KonradSzwarc/devscard",
+        "ref": "3111452adb9aac735fe8cdcc861a60612e963da5",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/KonradSzwarc/devscard/blob/3111452adb9aac735fe8cdcc861a60612e963da5/LICENSE",
+        "attribution": "Devscard by Konrad Szwarc"
+      },
+      "demoUrl": "https://devscard-resume.pages.dev/",
+      "thumbnail": "/templates/devscard.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/KonradSzwarc/devscard/tar.gz/3111452adb9aac735fe8cdcc861a60612e963da5",
+        "stripPrefix": "devscard-3111452adb9aac735fe8cdcc861a60612e963da5"
+      }
+    },
+    {
+      "id": "monolume",
+      "name": "Mono Lume",
+      "nameVi": "Mono Lume",
+      "description": {
+        "en": "Minimal one-page portfolio with a big name, selected work and a contact block.",
+        "vi": "Hồ sơ một trang tối giản: tên lớn, vài dự án chọn lọc và phần liên hệ."
+      },
+      "category": "portfolio",
+      "tags": ["astro", "tối giản", "hồ sơ", "một trang"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "heshify/monolume",
+        "ref": "d2e0501dd6eff4c7253e23cb94ec7366c2581b5e",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/heshify/monolume/blob/d2e0501dd6eff4c7253e23cb94ec7366c2581b5e/LICENSE",
+        "attribution": "Mono Lume by Heshify"
+      },
+      "demoUrl": "https://monolume.vercel.app/",
+      "thumbnail": "/templates/monolume.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/heshify/monolume/tar.gz/d2e0501dd6eff4c7253e23cb94ec7366c2581b5e",
+        "stripPrefix": "monolume-d2e0501dd6eff4c7253e23cb94ec7366c2581b5e"
+      }
+    },
+    {
+      "id": "simple-portfolio",
+      "name": "Simple Portfolio",
+      "nameVi": "Simple Portfolio",
+      "description": {
+        "en": "Developer portfolio with a projects grid, stack badges and dark mode.",
+        "vi": "Hồ sơ cho người làm kỹ thuật: lưới dự án, nhãn công nghệ và chế độ tối."
+      },
+      "category": "portfolio",
+      "tags": ["astro", "tailwind", "hồ sơ", "lập trình"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "vito8916/simple-portfolio",
+        "ref": "10226eca7d9647fc929f8758d8bac1ca3f328861",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/vito8916/simple-portfolio/blob/10226eca7d9647fc929f8758d8bac1ca3f328861/LICENSE",
+        "attribution": "Simple Portfolio by vito8916"
+      },
+      "demoUrl": "https://simple-portfolio.vicbox.dev/",
+      "thumbnail": "/templates/simple-portfolio.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/vito8916/simple-portfolio/tar.gz/10226eca7d9647fc929f8758d8bac1ca3f328861",
+        "stripPrefix": "simple-portfolio-10226eca7d9647fc929f8758d8bac1ca3f328861"
+      }
+    },
+    {
+      "id": "astro-stone",
+      "name": "Stone",
+      "nameVi": "Stone",
+      "description": {
+        "en": "Editorial portfolio with large photography, project pages and a quiet serif type scale.",
+        "vi": "Hồ sơ cá nhân phong cách tạp chí, ảnh lớn, có trang dự án riêng và chữ serif nhẹ nhàng."
+      },
+      "category": "portfolio",
+      "tags": ["astro", "tailwind", "hồ sơ", "tạp chí"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "m6v3l9/astro-theme-stone",
+        "ref": "0fafbf273e2e021f9227c6ba86c1b68d5b1c3935",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/m6v3l9/astro-theme-stone/blob/0fafbf273e2e021f9227c6ba86c1b68d5b1c3935/LICENSE",
+        "attribution": "Stone by m6v3l9"
+      },
+      "demoUrl": "https://astro-theme-stone.vercel.app/",
+      "thumbnail": "/templates/astro-stone.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/m6v3l9/astro-theme-stone/tar.gz/0fafbf273e2e021f9227c6ba86c1b68d5b1c3935",
+        "stripPrefix": "astro-theme-stone-0fafbf273e2e021f9227c6ba86c1b68d5b1c3935"
+      }
+    },
+    {
+      "id": "agencex",
+      "name": "AgenceX",
+      "nameVi": "AgenceX",
+      "description": {
+        "en": "Design studio landing page with a motion hero, service list and portfolio strip.",
+        "vi": "Trang studio thiết kế, phần mở đầu có chuyển động, danh sách dịch vụ và dải dự án."
+      },
+      "category": "agency-studio",
+      "tags": ["astro", "tailwind", "studio", "portfolio"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "uno-forge-hub/agency-landing-page-Astrojs",
+        "ref": "2727b8790ea6fcbae9e179174c0438c7e1723517",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/uno-forge-hub/agency-landing-page-Astrojs/blob/2727b8790ea6fcbae9e179174c0438c7e1723517/LICENCE.md",
+        "attribution": "AgenceX by Unify UI"
+      },
+      "demoUrl": "https://agencex-astro.vercel.app/",
+      "thumbnail": "/templates/agencex.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/uno-forge-hub/agency-landing-page-Astrojs/tar.gz/2727b8790ea6fcbae9e179174c0438c7e1723517",
+        "stripPrefix": "agency-landing-page-Astrojs-2727b8790ea6fcbae9e179174c0438c7e1723517"
+      }
+    },
+    {
+      "id": "bigspring-light-nextjs",
+      "name": "Bigspring Light (Next.js)",
+      "nameVi": "Bigspring Light (Next.js)",
+      "description": {
+        "en": "Corporate and agency site with services, team, pricing and blog.",
+        "vi": "Trang công ty hoặc agency với dịch vụ, đội ngũ, bảng giá và blog."
+      },
+      "category": "agency-studio",
+      "tags": ["nextjs", "tailwind", "agency", "công ty"],
+      "stack": "nextjs",
+      "source": {
+        "provider": "github",
+        "repo": "themefisher/bigspring-light-nextjs",
+        "ref": "054e7df284ec7f80c36b00e4fb67f9d7e083bc15",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/themefisher/bigspring-light-nextjs/blob/054e7df284ec7f80c36b00e4fb67f9d7e083bc15/LICENSE",
+        "attribution": "Bigspring Light by Themefisher"
+      },
+      "demoUrl": "https://bigspring-light-nextjs.vercel.app/",
+      "thumbnail": "/templates/bigspring-light-nextjs.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/themefisher/bigspring-light-nextjs/tar.gz/054e7df284ec7f80c36b00e4fb67f9d7e083bc15",
+        "stripPrefix": "bigspring-light-nextjs-054e7df284ec7f80c36b00e4fb67f9d7e083bc15"
+      }
+    },
+    {
+      "id": "mizu-astro",
+      "name": "Mizu Light",
+      "nameVi": "Mizu Light",
+      "description": {
+        "en": "Light SaaS and startup landing page with soft gradients and a clean feature layout.",
+        "vi": "Trang cho startup và SaaS phong cách sáng, chuyển màu nhẹ và bố cục tính năng gọn gàng."
+      },
+      "category": "agency-studio",
+      "tags": ["astro", "tailwind", "startup", "sáng"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "oxygenna-themes/mizu-light-astro-theme",
+        "ref": "44af41e020f0253231030531fa62067f61b33f27",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/oxygenna-themes/mizu-light-astro-theme/blob/44af41e020f0253231030531fa62067f61b33f27/LICENSE",
+        "attribution": "Mizu Light by Oxygenna"
+      },
+      "demoUrl": "https://mizu-light-theme.netlify.app/",
+      "thumbnail": "/templates/mizu-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/oxygenna-themes/mizu-light-astro-theme/tar.gz/44af41e020f0253231030531fa62067f61b33f27",
+        "stripPrefix": "mizu-light-astro-theme-44af41e020f0253231030531fa62067f61b33f27"
+      }
+    },
+    {
+      "id": "positivus",
+      "name": "Positivus",
+      "nameVi": "Positivus",
+      "description": {
+        "en": "Bold agency site with oversized type, olive and white blocks and a case-study grid.",
+        "vi": "Trang agency cá tính với chữ rất lớn, mảng màu ô-liu và lưới dự án đã hoàn thành."
+      },
+      "category": "agency-studio",
+      "tags": ["astro", "tailwind", "agency", "chữ lớn"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "manulthanura/Positivus",
+        "ref": "bef52c3b56745f1a6e974c4da6fea6ca2d02eff7",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/manulthanura/Positivus/blob/bef52c3b56745f1a6e974c4da6fea6ca2d02eff7/LICENSE",
+        "attribution": "Positivus by Manul Thanura"
+      },
+      "demoUrl": "https://positivustheme.vercel.app/",
+      "thumbnail": "/templates/positivus.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/manulthanura/Positivus/tar.gz/bef52c3b56745f1a6e974c4da6fea6ca2d02eff7",
+        "stripPrefix": "Positivus-bef52c3b56745f1a6e974c4da6fea6ca2d02eff7"
+      }
+    },
+    {
+      "id": "astroflow",
+      "name": "AstroFlow",
+      "nameVi": "AstroFlow",
+      "description": {
+        "en": "Workflow SaaS landing page with product screenshots, integrations and pricing.",
+        "vi": "Trang cho phần mềm quy trình làm việc, có ảnh sản phẩm, phần kết nối ứng dụng và bảng giá."
+      },
+      "category": "saas-landing",
+      "tags": ["astro", "tailwind", "saas", "quy trình"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "sudeep2003/AstroFlow",
+        "ref": "90fa330cc0004f718bf6c0e4ed4e78a65649255a",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/sudeep2003/AstroFlow/blob/90fa330cc0004f718bf6c0e4ed4e78a65649255a/LICENSE",
+        "attribution": "AstroFlow by Sudeep"
+      },
+      "demoUrl": "https://astroflow.wingflows.com/",
+      "thumbnail": "/templates/astroflow.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/sudeep2003/AstroFlow/tar.gz/90fa330cc0004f718bf6c0e4ed4e78a65649255a",
+        "stripPrefix": "AstroFlow-90fa330cc0004f718bf6c0e4ed4e78a65649255a"
+      }
+    },
+    {
+      "id": "astroplate",
+      "name": "Astroplate",
+      "nameVi": "Astroplate",
+      "description": {
+        "en": "Multi-page Astro starter for SaaS and marketing sites.",
+        "vi": "Bộ khung Astro nhiều trang cho SaaS và trang marketing."
+      },
+      "category": "saas-landing",
+      "tags": ["astro", "tailwind", "saas", "bộ khung"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "zeon-studio/astroplate",
+        "ref": "501646d0fede2471105ef0cf3c2a154cbb814c4a",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/zeon-studio/astroplate/blob/501646d0fede2471105ef0cf3c2a154cbb814c4a/LICENSE",
+        "attribution": "Astroplate by Zeon Studio"
+      },
+      "demoUrl": "https://astroplate.netlify.app",
+      "thumbnail": "/templates/astroplate.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/zeon-studio/astroplate/tar.gz/501646d0fede2471105ef0cf3c2a154cbb814c4a",
+        "stripPrefix": "astroplate-501646d0fede2471105ef0cf3c2a154cbb814c4a"
+      }
+    },
+    {
+      "id": "bigspring-light-astro",
+      "name": "Bigspring Light (Astro)",
+      "nameVi": "Bigspring Light (Astro)",
+      "description": {
+        "en": "Marketing site for software products with pricing, blog and contact blocks.",
+        "vi": "Trang marketing cho phần mềm, nhiều khối giới thiệu và lời kêu gọi hành động."
+      },
+      "category": "saas-landing",
+      "tags": ["astro", "tailwind", "saas", "marketing"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "themefisher/bigspring-light-astro",
+        "ref": "4b40e8ec4f1d4ed4d10699496e2423828263ae29",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/themefisher/bigspring-light-astro/blob/4b40e8ec4f1d4ed4d10699496e2423828263ae29/LICENSE",
+        "attribution": "Bigspring Light by Themefisher"
+      },
+      "demoUrl": "https://tf-bigspring-light-astro.vercel.app/",
+      "thumbnail": "/templates/bigspring-light-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/themefisher/bigspring-light-astro/tar.gz/4b40e8ec4f1d4ed4d10699496e2423828263ae29",
+        "stripPrefix": "bigspring-light-astro-4b40e8ec4f1d4ed4d10699496e2423828263ae29"
+      }
+    },
+    {
+      "id": "datanova",
+      "name": "DataNova",
+      "nameVi": "DataNova",
+      "description": {
+        "en": "Analytics product landing page with dashboard mockups, testimonials and a clean light palette.",
+        "vi": "Trang giới thiệu sản phẩm phân tích dữ liệu, có ảnh bảng điều khiển, phần đánh giá và bảng màu sáng."
+      },
+      "category": "saas-landing",
+      "tags": ["astro", "tailwind", "dữ liệu", "saas"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "mearashadowfax/DataNova",
+        "ref": "3cb28c1aa63ddc95840315806b4e33ab6b488ba7",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/mearashadowfax/DataNova/blob/3cb28c1aa63ddc95840315806b4e33ab6b488ba7/LICENSE",
+        "attribution": "DataNova by Meara Shadowfax"
+      },
+      "demoUrl": "https://data-nova.vercel.app/",
+      "thumbnail": "/templates/datanova.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/mearashadowfax/DataNova/tar.gz/3cb28c1aa63ddc95840315806b4e33ab6b488ba7",
+        "stripPrefix": "DataNova-3cb28c1aa63ddc95840315806b4e33ab6b488ba7"
+      }
+    },
+    {
+      "id": "foxi-astro",
+      "name": "Foxi",
+      "nameVi": "Foxi",
+      "description": {
+        "en": "Productivity app landing page with illustration blocks and a feature walkthrough.",
+        "vi": "Trang giới thiệu ứng dụng năng suất, có minh hoạ và phần giới thiệu tính năng theo từng bước."
+      },
+      "category": "saas-landing",
+      "tags": ["astro", "tailwind", "ứng dụng", "saas"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "oxygenna-themes/foxi-astro-theme",
+        "ref": "7c8820c5f643847e83b540b205d962b02f290f8a",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/oxygenna-themes/foxi-astro-theme/blob/7c8820c5f643847e83b540b205d962b02f290f8a/LICENSE",
+        "attribution": "Foxi by Oxygenna"
+      },
+      "demoUrl": "https://foxi.netlify.app/",
+      "thumbnail": "/templates/foxi-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/oxygenna-themes/foxi-astro-theme/tar.gz/7c8820c5f643847e83b540b205d962b02f290f8a",
+        "stripPrefix": "foxi-astro-theme-7c8820c5f643847e83b540b205d962b02f290f8a"
+      }
+    },
+    {
+      "id": "landwind",
+      "name": "Landwind",
+      "nameVi": "Landwind",
+      "description": {
+        "en": "Tailwind and Flowbite SaaS landing page focused on conversion.",
+        "vi": "Trang đích SaaS bằng Tailwind, sạch sẽ và tập trung vào chuyển đổi."
+      },
+      "category": "saas-landing",
+      "tags": ["tailwind", "flowbite", "saas", "trang đích"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "themesberg/landwind",
+        "ref": "f8be851cc8b4b44ff9d842ca8f5149d7911af88c",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/themesberg/landwind/blob/f8be851cc8b4b44ff9d842ca8f5149d7911af88c/LICENSE",
+        "attribution": "Landwind by Themesberg"
+      },
+      "demoUrl": "https://landwind.vercel.app",
+      "thumbnail": "/templates/landwind.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/themesberg/landwind/tar.gz/f8be851cc8b4b44ff9d842ca8f5149d7911af88c",
+        "stripPrefix": "landwind-f8be851cc8b4b44ff9d842ca8f5149d7911af88c"
+      }
+    },
+    {
+      "id": "nextly",
+      "name": "Nextly",
+      "nameVi": "Nextly",
+      "description": {
+        "en": "Modern product landing page with feature grid and newsletter signup.",
+        "vi": "Trang đích sản phẩm hiện đại, có khối tính năng và đăng ký nhận tin."
+      },
+      "category": "saas-landing",
+      "tags": ["nextjs", "tailwind", "saas", "trang đích"],
+      "stack": "nextjs",
+      "source": {
+        "provider": "github",
+        "repo": "web3templates/nextly-template",
+        "ref": "97b3fe2b2bf0a40cf3ca2350752f9aec42748867",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/web3templates/nextly-template/blob/97b3fe2b2bf0a40cf3ca2350752f9aec42748867/LICENSE",
+        "attribution": "Nextly by Web3Templates"
+      },
+      "demoUrl": "https://nextly.web3templates.com/",
+      "thumbnail": "/templates/nextly.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/web3templates/nextly-template/tar.gz/97b3fe2b2bf0a40cf3ca2350752f9aec42748867",
+        "stripPrefix": "nextly-template-97b3fe2b2bf0a40cf3ca2350752f9aec42748867"
+      }
+    },
+    {
+      "id": "nextplate",
+      "name": "Nextplate",
+      "nameVi": "Nextplate",
+      "description": {
+        "en": "Multi-page Next.js starter for SaaS and business sites.",
+        "vi": "Bộ khung Next.js nhiều trang cho SaaS và doanh nghiệp."
+      },
+      "category": "saas-landing",
+      "tags": ["nextjs", "tailwind", "saas", "bộ khung"],
+      "stack": "nextjs",
+      "source": {
+        "provider": "github",
+        "repo": "zeon-studio/nextplate",
+        "ref": "0b3de3479d9b0a86756037bc078f95a956ff0268",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/zeon-studio/nextplate/blob/0b3de3479d9b0a86756037bc078f95a956ff0268/LICENSE",
+        "attribution": "Nextplate by Zeon Studio"
+      },
+      "demoUrl": "https://nextplate.netlify.app",
+      "thumbnail": "/templates/nextplate.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/zeon-studio/nextplate/tar.gz/0b3de3479d9b0a86756037bc078f95a956ff0268",
+        "stripPrefix": "nextplate-0b3de3479d9b0a86756037bc078f95a956ff0268"
+      }
+    },
+    {
+      "id": "pinwheel-astro",
+      "name": "Pinwheel",
+      "nameVi": "Pinwheel",
+      "description": {
+        "en": "SaaS product site with feature blocks, pricing and testimonials.",
+        "vi": "Trang giới thiệu sản phẩm SaaS nhiều khối, có bảng giá và phần đánh giá."
+      },
+      "category": "saas-landing",
+      "tags": ["astro", "tailwind", "saas", "phần mềm"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "themefisher/pinwheel-astro",
+        "ref": "2d359542cb5cb53834cd20f335598c98ffb7b275",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/themefisher/pinwheel-astro/blob/2d359542cb5cb53834cd20f335598c98ffb7b275/LICENSE",
+        "attribution": "Pinwheel by Themefisher"
+      },
+      "demoUrl": "https://pinwheel-astro.vercel.app/",
+      "thumbnail": "/templates/pinwheel-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/themefisher/pinwheel-astro/tar.gz/2d359542cb5cb53834cd20f335598c98ffb7b275",
+        "stripPrefix": "pinwheel-astro-2d359542cb5cb53834cd20f335598c98ffb7b275"
+      }
+    },
+    {
+      "id": "powerai-astro",
+      "name": "Power AI",
+      "nameVi": "Power AI",
+      "description": {
+        "en": "AI SaaS template with gradient hero, tool cards and a pricing section.",
+        "vi": "Mẫu trang cho sản phẩm AI: phần mở đầu chuyển màu, thẻ công cụ và bảng giá."
+      },
+      "category": "saas-landing",
+      "tags": ["astro", "tailwind", "ai", "saas"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "sitepins/powerai-astro",
+        "ref": "a1176bf882bf0b1af98115f3280c2a6928e69261",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/sitepins/powerai-astro/blob/a1176bf882bf0b1af98115f3280c2a6928e69261/LICENSE",
+        "attribution": "Power AI by Sitepins"
+      },
+      "demoUrl": "https://powerai-astro.vercel.app/",
+      "thumbnail": "/templates/powerai-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/sitepins/powerai-astro/tar.gz/a1176bf882bf0b1af98115f3280c2a6928e69261",
+        "stripPrefix": "powerai-astro-a1176bf882bf0b1af98115f3280c2a6928e69261"
+      }
+    },
+    {
+      "id": "shadcn-landing-page",
+      "name": "Shadcn Landing",
+      "nameVi": "Shadcn Landing",
+      "description": {
+        "en": "Next.js landing page built with shadcn/ui, with dark mode and a component showcase.",
+        "vi": "Trang đích Next.js dựng bằng shadcn/ui, có chế độ tối và khu trưng bày thành phần giao diện."
+      },
+      "category": "saas-landing",
+      "tags": ["nextjs", "shadcn", "tailwind", "nền tối"],
+      "stack": "nextjs",
+      "source": {
+        "provider": "github",
+        "repo": "nobruf/shadcn-landing-page",
+        "ref": "ec8e18e8ed56ed6636023ced09948515c19258cc",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/nobruf/shadcn-landing-page/blob/ec8e18e8ed56ed6636023ced09948515c19258cc/LICENSE",
+        "attribution": "Shadcn Landing Page by nobruf"
+      },
+      "demoUrl": "https://shadcn-landing-page-livid.vercel.app/",
+      "thumbnail": "/templates/shadcn-landing-page.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/nobruf/shadcn-landing-page/tar.gz/ec8e18e8ed56ed6636023ced09948515c19258cc",
+        "stripPrefix": "shadcn-landing-page-ec8e18e8ed56ed6636023ced09948515c19258cc"
+      }
+    },
+    {
+      "id": "astro-micro",
+      "name": "Astro Micro",
+      "nameVi": "Astro Micro",
+      "description": {
+        "en": "Compact writing blog with search, tags, table of contents and dark mode.",
+        "vi": "Blog viết lách gọn nhẹ, có tìm kiếm, thẻ phân loại, mục lục và chế độ tối."
+      },
+      "category": "blog-magazine",
+      "tags": ["astro", "blog", "tìm kiếm", "tối giản"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "trevortylerlee/astro-micro",
+        "ref": "af69926c87341719846fe0e7a415483deb4e05ee",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/trevortylerlee/astro-micro/blob/af69926c87341719846fe0e7a415483deb4e05ee/LICENSE",
+        "attribution": "Astro Micro by Trevor Tyler Lee"
+      },
+      "demoUrl": "https://astro-micro.vercel.app/",
+      "thumbnail": "/templates/astro-micro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/trevortylerlee/astro-micro/tar.gz/af69926c87341719846fe0e7a415483deb4e05ee",
+        "stripPrefix": "astro-micro-af69926c87341719846fe0e7a415483deb4e05ee"
+      }
+    },
+    {
+      "id": "astro-sphere",
+      "name": "Astro Sphere",
+      "nameVi": "Astro Sphere",
+      "description": {
+        "en": "Technical blog and notes site with a command palette, tags and dark mode.",
+        "vi": "Blog kỹ thuật kèm ghi chú, có bảng tìm lệnh nhanh, thẻ phân loại và chế độ tối."
+      },
+      "category": "blog-magazine",
+      "tags": ["astro", "blog", "ghi chú", "nền tối"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "markhorn-dev/astro-sphere",
+        "ref": "f7e3a40f20e1267d7fbbb7b6dd868df1845e1d82",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/markhorn-dev/astro-sphere/blob/f7e3a40f20e1267d7fbbb7b6dd868df1845e1d82/LICENSE",
+        "attribution": "Astro Sphere by Mark Horn"
+      },
+      "demoUrl": "https://astro-sphere-demo.vercel.app/",
+      "thumbnail": "/templates/astro-sphere.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/markhorn-dev/astro-sphere/tar.gz/f7e3a40f20e1267d7fbbb7b6dd868df1845e1d82",
+        "stripPrefix": "astro-sphere-f7e3a40f20e1267d7fbbb7b6dd868df1845e1d82"
+      }
+    },
+    {
+      "id": "bookworm-light-astro",
+      "name": "Bookworm Light",
+      "nameVi": "Bookworm Light",
+      "description": {
+        "en": "Clean long-form blog theme for books, essays and editorial content.",
+        "vi": "Blog đọc sách và nội dung dài, bố cục nhẹ, dễ đọc trên điện thoại."
+      },
+      "category": "blog-magazine",
+      "tags": ["astro", "tailwind", "blog", "nội dung dài"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "themefisher/bookworm-light-astro",
+        "ref": "b94f01efcf2296568902975118305cd0da9cd80e",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/themefisher/bookworm-light-astro/blob/b94f01efcf2296568902975118305cd0da9cd80e/LICENSE",
+        "attribution": "Bookworm Light by Themefisher"
+      },
+      "demoUrl": "https://bookworm-light-astro.vercel.app/",
+      "thumbnail": "/templates/bookworm-light-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/themefisher/bookworm-light-astro/tar.gz/b94f01efcf2296568902975118305cd0da9cd80e",
+        "stripPrefix": "bookworm-light-astro-b94f01efcf2296568902975118305cd0da9cd80e"
+      }
+    },
+    {
+      "id": "frosti",
+      "name": "Frosti",
+      "nameVi": "Frosti",
+      "description": {
+        "en": "Clean personal blog with a photo hero, reading time and related posts.",
+        "vi": "Blog cá nhân sạch sẽ, ảnh mở đầu, thời gian đọc và gợi ý bài liên quan."
+      },
+      "category": "blog-magazine",
+      "tags": ["astro", "tailwind", "blog", "cá nhân"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "EveSunMaple/Frosti",
+        "ref": "a48ecaa273492cdc3049afbd4e626bc4a03c94dc",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/EveSunMaple/Frosti/blob/a48ecaa273492cdc3049afbd4e626bc4a03c94dc/LICENSE",
+        "attribution": "Frosti by EveSunMaple"
+      },
+      "demoUrl": "https://frosti.saroprock.com/",
+      "thumbnail": "/templates/frosti.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/EveSunMaple/Frosti/tar.gz/a48ecaa273492cdc3049afbd4e626bc4a03c94dc",
+        "stripPrefix": "Frosti-a48ecaa273492cdc3049afbd4e626bc4a03c94dc"
+      }
+    },
+    {
+      "id": "northendlab-light-astro",
+      "name": "Northendlab Light",
+      "nameVi": "Northendlab Light",
+      "description": {
+        "en": "Compact technology blog with categories and featured posts.",
+        "vi": "Blog công nghệ gọn gàng, có chuyên mục và bài nổi bật."
+      },
+      "category": "blog-magazine",
+      "tags": ["astro", "tailwind", "blog", "công nghệ"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "themefisher/northendlab-light-astro",
+        "ref": "bb76664593cab80bd2a7beeee2dcd978e3cbb691",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/themefisher/northendlab-light-astro/blob/bb76664593cab80bd2a7beeee2dcd978e3cbb691/LICENSE",
+        "attribution": "Northendlab Light by Themefisher"
+      },
+      "demoUrl": "https://northendlab-light-astro.vercel.app/",
+      "thumbnail": "/templates/northendlab-light-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/themefisher/northendlab-light-astro/tar.gz/bb76664593cab80bd2a7beeee2dcd978e3cbb691",
+        "stripPrefix": "northendlab-light-astro-bb76664593cab80bd2a7beeee2dcd978e3cbb691"
+      }
+    },
+    {
+      "id": "tailcast",
+      "name": "Tailcast",
+      "nameVi": "Tailcast",
+      "description": {
+        "en": "Dark magazine-style blog with category rails, a featured story and article pages.",
+        "vi": "Blog nền tối kiểu tạp chí: dải chuyên mục, bài nổi bật và trang đọc bài đầy đủ."
+      },
+      "category": "blog-magazine",
+      "tags": ["astro", "tailwind", "blog", "nền tối"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "matt765/Tailcast",
+        "ref": "85843e5feaa46bdee05e180cf0c76f12408d7557",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/matt765/Tailcast/blob/85843e5feaa46bdee05e180cf0c76f12408d7557/license",
+        "attribution": "Tailcast by Matt"
+      },
+      "demoUrl": "https://tailcast.vercel.app/",
+      "thumbnail": "/templates/tailcast.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/matt765/Tailcast/tar.gz/85843e5feaa46bdee05e180cf0c76f12408d7557",
+        "stripPrefix": "Tailcast-85843e5feaa46bdee05e180cf0c76f12408d7557"
+      }
+    },
+    {
+      "id": "lumen-photography",
+      "name": "Lumen",
+      "nameVi": "Lumen",
+      "description": {
+        "en": "Photography portfolio with albums, lightbox and booking contact.",
+        "vi": "Portfolio nhiếp ảnh với thư viện ảnh theo bộ sưu tập và liên hệ đặt lịch."
+      },
+      "category": "photography",
+      "tags": ["nextjs", "tailwind", "nhiếp ảnh", "portfolio"],
+      "stack": "nextjs",
+      "source": {
+        "provider": "github",
+        "repo": "haider484991/lumen-nextjs-photography-template",
+        "ref": "db6a98d9dd089fa33661713ac2a689962c8e0f0b",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/haider484991/lumen-nextjs-photography-template/blob/db6a98d9dd089fa33661713ac2a689962c8e0f0b/LICENSE",
+        "attribution": "Lumen by Haider"
+      },
+      "demoUrl": "https://pixelandoak-lumen.pages.dev",
+      "thumbnail": "/templates/lumen-photography.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/haider484991/lumen-nextjs-photography-template/tar.gz/db6a98d9dd089fa33661713ac2a689962c8e0f0b",
+        "stripPrefix": "lumen-nextjs-photography-template-db6a98d9dd089fa33661713ac2a689962c8e0f0b"
+      }
+    },
+    {
+      "id": "church-starter",
+      "name": "Church Starter",
+      "nameVi": "Church Starter",
+      "description": {
+        "en": "Community and church site with service times, events, sermons and giving.",
+        "vi": "Trang cộng đoàn và nhà thờ: giờ sinh hoạt, sự kiện, bài giảng và phần đóng góp."
+      },
+      "category": "nonprofit",
+      "tags": ["astro", "tailwind", "cộng đồng", "tổ chức"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "MauCariApa-com/maucariapacom-church-starter",
+        "ref": "50f44845cff80666bccb37fdff78d202ba501b0e",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/MauCariApa-com/maucariapacom-church-starter/blob/50f44845cff80666bccb37fdff78d202ba501b0e/LICENSE",
+        "attribution": "Church Starter by MauCariApa"
+      },
+      "demoUrl": "https://maucariapacom-church-starter.pages.dev/",
+      "thumbnail": "/templates/church-starter.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/MauCariApa-com/maucariapacom-church-starter/tar.gz/50f44845cff80666bccb37fdff78d202ba501b0e",
+        "stripPrefix": "maucariapacom-church-starter-50f44845cff80666bccb37fdff78d202ba501b0e"
+      }
+    },
+    {
+      "id": "tree2hope",
+      "name": "Tree2Hope",
+      "nameVi": "Tree2Hope",
+      "description": {
+        "en": "Charity site that tells the story and invites donations.",
+        "vi": "Trang tổ chức thiện nguyện, kể câu chuyện và kêu gọi quyên góp."
+      },
+      "category": "nonprofit",
+      "tags": ["html", "css", "thiện nguyện", "quyên góp"],
+      "stack": "html-tailwind",
+      "source": {
+        "provider": "github",
+        "repo": "Virtual4087/Tree2Hope",
+        "ref": "4897f02988ba483807d01b820ac46c75e9fd34f8",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/Virtual4087/Tree2Hope/blob/4897f02988ba483807d01b820ac46c75e9fd34f8/LICENSE",
+        "attribution": "Tree2Hope by Virtual4087"
+      },
+      "demoUrl": "https://virtual4087.github.io/Tree2Hope/",
+      "thumbnail": "/templates/tree2hope.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/Virtual4087/Tree2Hope/tar.gz/4897f02988ba483807d01b820ac46c75e9fd34f8",
+        "stripPrefix": "Tree2Hope-4897f02988ba483807d01b820ac46c75e9fd34f8"
+      }
+    },
+    {
+      "id": "astro-landing-page",
+      "name": "Astro Landing",
+      "nameVi": "Astro Landing",
+      "description": {
+        "en": "Single-page product launch site with a photo hero, feature blocks and pricing.",
+        "vi": "Trang ra mắt sản phẩm một trang: ảnh mở đầu, khối tính năng và bảng giá."
+      },
+      "category": "landing-generic",
+      "tags": ["astro", "tailwind", "trang đích", "sản phẩm"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "mhyfritz/astro-landing-page",
+        "ref": "987617a50863d31bb865ee531391a191d74a878a",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/mhyfritz/astro-landing-page/blob/987617a50863d31bb865ee531391a191d74a878a/LICENSE",
+        "attribution": "Astro Landing Page by Michael Fritz"
+      },
+      "demoUrl": "https://astro-moon-landing.netlify.app/",
+      "thumbnail": "/templates/astro-landing-page.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/mhyfritz/astro-landing-page/tar.gz/987617a50863d31bb865ee531391a191d74a878a",
+        "stripPrefix": "astro-landing-page-987617a50863d31bb865ee531391a191d74a878a"
+      }
+    },
+    {
+      "id": "astrolus-atom",
+      "name": "Atom",
+      "nameVi": "Atom",
+      "description": {
+        "en": "Tailus UI marketing page with layered gradients, feature cards and a demo section.",
+        "vi": "Trang marketing dùng Tailus UI, nền chuyển màu nhiều lớp, thẻ tính năng và phần dùng thử."
+      },
+      "category": "landing-generic",
+      "tags": ["astro", "tailwind", "giao diện", "marketing"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "Tailus-UI/atom-astro",
+        "ref": "764b5c885054f68f173608ac483208a0de85f917",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/Tailus-UI/atom-astro/blob/764b5c885054f68f173608ac483208a0de85f917/LICENCE.md",
+        "attribution": "Atom by Tailus UI"
+      },
+      "demoUrl": "https://atom-astro.pages.dev/",
+      "thumbnail": "/templates/astrolus-atom.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/Tailus-UI/atom-astro/tar.gz/764b5c885054f68f173608ac483208a0de85f917",
+        "stripPrefix": "atom-astro-764b5c885054f68f173608ac483208a0de85f917"
+      }
+    },
+    {
+      "id": "nextjs-landing-starter",
+      "name": "Next.js Landing Page Starter",
+      "nameVi": "Mẫu trang đích Next.js",
+      "description": {
+        "en": "Minimal Next.js landing page with hero, features and call to action.",
+        "vi": "Trang đích Next.js tối giản, dễ đổi nội dung và triển khai."
+      },
+      "category": "landing-generic",
+      "tags": ["nextjs", "tailwind", "trang đích", "tối giản"],
+      "stack": "nextjs",
+      "source": {
+        "provider": "github",
+        "repo": "ixartz/Next-JS-Landing-Page-Starter-Template",
+        "ref": "cd6694e6c69efad1128c1ed732188389182789df",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/ixartz/Next-JS-Landing-Page-Starter-Template/blob/cd6694e6c69efad1128c1ed732188389182789df/LICENSE",
+        "attribution": "Next.js Landing Page Starter by Ixartz"
+      },
+      "demoUrl": "https://creativedesignsguru.com/demo/nextjs-landing-page/",
+      "thumbnail": "/templates/nextjs-landing-starter.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/ixartz/Next-JS-Landing-Page-Starter-Template/tar.gz/cd6694e6c69efad1128c1ed732188389182789df",
+        "stripPrefix": "Next-JS-Landing-Page-Starter-Template-cd6694e6c69efad1128c1ed732188389182789df"
+      }
+    },
+    {
+      "id": "tailkits-astro",
+      "name": "TailKits Astro",
+      "nameVi": "TailKits Astro",
+      "description": {
+        "en": "Modern starter landing page with a component library feel and clean spacing.",
+        "vi": "Trang đích khởi đầu hiện đại, bố cục thoáng, phù hợp giới thiệu bộ sản phẩm."
+      },
+      "category": "landing-generic",
+      "tags": ["astro", "tailwind", "bộ khung", "trang đích"],
+      "stack": "astro",
+      "source": {
+        "provider": "github",
+        "repo": "tailkits/tailkits-astro",
+        "ref": "cd4ed2a3790071a25f241bed180ed6d6658e4f2a",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/tailkits/tailkits-astro/blob/cd4ed2a3790071a25f241bed180ed6d6658e4f2a/LICENSE",
+        "attribution": "TailKits Astro by TailKits"
+      },
+      "demoUrl": "https://tailkits-astro.pages.dev/",
+      "thumbnail": "/templates/tailkits-astro.webp",
+      "install": {
+        "type": "tarball",
+        "url": "https://codeload.github.com/tailkits/tailkits-astro/tar.gz/cd4ed2a3790071a25f241bed180ed6d6658e4f2a",
+        "stripPrefix": "tailkits-astro-cd4ed2a3790071a25f241bed180ed6d6658e4f2a"
+      }
+    }
+  ]
+}

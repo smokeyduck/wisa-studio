@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#060a09" />
+<meta name="robots" content="noindex" />
+<title>WISA STUDIO — Điều khiển từ điện thoại</title>
+<!--
+  The phone page for the hub room (see src/main/phone-hub.ts and
+  src/shared/phone-hub.ts).
+
+  It is a single self-contained file on purpose: GitHub Pages serves it as-is,
+  so there is no build step to keep working, and no dependency to go stale. The
+  protocol it speaks is deliberately tiny — list sessions, open one, create one
+  — because everything that renders a session (transcript, tool cards,
+  approvals, prompts) is the agent's own PWA, embedded in an iframe below.
+
+  Security: the room key comes from the URL fragment, which browsers never send
+  to a server, and every frame is AES-GCM sealed with it. The relay only ever
+  sees ciphertext. The key is a credential for every session, so the page keeps
+  it in memory only — never localStorage — and a reload requires the link again.
+
+  The constants below mirror src/shared/phone-hub.ts; src/main/phone-hub.page.test.ts
+  fails if they drift apart.
+-->
+<style>
+  :root {
+    --bg: #060a09;
+    --panel: #0c1312;
+    --panel-2: #101a18;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-strong: rgba(255, 255, 255, 0.16);
+    --text: #ecf3f1;
+    --muted: #96a8a3;
+    --faint: #5f706b;
+    --accent: #34d3be;
+    --accent-soft: rgba(52, 211, 190, 0.14);
+    --danger: #ff6b6b;
+    --warn: #f2c14e;
+    --radius: 16px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overscroll-behavior: none;
+  }
+
+  body { display: flex; flex-direction: column; }
+
+  /* ---------- shell ---------- */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: max(12px, env(safe-area-inset-top, 0px)) 14px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    flex: 0 0 auto;
+  }
+  header .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--faint);
+    flex: 0 0 auto;
+  }
+  header .dot.live { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  header .dot.down { background: var(--danger); }
+  header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  header .sub { font-size: 11px; color: var(--faint); margin-top: 1px; }
+  header .grow { flex: 1 1 auto; min-width: 0; }
+  header .grow > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+
+  /* ---------- session list ---------- */
+  #list { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px calc(12px + var(--safe-bottom)); }
+  #list.hidden { display: none; }
+
+  .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    padding: 13px 13px;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+  }
+  .row:active { background: var(--panel-2); border-color: var(--line-strong); }
+  .row .meta { flex: 1 1 auto; min-width: 0; }
+  .row .title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .path { font-size: 11px; color: var(--faint); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+  .tag {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.02em;
+    padding: 3px 7px; border-radius: 999px;
+    background: var(--panel-2); color: var(--muted);
+    border: 1px solid var(--line);
+  }
+  .tag.live { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+  .tag.run { color: var(--warn); border-color: rgba(242, 193, 78, 0.28); background: rgba(242, 193, 78, 0.12); }
+  .row .go { flex: 0 0 auto; color: var(--faint); align-self: center; }
+
+  .empty { padding: 32px 16px; text-align: center; color: var(--faint); font-size: 13px; line-height: 1.6; }
+
+  /* ---------- new session bar ---------- */
+  #actions {
+    flex: 0 0 auto;
+    padding: 10px 12px calc(10px + var(--safe-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+  }
+  #actions.hidden { display: none; }
+  button.primary {
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: #04110f;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  button.primary:disabled { opacity: 0.5; }
+
+  /* ---------- session view ---------- */
+  #view { flex: 1 1 auto; min-height: 0; display: none; flex-direction: column; }
+  #view.shown { display: flex; }
+  #viewbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  #viewbar .title { flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #viewbar button {
+    flex: 0 0 auto;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  #frame { flex: 1 1 auto; width: 100%; border: 0; background: #0a100f; }
+
+  /* ---------- notices ---------- */
+  #notice {
+    position: fixed;
+    left: 12px; right: 12px;
+    bottom: calc(12px + var(--safe-bottom));
+    padding: 11px 13px;
+    border-radius: 12px;
+    background: #241516;
+    border: 1px solid rgba(255, 107, 107, 0.35);
+    color: #ffd9d9;
+    font-size: 12px;
+    line-height: 1.5;
+    display: none;
+    z-index: 20;
+  }
+  #notice.shown { display: block; }
+
+  /* ---------- boot / fatal ---------- */
+  #boot {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 14px; padding: 28px;
+    text-align: center;
+    background: var(--bg);
+    z-index: 30;
+  }
+  #boot.hidden { display: none; }
+  .spinner {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 2.5px solid var(--line-strong);
+    border-top-color: var(--accent);
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #boot h2 { font-size: 16px; font-weight: 600; }
+  #boot p { font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 320px; }
+  #boot code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: var(--faint);
+    word-break: break-all;
+    max-width: 320px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="status"></span>
+  <div class="grow">
+    <h1 id="hubname">WISA STUDIO</h1>
+    <div class="sub" id="hubsub">Đang kết nối…</div>
+  </div>
+</header>
+
+<main>
+  <div id="list">
+    <div class="empty" id="listempty">Đang tải phiên…</div>
+  </div>
+
+  <div id="actions">
+    <button class="primary" id="newbtn" type="button">+ Phiên mới</button>
+  </div>
+
+  <div id="view">
+    <div id="viewbar">
+      <button id="backbtn" type="button">‹ Danh sách</button>
+      <div class="title" id="viewtitle"></div>
+    </div>
+    <iframe id="frame" allow="clipboard-write; clipboard-read" title="Phiên"></iframe>
+  </div>
+</main>
+
+<div id="notice"></div>
+
+<div id="boot">
+  <div class="spinner" id="bootspin"></div>
+  <h2 id="boottitle">Đang kết nối…</h2>
+  <p id="boottext">Đang mở liên kết tới máy tính của bạn.</p>
+  <code id="bootdetail"></code>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------------------------------------------------------------- constants
+  // Mirrors src/shared/phone-hub.ts; src/main/phone-hub.page.test.ts pins them.
+  const PROTO = 1;
+  const ROOM_PREFIX = "/r/";
+  const ROOM_MARKER = "hub-";
+  const PING_MS = 15000;
+  const SILENCE_LIMIT_MS = 45000;
+  const RECONNECT_MIN_MS = 1000;
+  const RECONNECT_MAX_MS = 30000;
+
+  // ------------------------------------------------------------------- state
+  /** Room + key, kept in memory only: a reload must re-scan the link. */
+  let room = null;
+  let key = null;
+  let socket = null;
+  let sessions = [];
+  let currentTabId = null;
+  let lastFrameAt = 0;
+  let reconnectMs = RECONNECT_MIN_MS;
+  let reconnectTimer = null;
+  let pingTimer = null;
+  let closedByUs = false;
+  /** Requests sent but not yet answered, so a create can show a spinner. */
+  let awaiting = null;
+
+  const el = id => document.getElementById(id);
+  const statusDot = el("status");
+  const hubName = el("hubname");
+  const hubSub = el("hubsub");
+  const list = el("list");
+  const listEmpty = el("listempty");
+  const actions = el("actions");
+  const newBtn = el("newbtn");
+  const view = el("view");
+  const viewTitle = el("viewtitle");
+  const frame = el("frame");
+  const backBtn = el("backbtn");
+  const notice = el("notice");
+  const boot = el("boot");
+  const bootTitle = el("boottitle");
+  const bootText = el("boottext");
+  const bootDetail = el("bootdetail");
+  const bootSpin = el("bootspin");
+
+  // ------------------------------------------------------------------ crypto
+  function b64urlToBytes(text) {
+    const padded = text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4);
+    const binary = atob(padded);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  }
+
+  async function importKey(text) {
+    return await crypto.subtle.importKey("raw", b64urlToBytes(text), "AES-GCM", false, ["encrypt", "decrypt"]);
+  }
+
+  /**
+   * The wire frame: `[4B uint32 BE peerId][12B IV][ciphertext+tag]`.
+   *
+   * The leading peer id is not optional — the relay rewrites it to the sender's
+   * id so the hub can answer one phone. Sending the sealed bytes alone makes the
+   * relay overwrite the first four bytes of the IV, and the hub then fails to
+   * open a frame it would otherwise have accepted.
+   */
+  async function seal(value) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const plaintext = new TextEncoder().encode(JSON.stringify(value));
+    const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext));
+    const out = new Uint8Array(4 + iv.length + ciphertext.length);
+    new DataView(out.buffer).setUint32(0, 0, false);
+    out.set(iv, 4);
+    out.set(ciphertext, 4 + iv.length);
+    return out;
+  }
+
+  async function unseal(bytes) {
+    // Hub frames carry the same 4-byte header (0 = broadcast, N = one guest).
+    if (bytes.byteLength <= 16) throw new Error("short frame");
+    const iv = bytes.subarray(4, 16);
+    const ciphertext = bytes.subarray(16);
+    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+    return JSON.parse(new TextDecoder().decode(plaintext));
+  }
+
+  // -------------------------------------------------------------------- link
+  /**
+   * Read the link from the fragment. Accepted shapes:
+   *   #wss://relay/r/hub-xxxx#<key>      (the link as the GUI shows it)
+   *   #hub-xxxx#<key>                    (room only)
+   * The key is everything after the LAST "#", because a hub page URL carries a
+   * fragment of its own.
+   */
+  function parseLink() {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return null;
+    const at = hash.lastIndexOf("#");
+    if (at < 0) return null;
+    const keyText = hash.slice(at + 1).trim();
+    const head = hash.slice(0, at);
+    const roomAt = head.indexOf(ROOM_PREFIX);
+    const roomId = (roomAt >= 0 ? head.slice(roomAt + ROOM_PREFIX.length) : head).replace(/\/+$/, "");
+    if (!roomId.startsWith(ROOM_MARKER)) return null;
+    if (!/^[A-Za-z0-9_-]+$/.test(keyText)) return null;
+    const relayUrl = roomAt > 0 ? head.slice(0, roomAt) : "";
+    return { roomId, key: keyText, relayUrl };
+  }
+
+  function socketUrl() {
+    const base = (room.relayUrl || "wss://my.omp.sh").replace(/\/+$/, "");
+    return base + ROOM_PREFIX + room.roomId + "?role=guest";
+  }
+
+  // -------------------------------------------------------------------- ui
+  function showNotice(message) {
+    notice.textContent = message;
+    notice.classList.add("shown");
+    setTimeout(() => notice.classList.remove("shown"), 6000);
+  }
+
+  function setStatus(state) {
+    statusDot.className = "dot" + (state === "live" ? " live" : state === "down" ? " down" : "");
+  }
+
+  function fatal(title, text, detail) {
+    boot.classList.remove("hidden");
+    bootSpin.style.display = "none";
+    bootTitle.textContent = title;
+    bootText.textContent = text;
+    bootDetail.textContent = detail || "";
+  }
+
+  function booting() {
+    boot.classList.remove("hidden");
+    bootSpin.style.display = "";
+    bootTitle.textContent = "Đang kết nối…";
+    bootText.textContent = "Đang mở liên kết tới máy tính của bạn.";
+    bootDetail.textContent = "";
+  }
+
+  function ready() {
+    boot.classList.add("hidden");
+  }
+
+  /** One session row. */
+  function renderRow(session) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "row";
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = session.title || session.cwd || "Phiên";
+    meta.appendChild(title);
+
+    const path = document.createElement("div");
+    path.className = "path";
+    path.textContent = session.cwd || "";
+    meta.appendChild(path);
+
+    const tags = document.createElement("div");
+    tags.className = "tags";
+    const addTag = (text, cls) => {
+      const tag = document.createElement("span");
+      tag.className = "tag" + (cls ? " " + cls : "");
+      tag.textContent = text;
+      tags.appendChild(tag);
+    };
+    if (session.running) addTag("Đang chạy", "run");
+    if (session.participants > 0) addTag("Có người xem", "live");
+    if (session.status && session.status !== "ready") addTag(session.status);
+    if (tags.childElementCount > 0) meta.appendChild(tags);
+
+    row.appendChild(meta);
+
+    const go = document.createElement("div");
+    go.className = "go";
+    go.textContent = "›";
+    row.appendChild(go);
+
+    row.addEventListener("click", () => openSession(session.tabId));
+    return row;
+  }
+
+  function renderList() {
+    // Keep the empty hint node, replace the rows around it.
+    for (const child of Array.from(list.children)) {
+      if (child !== listEmpty) child.remove();
+    }
+    if (sessions.length === 0) {
+      listEmpty.textContent = "Chưa có phiên nào. Bấm “Phiên mới” để bắt đầu.";
+      listEmpty.style.display = "";
+      return;
+    }
+    listEmpty.style.display = "none";
+    for (const session of sessions) list.appendChild(renderRow(session));
+  }
+
+  function showList() {
+    currentTabId = null;
+    view.classList.remove("shown");
+    list.classList.remove("hidden");
+    actions.classList.remove("hidden");
+    // Drop the iframe so the embedded PWA stops holding a relay connection.
+    frame.src = "about:blank";
+  }
+
+  function showSession(session) {
+    currentTabId = session.tabId;
+    viewTitle.textContent = session.title || session.cwd || "Phiên";
+    list.classList.add("hidden");
+    actions.classList.add("hidden");
+    view.classList.add("shown");
+    if (session.webLink) {
+      if (frame.src !== session.webLink) frame.src = session.webLink;
+    } else {
+      // No link yet (still starting, or hosting failed): say so rather than
+      // showing a blank frame the user would read as "the session is empty".
+      showNotice("Phiên này chưa sẵn sàng để xem trên điện thoại. Thử lại sau giây lát.");
+    }
+  }
+
+  // ---------------------------------------------------------------- protocol
+  function send(request) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    const payload = JSON.stringify(request);
+    // Seal before send; a failure here means the key is unusable, which the
+    // close handler will surface as a reconnect.
+    void seal(request).then(
+      sealed => {
+        if (socket && socket.readyState === WebSocket.OPEN) socket.send(sealed);
+      },
+      () => showNotice("Không mã hoá được dữ liệu: " + payload.slice(0, 40)),
+    );
+    return true;
+  }
+
+  function applyWelcome(reply) {
+    if (reply.proto !== PROTO) {
+      fatal(
+        "Cần cập nhật",
+        "Trang này cũ hơn ứng dụng trên máy tính. Tải lại trang sau khi cập nhật WISA STUDIO.",
+        "page proto " + PROTO + " · hub proto " + reply.proto,
+      );
+      return;
+    }
+    hubName.textContent = reply.name || "WISA STUDIO";
+    sessions = Array.isArray(reply.sessions) ? reply.sessions : [];
+    renderList();
+    hubSub.textContent = sessions.length + " phiên";
+    ready();
+  }
+
+  function onReply(reply) {
+    lastFrameAt = Date.now();
+    if (!reply || typeof reply !== "object") return;
+    switch (reply.t) {
+      case "welcome":
+        applyWelcome(reply);
+        break;
+      case "sessions":
+        sessions = Array.isArray(reply.sessions) ? reply.sessions : [];
+        renderList();
+        hubSub.textContent = sessions.length + " phiên";
+        break;
+      case "session":
+        awaiting = null;
+        newBtn.disabled = false;
+        if (reply.error) showNotice(reply.error);
+        if (reply.session) {
+          // Fold the new state into the list, then show it.
+          const at = sessions.findIndex(candidate => candidate.tabId === reply.session.tabId);
+          if (at >= 0) sessions[at] = reply.session;
+          else sessions.unshift(reply.session);
+          renderList();
+          showSession(reply.session);
+        }
+        break;
+      case "error":
+        awaiting = null;
+        newBtn.disabled = false;
+        showNotice(reply.message || "Yêu cầu thất bại.");
+        break;
+      case "pong":
+        break;
+    }
+  }
+
+  // ------------------------------------------------------------------ socket
+  function scheduleReconnect() {
+    if (closedByUs || reconnectTimer) return;
+    const delay = reconnectMs;
+    reconnectMs = Math.min(reconnectMs * 2, RECONNECT_MAX_MS);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  }
+
+  function stopTimers() {
+    clearInterval(pingTimer);
+    clearTimeout(reconnectTimer);
+    pingTimer = null;
+    reconnectTimer = null;
+  }
+
+  function connect() {
+    if (closedByUs) return;
+    setStatus("connecting");
+    hubSub.textContent = "Đang kết nối…";
+    let next;
+    try {
+      next = new WebSocket(socketUrl());
+    } catch (cause) {
+      fatal("Liên kết không hợp lệ", "Không mở được kết nối tới relay.", String(cause));
+      return;
+    }
+    next.binaryType = "arraybuffer";
+    socket = next;
+
+    next.addEventListener("open", () => {
+      reconnectMs = RECONNECT_MIN_MS;
+      lastFrameAt = Date.now();
+      setStatus("live");
+      send({ t: "list" });
+      pingTimer = setInterval(() => {
+        // A slept laptop stops answering; dropping the socket is what makes the
+        // relay let the desktop reclaim the room when it wakes.
+        if (Date.now() - lastFrameAt > SILENCE_LIMIT_MS) {
+          next.close();
+          return;
+        }
+        send({ t: "ping" });
+      }, PING_MS);
+    });
+
+    next.addEventListener("message", event => {
+      const data = event.data;
+      if (!(data instanceof ArrayBuffer)) return;
+      void unseal(new Uint8Array(data)).then(onReply, () => {
+        // A frame we cannot open: the room was rotated, so this link is dead.
+        fatal(
+          "Liên kết đã hết hiệu lực",
+          "Máy tính đã tạo liên kết mới. Quét mã QR mới trong WISA STUDIO.",
+          "",
+        );
+        closedByUs = true;
+        stopTimers();
+      });
+    });
+
+    next.addEventListener("close", () => {
+      stopTimers();
+      if (socket === next) socket = null;
+      if (closedByUs) return;
+      setStatus("down");
+      hubSub.textContent = "Mất kết nối — đang thử lại…";
+      scheduleReconnect();
+    });
+
+    next.addEventListener("error", () => {
+      // `close` always follows; nothing to report beyond the status dot.
+      setStatus("down");
+    });
+  }
+
+  // ----------------------------------------------------------------- actions
+  function openSession(tabId) {
+    const known = sessions.find(session => session.tabId === tabId);
+    if (known) showSession(known);
+    // Ask for the session anyway: this is what hosts its room and yields a link
+    // when the tab has not been shared yet.
+    send({ t: "open", tabId });
+  }
+
+  newBtn.addEventListener("click", () => {
+    if (awaiting) return;
+    awaiting = "create";
+    newBtn.disabled = true;
+    newBtn.textContent = "Đang tạo phiên…";
+    if (!send({ t: "create" })) {
+      awaiting = null;
+      newBtn.disabled = false;
+      newBtn.textContent = "+ Phiên mới";
+      showNotice("Chưa kết nối tới máy tính.");
+    }
+  });
+
+  backBtn.addEventListener("click", () => {
+    showList();
+    send({ t: "list" });
+  });
+
+  // A phone that sleeps in the background should not keep a socket alive, and
+  // should refresh its list on return: the desktop may have opened sessions.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      if (!socket || socket.readyState !== WebSocket.OPEN) connect();
+      else send({ t: "list" });
+    }
+  });
+
+  // ------------------------------------------------------------------- start
+  async function main() {
+    if (!window.isSecureContext || !crypto.subtle) {
+      fatal(
+        "Cần HTTPS",
+        "Trang này phải mở qua HTTPS thì trình duyệt mới cho mã hoá đầu cuối.",
+        window.location.origin,
+      );
+      return;
+    }
+    room = parseLink();
+    if (!room) {
+      fatal(
+        "Thiếu liên kết",
+        "Hãy quét mã QR trong WISA STUDIO (Cửa sổ Điện thoại) thay vì mở trang này trực tiếp.",
+        window.location.href,
+      );
+      return;
+    }
+    try {
+      key = await importKey(room.key);
+    } catch (cause) {
+      fatal("Liên kết hỏng", "Khoá trong liên kết không đọc được.", String(cause));
+      return;
+    }
+    booting();
+    connect();
+  }
+
+  void main();
+})();
+</script>
+</body>
+</html>

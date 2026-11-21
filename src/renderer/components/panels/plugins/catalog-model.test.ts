@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RpcMarketplacePluginInfo } from "../../../../shared/rpc-types";
 import {
 	catalogCategories,
+	DEFAULT_CATALOGS,
 	dedupeCatalog,
 	filterCatalog,
 	humanizePluginName,
@@ -101,6 +102,64 @@ describe("dedupeCatalog", () => {
 			"apollo@first",
 			"apollo@second",
 		]);
+	});
+});
+
+describe("DEFAULT_CATALOGS", () => {
+	const names = new Map(DEFAULT_CATALOGS.map(catalog => [catalog.source, catalog.name]));
+
+	it("ships the vendor catalogs that actually serve a marketplace.json", () => {
+		// Each of these answered 200 with a `plugins` array when it was added; a
+		// catalog that 404s would cost every user a failed download on first run.
+		expect(
+			DEFAULT_CATALOGS.map(catalog => catalog.source).filter(source =>
+				[
+					"cloudflare/skills",
+					"getsentry/sentry-skills",
+					"huggingface/skills",
+					"microsoft/skills",
+					"openai/codex-plugin-cc",
+					"supabase/agent-skills",
+				].includes(source),
+			),
+		).toHaveLength(6);
+		expect(names.get("cloudflare/skills")).toBe("cloudflare");
+		expect(names.get("supabase/agent-skills")).toBe("supabase-agent-skills");
+		expect(names.get("getsentry/sentry-skills")).toBe("sentry-skills");
+		expect(names.get("huggingface/skills")).toBe("huggingface-skills");
+		// The catalog names itself "skills", and the agent keys its registry by that name.
+		expect(names.get("microsoft/skills")).toBe("skills");
+		expect(names.get("openai/codex-plugin-cc")).toBe("openai-codex");
+	});
+
+	it("names every catalog once, and never with an address twice", () => {
+		// The agent refuses a second marketplace under a name it already has (case-
+		// insensitively, since the cache is a folder), so a duplicate would be an
+		// error the person sees on first run for no reason.
+		const lowered = DEFAULT_CATALOGS.map(catalog => catalog.name.toLowerCase());
+		expect(new Set(lowered).size).toBe(lowered.length);
+		const sources = DEFAULT_CATALOGS.map(catalog => catalog.source);
+		expect(new Set(sources).size).toBe(sources.length);
+		// `name@marketplace` ids are built from these, and both segments are slugs.
+		for (const catalog of DEFAULT_CATALOGS) expect(catalog.name).toMatch(/^[a-z0-9][a-z0-9.-]*$/);
+	});
+
+	it("puts first-party catalogs before community ones, which is the duplicate tie-break", () => {
+		// Earlier catalogs win when two list the same plugin, so Anthropic's and the
+		// vendors' own go first and the community ones last.
+		const position = new Map(DEFAULT_CATALOGS.map((catalog, index) => [catalog.source, index]));
+		const lastVendor = Math.max(
+			position.get("anthropics/claude-plugins-official") ?? Number.POSITIVE_INFINITY,
+			position.get("microsoft/skills") ?? Number.POSITIVE_INFINITY,
+			position.get("openai/codex-plugin-cc") ?? Number.POSITIVE_INFINITY,
+		);
+		for (const community of [
+			"wshobson/agents",
+			"trailofbits/skills",
+			"obra/superpowers-marketplace",
+			"phuryn/pm-skills",
+		])
+			expect(position.get(community)).toBeGreaterThan(lastVendor);
 	});
 });
 

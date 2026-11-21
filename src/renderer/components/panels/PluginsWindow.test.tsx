@@ -234,6 +234,23 @@ describe("default catalogs", () => {
 		expect(fake.marketplaces.map(entry => entry.name)).toContain("ponytail");
 	});
 
+	it("seeds the vendor catalogs too, under the names their marketplaces call themselves", async () => {
+		// Each of these serves a marketplace.json on `main`; seeding them is what
+		// puts other vendors' plugins next to Anthropic's on the first run.
+		const fake = installAgent({ marketplaces: [], offered: [] });
+		await openPage();
+		const added = new Map(fake.marketplaces.map(entry => [entry.source, entry.name]));
+		expect(added.get("cloudflare/skills")).toBe("cloudflare");
+		expect(added.get("supabase/agent-skills")).toBe("supabase-agent-skills");
+		expect(added.get("getsentry/sentry-skills")).toBe("sentry-skills");
+		expect(added.get("huggingface/skills")).toBe("huggingface-skills");
+		expect(added.get("microsoft/skills")).toBe("skills");
+		expect(added.get("openai/codex-plugin-cc")).toBe("openai-codex");
+		// The catalog filter offers every one of them, plus "All catalogs".
+		const options = document.body.querySelectorAll('select[aria-label="Catalog"] option');
+		expect(options.length).toBe(DEFAULT_SOURCES.length + 1);
+	});
+
 	it("doesn't add one already there under another address, and won't bring it back once removed", async () => {
 		const trailofbits = "trailofbits/skills";
 		const fake = installAgent({

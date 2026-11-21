@@ -18,10 +18,23 @@ export interface DefaultCatalog {
  * is listed twice, so the most trusted ones go first.
  */
 export const DEFAULT_CATALOGS: readonly DefaultCatalog[] = [
+	// Anthropic's own catalogs.
 	{ source: "anthropics/claude-plugins-official", name: "claude-plugins-official" },
 	{ source: "anthropics/knowledge-work-plugins", name: "knowledge-work-plugins" },
 	{ source: "anthropics/skills", name: "anthropic-agent-skills" },
 	{ source: "anthropics/financial-services-plugins", name: "claude-for-financial-services" },
+	// Other vendors' official catalogs, in alphabetical order of the vendor. Each
+	// `name` is the name the catalog gives itself, which is how the agent keys its
+	// registry and how a copy added some other way is recognised.
+	{ source: "cloudflare/skills", name: "cloudflare" },
+	{ source: "getsentry/sentry-skills", name: "sentry-skills" },
+	{ source: "huggingface/skills", name: "huggingface-skills" },
+	// Microsoft's own catalog is named just "skills"; keeping its name is what lets a
+	// copy someone added under another address be recognised.
+	{ source: "microsoft/skills", name: "skills" },
+	{ source: "openai/codex-plugin-cc", name: "openai-codex" },
+	{ source: "supabase/agent-skills", name: "supabase-agent-skills" },
+	// Community catalogs last: they only win a duplicate when nothing above lists it.
 	{ source: "wshobson/agents", name: "claude-code-workflows" },
 	{ source: "trailofbits/skills", name: "trailofbits" },
 	{ source: "obra/superpowers-marketplace", name: "superpowers-marketplace" },
