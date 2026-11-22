@@ -17,7 +17,6 @@ export { WISA_PROVIDER_ID };
 
 const WISA_PROVIDER = {
 	baseUrl: "https://api.askwisa.com/v1",
-	api: "openai-completions",
 	auth: "apiKey",
 	discovery: { type: "openai-models-list" },
 } as const;
@@ -27,7 +26,6 @@ export function ensureWisaProvider(): boolean {
 	if (listModelsProviders().some(provider => provider.id === WISA_PROVIDER_ID)) return false;
 	upsertModelsProvider({
 		id: WISA_PROVIDER_ID,
-		api: WISA_PROVIDER.api,
 		baseUrl: WISA_PROVIDER.baseUrl,
 		auth: WISA_PROVIDER.auth,
 		discovery: WISA_PROVIDER.discovery,

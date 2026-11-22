@@ -1654,47 +1654,6 @@ export function SettingsWindow() {
 														/>
 														<div>
 															<span className="mb-1 block text-omp-md font-medium text-(--omp-text)">
-																{t("settings.launch.profile")}
-															</span>
-															<Input
-																compact
-																onBlur={() => commitLaunchField("profile")}
-																onChange={event =>
-																	setLaunchDrafts(prev => ({ ...prev, profile: event.target.value }))
-																}
-																onKeyDown={event => {
-																	if (isImeKeyEvent(event)) return;
-																	if (event.key === "Enter") event.currentTarget.blur();
-																}}
-																placeholder={t("settings.launch.profilePlaceholder")}
-																spellCheck={false}
-																value={launchDrafts.profile ?? launchProfile.profile ?? ""}
-															/>
-														</div>
-														<div>
-															<span className="mb-1 block text-omp-md font-medium text-(--omp-text)">
-																{t("settings.launch.sessionDir")}
-															</span>
-															<Input
-																compact
-																onBlur={() => commitLaunchField("sessionDir")}
-																onChange={event =>
-																	setLaunchDrafts(prev => ({
-																		...prev,
-																		sessionDir: event.target.value,
-																	}))
-																}
-																onKeyDown={event => {
-																	if (isImeKeyEvent(event)) return;
-																	if (event.key === "Enter") event.currentTarget.blur();
-																}}
-																placeholder={t("settings.launch.sessionDirPlaceholder")}
-																spellCheck={false}
-																value={launchDrafts.sessionDir ?? launchProfile.sessionDir ?? ""}
-															/>
-														</div>
-														<div>
-															<span className="mb-1 block text-omp-md font-medium text-(--omp-text)">
 																{t("settings.launch.config")}
 															</span>
 															<Input

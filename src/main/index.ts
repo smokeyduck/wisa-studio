@@ -2,23 +2,23 @@
  * Main process entry point for the omp GUI.
  * App lifecycle: ready → window, sidecar, session index, IPC, tray, menu, deep links, updater.
  */
+import "./app-profile-bootstrap";
 
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { app, BrowserWindow, desktopCapturer, nativeImage, session, webContents } from "electron";
 import Store from "electron-store";
 import type { SessionKind } from "../shared/ipc-types";
 import { installQuitGuard, requestQuit } from "./app-quit";
 import { BrowserHost } from "./browser-host";
-import { bundledOmpFilename, resolveOmpCandidate } from "./bundled-omp-path";
+import { resolveBundledOmp } from "./bundled-omp-path";
 import { CollabPhoneHost } from "./collab-phone";
 import { type ConversationIndex, openConversationIndex } from "./conversation-index";
 import { CustomThemesWatcher } from "./custom-themes";
 import { setupDeepLinks, startupFolder } from "./deep-link";
 import { ensureDefaultWorkspace } from "./default-workspace";
-import { applyDevProfile } from "./dev-profile";
-import { FULL_CAPABILITIES, resolveDevSidecar } from "./dev-sidecar";
+import { agentSpawnEnv } from "./dev-profile";
 import { applyGpuFallbackIfNeeded, handleGpuProcessGone } from "./gpu-fallback";
 import { firstUsableCwd } from "./initial-cwd";
 import { registerIpcHandlers } from "./ipc";
@@ -44,20 +44,6 @@ import { WindowManager } from "./window";
 import { resolveWindowSpawnTarget } from "./window-spawn-target";
 import { ensureWisaProvider } from "./wisa-provider";
 
-// Honor Electron's explicit profile before acquiring its instance lock.
-const userDataDirectory = app.commandLine.getSwitchValue("user-data-dir");
-if (userDataDirectory) {
-	const directory = resolve(userDataDirectory);
-	mkdirSync(directory, { recursive: true });
-	app.setPath("userData", directory);
-}
-
-// Dev isolation (must precede both the instance lock and any userData read):
-// an unpackaged run gets its own userData and its own agent profile, so it
-// neither contends for the installed app's SingletonLock nor writes into the
-// `~/.omp` of a live omp session.
-applyDevProfile();
-
 // Software-rendering escape hatch (must precede whenReady): a crashed GPU
 // process leaves every window black — the marker relaunches without it.
 applyGpuFallbackIfNeeded();
@@ -77,18 +63,7 @@ if (!gotLock) {
 	app.quit();
 }
 
-// App identity: the dev run shows "Electron" + the default atom icon in the
-// dock otherwise. Packaged builds get both from the bundle via electron-builder.
-// The display name is WISA STUDIO only — the sidecar binary, `omp://` scheme,
-// `~/.omp` config and `window.omp` bridge keep the omp identity.
-//
-// userData is derived from the app name, so renaming would silently move every
-// setting, saved tab layout, launch profile and the single-instance lock to a
-// fresh directory. Packaged builds therefore pin the directory the previous
-// product name ("omp") produced; a dev run already got its own profile from
-// applyDevProfile() above.
-app.setName("WISA STUDIO");
-if (!userDataDirectory && app.isPackaged) app.setPath("userData", join(app.getPath("appData"), "omp"));
+// Packaged builds get their icon from the bundle; dev needs the dock icon too.
 {
 	const dockIcon = join(app.getAppPath(), "resources", "icon.png");
 	if (process.platform === "darwin" && existsSync(dockIcon)) {
@@ -97,47 +72,12 @@ if (!userDataDirectory && app.isPackaged) app.setPath("userData", join(app.getPa
 }
 
 /**
- * Locate the GUI's built-in omp binary — the ONLY sidecar the GUI runs in the
- * closed loop. Packaged apps ship it at `process.resourcesPath/omp`; in dev it
- * lives at `packages/gui/resources/omp` (built by `bun --cwd=packages/gui run
- * build:omp`). No system-installed omp is consulted and there is no external
- * fallback: when it is missing the GUI surfaces an error telling the user to
- * build it. The workspace source sidecar is available only as an explicit dev
- * override (`OMP_SIDECAR=source`), never automatically.
- */
-function resolveBundledOmp(): string | null {
-	const override = process.env.OMP_BUNDLED_OMP;
-	if (override && existsSync(override)) return override;
-	const name = bundledOmpFilename();
-	if (process.resourcesPath) {
-		const packaged =
-			resolveOmpCandidate(process.resourcesPath, name) ?? resolveOmpCandidate(process.resourcesPath, "omp");
-		if (packaged) return packaged;
-	}
-	for (const start of [app.getAppPath(), process.cwd()]) {
-		let dir = start;
-		for (let i = 0; i < 8; i++) {
-			const direct = resolveOmpCandidate(dir, "resources", name) ?? resolveOmpCandidate(dir, "resources", "omp");
-			if (direct) return direct;
-			const nested =
-				resolveOmpCandidate(dir, "packages", "gui", "resources", name) ??
-				resolveOmpCandidate(dir, "packages", "gui", "resources", "omp");
-			if (nested) return nested;
-			const parent = join(dir, "..");
-			if (parent === dir) break;
-			dir = parent;
-		}
-	}
-	return null;
-}
-
-/**
  * Dev-only explicit override (`OMP_SIDECAR=source`): run the workspace
  * coding-agent source CLI instead of the bundled binary. Used to exercise
  * in-repo changes without rebuilding the binary. Returns null otherwise.
  */
 function resolveSourceCli(): string | null {
-	if (process.env.OMP_SIDECAR !== "source") return null;
+	if (app.isPackaged || process.env.OMP_SIDECAR !== "source") return null;
 	const explicit = process.env.OMP_SIDECAR_CLI;
 	if (explicit && existsSync(explicit)) return explicit;
 	for (const start of [app.getAppPath(), process.cwd()]) {
@@ -326,31 +266,9 @@ app.whenReady().then(() => {
 
 	const initialCwd = resolveInitialCwd();
 	const explicitStartupCwd = startupFolder();
-	// A clean checkout has no resources/omp until build:omp runs. Rather than
-	// failing every tab with "built-in omp not found", a dev run falls back to
-	// an omp CLI already installed on the machine: same wire protocol, and it
-	// inherits the dev agent profile set by applyDevProfile(). A packaged build
-	// never leaves the closed loop.
-	const bundledSidecar = resolveBundledOmp();
-	const devFallback = bundledSidecar || app.isPackaged ? null : resolveDevSidecar();
-	const bundledOmp = bundledSidecar ?? devFallback?.path ?? null;
-	// A pinned sidecar accepts every flag the GUI passes; a dev fallback may not,
-	// and the spawn sites below omit what it would refuse.
-	const capabilities = devFallback?.capabilities ?? FULL_CAPABILITIES;
-	if (devFallback) {
-		const what = devFallback.kind === "bundle" ? "installed app sidecar" : "installed omp CLI";
-		console.log(`[dev] no resources/omp - using ${what}: ${devFallback.path}`);
-		if (!capabilities.noAutoResume || !capabilities.statsNoOpen) {
-			const missing = [
-				capabilities.noAutoResume ? null : "--no-auto-resume",
-				capabilities.statsNoOpen ? null : "stats --no-open",
-			].filter((flag): flag is string => flag !== null);
-			console.warn(
-				`[dev] that binary does not accept ${missing.join(" or ")} - omitting it for this run; ` +
-					"run build:omp for a pinned sidecar at parity with this GUI",
-			);
-		}
-	}
+	// Only the pinned WISA sidecar supports the storage-isolation contract.
+	// Missing resources/omp is actionable; never run an installed foreign CLI.
+	const bundledOmp = resolveBundledOmp(app.isPackaged, process.resourcesPath, app.getAppPath());
 	const sourceCli = resolveSourceCli();
 	// Finder-launched omp has no terminal, and a sidecar that dies before
 	// it can write its own log only speaks through stderr — land the tail
@@ -381,7 +299,6 @@ app.whenReady().then(() => {
 			cwd,
 			kind,
 			fresh,
-			noAutoResume: capabilities.noAutoResume,
 			proxyEnv: resolveProxyEnvForSpawn,
 			shellEnv: shellSpawnEnv,
 			reportFailure: reportSidecarFailure,
@@ -469,7 +386,6 @@ app.whenReady().then(() => {
 					cwd: spec.cwd,
 					kind: "agent",
 					fresh: true,
-					noAutoResume: capabilities.noAutoResume,
 					runPolicy: { flags: spec.flags, deny: spec.deny },
 					proxyEnv: resolveProxyEnvForSpawn,
 					shellEnv: shellSpawnEnv,
@@ -489,7 +405,7 @@ app.whenReady().then(() => {
 	// Built-in stats dashboard: spawned from the SAME bundled binary. No
 	// external `omp stats` process is required (closed loop).
 	if (bundledOmp) {
-		statsServer = new StatsServerManager(bundledOmp, { noOpen: capabilities.statsNoOpen });
+		statsServer = new StatsServerManager(bundledOmp);
 		statsServer.on("ready", (port: number) => {
 			statsClient.port = port;
 		});
@@ -521,7 +437,9 @@ app.whenReady().then(() => {
 		windowManager,
 		benchmarkBinaryPath: bundledOmp,
 		benchmarkEnv: async () =>
-			dropUnsupportedProxies({ ...process.env, ...(await shellSpawnEnv()), ...(await resolveProxyEnvForSpawn()) }),
+			dropUnsupportedProxies(
+				agentSpawnEnv({ ...process.env, ...(await shellSpawnEnv()), ...(await resolveProxyEnvForSpawn()) }),
+			),
 		proxyWarnings: async () => (await resolveProxy()).dropped,
 		spawnWindow,
 		initialCwd: resolveInitialCwd,

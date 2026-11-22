@@ -287,8 +287,8 @@ jobs:
           app=$(find dist/mac-arm64 dist/mac -maxdepth 1 -name "*.app" | head -1)
           echo "launching $app"
           profile=$(mktemp -d)
-          env -u ELECTRON_RUN_AS_NODE "$app/Contents/MacOS/$(basename "$app" .app)" \
-            --user-data-dir="$profile" >/tmp/gui.log 2>&1 &
+          env -u ELECTRON_RUN_AS_NODE WISA_PROFILE_ROOT="$profile" "$app/Contents/MacOS/$(basename "$app" .app)" \
+            >/tmp/gui.log 2>&1 &
           pid=$!
           renderer_up=0
           for _ in $(seq 1 40); do

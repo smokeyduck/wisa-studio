@@ -1698,6 +1698,10 @@ export const vi: Record<string, string> = {
 	"providerCfg.form.idPlaceholder": "ví dụ: my-proxy",
 	"providerCfg.form.idHint": "Chữ thường, chữ số, dấu gạch ngang, gạch dưới - khóa trong models.yml.",
 	"providerCfg.form.idRequired": "Cần có ID nhà cung cấp",
+	"providerCfg.form.wisaApiDefault": "Mặc định (theo họ mô hình Wisa)",
+	"providerCfg.form.wisaApiUseFamilies": "Dùng API theo dòng model",
+	"providerCfg.form.wisaApiHint":
+		"Mặc định dùng Anthropic Messages cho Claude, Responses cho mô hình OpenAI và Chat Completions cho các mô hình khác. API ghi đè ở nhà cung cấp hoặc mô hình được ưu tiên. Với cấu hình Wisa cũ, chọn Mặc định rồi lưu để bật cách định tuyến này.",
 	"providerCfg.form.idSlug":
 		"Bắt đầu bằng chữ cái hoặc chữ số; chỉ dùng chữ thường, chữ số, dấu gạch ngang và gạch dưới",
 	"providerCfg.form.idExists": "Nhà cung cấp với ID này đã tồn tại",
@@ -2142,10 +2146,6 @@ export const vi: Record<string, string> = {
 	"settings.launch.noLspDesc": "Khởi động mà không có công cụ language-server (--no-lsp).",
 	"settings.launch.planYolo": "Plan yolo",
 	"settings.launch.planYoloDesc": "Tự động phê duyệt thực thi ở chế độ plan (--plan-yolo).",
-	"settings.launch.profile": "Tên hồ sơ",
-	"settings.launch.profilePlaceholder": "Hồ sơ tác nhân dùng để khởi chạy (--profile)",
-	"settings.launch.sessionDir": "Thư mục phiên",
-	"settings.launch.sessionDirPlaceholder": "Nơi lưu tệp phiên (--session-dir)",
 	"settings.launch.config": "Đường dẫn tệp cấu hình",
 	"settings.launch.configPlaceholder": "Tệp cấu hình cần tải (--config)",
 	"settings.launch.preview": "Xem trước lệnh khởi chạy",

@@ -95,24 +95,21 @@ Trên Linux, ứng dụng cần một phiên đồ hoạ X11 hoặc Wayland. Ch�
 
 ## Dữ liệu được lưu ở đâu
 
-Toàn bộ cấu hình agent nằm trong `~/.omp`, dùng chung với `omp` CLI nếu bạn cài cả hai:
+Cấu hình agent nằm trong `~/.wisa-studio/agent` (bản phát triển: `~/.wisa-studio-dev/agent`). WISA STUDIO không dùng `~/.omp` của `omp` CLI và không tự sao chép dữ liệu cũ.
 
 | Đường dẫn | Nội dung |
 |---|---|
-| `~/.omp/agent/models.yml` | Nhà cung cấp, mô hình, API key (kể cả khóa WISA) |
-| `~/.omp/agent/sessions/` | Lịch sử phiên dạng `.jsonl` |
-| `~/.omp/agent/` | MCP, skill, bộ nhớ, cấu hình agent |
-| `~/.omp/gui/themes/` | Theme tuỳ chỉnh của GUI |
-| `~/.omp/logs/` | Nhật ký ứng dụng và agent |
-| `~/.omp/work/` | Không gian làm việc mặc định |
+| `~/.wisa-studio/agent/` | Cấu hình agent và phiên làm việc do engine quản lý |
+| `~/.wisa-studio/logs/` | Nhật ký agent |
+| `~/.wisa-studio/tmp/` | Thư mục tạm của agent |
 
-Trạng thái riêng của giao diện (bố cục cửa sổ, chỉ mục hội thoại, lịch tác vụ định kỳ) nằm trong thư mục dữ liệu ứng dụng của Electron:
+Trạng thái giao diện (bố cục cửa sổ, chỉ mục hội thoại, lịch tác vụ định kỳ, nhật ký `logs/gui-runtime.jsonl`) nằm trong thư mục dữ liệu ứng dụng:
 
-- macOS: `~/Library/Application Support/omp`
-- Windows: `%APPDATA%\omp`
-- Linux: `~/.config/omp`
+- macOS: `~/Library/Application Support/wisa-studio`
+- Windows: `%APPDATA%\wisa-studio`
+- Linux: `~/.config/wisa-studio`
 
-Có thể đổi cả hai bằng biến môi trường khi chạy từ mã nguồn (`PI_CODING_AGENT_DIR`, `--user-data-dir`), nhưng bản cài đặt thông thường không cần.
+Khi chạy thử hoặc tự động hóa, đặt `WISA_PROFILE_ROOT` thành thư mục tạm tuyệt đối để cách ly dữ liệu: khi đó dữ liệu nằm ở `$WISA_PROFILE_ROOT/appData/wisa-studio` và `$WISA_PROFILE_ROOT/.wisa-studio/agent`. Biến này chỉ dành cho kiểm thử, không phải để chọn thư mục dữ liệu tùy ý. `--user-data-dir` không còn có tác dụng. Bản cài đặt thông thường không cần.
 
 ## Cập nhật
 
@@ -122,7 +119,7 @@ Mở **Cài đặt** → **Hệ thống & nâng cao** → **Cập nhật**, rồ
 - **Windows portable và gói deb:** tải bản mới từ trang Releases rồi thay thế thủ công.
 - **macOS:** vì bản ký ad-hoc không qua notarize, ứng dụng tải tệp `.dmg` vào thư mục Downloads và mở Finder thay vì tự cài. Thoát WISA STUDIO, mở DMG mới, kéo vào Applications và chọn **Replace**.
 
-Cũng có thể tải tay từ trang Releases bất cứ lúc nào; cấu hình trong `~/.omp` được giữ nguyên qua các lần cập nhật.
+Cũng có thể tải tay từ trang Releases bất cứ lúc nào; cấu hình trong `~/.wisa-studio/agent` được giữ nguyên qua các lần cập nhật. Dữ liệu của bản cũ trong `~/.omp` không được đọc hay di chuyển tự động.
 
 ## Đặt lại
 
@@ -130,11 +127,11 @@ Cũng có thể tải tay từ trang Releases bất cứ lúc nào; cấu hình 
 
 | Muốn xoá | Xoá gì |
 |---|---|
-| Chỉ lịch sử trò chuyện | `~/.omp/agent/sessions/` |
-| Toàn bộ cấu hình agent, key, MCP, bộ nhớ | `~/.omp/` |
+| Chỉ lịch sử trò chuyện | `~/.wisa-studio/agent/sessions/` |
+| Toàn bộ cấu hình agent, key, MCP, bộ nhớ | `~/.wisa-studio/agent/` (bản phát triển: `~/.wisa-studio-dev/agent/`) |
 | Bố cục cửa sổ, chỉ mục hội thoại, tác vụ định kỳ | thư mục dữ liệu Electron ở bảng trên |
 
-Xoá `~/.omp/` sẽ mất API key đã lưu, kể cả khóa WISA — bạn phải dán lại. Nhà cung cấp `wisa` được tạo lại tự động ở lần khởi động sau, nhưng key thì không.
+Xoá `~/.wisa-studio/agent/` sẽ mất API key đã lưu, kể cả khóa WISA — bạn phải dán lại. Nhà cung cấp `wisa` được tạo lại tự động ở lần khởi động sau, nhưng key thì không.
 
 ## Sự cố thường gặp
 

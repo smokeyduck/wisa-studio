@@ -2,15 +2,14 @@
  * Check the actual bundled Core schema against a locale's translation tables,
  * using an isolated agent profile.
  *
- * Usage: bun scripts/check-schema-locale.ts <sidecar-path> [--lang ru|vi]
+ * Usage: bun scripts/check-schema-locale.ts [--lang ru|vi]
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { resolveDevSidecar } from "../src/main/dev-sidecar";
+import { bundledOmpFilename, resolveOmpCandidate } from "../src/main/bundled-omp-path";
 import { RU_SCHEMA_OPTION_TEXT } from "../src/renderer/components/settings/schema-option-ru";
 import { VI_SCHEMA_OPTION_TEXT } from "../src/renderer/components/settings/schema-option-vi";
 import { RU_GROUP_TITLES, RU_SETTINGS } from "../src/renderer/components/settings/schema-ru";
@@ -37,31 +36,58 @@ type LocaleId = keyof typeof LOCALES;
 const args = process.argv.slice(2);
 const langIndex = args.indexOf("--lang");
 const lang = (langIndex === -1 ? "ru" : args[langIndex + 1]) as LocaleId;
-if (!(lang in LOCALES)) throw new Error("Usage: bun scripts/check-schema-locale.ts [sidecar-path] [--lang ru|vi]");
+if (!(lang in LOCALES)) throw new Error("Usage: bun scripts/check-schema-locale.ts [--lang ru|vi]");
 
-// Default to the built sidecars, then to whatever `bun run dev` would spawn:
-// the check must run against a real Core schema, and a checkout mid-build has
-// no resources/omp.
-const sidecar = args.find((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--lang") ?? builtSidecar();
+// Pinned sidecar only: the check runs the Core schema this checkout ships, never
+// an installed binary or a global CLI.
+const sidecar = resolveOmpCandidate(import.meta.dir, "..", "resources", bundledOmpFilename());
 if (!sidecar) {
 	throw new Error(
-		[
-			"No sidecar to check against: build one with `bun run build:omp`, or pass its path.",
-			"An installed WISA STUDIO / omp bundle also works.",
-		].join("\n"),
+		"No pinned sidecar at resources/omp. Build it with `bun run build:omp` (needs the omp monorepo next to this checkout), or copy a prebuilt sidecar there.",
 	);
 }
 const locale = LOCALES[lang];
 
-function builtSidecar(): string | null {
-	const candidates = ["omp", "omp.x64", "omp.exe"].map(name => join(import.meta.dir, "..", "resources", name));
-	return candidates.find(existsSync) ?? resolveDevSidecar()?.path ?? null;
-}
-
 const temporary = await mkdtemp(join(tmpdir(), `omp-${lang}-schema-`));
+// Fully isolated: the sidecar resolves global engine metadata from HOME, XDG,
+// APPDATA and TEMP, so each of those points inside `temporary`. The child gets
+// only the allowlisted process variables below; every inherited OMP_* / PI_*
+// value (profile, session, cache, artifact overrides) is dropped. PI_CONFIG_DIR
+// and PI_PROJECT_CONFIG_DIR are relative names, as the sidecar requires.
+const home = join(temporary, "home");
+const tmp = join(temporary, "tmp");
+await mkdir(home, { recursive: true });
+await mkdir(tmp, { recursive: true });
+const xdg = (name: string) => join(temporary, "xdg", name);
+const INHERITED = ["PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "LD_LIBRARY_PATH"];
+const windows = process.platform === "win32";
+const allowed = new Set(INHERITED.map(name => (windows ? name.toUpperCase() : name)));
+const env: Record<string, string> = {};
+for (const [name, value] of Object.entries(process.env)) {
+	if (value !== undefined && allowed.has(windows ? name.toUpperCase() : name)) env[name] = value;
+}
+Object.assign(env, {
+	HOME: home,
+	USERPROFILE: home,
+	APPDATA: join(home, "AppData", "Roaming"),
+	LOCALAPPDATA: join(home, "AppData", "Local"),
+	XDG_CONFIG_HOME: xdg("config"),
+	XDG_DATA_HOME: xdg("data"),
+	XDG_CACHE_HOME: xdg("cache"),
+	XDG_STATE_HOME: xdg("state"),
+	TMPDIR: tmp,
+	TMP: tmp,
+	TEMP: tmp,
+	PI_CODING_AGENT_DIR: join(temporary, ".wisa-studio", "agent"),
+	PI_CONFIG_DIR: ".wisa-studio",
+	PI_PROJECT_CONFIG_DIR: ".wisa-studio",
+	PI_CONFIG_SOURCES: "native",
+	PI_NO_PTY: "1",
+	PI_NOTIFICATIONS: "off",
+});
 const child = spawn(sidecar, ["--mode", "rpc-ui"], {
 	cwd: temporary,
-	env: { ...process.env, PI_CODING_AGENT_DIR: temporary, PI_NO_PTY: "1", PI_NOTIFICATIONS: "off" },
+	env,
 	stdio: ["pipe", "pipe", "pipe"],
 });
 /**

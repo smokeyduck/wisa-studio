@@ -23,8 +23,6 @@ describe("profileToFlags mapping", () => {
 			tools: ["read", "bash"],
 			noLsp: true,
 			planYolo: true,
-			profile: "fast",
-			sessionDir: "/tmp/sessions",
 			config: "/tmp/config.yml",
 		});
 		expect(flags).toEqual([
@@ -41,10 +39,6 @@ describe("profileToFlags mapping", () => {
 			"read,bash",
 			"--no-lsp",
 			"--plan-yolo",
-			"--profile",
-			"fast",
-			"--session-dir",
-			"/tmp/sessions",
 			"--config",
 			"/tmp/config.yml",
 		]);
@@ -64,8 +58,6 @@ describe("profileToFlags mapping", () => {
 				tools: [],
 				noLsp: false,
 				planYolo: false,
-				profile: "  ",
-				sessionDir: "",
 				config: " ",
 			}),
 		).toEqual([]);
@@ -93,6 +85,8 @@ describe("denylist", () => {
 		for (const flag of DENYLISTED_FLAGS) {
 			expect(stripDenylistedFlags([flag, "value", "--tools", "read"])).toEqual(
 				flag === "--session" ||
+					flag === "--profile" ||
+					flag === "--session-dir" ||
 					flag === "--mode" ||
 					flag === "--export" ||
 					flag === "--cwd" ||
@@ -106,6 +100,10 @@ describe("denylist", () => {
 	});
 
 	it("drops the --flag=value form in one token", () => {
+		expect(stripDenylistedFlags(["--profile=old", "--session-dir", "/old/sessions", "--tools", "read"])).toEqual([
+			"--tools",
+			"read",
+		]);
 		expect(stripDenylistedFlags(["--mode=text", "--session=/tmp/x.jsonl", "--no-lsp"])).toEqual(["--no-lsp"]);
 	});
 
@@ -182,8 +180,6 @@ describe("parseLaunchProfile", () => {
 			addDirs: ["/a"],
 			tools: ["read", "bash"],
 			noLsp: true,
-			profile: "p",
-			sessionDir: "/s",
 			config: "/c.yml",
 		});
 	});

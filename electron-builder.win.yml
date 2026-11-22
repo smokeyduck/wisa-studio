@@ -1,4 +1,4 @@
-appId: sh.omp.gui
+appId: org.wisa.studio
 productName: WISA STUDIO
 afterPack: scripts/after-pack.cjs
 directories:
@@ -11,9 +11,9 @@ extraResources:
   - from: resources/omp.exe
     to: omp.exe
 protocols:
-  - name: omp
+  - name: wisa-studio
     schemes:
-      - omp
+      - wisa-studio
 asar: true
 compression: maximum
 
@@ -34,9 +34,9 @@ nsis:
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  # Display name only: the installed executable stays `omp.exe` (electron-builder
-  # derives it from package.json's name), which keeps the userData dir, the
-  # runtime-log path and the deep-link handler working unchanged.
+  # Display name and executable: electron-builder names the installed exe from
+  # productName ("WISA STUDIO.exe"); the sidecar stays `omp.exe` in extraResources.
+  # userData is pinned explicitly in src/main/index.ts, not derived from the exe name.
   shortcutName: WISA STUDIO
   artifactName: wisa-studio-${version}-setup.${ext}
 

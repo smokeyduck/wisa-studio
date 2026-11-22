@@ -1,8 +1,8 @@
 /**
  * Watches what omp learns outside any one window: auto-learned skills
- * (~/.omp/agent/managed-skills) and per-project memory
- * (~/.omp/agent/memories). Either can change from a background capture or
- * another omp process, so the renderer is told instead of polling. Bursts
+ * (agent/managed-skills) and per-project memory (agent/memories), both within
+ * the selected WISA profile. Either can change from a background capture, so
+ * the renderer is told instead of polling. Bursts
  * (a consolidation rewrites several files) collapse into one notice.
  */
 import { join, relative, sep } from "node:path";

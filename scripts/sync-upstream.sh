@@ -17,6 +17,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
 GUI=packages/gui
+# WISA natives cache root. Exported so every child step (bun install, build:omp) sees one value.
+export PI_NATIVES_DIR="${PI_NATIVES_DIR:-$HOME/.wisa-studio/natives}"
 say() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
 
 if [ "${SKIP_MERGE:-0}" = "1" ]; then
@@ -62,7 +64,7 @@ say "4/7 pi_natives for v$new_version"
 # build:omp (step 6) now stages the matching-version addon itself — including
 # replacing stale addons whose version sentinel doesn't match — so this step is
 # only an early, explicit check that the new version is available somewhere.
-native_dir="$HOME/.omp/natives/$new_version"
+native_dir="$PI_NATIVES_DIR/$new_version"
 if [ -n "$new_version" ] && [ ! -f "$native_dir/pi_natives.darwin-arm64.node" ]; then
 	tmp="$(mktemp -d)"
 	bun add --no-cache --registry=https://registry.npmjs.org --os=darwin --cpu=arm64 "@oh-my-pi/pi-natives-darwin-arm64@$new_version" --cwd "$tmp" || \

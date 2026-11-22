@@ -467,6 +467,31 @@ describe("ProvidersWindow", () => {
 		expect(text()).not.toContain(translate("providers.noAuth"));
 	});
 
+	it("shows discovery failure without telling a configured provider to sign in again", async () => {
+		listProviders.mockResolvedValue([{ ...config("wisa"), hasApiKey: true, auth: "apiKey", models: [] }]);
+		getProviders.mockResolvedValue(
+			providersResponse(
+				snapshot([], {
+					discoveryStates: [
+						{
+							provider: "wisa",
+							status: "unavailable",
+							optional: false,
+							stale: false,
+							models: [],
+							error: "fixture discovery unavailable",
+						},
+					],
+				}),
+			),
+		);
+		useSessionStore.setState({ status: "ready" });
+		useUiStore.getState().openProviders();
+		await mountWindow();
+		expect(text()).toContain("fixture discovery unavailable");
+		expect(text()).not.toContain(translate("providers.noAuth"));
+	});
+
 	it("counts a keyless models.yml provider as ready instead of asking the user to sign in", async () => {
 		// The session ran on this provider while the window said no provider was
 		// authenticated and listed it under "Available" with a "no auth" badge.

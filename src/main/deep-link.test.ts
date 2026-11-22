@@ -27,6 +27,11 @@ const { LINUX_DESKTOP_FILE, LINUX_DEV_DESKTOP_FILE, linuxDesktopEntry, parseDeep
 );
 
 describe("parseDeepLink", () => {
+	it("accepts the private external scheme without accepting arbitrary schemes", () => {
+		expect(parseDeepLink("wisa-studio://new")).toEqual({ kind: "payload", payload: { action: "new-session" } });
+		expect(parseDeepLink("wisa-studio://wisa-auth?code=private")).toEqual({ kind: "wisa-auth", code: "private" });
+		expect(parseDeepLink("https://wisa-auth?code=foreign")).toEqual({ kind: "none" });
+	});
 	it("decodes a new-session link", () => {
 		expect(parseDeepLink("omp://new")).toEqual({
 			kind: "payload",
@@ -89,8 +94,9 @@ describe("linuxDesktopEntry", () => {
 	});
 
 	it("declares the scheme and no terminal", () => {
-		const entry = linuxDesktopEntry("/opt/wisa-studio/omp-gui");
-		expect(entry).toContain("MimeType=x-scheme-handler/omp;");
+		const entry = linuxDesktopEntry("/opt/wisa-studio/wisa-studio");
+		expect(entry).toContain("MimeType=x-scheme-handler/wisa-studio;");
+		expect(entry).not.toContain("x-scheme-handler/omp;");
 		expect(entry).toContain("Type=Application");
 		expect(entry).toContain("Terminal=false");
 	});
@@ -126,7 +132,7 @@ describe("linuxDesktopEntry", () => {
 		const executableName = /^\s*executableName:\s*(\S+)\s*$/m.exec(
 			readFileSync(join(__dirname, "..", "..", "electron-builder.yml"), "utf8"),
 		)?.[1];
-		expect(executableName).toBe("omp-gui");
+		expect(executableName).toBe("wisa-studio");
 		expect(LINUX_DESKTOP_FILE).toBe(`${executableName}.desktop`);
 		expect(LINUX_DESKTOP_FILE).not.toContain(" ");
 	});
@@ -161,7 +167,7 @@ describe("cold-start deep link", () => {
 			recordFor: () => undefined,
 		};
 		const originalArgv = process.argv;
-		process.argv = ["/opt/omp-gui", "omp://new"];
+		process.argv = ["/opt/wisa-studio", "wisa-studio://new"];
 		try {
 			setupDeepLinks(windowManager as never, (() => win) as never);
 		} finally {

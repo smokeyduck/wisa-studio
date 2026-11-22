@@ -10,6 +10,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { stripVTControlCharacters } from "node:util";
+import { agentSpawnEnv } from "./dev-profile";
 import { dropUnsupportedProxies } from "./proxy-env";
 import { MAX_RESTART_ATTEMPTS, RestartBudget, type Revive } from "./stats-restart-policy";
 
@@ -71,13 +72,15 @@ export class StatsServerManager extends EventEmitter {
 		try {
 			child = spawn(this.#binaryPath, args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: dropUnsupportedProxies({
-					...process.env,
-					PI_NOTIFICATIONS: "off",
-					// kill() can't run if this process is force-killed or crashes, so the
-					// server watches this pid and exits with it.
-					PI_STATS_OWNER_PID: String(process.pid),
-				}),
+				env: dropUnsupportedProxies(
+					agentSpawnEnv({
+						...process.env,
+						PI_NOTIFICATIONS: "off",
+						// kill() can't run if this process is force-killed or crashes, so the
+						// server watches this pid and exits with it.
+						PI_STATS_OWNER_PID: String(process.pid),
+					}),
+				),
 			});
 		} catch (err) {
 			// spawn() throws synchronously (e.g. EBADF/ENOENT) — treat like a

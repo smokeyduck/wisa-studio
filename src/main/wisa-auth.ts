@@ -90,10 +90,8 @@ export async function exchangeWisaCode(
  * models.yml is free-form: an api value outside the enum would fail the agent's
  * validation and take every provider down with it, so fall back to the default.
  */
-function asProviderApi(value: string | undefined): CustomProviderApi {
-	return CUSTOM_PROVIDER_APIS.includes(value as CustomProviderApi)
-		? (value as CustomProviderApi)
-		: "openai-completions";
+function asProviderApi(value: string | undefined): CustomProviderApi | undefined {
+	return CUSTOM_PROVIDER_APIS.includes(value as CustomProviderApi) ? (value as CustomProviderApi) : undefined;
 }
 
 /**

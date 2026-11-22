@@ -1698,6 +1698,10 @@ export const en: Record<string, string> = {
 	"themeEditor.deleted": "Deleted {name}",
 	"themeEditor.deleteFailed": "Could not delete the theme: {error}",
 
+	"providerCfg.form.wisaApiDefault": "Default (Wisa family routing)",
+	"providerCfg.form.wisaApiUseFamilies": "Use API by model family",
+	"providerCfg.form.wisaApiHint":
+		"Default routes Claude through Anthropic Messages, OpenAI models through Responses, and other models through Chat Completions. Explicit provider and model APIs win. To enable these defaults on an older Wisa entry, select Default and save.",
 	// Plan approval dialog
 	"planApproval.failed": "Plan approval failed",
 	"planApproval.notDispatched": "Approval recorded, but execution was not dispatched.",
@@ -2207,10 +2211,6 @@ export const en: Record<string, string> = {
 	"settings.launch.noLspDesc": "Start without language-server tooling (--no-lsp).",
 	"settings.launch.planYolo": "Plan yolo",
 	"settings.launch.planYoloDesc": "Auto-approve plan-mode execution (--plan-yolo).",
-	"settings.launch.profile": "Profile name",
-	"settings.launch.profilePlaceholder": "Agent profile to launch with (--profile)",
-	"settings.launch.sessionDir": "Session directory",
-	"settings.launch.sessionDirPlaceholder": "Where session files are stored (--session-dir)",
 	"settings.launch.config": "Config file path",
 	"settings.launch.configPlaceholder": "Config file to load (--config)",
 	"settings.launch.preview": "Launch command preview",

@@ -13,14 +13,8 @@ export { GUI_TAB_ID };
 export type LoadState = "loading" | "error" | "ready";
 
 /** Launch-profile text fields that commit on blur (checkboxes/chips apply immediately). */
-export type LaunchTextField = "systemPrompt" | "appendSystemPrompt" | "profile" | "sessionDir" | "config";
-export const LAUNCH_TEXT_FIELDS: readonly LaunchTextField[] = [
-	"systemPrompt",
-	"appendSystemPrompt",
-	"profile",
-	"sessionDir",
-	"config",
-];
+export type LaunchTextField = "systemPrompt" | "appendSystemPrompt" | "config";
+export const LAUNCH_TEXT_FIELDS: readonly LaunchTextField[] = ["systemPrompt", "appendSystemPrompt", "config"];
 /** Prompt fields keep whitespace verbatim (the CLI takes the literal value); the rest trim. */
 export const LAUNCH_VERBATIM_FIELDS: Record<string, true> = { systemPrompt: true, appendSystemPrompt: true };
 
@@ -224,6 +218,6 @@ export const GUI_SETTING_SEARCH_ITEMS = [
 		id: "launch",
 		tabId: ADVANCED_TAB_ID,
 		labelKey: "settings.launch.title",
-		aliases: "launchProfiles launch systemPrompt profile sessionDir 启动 参数 工作区",
+		aliases: "launchProfiles launch systemPrompt config 启动 参数 工作区",
 	},
 ] as const;

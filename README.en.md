@@ -51,7 +51,7 @@ The agent is unchanged. All the work — reading files, running commands, editin
 - **WISA gateway:** the `wisa` provider is pre-seeded and offered first in onboarding.
 - **Releases:** published from this repository.
 
-Because it shares `~/.omp`, sessions and settings stay compatible with the omp CLI: the same session opens from a terminal or from the GUI.
+The agent is the same oh-my-pi engine, but WISA STUDIO keeps its own data under `~/.wisa-studio/agent` (not `~/.omp`), so sessions and settings are not shared with the omp CLI.
 
 ## What the interface does
 
@@ -71,6 +71,31 @@ Download the package above, open it, paste an API key (or pick another provider)
 
 Per-platform details, resetting data and first-launch troubleshooting: [docs/vi/cai-dat.md](docs/vi/cai-dat.md).
 
+## Data locations and coexistence
+
+WISA STUDIO keeps its own data and does not read or write `~/.omp`. Nothing is migrated automatically from earlier builds.
+
+| Data | macOS | Windows | Linux |
+|---|---|---|---|
+| App settings, tabs, scheduler, conversation index, `logs/gui-runtime.jsonl` | `~/Library/Application Support/wisa-studio` | `%APPDATA%\wisa-studio` | `~/.config/wisa-studio` |
+| Agent config: `models.yml`, MCP, skills, sessions | `~/.wisa-studio/agent` | `%USERPROFILE%\.wisa-studio\agent` | `~/.wisa-studio/agent` |
+| Agent logs | `~/.wisa-studio/logs` | `%USERPROFILE%\.wisa-studio\logs` | `~/.wisa-studio/logs` |
+| Project settings (inside a workspace) | `.wisa-studio/` | `.wisa-studio\` | `.wisa-studio/` |
+
+Development runs (`bun run dev`) use `wisa-studio-dev` and `~/.wisa-studio-dev/agent`. The agent's temp folder is `~/.wisa-studio-dev/tmp`.
+
+Tests and automation may set `WISA_PROFILE_ROOT` (an absolute path) to move all of the above under `<root>/appData/wisa-studio` and `<root>/.wisa-studio/agent`. This variable exists for tests; it is not a way to pick an arbitrary data directory.
+
+Earlier builds stored data in `…/omp` (userData) and `~/.omp` (agent). WISA STUDIO does not copy, move, or delete that data. Saved API keys must be re-entered in the new app.
+
+Coexistence:
+
+- Against the upstream `omp` builds (`productName: omp`, `appId: sh.omp.gui`) the new build installs separately: different bundle or install folder, different identity.
+- Against earlier WISA STUDIO builds (`appId: sh.omp.gui`, `productName: WISA STUDIO`) the new build has the same product name, so it lands on the same `WISA STUDIO.app` path (macOS) or install folder (Windows) and replaces the old app file. The old data folders are left untouched; use a different path only if you need both running.
+- An earlier WISA STUDIO install reads the same release feed, so its auto-updater may install the new build in place. That update does not carry data over: the app then opens on the new data folder, and keys and macOS permissions tied to the old identity do not follow it.
+- Upstream `nornzach/oh-my-pi-gui` installs read their own feed and do not receive WISA releases.
+- WISA STUDIO is not a sandbox. It runs the agent with your login-shell environment, PATH, Git and SSH setup, and the workspace folders you open. These are shared with other programs on purpose.
+
 ## Development
 
 This repository is the GUI repo. The agent lives in the upstream monorepo and is compiled into a sidecar; to build the sidecar from source, clone the monorepo as a sibling directory and run:
@@ -81,7 +106,7 @@ bun run build:omp          # → resources/omp (arm64)
 bun run build:omp:x64      # → resources/omp.x64 (Intel)
 bun run build:omp:win      # → resources/omp.exe
 bun run build              # → out/
-bun run dev                # HMR; probes for a sidecar when none is built
+bun run dev                # HMR; needs resources/omp (built from the adjacent monorepo if missing; otherwise an error)
 ```
 
 Checks before a pull request:
@@ -94,7 +119,9 @@ bun run check:locale       # ru + vi cover every setting the sidecar ships
 bun run build
 ```
 
-`bun run dev` is isolated from the installed app: `wisa-studio-dev` userData, `~/.omp-dev` agent profile, no `omp://` registration, no global shortcut.
+`bun run dev` is isolated from the installed app: `wisa-studio-dev` userData, `~/.wisa-studio-dev/agent` agent profile, no OS URL-scheme registration, no global shortcut.
+
+Development-only overrides, unpackaged runs only: `OMP_BUNDLED_OMP=<path>` runs that binary instead of `resources/omp`, and `OMP_SIDECAR=source` runs the coding-agent source from a monorepo checkout through bun. Packaged builds ignore both. The app does not check that an override honors `PI_CONFIG_SOURCES` / `PI_PROJECT_CONFIG_DIR` or the isolated profile; using one is your responsibility.
 
 ## Packaging and releases
 
@@ -105,7 +132,7 @@ bun run package:win       -- --publish never   # NSIS + portable
 bun run package:linux     -- --publish never   # AppImage + deb
 ```
 
-The full release runbook, including sidecar build order and artifact checks, is in [AGENTS.md](AGENTS.md) — read it before cutting a build. `appId` remains `sh.omp.gui` so existing users keep receiving updates; changing it is a separate, migration-bearing step (see [docs/vi/appid-va-cap-nhat.md](docs/vi/appid-va-cap-nhat.md)).
+The full release runbook, including sidecar build order and artifact checks, is in [AGENTS.md](AGENTS.md) — read it before cutting a build. The packaging identity and cutover steps are in [docs/vi/appid-va-cap-nhat.md](docs/vi/appid-va-cap-nhat.md).
 
 ## License and credits
 

@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { z } from "zod";
 import type { IpcBenchmarkRunOptions, IpcBenchmarkRunResult, IpcBenchmarkSummary } from "../shared/ipc-types";
+import { agentSpawnEnv } from "./dev-profile";
 
 const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 const BENCHMARK_TIMEOUT_MS = 15 * 60 * 1000;
@@ -118,7 +119,7 @@ export class BenchmarkRunner {
 			return { success: false, error: error instanceof Error ? error.message : String(error) };
 		}
 		this.#terminationReason = null;
-		const child = spawn(binaryPath, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+		const child = spawn(binaryPath, args, { cwd, env: agentSpawnEnv(env), stdio: ["ignore", "pipe", "pipe"] });
 		this.#child = child;
 		let stdout = "";
 		let stderr = "";

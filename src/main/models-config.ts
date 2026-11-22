@@ -16,7 +16,12 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import { type Document, parseDocument } from "yaml";
-import { customProviderNeedsApiKey, effectiveProviderApi } from "../shared/custom-provider";
+import {
+	customProviderNeedsApiKey,
+	effectiveProviderApi,
+	isWisaGateway,
+	wisaModelApi,
+} from "../shared/custom-provider";
 import {
 	CUSTOM_MODEL_EFFORTS,
 	CUSTOM_PROVIDER_APIS,
@@ -500,7 +505,13 @@ export function upsertModelsProvider(input: CustomProviderInput): void {
 	entry.models = input.models.map(model =>
 		mergeModel(entry.models, {
 			...model,
-			api: model.api ?? (input.api ? undefined : effectiveProviderApi(model.baseUrl ?? input.baseUrl)),
+			api:
+				model.api ??
+				(input.api
+					? undefined
+					: !model.baseUrl && isWisaGateway(input.id, input.baseUrl)
+						? wisaModelApi(model.id)
+						: effectiveProviderApi(model.baseUrl ?? input.baseUrl)),
 		}),
 	);
 	data.doc.setIn(["providers", input.id], entry);

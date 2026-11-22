@@ -249,7 +249,7 @@ async function findTemplate(id: string): Promise<TemplateEntry | null> {
 }
 
 /**
- * Download and unpack one template into `~/.omp/work/templates/<id>`.
+ * Download and unpack one template into the WISA profile's work/templates/<id>.
  *
  * An existing folder is left untouched and reported, rather than merged: the
  * user may have edited the files, and silently overwriting them is worse than

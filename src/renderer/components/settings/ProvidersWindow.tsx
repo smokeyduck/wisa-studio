@@ -573,7 +573,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 						</div>
 					)}
 
-					{!loading && !error && readyCount === 0 && (
+					{!loading && !error && discoveryErrors.length === 0 && !refreshPending && readyCount === 0 && (
 						<div className="omp-empty-hint rounded-md border border-[var(--omp-border-muted)] px-3 py-4 text-center text-omp-md text-[var(--omp-muted)]">
 							{t("providers.noAuth")}
 						</div>
@@ -662,7 +662,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 						</div>
 						<div className="text-omp-xs leading-[1.5] text-[var(--omp-muted)]">
 							{t("providers.customHelp", {
-								file: "~/.omp/agent/models.yml",
+								file: import.meta.env.DEV ? "~/.wisa-studio-dev/agent/models.yml" : "~/.wisa-studio/agent/models.yml",
 								baseUrl: "baseUrl",
 								apiKey: "apiKey",
 								models: "models",

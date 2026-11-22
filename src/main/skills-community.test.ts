@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isCommunitySkillId } from "../shared/skills-community";
-import { agentDir } from "./agent-paths";
+import { agentDir, configureAgentProfile } from "./agent-paths";
 import { safeJoin } from "./install-safety";
 import {
 	communitySkillsDir,
@@ -121,7 +121,7 @@ describe("readCatalog", () => {
 	beforeEach(async () => {
 		const dir = await mkdtemp(path.join(tmpdir(), "omp-community-catalog-"));
 		tempDirs.push(dir);
-		vi.stubEnv("PI_CODING_AGENT_DIR", path.join(dir, "agent"));
+		configureAgentProfile(path.join(dir, "agent"));
 		// The catalogue is process-wide; each case starts from nothing, and pages
 		// arrive instantly rather than at the index's 30-a-minute pace.
 		resetCatalogState();
@@ -279,7 +279,7 @@ describe("installSkill", () => {
 	beforeEach(async () => {
 		const dir = await mkdtemp(path.join(tmpdir(), "omp-community-"));
 		tempDirs.push(dir);
-		vi.stubEnv("PI_CODING_AGENT_DIR", path.join(dir, "agent"));
+		configureAgentProfile(path.join(dir, "agent"));
 	});
 
 	afterEach(() => {

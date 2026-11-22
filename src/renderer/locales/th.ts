@@ -1698,6 +1698,10 @@ export const th: Record<string, string> = {
 	"benchmark.col.cost": "ค่าใช้จ่ายเฉลี่ย",
 
 	// Provider config dialog (third-party providers in models.yml)
+	"providerCfg.form.wisaApiDefault": "ค่าเริ่มต้น (ตามตระกูลโมเดล Wisa)",
+	"providerCfg.form.wisaApiUseFamilies": "ใช้ API ตามตระกูลโมเดล",
+	"providerCfg.form.wisaApiHint":
+		"ค่าเริ่มต้นใช้ Anthropic Messages สำหรับ Claude, Responses สำหรับโมเดล OpenAI และ Chat Completions สำหรับโมเดลอื่น API ที่กำหนดเองระดับผู้ให้บริการหรือโมเดลมีลำดับความสำคัญสูงกว่า สำหรับการตั้งค่า Wisa เดิม ให้เลือกค่าเริ่มต้นแล้วบันทึกเพื่อเปิดใช้การกำหนดเส้นทางนี้",
 	"providerCfg.title.list": "ผู้ให้บริการแบบกำหนดเอง",
 	"providerCfg.title.add": "เพิ่มผู้ให้บริการ",
 	"providerCfg.title.edit": "แก้ไขผู้ให้บริการ {id}",
@@ -2136,10 +2140,6 @@ export const th: Record<string, string> = {
 	"settings.launch.noLspDesc": "เริ่มโดยไม่โหลดเครื่องมือ language server (--no-lsp)",
 	"settings.launch.planYolo": "Plan yolo",
 	"settings.launch.planYoloDesc": "อนุมัติการทำงานใน plan mode อัตโนมัติ (--plan-yolo)",
-	"settings.launch.profile": "ชื่อโปรไฟล์",
-	"settings.launch.profilePlaceholder": "โปรไฟล์ agent ที่ใช้เริ่มทำงาน (--profile)",
-	"settings.launch.sessionDir": "ไดเรกทอรีเซสชัน",
-	"settings.launch.sessionDirPlaceholder": "ตำแหน่งเก็บไฟล์เซสชัน (--session-dir)",
 	"settings.launch.config": "path ของไฟล์ config",
 	"settings.launch.configPlaceholder": "ไฟล์ config ที่จะโหลด (--config)",
 	"settings.launch.preview": "ตัวอย่างคำสั่งเริ่มทำงาน",

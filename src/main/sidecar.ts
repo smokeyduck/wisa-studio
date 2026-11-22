@@ -37,6 +37,7 @@ import type {
 	SubagentFrame,
 } from "../shared/rpc-types";
 import { BTW_FRAME_TYPES, DICTATION_FRAME_TYPES, LIVE_FRAME_TYPES, TERMINAL_FRAME_TYPES } from "../shared/rpc-types";
+import { agentSpawnEnv } from "./dev-profile";
 import { EventBatcher } from "./event-batcher";
 import { dropUnsupportedProxies } from "./proxy-env";
 import { attachNdjsonParser, supportsRpcProtocolV2 } from "./rpc-bridge";
@@ -198,7 +199,7 @@ function loadLaunchProfileFlags(cwd: string): string[] {
 		// store matches index.ts/ipc.ts exactly. A pre-typed variable sidesteps
 		// the excess-property check — electron-store's Options type hides
 		// projectName, but its constructor passes it through to conf.
-		const storeOptions = { name: "prefs", projectName: "omp-gui" };
+		const storeOptions = { name: "prefs", projectName: "wisa-studio" };
 		const profiles = new Store<{ launchProfiles?: Record<string, unknown> }>(storeOptions).get("launchProfiles");
 		if (typeof profiles !== "object" || profiles === null) return [];
 		return profileToFlags(parseLaunchProfile(profiles[cwd]));
@@ -390,16 +391,18 @@ export class SidecarManager extends EventEmitter {
 		try {
 			child = spawn(command, spawnArgs, {
 				stdio: ["pipe", "pipe", "pipe"],
-				env: dropUnsupportedProxies({
-					...process.env,
-					// Login-shell PATH first so the GUI proxy pref (and inherited
-					// proxy env) keeps precedence over rc-file proxy exports.
-					...this.#shellEnvVars,
-					...this.#proxyEnvVars,
-					PI_RPC_EMIT_TITLE: "1",
-					PI_NO_PTY: "1",
-					PI_NOTIFICATIONS: "off",
-				}),
+				env: dropUnsupportedProxies(
+					agentSpawnEnv({
+						...process.env,
+						// Login-shell PATH first so the GUI proxy pref (and inherited
+						// proxy env) keeps precedence over rc-file proxy exports.
+						...this.#shellEnvVars,
+						...this.#proxyEnvVars,
+						PI_RPC_EMIT_TITLE: "1",
+						PI_NO_PTY: "1",
+						PI_NOTIFICATIONS: "off",
+					}),
+				),
 				cwd,
 				windowsHide: true,
 			});

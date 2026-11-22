@@ -546,7 +546,7 @@ async function pathExists(target: string): Promise<boolean> {
 }
 
 /**
- * Download and install one skill into `~/.omp/agent/skills/<slug>`.
+ * Download and install one skill into the WISA profile's agent/skills/<slug>.
  *
  * An existing folder is left untouched and reported rather than merged: the
  * user may have edited those files, and silently overwriting a skill the agent

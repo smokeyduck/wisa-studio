@@ -588,7 +588,7 @@ test("launch profile updates preserve concurrent fields and workspaces through t
 		await Promise.all([
 			window.omp.prefs.updateLaunchProfile(cwd, { noRules: true }),
 			window.omp.prefs.updateLaunchProfile(cwd, { noLsp: true }),
-			window.omp.prefs.updateLaunchProfile(other, { profile: " isolated " }),
+			window.omp.prefs.updateLaunchProfile(other, { config: " isolated.yml " }),
 		]);
 		const saved = (await window.omp.prefs.get("launchProfiles")) as Record<string, unknown>;
 		await window.omp.prefs.updateLaunchProfile(cwd, { noRules: false, noLsp: false });
@@ -597,9 +597,9 @@ test("launch profile updates preserve concurrent fields and workspaces through t
 	});
 	expect(result).toEqual({
 		saved: { noRules: true, noLsp: true },
-		other: { profile: "isolated" },
+		other: { config: "isolated.yml" },
 		cleared: undefined,
-		preserved: { profile: "isolated" },
+		preserved: { config: "isolated.yml" },
 	});
 });
 

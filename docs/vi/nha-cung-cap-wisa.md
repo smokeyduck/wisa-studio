@@ -30,7 +30,7 @@ Khóa là thông tin đăng nhập của bạn: đừng dán vào issue, ảnh c
 4. Danh sách mô hình tự xuất hiện sau khi lưu. Nếu chưa thấy, bấm **Làm mới**; quá trình khám phá mô hình có thể vẫn đang chạy.
 5. Mở một tab phiên mới và chọn mô hình trong danh sách. Xong — không cần khởi động lại ứng dụng.
 
-Khóa được lưu trong `~/.omp/agent/models.yml` trên máy bạn và dùng trực tiếp, không qua đăng nhập trình duyệt.
+Khóa được lưu trong `~/.wisa-studio/agent/models.yml` trên máy bạn và dùng trực tiếp, không qua đăng nhập trình duyệt.
 
 ## Dùng nhà cung cấp khác
 
@@ -44,7 +44,7 @@ Nhiều nhà cung cấp cùng lúc là bình thường: mỗi phiên chọn mộ
 
 ## Cấu hình nằm ở đâu
 
-`~/.omp/agent/models.yml` (trên Windows: `%USERPROFILE%\.omp\agent\models.yml`). Mục của cổng WISA trông như sau:
+`~/.wisa-studio/agent/models.yml` (trên Windows: `%USERPROFILE%\.wisa-studio\agent\models.yml`). Mục của cổng WISA trông như sau:
 
 ```yaml
 providers:
@@ -60,7 +60,7 @@ providers:
 
 Sửa tay là **tùy chọn**, không bắt buộc: giao diện ghi đúng tệp này và agent tự nạp lại khi tệp thay đổi. Chỉ nên sửa tay khi bạn cần thứ giao diện không hiển thị, ví dụ ghim `contextWindow`/`maxTokens` cho một mô hình, thêm `headers` riêng, hoặc đổi `baseUrl` sang một proxy nội bộ. Giữ nguyên id `wisa` nếu muốn giao diện tiếp tục nhận ra mục này; đổi id sẽ biến nó thành nhà cung cấp tùy chỉnh khác.
 
-Lưu ý: `apiKey` nằm dạng văn bản trong tệp. Đặt quyền đọc hạn chế cho `~/.omp` nếu máy có nhiều người dùng.
+Lưu ý: `apiKey` nằm dạng văn bản trong tệp. Đặt quyền đọc hạn chế cho `~/.wisa-studio` nếu máy có nhiều người dùng.
 
 ## Xử lý sự cố
 
@@ -70,10 +70,10 @@ Lưu ý: `apiKey` nằm dạng văn bản trong tệp. Đặt quyền đọc h�
 
 **429 — "Quá nhiều yêu cầu hoặc hạn mức của bạn đã hết".** Hai nguyên nhân khác nhau: gọi quá nhanh (chờ vài giây rồi thử lại, hoặc giảm số phiên chạy song song) hay hết hạn mức trong kỳ (xem **Mức dùng & hạn mức** trong Command palette, hoặc nâng hạn mức trên trang WISA). Agent có cơ chế thử lại với backoff cho lỗi tạm thời, nhưng hết hạn mức thì phải chờ hoặc đổi mô hình/nhà cung cấp.
 
-**Không thấy mô hình nào sau khi lưu khóa.** Bấm **Làm mới** trong trang nhà cung cấp. Nếu vẫn trống, kiểm tra kết nối mạng tới `api.askwisa.com` (proxy công ty, DNS, tường lửa) và xem nhật ký trong `~/.omp/logs/`.
+**Không thấy mô hình nào sau khi lưu khóa.** Bấm **Làm mới** trong trang nhà cung cấp. Nếu vẫn trống, kiểm tra kết nối mạng tới `api.askwisa.com` (proxy công ty, DNS, tường lửa) và xem nhật ký trong `~/.wisa-studio/logs/`.
 
 **Danh sách mô hình cũ sau khi cổng cập nhật.** Mở **Nhà cung cấp** và bấm **Làm mới**; danh sách được lấy lại từ cổng, không cần cài lại ứng dụng.
 
-**Đã xóa `~/.omp` và mất khóa.** Nhà cung cấp `wisa` được tạo lại tự động ở lần khởi động sau, nhưng khóa thì không — dán lại khóa như hướng dẫn ở trên.
+**Đã xóa `~/.wisa-studio/agent` và mất khóa.** Nhà cung cấp `wisa` được tạo lại tự động ở lần khởi động sau, nhưng khóa thì không — dán lại khóa như hướng dẫn ở trên.
 
 Cài đặt và các sự cố khác: xem [Hướng dẫn cài đặt](./cai-dat.md) và [Câu hỏi thường gặp](./faq.md).

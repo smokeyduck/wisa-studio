@@ -18,12 +18,12 @@ async function captureLocale(language: "en" | "zh" | "vi"): Promise<void> {
 	const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "omp-showcase-"));
 	const home = path.join(temporary, "home");
 	const project = path.join(home, "projects", "aurora-web");
-	const agent = path.join(home, ".omp", "agent");
-	const desktop = path.join(temporary, "desktop");
+	const agent = path.join(temporary, ".wisa-studio", "agent");
+	const userData = path.join(temporary, "appData", "wisa-studio");
 	const output = path.join(root, "docs", "screenshots", language);
-	await Promise.all([project, agent, desktop, output].map(directory => fs.mkdir(directory, { recursive: true })));
+	await Promise.all([project, agent, userData, output].map(directory => fs.mkdir(directory, { recursive: true })));
 	await Bun.write(
-		path.join(desktop, "prefs.json"),
+		path.join(userData, "prefs.json"),
 		JSON.stringify({ language, firstRunComplete: true, theme: "dark" }),
 	);
 	const fixture = path.join(temporary, "omp-showcase");
@@ -71,12 +71,14 @@ async function captureLocale(language: "en" | "zh" | "vi"): Promise<void> {
 			`${entries.map(entry => JSON.stringify(entry)).join("\n")}\n`,
 		);
 	}
-	const taskTitles = seedScheduledTasks(path.join(desktop, "scheduler.db"), project, language, Date.now());
+	const taskTitles = seedScheduledTasks(path.join(userData, "scheduler.db"), project, language, Date.now());
 	const app = await electron.launch({
-		args: [path.join(root, "out", "main", "index.js"), project, `--user-data-dir=${desktop}`],
+		args: [path.join(root, "out", "main", "index.js"), project],
 		cwd: project,
 		env: {
 			HOME: home,
+			WISA_PROFILE_ROOT: temporary,
+			APPDATA: path.join(temporary, "appData"),
 			USER: "demo",
 			LOGNAME: "demo",
 			SHELL: "/usr/bin/false",

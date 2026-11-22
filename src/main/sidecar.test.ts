@@ -297,7 +297,7 @@ describe("SidecarManager", () => {
 		try {
 			// Same options as the loader; a variable sidesteps the excess-property
 			// check on electron-store's Options type (projectName reaches conf).
-			const storeOptions = { name: "prefs", projectName: "omp-gui" };
+			const storeOptions = { name: "prefs", projectName: "wisa-studio" };
 			const probe = new Store(storeOptions);
 			await fs.mkdir(path.dirname(probe.path), { recursive: true });
 			await fs.writeFile(

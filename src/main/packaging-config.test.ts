@@ -74,10 +74,10 @@ describe("mac bundle configs", () => {
 		).toBe("electron-builder.x64.yml,electron-builder.yml");
 	});
 
-	it("registers the omp:// scheme that src/main/deep-link.ts handles", () => {
+	it("registers the wisa-studio:// scheme that src/main/deep-link.ts handles", () => {
 		for (const { file, config } of configs) {
 			const schemes = (config.protocols ?? []).flatMap(protocol => protocol.schemes ?? []);
-			expect(schemes, `${file} ships no URL scheme`).toContain("omp");
+			expect(schemes, `${file} ships no URL scheme`).toContain("wisa-studio");
 		}
 	});
 
@@ -131,8 +131,8 @@ describe("mac bundle configs", () => {
 		const plistPath = path.join(directory, "WISA STUDIO.app", "Contents", "Info.plist");
 		const loopback = { NSExceptionAllowsInsecureHTTPLoads: true };
 		const original: PlistObject = {
-			CFBundleIdentifier: "sh.omp.gui",
-			CFBundleURLTypes: [{ CFBundleURLSchemes: ["omp"] }],
+			CFBundleIdentifier: "org.wisa.studio",
+			CFBundleURLTypes: [{ CFBundleURLSchemes: ["wisa-studio"] }],
 			NSAppTransportSecurity: {
 				NSAllowsArbitraryLoads: true,
 				NSAllowsLocalNetworking: true,
@@ -238,7 +238,7 @@ describe("Windows package config", () => {
 		expect(
 			config.protocols?.flatMap(protocol => protocol.schemes ?? []),
 			`${file} ships no URL scheme`,
-		).toContain("omp");
+		).toContain("wisa-studio");
 		expect(config.extraResources).toContainEqual({ from: "resources/omp.exe", to: "omp.exe" });
 		expect(config.win?.target).toEqual([
 			{ target: "nsis", arch: ["x64"] },

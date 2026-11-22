@@ -8,6 +8,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { configureAgentProfile } from "./agent-paths";
 import { ensureDefaultWorkspace } from "./default-workspace";
 
 const tempDirs: string[] = [];
@@ -15,7 +16,7 @@ const tempDirs: string[] = [];
 async function tempAgentDir(): Promise<string> {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-work-"));
 	tempDirs.push(dir);
-	vi.stubEnv("PI_CODING_AGENT_DIR", path.join(dir, "agent"));
+	configureAgentProfile(path.join(dir, "agent"));
 	return dir;
 }
 

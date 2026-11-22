@@ -51,7 +51,7 @@ Agent không đổi. Toàn bộ phần "làm việc" — đọc file, chạy l�
 - **Cổng WISA:** provider `wisa` được tạo sẵn, xuất hiện đầu tiên trong onboarding.
 - **Bản phát hành:** trỏ về repo này.
 
-Vì dùng chung `~/.omp`, phiên và cấu hình của bạn tương thích với omp CLI: mở cùng một phiên từ terminal hay từ GUI đều được.
+Dữ liệu của WISA STUDIO nằm riêng ở `~/.wisa-studio/agent` (không phải `~/.omp`), nên phiên và cấu hình không dùng chung với omp CLI.
 
 ## Giao diện có gì
 
@@ -71,6 +71,31 @@ Tải gói ở trên, mở lên, dán API key (hoặc chọn provider khác) là
 
 Chi tiết theo từng nền tảng, cách đặt lại dữ liệu và xử lý lỗi khi mở app: [docs/vi/cai-dat.md](docs/vi/cai-dat.md).
 
+## Vị trí dữ liệu và cùng tồn tại
+
+WISA STUDIO giữ dữ liệu riêng và không đọc hay ghi `~/.omp`. Không có di chuyển dữ liệu tự động từ bản cũ.
+
+| Dữ liệu | macOS | Windows | Linux |
+|---|---|---|---|
+| Cài đặt app, tab, lịch tác vụ, chỉ mục hội thoại, `logs/gui-runtime.jsonl` | `~/Library/Application Support/wisa-studio` | `%APPDATA%\wisa-studio` | `~/.config/wisa-studio` |
+| Cấu hình agent: `models.yml`, MCP, skills, phiên | `~/.wisa-studio/agent` | `%USERPROFILE%\.wisa-studio\agent` | `~/.wisa-studio/agent` |
+| Nhật ký agent | `~/.wisa-studio/logs` | `%USERPROFILE%\.wisa-studio\logs` | `~/.wisa-studio/logs` |
+| Cấu hình dự án (trong thư mục làm việc) | `.wisa-studio/` | `.wisa-studio\` | `.wisa-studio/` |
+
+Chạy phát triển (`bun run dev`) dùng `wisa-studio-dev` và `~/.wisa-studio-dev/agent`. Thư mục tạm của agent là `~/.wisa-studio-dev/tmp`.
+
+Kiểm thử và tự động hóa có thể đặt `WISA_PROFILE_ROOT` (đường dẫn tuyệt đối) để chuyển toàn bộ dữ liệu trên sang `<root>/appData/wisa-studio` và `<root>/.wisa-studio/agent`. Đây là biến dành cho kiểm thử, không phải cách chọn thư mục dữ liệu tùy ý.
+
+Các bản cũ lưu dữ liệu ở `…/omp` (userData) và `~/.omp` (agent). WISA STUDIO không sao chép, di chuyển hay xoá dữ liệu đó. API key đã lưu phải dán lại trong bản mới.
+
+Cùng tồn tại:
+
+- Với bản upstream `omp` (`productName: omp`, `appId: sh.omp.gui`) bản mới cài riêng: khác thư mục cài và định danh.
+- Với bản WISA STUDIO cũ (`appId: sh.omp.gui`, `productName: WISA STUDIO`), bản mới trùng tên sản phẩm nên cùng đường dẫn `WISA STUDIO.app` (macOS) hoặc thư mục cài (Windows) và thay thế tệp ứng dụng cũ. Thư mục dữ liệu cũ không bị đụng tới; chỉ cài đường dẫn khác nếu cần chạy cả hai.
+- Bản WISA cũ đọc cùng feed phát hành, nên trình tự cập nhật có thể cài bản mới tại chỗ. Cập nhật đó không mang theo dữ liệu: ứng dụng mở trên thư mục dữ liệu mới, còn key và quyền macOS gắn với định danh cũ không đi theo.
+- Bản upstream `nornzach/oh-my-pi-gui` đọc feed riêng, không nhận bản WISA.
+- WISA STUDIO không phải sandbox. Agent chạy với môi trường shell đăng nhập, PATH, cấu hình Git và SSH, và các thư mục làm việc bạn mở. Những thứ này được dùng chung có chủ ý.
+
 ## Phát triển
 
 Repo này là GUI repo. Agent nằm ở monorepo upstream và được biên dịch thành sidecar; muốn dựng sidecar từ mã nguồn, clone monorepo vào thư mục anh em rồi:
@@ -81,7 +106,7 @@ bun run build:omp          # → resources/omp (arm64)
 bun run build:omp:x64      # → resources/omp.x64 (Intel)
 bun run build:omp:win      # → resources/omp.exe
 bun run build              # → out/
-bun run dev                # HMR; tự dò sidecar nếu chưa build
+bun run dev                # HMR; cần resources/omp (thiếu thì build từ monorepo kế bên; không có monorepo thì báo lỗi)
 ```
 
 Kiểm tra trước khi gửi PR:
@@ -94,7 +119,9 @@ bun run check:locale       # ru + vi phủ đủ mọi setting mà sidecar cung 
 bun run build
 ```
 
-`bun run dev` chạy tách biệt với bản đã cài: userData `wisa-studio-dev`, profile agent `~/.omp-dev`, không đăng ký `omp://`, không chiếm phím tắt toàn cục.
+`bun run dev` chạy tách biệt với bản đã cài: userData `wisa-studio-dev`, profile agent `~/.wisa-studio-dev/agent`, không đăng ký URL scheme với hệ điều hành, không chiếm phím tắt toàn cục.
+
+Ghi đè chỉ dành cho phát triển, chỉ với bản chưa đóng gói: `OMP_BUNDLED_OMP=<path>` chạy binary đó thay cho `resources/omp`, và `OMP_SIDECAR=source` chạy mã nguồn coding-agent của monorepo qua bun. Bản đóng gói bỏ qua cả hai. App không kiểm tra rằng bản ghi đè hiểu `PI_CONFIG_SOURCES` / `PI_PROJECT_CONFIG_DIR` hay profile cách ly; dùng chúng là trách nhiệm của bạn.
 
 ## Đóng gói và phát hành
 
@@ -105,7 +132,7 @@ bun run package:win       -- --publish never   # NSIS + portable
 bun run package:linux     -- --publish never   # AppImage + deb
 ```
 
-Quy trình phát hành đầy đủ, gồm thứ tự build sidecar và kiểm tra gói, nằm trong [AGENTS.md](AGENTS.md) — đọc trước khi cắt bản. `appId` hiện vẫn là `sh.omp.gui` để không cắt người dùng khỏi auto-update; đổi `appId` là một bước riêng có di trú, xem [docs/vi/appid-va-cap-nhat.md](docs/vi/appid-va-cap-nhat.md).
+Quy trình phát hành đầy đủ, gồm thứ tự build sidecar và kiểm tra gói, nằm trong [AGENTS.md](AGENTS.md) — đọc trước khi cắt bản. Định danh đóng gói và các bước cutover nằm trong [docs/vi/appid-va-cap-nhat.md](docs/vi/appid-va-cap-nhat.md).
 
 ## Giấy phép và ghi công
 

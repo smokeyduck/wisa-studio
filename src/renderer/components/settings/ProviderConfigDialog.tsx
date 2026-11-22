@@ -18,7 +18,12 @@
 
 import { ChevronDown, ChevronRight, CloudDownload, Eye, EyeOff, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { customProviderNeedsApiKey, effectiveProviderApi } from "../../../shared/custom-provider";
+import {
+	customProviderNeedsApiKey,
+	effectiveProviderApi,
+	isWisaGateway,
+	wisaModelApi,
+} from "../../../shared/custom-provider";
 import type {
 	CustomProviderApi,
 	CustomProviderDiscoveryType,
@@ -156,7 +161,9 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 		for (const row of [...catalog, ...endpointModels]) if (row.provider === editing?.id) rows.set(row.id, row);
 		return [...rows.values()];
 	}, [catalog, endpointModels, editing?.id]);
+	const wisaDefaults = !api && isWisaGateway(id, baseUrl);
 	const effectiveModelApi = (model: ModelRow) => {
+		if (wisaDefaults && !model.api && !model.baseUrl) return wisaModelApi(model.id);
 		const savedEndpoint = editing?.models.find(row => row.id === model.id)?.baseUrl ?? editing?.baseUrl;
 		return effectiveProviderApi(
 			model.baseUrl ?? baseUrl,
@@ -195,7 +202,10 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 		.filter(model => !models.some(row => row.id.trim() === model.id))
 		.map((model, index) => ({ key: -index - 1, id: model.id, name: model.name }));
 	const updateDiscoveredModel = (row: ModelRow, patch: Partial<Omit<ModelRow, "key">>) => {
-		setModels(previous => [...previous.filter(model => model.id.trim() || model.name?.trim()), { ...row, ...patch, key: nextKey.current++ }]);
+		setModels(previous => [
+			...previous.filter(model => model.id.trim() || model.name?.trim()),
+			{ ...row, ...patch, key: nextKey.current++ },
+		]);
 		setErrors(previous => dropKey(previous, "models"));
 	};
 	const [headers, setHeaders] = useState<HeaderRow[]>(() =>
@@ -250,7 +260,7 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 			const response = await rpc.discoverProviderModels({
 				// A saved key only ever goes with the provider it was saved for.
 				...(editing && !clearKey ? { provider: editing.id } : {}),
-				api: effectiveProviderApi(url, api),
+				api: wisaDefaults ? "" : effectiveProviderApi(url, api),
 				baseUrl: url,
 				...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
 				...(authHeader ? { authHeader: true } : {}),
@@ -377,7 +387,11 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 
 		const input: CustomProviderInput = {
 			id: editing ? editing.id : id.trim(),
-			...(api ? { api } : discoveryType && discoveryType !== "proxy" ? { api: effectiveProviderApi(baseUrl) } : {}),
+			...(api
+				? { api }
+				: discoveryType && discoveryType !== "proxy" && !wisaDefaults
+					? { api: effectiveProviderApi(baseUrl) }
+					: {}),
 			baseUrl: baseUrl.trim(),
 			...(apiKey.trim().length > 0 ? { apiKey: apiKey.trim() } : {}),
 			...(clearKey ? { clearApiKey: true } : {}),
@@ -476,14 +490,34 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 						disabled={readonly || submitting}
 						onChange={event => setApi((event.target.value || undefined) as CustomProviderApi | undefined)}
 					>
-						<option value="">{t("providerCfg.form.apiAuto", { api: effectiveProviderApi(baseUrl) })}</option>
+						<option value="">
+							{isWisaGateway(id, baseUrl)
+								? t("providerCfg.form.wisaApiDefault")
+								: t("providerCfg.form.apiAuto", { api: effectiveProviderApi(baseUrl) })}
+						</option>
 						{PROVIDER_PROTOCOLS.map(protocol => (
 							<option key={protocol} value={protocol}>
 								{protocol}
 							</option>
 						))}
 					</select>
-					{!api && <p className="mt-1 text-omp-sm text-(--omp-dim)">{t("providerCfg.form.apiAutoHint")}</p>}
+					{isWisaGateway(id, baseUrl) && api && !readonly && (
+						<button
+							type="button"
+							className="mt-2 text-omp-sm font-medium text-(--omp-accent) disabled:opacity-50"
+							disabled={submitting}
+							onClick={() => setApi(undefined)}
+						>
+							{t("providerCfg.form.wisaApiUseFamilies")}
+						</button>
+					)}
+					<p className="mt-1 text-omp-sm text-(--omp-dim)">
+						{isWisaGateway(id, baseUrl)
+							? t("providerCfg.form.wisaApiHint")
+							: !api
+								? t("providerCfg.form.apiAutoHint")
+								: null}
+					</p>
 				</div>
 
 				<Input
@@ -645,8 +679,15 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 						<div className="mt-3 flex flex-col gap-2">
 							<p className="text-omp-sm text-(--omp-dim)">{t("providerCfg.form.discoveredModelsHint")}</p>
 							{discoveredModels.map(row => (
-								<ModelEditor key={row.id} model={row} effectiveApi={effectiveModelApi(row)} readonly={readonly} disabled={submitting}
-									onUpdate={(_key, patch) => updateDiscoveredModel(row, patch)} canRemove={false} />
+								<ModelEditor
+									key={row.id}
+									model={row}
+									effectiveApi={effectiveModelApi(row)}
+									readonly={readonly}
+									disabled={submitting}
+									onUpdate={(_key, patch) => updateDiscoveredModel(row, patch)}
+									canRemove={false}
+								/>
 							))}
 						</div>
 					)}

@@ -265,29 +265,55 @@ describe("ProviderConfigDialog", () => {
 		useUiStore.getState().openProviderConfig({ ...mockProvider(), api: undefined, models: [{ id: "responses" }] });
 		await mountDialog();
 		const expand = document.querySelector(`button[aria-label="${translate("providerCfg.form.modelExpand")}"]`);
-		await act(async () => { (expand as unknown as HTMLElement)?.click(); });
-		await change(`input[placeholder="${translate("providerCfg.form.modelBaseUrlPlaceholder")}"]`, "https://api.anthropic.com/v1");
+		await act(async () => {
+			(expand as unknown as HTMLElement)?.click();
+		});
+		await change(
+			`input[placeholder="${translate("providerCfg.form.modelBaseUrlPlaceholder")}"]`,
+			"https://api.anthropic.com/v1",
+		);
 		await click(translate("providerCfg.form.save"));
-		expect(upsertProvider.mock.calls[0]?.[0]?.models[0]).toMatchObject({ baseUrl: "https://api.anthropic.com/v1", api: "anthropic-messages" });
+		expect(upsertProvider.mock.calls[0]?.[0]?.models[0]).toMatchObject({
+			baseUrl: "https://api.anthropic.com/v1",
+			api: "anthropic-messages",
+		});
 	});
 
 	it("shows automatically discovered models without pinning untouched rows, and saves an edited API override", async () => {
-		const runtimeModels = [{ provider: "mock", id: "runtime-a", name: "Runtime A", api: "openai-responses" }, { provider: "mock", id: "runtime-b", name: "Runtime B", api: "openai-completions" }];
-		getAvailableModels.mockResolvedValue({ type: "response", command: "get_available_models", success: true, data: { models: runtimeModels } });
+		const runtimeModels = [
+			{ provider: "mock", id: "runtime-a", name: "Runtime A", api: "openai-responses" },
+			{ provider: "mock", id: "runtime-b", name: "Runtime B", api: "openai-completions" },
+		];
+		getAvailableModels.mockResolvedValue({
+			type: "response",
+			command: "get_available_models",
+			success: true,
+			data: { models: runtimeModels },
+		});
 		useModelStore.setState({ availableModels: runtimeModels });
 		const saved = { ...mockProvider(), api: undefined, discovery: { type: "proxy" as const }, models: [] };
 		useUiStore.getState().openProviderConfig(saved);
 		await mountDialog();
-		const names = Array.from(document.querySelectorAll(`input[placeholder="${translate("providerCfg.form.modelNamePlaceholder")}"]`)) as unknown as HTMLInputElement[];
+		const names = Array.from(
+			document.querySelectorAll(`input[placeholder="${translate("providerCfg.form.modelNamePlaceholder")}"]`),
+		) as unknown as HTMLInputElement[];
 		expect(names.map(input => input.value)).toContain("Runtime A");
 		expect(names.map(input => input.value)).toContain("Runtime B");
 		await click(translate("providerCfg.form.save"));
 		expect(upsertProvider.mock.calls[0]?.[0]?.models).toEqual([]);
-		await act(async () => { useUiStore.getState().openProviderConfig({ ...saved }); });
-		const ids = Array.from(document.querySelectorAll(`input[placeholder="${translate("providerCfg.form.modelIdPlaceholder")}"]`)) as unknown as HTMLInputElement[];
+		await act(async () => {
+			useUiStore.getState().openProviderConfig({ ...saved });
+		});
+		const ids = Array.from(
+			document.querySelectorAll(`input[placeholder="${translate("providerCfg.form.modelIdPlaceholder")}"]`),
+		) as unknown as HTMLInputElement[];
 		const row = ids.find(input => input.value === "runtime-a")?.parentElement;
 		expect(row).toBeDefined();
-		await act(async () => { row?.querySelector<HTMLButtonElement>(`button[aria-label="${translate("providerCfg.form.modelExpand")}"]`)?.click(); });
+		await act(async () => {
+			row?.querySelector<HTMLButtonElement>(
+				`button[aria-label="${translate("providerCfg.form.modelExpand")}"]`,
+			)?.click();
+		});
 		await change('label select:has(option[value="anthropic-messages"])', "anthropic-messages");
 		await click(translate("providerCfg.form.save"));
 		expect(upsertProvider.mock.calls[1]?.[0]?.models).toMatchObject([{ id: "runtime-a", api: "anthropic-messages" }]);
@@ -323,6 +349,64 @@ describe("ProviderConfigDialog", () => {
 		);
 		await click(translate("providerCfg.form.save"));
 		expect(upsertProvider.mock.calls[0]?.[0]?.models).toEqual([{ id: "explicit", api: "openai-responses" }]);
+	});
+
+	it("activates Wisa family defaults only after clearing an explicit provider API", async () => {
+		const runtimeModels = ["claude-opus-4-6", "gpt-6-sol", "gemini-4-argon"].map(id => ({
+			provider: "wisa",
+			id,
+			api: "openai-completions",
+		}));
+		getAvailableModels.mockResolvedValue({
+			type: "response",
+			command: "get_available_models",
+			success: true,
+			data: { models: runtimeModels },
+		});
+		useModelStore.setState({ availableModels: runtimeModels });
+		useUiStore.getState().openProviderConfig({
+			...mockProvider(),
+			id: "wisa",
+			baseUrl: "https://api.askwisa.com/v1",
+			discovery: { type: "openai-models-list" },
+			models: [{ id: "explicit", api: "openai-completions" }],
+		});
+		await mountDialog();
+		await click(translate("providerCfg.form.wisaApiUseFamilies"));
+		expect(text()).toContain(translate("providerCfg.form.modelApiAuto", { api: "anthropic-messages" }));
+		expect(text()).toContain(translate("providerCfg.form.modelApiAuto", { api: "openai-responses" }));
+		expect(text()).toContain(translate("providerCfg.form.modelApiAuto", { api: "openai-completions" }));
+		await click(translate("providerCfg.form.save"));
+		expect(upsertProvider.mock.calls[0]?.[0]?.api).toBeUndefined();
+		expect(upsertProvider.mock.calls[0]?.[0]?.models).toEqual([{ id: "explicit", api: "openai-completions" }]);
+	});
+
+	it("uses Wisa family policy over an old runtime catalog when provider API is already unset", async () => {
+		const runtimeModels = ["claude-opus-4-6", "gpt-6-sol", "gemini-4-argon"].map(id => ({
+			provider: "wisa",
+			id,
+			api: "openai-completions",
+		}));
+		getAvailableModels.mockResolvedValue({
+			type: "response",
+			command: "get_available_models",
+			success: true,
+			data: { models: runtimeModels },
+		});
+		useModelStore.setState({ availableModels: runtimeModels });
+		useUiStore.getState().openProviderConfig({
+			...mockProvider(),
+			id: "wisa",
+			api: undefined,
+			baseUrl: "https://api.askwisa.com/v1",
+			discovery: { type: "openai-models-list" },
+			models: [{ id: "explicit", api: "openai-completions" }],
+		});
+		await mountDialog();
+		expect(text()).toContain(translate("providerCfg.form.modelApiAuto", { api: "anthropic-messages" }));
+		expect(text()).toContain(translate("providerCfg.form.modelApiAuto", { api: "openai-responses" }));
+		await click(translate("providerCfg.form.save"));
+		expect(upsertProvider.mock.calls[0]?.[0]?.models).toEqual([{ id: "explicit", api: "openai-completions" }]);
 	});
 
 	it("reads effective saved endpoint routes through the existing catalog RPC before saving fetched models", async () => {

@@ -1,5 +1,5 @@
 /**
- * Watches ~/.omp/agent/sessions/ for .jsonl session files.
+ * Watches the selected WISA profile's agent/sessions/ for .jsonl session files.
  * Parses title, session header, first message, and tail status.
  *
  * Change handling is per file: a watcher event drops that path's cache entries

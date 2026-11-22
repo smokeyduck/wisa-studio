@@ -24,10 +24,6 @@ export interface LaunchProfile {
 	noLsp?: boolean;
 	/** --plan-yolo: auto-approve plan-mode execution. */
 	planYolo?: boolean;
-	/** --profile <name>: agent profile to boot from. */
-	profile?: string;
-	/** --session-dir <path>: where session files live. */
-	sessionDir?: string;
 	/** --config <path>: config file path. */
 	config?: string;
 }
@@ -41,6 +37,8 @@ export interface LaunchProfile {
  */
 export const DENYLISTED_FLAGS: readonly string[] = [
 	"--session",
+	"--profile",
+	"--session-dir",
 	"--mode",
 	"--print",
 	"--print-thoughts",
@@ -59,6 +57,8 @@ export const DENYLISTED_FLAGS: readonly string[] = [
 
 const DENYLISTED: Record<string, true> = {
 	"--session": true,
+	"--profile": true,
+	"--session-dir": true,
 	"--mode": true,
 	"--print": true,
 	"--print-thoughts": true,
@@ -81,6 +81,8 @@ const DENYLISTED: Record<string, true> = {
  * positional argument. */
 const DENYLISTED_WITH_VALUE: Record<string, true> = {
 	"--session": true,
+	"--profile": true,
+	"--session-dir": true,
 	"--mode": true,
 	"--export": true,
 	"--cwd": true,
@@ -98,8 +100,6 @@ const VALUED_FLAGS: Record<string, true> = {
 	"--append-system-prompt": true,
 	"--add-dir": true,
 	"--tools": true,
-	"--profile": true,
-	"--session-dir": true,
 	"--config": true,
 };
 
@@ -173,12 +173,6 @@ export function profileToFlags(profile: LaunchProfile): string[] {
 	}
 	if (profile.noLsp === true) flags.push("--no-lsp");
 	if (profile.planYolo === true) flags.push("--plan-yolo");
-	if (typeof profile.profile === "string" && profile.profile.trim() !== "") {
-		flags.push("--profile", profile.profile.trim());
-	}
-	if (typeof profile.sessionDir === "string" && profile.sessionDir.trim() !== "") {
-		flags.push("--session-dir", profile.sessionDir.trim());
-	}
 	if (typeof profile.config === "string" && profile.config.trim() !== "") {
 		flags.push("--config", profile.config.trim());
 	}
@@ -218,12 +212,6 @@ export function parseLaunchProfile(raw: unknown): LaunchProfile {
 	}
 	if (record.noLsp === true) profile.noLsp = true;
 	if (record.planYolo === true) profile.planYolo = true;
-	if (typeof record.profile === "string" && record.profile.trim() !== "") {
-		profile.profile = record.profile.trim();
-	}
-	if (typeof record.sessionDir === "string" && record.sessionDir.trim() !== "") {
-		profile.sessionDir = record.sessionDir.trim();
-	}
 	if (typeof record.config === "string" && record.config.trim() !== "") {
 		profile.config = record.config.trim();
 	}

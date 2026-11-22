@@ -1,7 +1,14 @@
 import * as os from "node:os";
 import * as path from "node:path";
 
-/** Keep desktop config and session discovery on the same Agent profile. */
+let directory = path.join(os.homedir(), ".wisa-studio", "agent");
+
+/** Selected by the application before any profile consumer starts. */
+export function configureAgentProfile(agentDirectory: string): void {
+	directory = agentDirectory;
+}
+
+/** Desktop configuration never inherits an enclosing omp session's profile. */
 export function agentDir(): string {
-	return process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".omp", "agent");
+	return directory;
 }

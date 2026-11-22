@@ -1,6 +1,6 @@
 /**
- * Registers omp:// protocol and handles deep links.
- * Supports omp://session/<id>, omp://new, and omp://wisa-auth?code=<code>.
+ * Registers wisa-studio:// externally; still understands internal omp:// links.
+ * Supports session/<id>, new, and wisa-auth?code=<code> routes.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -11,7 +11,7 @@ import { launchArguments, launchFolder, parseLaunchArgv } from "./launch-argv";
 import type { SpawnWindow, WindowManager } from "./window";
 import { connectWisa } from "./wisa-auth";
 
-const PROTOCOL = "omp";
+const PROTOCOL = "wisa-studio";
 
 /**
  * macOS delivers the launch URL while the app is still starting, and `setupDeepLinks`
@@ -49,7 +49,7 @@ export function startupFolder(): string | undefined {
  * die in awk (`cannot open …/WISA`) and leaves the scheme with whatever app
  * owned it before — the old omp, in the field.
  */
-export const LINUX_DESKTOP_FILE = "omp-gui.desktop";
+export const LINUX_DESKTOP_FILE = "wisa-studio.desktop";
 
 /** The entry a dev run registers, so "Open With" can tell it from the install. */
 export const LINUX_DEV_DESKTOP_FILE = "wisa-studio-dev.desktop";
@@ -77,7 +77,7 @@ export function linuxDesktopEntry(
 		"Comment=Desktop GUI for the omp coding agent",
 		`Exec=${quoted}${options.execArgs ? ` ${options.execArgs}` : ""} %U`,
 		...(options.icon ? [`Icon=${options.icon}`] : []),
-		"MimeType=x-scheme-handler/omp;",
+		`MimeType=x-scheme-handler/${PROTOCOL};`,
 		"Terminal=false",
 		"Categories=Development;",
 		"",
@@ -119,9 +119,8 @@ function ensureLinuxDesktopEntry(): void {
  * Register a `.desktop` entry for a dev run, so "Open With" lists it separately
  * from the installed app instead of showing "WISA STUDIO" twice.
  *
- * Deliberately *not* made the `omp://` default: the scheme belongs to the
- * installed build, and taking it over from a checkout is how a dev run ends up
- * hijacking the user's links.
+ * Deliberately not made the scheme default: a checkout must not hijack the
+ * installed WISA application's browser hand-off.
  */
 function ensureLinuxDevDesktopEntry(): void {
 	if (process.platform !== "linux" || app.isPackaged) return;
@@ -150,8 +149,7 @@ function ensureLinuxDevDesktopEntry(): void {
 
 export function setupDeepLinks(windowManager: WindowManager, spawnWindow: SpawnWindow): void {
 	// Register as default protocol handler (Windows/Linux). A dev run must not:
-	// it would point `omp://` at the Electron binary (and `xdg-settings` rejects
-	// the generated name), silently taking the scheme from the installed app.
+	// it would point the scheme at Electron and hijack the installed WISA app.
 	if (app.isPackaged) {
 		// Electron builds the id from `app.getName()`, which is the productName
 		// here; CHROME_DESKTOP is the only override it honours, and it is read at
@@ -245,6 +243,7 @@ export function parseDeepLink(url: string): DeepLinkRequest {
 	} catch {
 		return { kind: "none" };
 	}
+	if (parsed.protocol !== `${PROTOCOL}:` && parsed.protocol !== "omp:") return { kind: "none" };
 
 	const host = parsed.hostname.toLowerCase();
 	if (host === "new") return { kind: "payload", payload: { action: "new-session" } };

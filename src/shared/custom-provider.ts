@@ -4,6 +4,29 @@
  */
 import { CUSTOM_PROVIDER_APIS, type CustomProviderApi } from "./ipc-types";
 
+/** Family defaults are a Wisa gateway contract, never a generic vendor heuristic. */
+export function isWisaGateway(provider: string, baseUrl: string): boolean {
+	if (provider !== "wisa") return false;
+	try {
+		const url = new URL(baseUrl);
+		return (
+			url.origin === "https://api.askwisa.com" &&
+			url.pathname.replace(/\/$/, "") === "/v1" &&
+			!url.search &&
+			!url.hash
+		);
+	} catch {
+		return false;
+	}
+}
+
+export function wisaModelApi(id: string): CustomProviderApi {
+	const name = id.toLowerCase().replace(/^(?:anthropic|openai)\//, "");
+	if (/^claude(?:[-_.]|$)/.test(name)) return "anthropic-messages";
+	if (/^(?:gpt|chatgpt|codex)(?:[-_.]|$)|^o[134](?:[-_.]|$)/.test(name)) return "openai-responses";
+	return "openai-completions";
+}
+
 /** Never infer wire protocols from a model name: gateways can serve any vendor. */
 export function effectiveProviderApi(
 	baseUrl: string,

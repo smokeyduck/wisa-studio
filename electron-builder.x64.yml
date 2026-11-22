@@ -1,4 +1,4 @@
-appId: sh.omp.gui
+appId: org.wisa.studio
 productName: WISA STUDIO
 afterPack: scripts/after-pack.cjs
 directories:
@@ -11,11 +11,11 @@ extraResources:
   - from: resources/omp.x64
     to: omp
 # Must match electron-builder.yml: the x64 bundle is a separate config, so the
-# `omp://` scheme has to be declared here too or Intel Macs get no deep links.
+# `wisa-studio://` scheme has to be declared here too or Intel Macs get no deep links.
 protocols:
-  - name: omp
+  - name: wisa-studio
     schemes:
-      - omp
+      - wisa-studio
 asar: true
 compression: maximum
 

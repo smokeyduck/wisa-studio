@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { agentDir, configureAgentProfile } from "./agent-paths";
 import { listModelsProviders } from "./models-config";
 import { ensureWisaProvider, WISA_PROVIDER_ID } from "./wisa-provider";
 
@@ -16,13 +17,12 @@ describe("ensureWisaProvider", () => {
 	beforeEach(() => {
 		testDir = join(tmpdir(), `omp-test-wisa-${Date.now()}`);
 		mkdirSync(testDir, { recursive: true });
-		originalEnv = process.env.PI_CODING_AGENT_DIR;
-		process.env.PI_CODING_AGENT_DIR = testDir;
+		originalEnv = agentDir();
+		configureAgentProfile(testDir);
 	});
 
 	afterEach(() => {
-		if (originalEnv !== undefined) process.env.PI_CODING_AGENT_DIR = originalEnv;
-		else delete process.env.PI_CODING_AGENT_DIR;
+		configureAgentProfile(originalEnv!);
 		if (existsSync(testDir)) rmSync(testDir, { recursive: true, force: true });
 	});
 
@@ -31,7 +31,7 @@ describe("ensureWisaProvider", () => {
 		const provider = listModelsProviders().find(candidate => candidate.id === WISA_PROVIDER_ID);
 		expect(provider).toBeDefined();
 		expect(provider?.baseUrl).toBe("https://api.askwisa.com/v1");
-		expect(provider?.api).toBe("openai-completions");
+		expect(provider?.api).toBeUndefined();
 		expect(provider?.auth).toBe("apiKey");
 		expect(provider?.discovery?.type).toBe("openai-models-list");
 		expect(provider?.models).toEqual([]);

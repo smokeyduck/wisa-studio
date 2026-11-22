@@ -1,4 +1,4 @@
-appId: sh.omp.gui
+appId: org.wisa.studio
 productName: WISA STUDIO
 afterPack: scripts/after-pack.cjs
 directories:
@@ -10,13 +10,13 @@ files:
 extraResources:
   - from: resources/omp
     to: omp
-# `omp://` deep links only work if LaunchServices sees CFBundleURLTypes, which
+# `wisa-studio://` deep links only work if LaunchServices sees CFBundleURLTypes, which
 # this block is the only thing that writes. Without it `open-url` never fires in
 # an installed build and the handler in src/main/deep-link.ts is dead code.
 protocols:
-  - name: omp
+  - name: wisa-studio
     schemes:
-      - omp
+      - wisa-studio
 asar: true
 compression: maximum
 
@@ -90,7 +90,7 @@ linux:
   # Pinned rather than derived from metadata.name: the Linux binary name is
   # part of the installed layout (AppRun BIN, .desktop Exec, StartupWMClass), so
   # a package rename must not silently move it.
-  executableName: omp-gui
+  executableName: wisa-studio
   target:
     - target: AppImage
       arch: [x64]
@@ -98,7 +98,7 @@ linux:
       arch: [x64]
   desktop:
     entry:
-      StartupWMClass: omp-gui
+      StartupWMClass: wisa-studio
 
 # Root compression "maximum" maps to xz on the FUSE2 toolset, which
 # AppImageHub's mounter and some FUSE environments can't open — gzip is the

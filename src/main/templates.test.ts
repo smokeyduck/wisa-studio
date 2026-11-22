@@ -9,6 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { configureAgentProfile } from "./agent-paths";
 import { ensureDefaultWorkspace } from "./default-workspace";
 import {
 	bundledTemplates,
@@ -104,12 +105,15 @@ describe("catalog URL", () => {
 		// A fresh module instance per test: the resolved catalog is memoized at module
 		// scope, so a static import would make these two tests order-dependent.
 		const dir = await mkdtemp(path.join(tmpdir(), "omp-catalog-"));
-		vi.stubEnv("PI_CODING_AGENT_DIR", path.join(dir, "agent"));
+		configureAgentProfile(path.join(dir, "agent"));
 		const live = { version: 1, updatedAt: "2026-11-01T07:59:17.853Z", templates: [entry()] };
 		const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify(live), { status: 200 }));
 		vi.stubGlobal("fetch", fetchMock);
 		vi.resetModules();
 		try {
+			// Reset modules also resets the profile singleton; configure the fresh module.
+			const { configureAgentProfile } = await import("./agent-paths");
+			configureAgentProfile(path.join(dir, "agent"));
 			const fresh = await import("./templates");
 			const result = await fresh.readTemplatesCatalog();
 			expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -129,13 +133,16 @@ describe("catalog URL", () => {
 		// memoized at module scope for six hours, so reaching the network again in
 		// this process means a fresh module instance — a static import cannot.
 		const dir = await mkdtemp(path.join(tmpdir(), "omp-catalog-"));
-		vi.stubEnv("PI_CODING_AGENT_DIR", path.join(dir, "agent"));
+		configureAgentProfile(path.join(dir, "agent"));
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () => new Response("not found", { status: 404 })),
 		);
 		vi.resetModules();
 		try {
+			// Reset modules also resets the profile singleton; configure the fresh module.
+			const { configureAgentProfile } = await import("./agent-paths");
+			configureAgentProfile(path.join(dir, "agent"));
 			const fresh = await import("./templates");
 			const result = await fresh.readTemplatesCatalog();
 			expect(result).toMatchObject({ status: "ok", origin: "bundled" });
@@ -200,7 +207,7 @@ describe("installTemplate", () => {
 	beforeEach(async () => {
 		const dir = await mkdtemp(path.join(tmpdir(), "omp-templates-"));
 		tempDirs.push(dir);
-		vi.stubEnv("PI_CODING_AGENT_DIR", path.join(dir, "agent"));
+		configureAgentProfile(path.join(dir, "agent"));
 	});
 
 	afterEach(() => {

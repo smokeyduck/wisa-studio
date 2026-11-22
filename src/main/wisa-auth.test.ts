@@ -11,6 +11,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { agentDir, configureAgentProfile } from "./agent-paths";
 import { listModelsProviders } from "./models-config";
 import { applyWisaCredentials, connectWisa, exchangeWisaCode, WISA_EXCHANGE_URL } from "./wisa-auth";
 import { ensureWisaProvider } from "./wisa-provider";
@@ -26,13 +27,12 @@ describe("wisa-auth", () => {
 	beforeEach(() => {
 		testDir = join(tmpdir(), `omp-test-wisa-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 		mkdirSync(testDir, { recursive: true });
-		originalEnv = process.env.PI_CODING_AGENT_DIR;
-		process.env.PI_CODING_AGENT_DIR = testDir;
+		originalEnv = agentDir();
+		configureAgentProfile(testDir);
 	});
 
 	afterEach(() => {
-		if (originalEnv !== undefined) process.env.PI_CODING_AGENT_DIR = originalEnv;
-		else delete process.env.PI_CODING_AGENT_DIR;
+		configureAgentProfile(originalEnv!);
 		rmSync(testDir, { recursive: true, force: true });
 	});
 
@@ -111,7 +111,7 @@ describe("wisa-auth", () => {
 		expect(provider?.hasApiKey).toBe(true);
 		// The seeded shell survives a sign-in: same api/baseUrl, discovery intact.
 		expect(provider?.baseUrl).toBe("https://api.askwisa.com/v1");
-		expect(provider?.api).toBe("openai-completions");
+		expect(provider?.api).toBeUndefined();
 		expect(provider?.discovery).toEqual({ type: "openai-models-list" });
 	});
 

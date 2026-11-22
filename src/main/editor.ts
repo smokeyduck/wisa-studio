@@ -6,9 +6,9 @@
 
 import { execFile, spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
+import { app } from "electron";
 import type { ConfigEditor } from "../shared/config-editor";
 import { resolveEditorCommand, spawnPath } from "./shell-env";
 
@@ -54,7 +54,10 @@ export async function openInExternalEditor(content: string): Promise<EditorRound
 	if (!editorCmd) {
 		throw new Error("Set $VISUAL or $EDITOR to use an external editor");
 	}
-	const tmpFile = path.join(os.tmpdir(), `omp-editor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.md`);
+	const tmpFile = path.join(
+		app.getPath("temp"),
+		`wisa-editor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.md`,
+	);
 	try {
 		await fs.writeFile(tmpFile, content, "utf8");
 		const [editor, ...editorArgs] = editorCmd.split(" ");

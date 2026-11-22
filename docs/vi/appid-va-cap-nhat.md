@@ -1,75 +1,53 @@
-# appId: vì sao lần này vẫn là `sh.omp.gui`, và khi nào nên đổi
+# appId và định danh WISA STUDIO
 
-## Tình trạng hiện tại
+## Định danh hiện tại (đã kiểm tra trong mã nguồn)
 
-Ba cấu hình đóng gói (`electron-builder.yml`, `electron-builder.x64.yml`,
-`electron-builder.win.yml`) đều giữ:
+`electron-builder.yml`, `electron-builder.x64.yml`, `electron-builder.win.yml`:
 
 ```yaml
-appId: sh.omp.gui
+appId: org.wisa.studio
+productName: WISA STUDIO
+protocols/schemes: [wisa-studio]
 ```
 
-Đây là **quyết định có chủ ý**, không phải bỏ sót.
+Linux (`electron-builder.yml`): `desktop` có `StartupWMClass: wisa-studio`; artifact `wisa-studio-${version}.${ext}` và `wisa-studio_${version}_${arch}.${ext}`.
 
-## appId quyết định điều gì
+Runtime (`src/main/deep-link.ts`): `PROTOCOL = "wisa-studio"`, `LINUX_DESKTOP_FILE = "wisa-studio.desktop"`, `LINUX_DEV_DESKTOP_FILE = "wisa-studio-dev.desktop"`.
 
-- **macOS:** bundle identifier của `WISA STUDIO.app`, cũng là khoá nhận diện
-  của LaunchServices, của Keychain (mục "safe storage" mà Electron dùng để mã
-  hoá API key đã lưu), của quyền TCC (thư mục, micro, accessibility) và của
-  `~/Library/Application Support/<appId>`.
-- **Windows:** `AppUserModelID` — thứ quyết định nhóm trên taskbar, toast
-  notification và việc Windows coi hai bản cài là cùng một ứng dụng.
-- **Auto-update:** electron-updater không so `appId`, nhưng bản cài cũ chỉ tự
-  cập nhật lên bản mới nếu nó tìm thấy feed của chính nó. Đổi `appId` không
-  làm hỏng feed, nhưng đổi *đường dẫn cài đặt mặc định* (suy ra từ
-  `productName`) thì có.
+Runtime (`src/main/dev-profile.ts`): AppUserModelID `org.wisa.studio` (đóng gói) và `org.wisa.studio.dev` (phát triển); `app.setName("WISA STUDIO")`.
 
-## Vì sao chưa đổi ngay
+Windows: GUID gỡ cài đặt NSIS = `UUID.v5(appId)` (`node_modules/app-builder-lib/out/targets/nsis/NsisTarget.js:157`), nên đổi appId đổi luôn GUID; bản mới là mục chương trình riêng.
 
-Người dùng đã cài bản cũ đang có:
+## Thư mục dữ liệu (theo `applyAppProfile()` trong `src/main/dev-profile.ts`)
 
-1. API key đã lưu, được mã hoá bằng Keychain/TCC gắn với `sh.omp.gui`;
-2. quyền đã cấp (thư mục, micro) gắn với `sh.omp.gui`;
-3. dữ liệu trong `~/Library/Application Support/sh.omp.gui`.
+Thư mục dữ liệu được đặt theo tên, không suy ra từ appId:
 
-Đổi `appId` trong một bản cập nhật thường sẽ khiến hệ điều hành coi đó là ứng
-dụng **khác**: macOS có thể tạo thư mục dữ liệu mới, xin lại toàn bộ quyền và
-mất key đã lưu (vì Keychain tra theo bundle id). Người dùng thấy như mất cấu
-hình, dù dữ liệu vẫn nằm đó.
+- userData đóng gói: `<appData>/wisa-studio` (`app.getPath("appData")`: macOS `~/Library/Application Support`, Windows `%APPDATA%`, Linux `~/.config`).
+- userData phát triển: `<appData>/wisa-studio-dev`.
+- Agent đóng gói: `~/.wisa-studio/agent`; phát triển: `~/.wisa-studio-dev/agent`.
+- Log runtime: `<userData>/logs/gui-runtime.jsonl` (`src/main/runtime-log.ts:6`); log agent: `~/.wisa-studio/logs` (dev `~/.wisa-studio-dev/logs`) (`src/main/log-watcher.ts:50`).
+- Thư mục tạm của agent: `~/.wisa-studio/tmp` (dev `~/.wisa-studio-dev/tmp`), có `tmp/runtime` (`src/main/dev-profile.ts:34`).
+- XDG của tiến trình agent: `<root>/xdg/{config,data,state,cache}`, `XDG_RUNTIME_DIR` = `<root>/tmp/runtime`, `TMPDIR` = `<root>/tmp` (`src/main/dev-profile.ts:64-73`). `HOME` không đổi: agent vẫn dùng HOME, Git/SSH và khoá API của người dùng (`dev-profile.ts:46-47`).
 
-Còn một rủi ro nữa: nếu bản mới dùng `appId` khác nhưng cùng `productName`,
-electron-builder ghi đè đúng thư mục `.app` cũ, còn LaunchServices lại thấy
-một bundle id lạ → có máy sẽ có hai mục trong Launchpad/Applications.
+## Cập nhật và cùng tồn tại
 
-## Khi nào nên đổi (và đổi thế nào)
+electron-updater không kiểm tra appId. Bản WISA cũ đọc cùng feed `smokeyduck/wisa-studio`, nên có thể tự cài bản mới tại chỗ. Khi đó ứng dụng mở trên thư mục dữ liệu mới; key đã lưu và quyền đã cấp theo định danh cũ không đi theo.
 
-Chỉ đổi khi thật sự cần tách khỏi bản cũ — ví dụ muốn cài song song, hoặc
-chuyển hẳn sang một nhà phát hành khác. Khi đó làm thành **một bản phát hành
-riêng**, theo thứ tự:
+Bản WISA cũ dùng `productName: WISA STUDIO`, nên cài bản mới sẽ thay tệp ứng dụng cũ ở cùng đường dẫn `WISA STUDIO.app` (macOS) hoặc thư mục cài (Windows). Để chạy cả hai, phải đổi đường dẫn cài đặt thủ công.
 
-1. **Chọn appId mới**, ví dụ `com.askwisa.studio`. Không dùng lại id của bất kỳ
-   ứng dụng nào khác.
-2. **Di trú dữ liệu trước khi đổi:** trong bản phát hành cuối cùng còn dùng
-   `sh.omp.gui`, thêm bước copy `~/Library/Application Support/sh.omp.gui` →
-   thư mục mới, và chép lại keychain item (`security find-generic-password -s
-   "sh.omp.gui"` / `-s "<appId mới>"`). Với Windows, đọc `AppUserModelID` cũ
-   trước khi đổi.
-3. **Ghi chú phát hành rõ ràng:** "bản này dùng định danh ứng dụng mới; lần đầu
-   mở có thể phải cấp lại quyền và dán lại API key".
-4. **Giữ `productName` ổn định** để đường dẫn cài đặt không đổi, tránh hai bản
-   song song ngoài ý muốn.
-5. **Kiểm tra trên máy sạch và máy đã cài bản cũ**: key còn, phiên còn, update
-   vẫn nhận được bản kế tiếp.
+Không có di chuyển dữ liệu tự động. Không sao chép, di chuyển hay xoá `~/.omp` hoặc thư mục `omp` cũ. API key phải nhập lại trong bản mới.
 
-## Những gì KHÔNG đổi theo appId
+## Không đổi theo định danh này
 
-Các thành phần sau giữ nguyên bất kể `appId`:
+- sidecar `resources/omp*`, `extraResources` tới `omp`, `resolveBundledOmp`; `omp.exe` trong gói Windows;
+- `window.omp`, biến môi trường `OMP_*` / `PI_*`, provider/model id, `@oh-my-pi/*`.
 
-- sidecar `resources/omp*` và cách nạp (`resolveBundledOmp`);
-- scheme `omp://` (`PROTOCOL` trong `src/main/deep-link.ts`, `protocols:` trong
-  các file builder);
-- `~/.omp`, `.omp/`, `PI_CODING_AGENT_DIR`, `models.yml`, MCP config;
-- provider/model id, `@oh-my-pi/*`, biến môi trường `OMP_*`, `window.omp`.
+## Trạng thái
 
-Nghĩa là đổi `appId` **không** làm mất phiên hay cấu hình agent — chỉ ảnh hưởng
-đến phần do hệ điều hành quản lý theo bundle id.
+- Chưa phát hành (not released).
+- Ứng dụng đang chạy chưa được khởi động lại (live app not restarted).
+- Triển khai web console: đang chờ (pending).
+- Bản build mới: đã stage, SHA `7ae61603af890f22814d9d6853a5f4b6052bc50dba21849def40c9660dfb8c41`.
+- Smoke cuối trên SHA `7ae61603af890f22814d9d6853a5f4b6052bc50dba21849def40c9660dfb8c41`: PASS. `READY protocolVersion=1`; `get_settings` trả `compaction.enabled=false`, `display.showTokenUsage=false` (`.claude` đặt `true` bị bỏ qua, mặc định schema); `set_setting` round-trip PASS; không ghi vào `~/.omp/agent`; 10 lệnh, `get_available_models` 271 ms, post-discovery tối đa 5 ms.
+- `check-schema-locale` ru/vi: chưa chạy lại trong đợt này.
+- Chưa phát hành (not released).

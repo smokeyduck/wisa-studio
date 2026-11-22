@@ -1,5 +1,5 @@
 /**
- * Tails ~/.omp/logs/omp.*.log files.
+ * Tails the selected WISA profile's logs/omp.*.log files.
  * Uses fs.watch + createReadStream from last offset, with a directory
  * watcher for new-file discovery. A slow 15s poll is the safety net for
  * platforms where fs.watch is unreliable or a watcher silently detaches

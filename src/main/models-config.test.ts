@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { parse } from "yaml";
 import type { CustomProviderInput } from "../shared/ipc-types";
 import { CUSTOM_PROVIDER_APIS } from "../shared/ipc-types";
+import { agentDir, configureAgentProfile } from "./agent-paths";
 import {
 	deleteModelsProvider,
 	listModelsProviders,
@@ -24,16 +25,12 @@ describe("models-config", () => {
 	beforeEach(() => {
 		testDir = join(tmpdir(), `omp-test-models-${Date.now()}`);
 		mkdirSync(testDir, { recursive: true });
-		originalEnv = process.env.PI_CODING_AGENT_DIR;
-		process.env.PI_CODING_AGENT_DIR = testDir;
+		originalEnv = agentDir();
+		configureAgentProfile(testDir);
 	});
 
 	afterEach(() => {
-		if (originalEnv !== undefined) {
-			process.env.PI_CODING_AGENT_DIR = originalEnv;
-		} else {
-			delete process.env.PI_CODING_AGENT_DIR;
-		}
+		configureAgentProfile(originalEnv!);
 		if (existsSync(testDir)) {
 			rmSync(testDir, { recursive: true, force: true });
 		}
@@ -395,7 +392,7 @@ providers:
 				apiKey: "sk-test",
 				models: [{ id: "model-a" }],
 			});
-			// ProvidersWindow tells the user `~/.omp/agent/models.yml`.
+			// Provider settings open models.yml in the active WISA agent directory.
 			expect(modelsPath()).toBe(join(testDir, "models.yml"));
 			expect(existsSync(join(testDir, "models.yaml"))).toBe(false);
 		});

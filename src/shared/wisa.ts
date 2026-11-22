@@ -11,4 +11,4 @@ export const WISA_PROVIDER_ID = "wisa";
 export const WISA_WEB_ORIGIN = "https://askwisa.com";
 
 /** Where a user signs in and is handed the one-time deep-link code. */
-export const WISA_CONNECT_PAGE_URL = `${WISA_WEB_ORIGIN}/console/desktop`;
+export const WISA_CONNECT_PAGE_URL = `${WISA_WEB_ORIGIN}/console/desktop?app=wisa-studio`;
