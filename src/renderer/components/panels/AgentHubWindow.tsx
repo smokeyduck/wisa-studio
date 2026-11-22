@@ -521,6 +521,14 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
 // ---------------------------------------------------------------------------
 // Hub: live multi-agent table
 // ---------------------------------------------------------------------------
+/**
+ * Registry rows the hub acts on: parked and idle refs stay abortable and
+ * revivable here, unlike the dock's working list, so the hub keeps its own
+ * live predicate.
+ */
+function hubLive(status: string): boolean {
+	return isLiveSubagentStatus(status) || status === "parked" || status === "idle";
+}
 
 /**
  * TUI hub ordering (running first); recency breaks ties. Keyed by the live
@@ -529,7 +537,7 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
  * `TABLE[status]` lookup returned undefined and produced a NaN comparator.
  */
 function hubStatusOrder(status: string): number {
-	if (isLiveSubagentStatus(status)) return 0;
+	if (hubLive(status)) return 0;
 	if (status === "failed") return 1;
 	if (status === "cancelled" || status === "aborted") return 2;
 	return 3;
@@ -559,7 +567,7 @@ const HubRow = memo(function HubRow({
 }) {
 	const t = useT();
 	const meta = statusMeta(agent.status);
-	const live = isLiveSubagentStatus(agent.status);
+	const live = hubLive(agent.status);
 	// Live rows advance the sidecar sample; terminal rows keep its final value.
 	const elapsed = subagentElapsedMs(agent, now);
 	const title = subagentPrimaryLabel(agent);
@@ -742,7 +750,7 @@ function HubTab() {
 	// which froze every elapsed timer and disabled Abort mid-run.
 	const liveCount = useMemo(() => {
 		let count = 0;
-		for (const agent of subagents.values()) if (isLiveSubagentStatus(agent.status)) count += 1;
+		for (const agent of subagents.values()) if (hubLive(agent.status)) count += 1;
 		return count;
 	}, [subagents]);
 

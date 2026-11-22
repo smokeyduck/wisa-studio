@@ -187,6 +187,22 @@ describe("planComposerSubmit", () => {
 		expect(omp.rpc.prompt).not.toHaveBeenCalled();
 	});
 
+	it("opens the phone dialog for typed /phone when the sidecar does not advertise it", () => {
+		const omp = installMockOmp();
+		useUiStore.setState({ phoneOpen: false });
+		const submit = planComposerSubmit({
+			message: "/phone",
+			images: [],
+			isStreaming: false,
+			mode: "prompt",
+			commands: [],
+		});
+
+		expect(submit.kind).toBe("handled");
+		expect(useUiStore.getState().phoneOpen).toBe(true);
+		expect(omp.rpc.prompt).not.toHaveBeenCalled();
+	});
+
 	it("routes typed /compact through its long-running RPC instead of the 8s prompt path", async () => {
 		const omp = installMockOmp();
 		const submit = planComposerSubmit({

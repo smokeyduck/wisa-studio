@@ -466,6 +466,14 @@
 .omp-transcript-editorial {
 	--omp-editorial-inset: var(--omp-column-pad);
 	--omp-editorial-edge: var(--omp-column-pad);
+	/* Flex resolves this viewport's size; containment does not size its content. */
+	container-type: size;
+}
+
+/* One budget for all execution cards, including focused/full views. The
+ * transcript viewport already excludes the composer and split-pane chrome. */
+.omp-workspace-dock {
+	max-height: min(360px, 40cqh);
 }
 
 .omp-transcript-editorial .omp-transcript-content {
@@ -1675,20 +1683,15 @@
 	}
 }
 
-/* The model picker reads as its name; only a toolbar too narrow for any name
-   trades it for an icon — never a bare chevron. */
-.omp-composer-model-icon {
-	display: none;
+/* The model name always shows and wraps within the trigger. The icon is not a
+   fallback for it. */
+.omp-composer-model-label {
+	overflow-wrap: anywhere;
+	white-space: normal;
 }
 
-@container omp-composer-toolbar (max-width: 220px) {
-	.omp-composer-model-label {
-		display: none;
-	}
-
-	.omp-composer-model-icon {
-		display: block;
-	}
+.omp-composer-model-icon {
+	display: none;
 }
 
 /* Context row: the method and threshold give way first when space runs
@@ -1706,10 +1709,6 @@
 
 	.omp-starter-grid {
 		grid-template-columns: minmax(0, 1fr);
-	}
-
-	.omp-composer-model-label {
-		max-width: 9rem;
 	}
 }
 

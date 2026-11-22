@@ -44,6 +44,7 @@ const LIVE_STATUSES: Record<string, true> = {
 	running: true,
 	pending: true,
 	idle: true,
+	waiting: true,
 	parked: true,
 	// Stale registrations remain server-owned rows and must disappear after
 	// hub cancel removes them; do not retain them as terminal history.
@@ -51,7 +52,9 @@ const LIVE_STATUSES: Record<string, true> = {
 };
 
 function normalizeSnapshot(snapshot: SubagentNode): SubagentNode {
-	return snapshot.status === "running" && snapshot.live === false ? { ...snapshot, status: "stale" } : snapshot;
+	return snapshot.live === false && ["started", "running", "pending", "waiting"].includes(snapshot.status)
+		? { ...snapshot, status: "stale" }
+		: snapshot;
 }
 
 /**
@@ -95,6 +98,7 @@ export const createSubagentsStore = (command: TabCommand = activeTabCommand) => 
 						agentSource: p.agentSource,
 						description: p.description ?? existing?.description,
 						status: p.status === "started" ? "running" : p.status,
+						live: p.status === "started",
 						task: existing?.task,
 						assignment: existing?.assignment,
 						sessionFile: p.sessionFile ?? existing?.sessionFile,
@@ -123,6 +127,7 @@ export const createSubagentsStore = (command: TabCommand = activeTabCommand) => 
 						agentSource: frame.payload.agentSource,
 						description: progress.description ?? existing?.description,
 						status: progress.status,
+						live: progress.status === "running" || progress.status === "pending",
 						task: frame.payload.task,
 						assignment: frame.payload.assignment ?? existing?.assignment,
 						sessionFile: frame.payload.sessionFile ?? existing?.sessionFile,

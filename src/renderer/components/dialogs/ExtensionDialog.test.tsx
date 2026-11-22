@@ -9,9 +9,11 @@ import {
 	deleteSessionRuntime,
 	sessionRuntimeStore,
 	setFocusedSessionRuntime,
+	SessionRuntimeProvider,
+	sessionRuntime,
 } from "../../stores/session-runtime-context";
 import { createTabRuntime } from "../../stores/tab-runtime";
-import { ExtensionDialog } from "./ExtensionDialog";
+import { ExtensionDialog, InlineExtensionQuestions } from "./ExtensionDialog";
 
 const { document, window, Event, CustomEvent, HTMLElement, Node } = parseHTML("<html><body></body></html>");
 const globals = globalThis as Record<string, unknown>;
@@ -73,6 +75,7 @@ async function mount(): Promise<void> {
 		root.render(
 			<I18nProvider>
 				<ExtensionDialog />
+				<InlineExtensionQuestions />
 			</I18nProvider>,
 		);
 	});
@@ -418,6 +421,26 @@ describe("ExtensionDialog non-dialog mutations", () => {
 });
 
 describe("ExtensionDialog cross-tab requests", () => {
+	it("keeps background questions out of the active chat and restores their draft on remount", async () => {
+		createTabRuntime("tab-fg"); createTabRuntime("tab-bg"); setFocusedSessionRuntime("tab-fg");
+		const bg = sessionRuntimeStore<ExtensionUiStore>("tab-bg", "extensionUi");
+		if (!bg) throw new Error("missing background store");
+		await mount();
+		await act(async () => bg.getState().pushRequest({ type: "extension_ui_request", id: "bg-question", method: "input", title: "Owning question" }));
+		expect(document.body.textContent).not.toContain("Owning question");
+		const runtime = sessionRuntime("tab-bg");
+		if (!runtime) throw new Error("missing runtime");
+		await act(async () => { setFocusedSessionRuntime("tab-bg"); root.render(<I18nProvider><ExtensionDialog /><SessionRuntimeProvider runtime={runtime}><InlineExtensionQuestions /></SessionRuntimeProvider></I18nProvider>); });
+		expect(document.querySelector("[data-inline-question]")).not.toBeNull();
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
+		await typeInto(document.querySelector("input") as unknown as TestElement, "keep draft");
+		await act(async () => { root.render(<I18nProvider><ExtensionDialog /></I18nProvider>); });
+		await act(async () => { root.render(<I18nProvider><ExtensionDialog /><SessionRuntimeProvider runtime={runtime}><InlineExtensionQuestions /></SessionRuntimeProvider></I18nProvider>); });
+		expect(document.querySelector("input")?.getAttribute("value")).toBe("keep draft");
+		await submit(document.querySelector("form") as unknown as TestElement);
+		expect(respondExtensionUi).toHaveBeenCalledWith({ type: "extension_ui_response", id: "bg-question", value: "keep draft" });
+		expect(bg.getState().pendingRequests).toEqual([]);
+	});
 	it("surfaces a blocking request queued in a background tab and clears it from the owning store", async () => {
 		createTabRuntime("tab-fg");
 		createTabRuntime("tab-bg");

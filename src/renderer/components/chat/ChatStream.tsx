@@ -39,7 +39,8 @@ import { cachedTranscript } from "../../stores/transcript-cache";
 import { TRANSCRIPT_FOCUS_TTL_MS, useTranscriptFocusStore } from "../../stores/transcript-focus";
 import { useUiStore } from "../../stores/ui";
 import { useTabIsWork } from "../../stores/workspace-mode";
-import { LongTaskStatus, WisaLogo } from "../common";
+import { Button, LongTaskStatus, Modal, TextArea, WisaLogo } from "../common";
+import { InlineExtensionQuestions } from "../dialogs/ExtensionDialog";
 import { buildEditCandidates } from "../panels/DiffPanel";
 import { DiffStat } from "../panels/workspace-ui";
 import { ReadGroupCard } from "../tools/ReadGroupCard";
@@ -281,6 +282,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	const parentRef = useRef<HTMLDivElement>(null);
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const footerRef = useRef<HTMLDivElement>(null);
+	const questionsRef = useRef<HTMLDivElement>(null);
 	const conversationAnchors = useMemo(() => buildConversationAnchors(rows, rowKeys), [rows, rowKeys]);
 	const tailRowKey = rowKeys.at(-1);
 	const activeConversationIndex = useMemo(
@@ -328,6 +330,10 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 		tabAwaitsTranscript(state.tabs.find(candidate => candidate.id === tabId)),
 	);
 	const awaitingTranscript = status === "starting" && (tabHasHistory || readOnly !== null);
+	const [quickAction, setQuickAction] = useState<{ title: string; prompt: string } | null>(null);
+	const [quickDraft, setQuickDraft] = useState("");
+	const activeTabId = useTabsStore(state => state.activeTabId);
+	useEffect(() => { setQuickAction(null); }, [activeTabId, sessionId]);
 
 	const virtualizer = useVirtualizer({
 		count: rows.length,
@@ -440,6 +446,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 		});
 		observer.observe(canvas);
 		observer.observe(el);
+		if (questionsRef.current) observer.observe(questionsRef.current);
 		if (footerRef.current) observer.observe(footerRef.current);
 		return () => observer.disconnect();
 	}, [scrollToTail, followsTail]);
@@ -712,7 +719,6 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	// Find in this conversation (⌘F). Matches come from the message data, since
 	// rows scrolled out of view are not in the DOM for the browser's own find.
 	const findRequest = useUiStore(s => s.transcriptFindRequest);
-	const activeTabId = useTabsStore(s => s.activeTabId);
 	const [findOpen, setFindOpen] = useState(false);
 	const [findQuery, setFindQuery] = useState("");
 	const [findIndex, setFindIndex] = useState(0);
@@ -863,11 +869,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 									<button
 										key={title}
 										type="button"
-										onClick={() =>
-											window.dispatchEvent(
-												new CustomEvent("omp:fill-composer", { detail: { text: prompt, tabId } }),
-											)
-										}
+										onClick={() => { setQuickAction({ title, prompt }); setQuickDraft(prompt); }}
 										className="omp-starter-card omp-lift group flex min-h-20 items-start gap-3 rounded-2xl border border-[var(--omp-border)] p-4 text-left shadow-[var(--omp-shadow-sm)] hover:border-[var(--omp-border-accent)] hover:bg-[var(--omp-bg-secondary)]"
 									>
 										<span className="omp-starter-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--omp-selected-bg)] text-[var(--omp-accent)]">
@@ -944,6 +946,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 							);
 						})}
 					</div>
+					{readOnly === null && <div ref={questionsRef} className="omp-transcript-row"><InlineExtensionQuestions /></div>}
 					{footer && (
 						<div className="omp-composer-shell" ref={footerRef}>
 							{footer}
@@ -968,6 +971,20 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 				anchors={conversationAnchors}
 				onNavigate={jumpToConversation}
 			/>
+			<Modal open={quickAction !== null} onClose={() => setQuickAction(null)} size="md" title={quickAction?.title}>
+				<form className="space-y-3" onSubmit={event => {
+					event.preventDefault();
+					if (!quickDraft.trim()) return;
+					window.dispatchEvent(new CustomEvent("omp:fill-composer", { detail: { text: quickDraft, tabId } }));
+					setQuickAction(null);
+				}}>
+					<TextArea autoFocus aria-label={quickAction?.title} rows={4} value={quickDraft} onChange={event => setQuickDraft(event.target.value)} />
+					<div className="flex justify-end gap-2">
+						<Button type="button" variant="ghost" onClick={() => setQuickAction(null)}>{t("common.cancel")}</Button>
+						<Button type="submit" variant="primary" disabled={!quickDraft.trim()}>{t("chat.starter.continue")}</Button>
+					</div>
+				</form>
+			</Modal>
 		</>
 	);
 }

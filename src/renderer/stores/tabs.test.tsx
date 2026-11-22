@@ -616,6 +616,23 @@ describe("tabs store switch", () => {
 		expect(useComposerStore.getState().images.map(image => image.content.data)).toEqual(["failed-image", "image-t0"]);
 	});
 
+	it("resumes A after A to B to A before A's transcript finishes loading", async () => {
+		seedTabs();
+		fillLiveStores("t0");
+		await useTabsStore.getState().switchTab("t1");
+		const transcript = Promise.withResolvers<RpcResponse>();
+		omp.rpc.getTranscript.mockReturnValueOnce(transcript.promise);
+		omp.rpc.getState.mockResolvedValue(ok(serverState({ sessionId: "s-t0", isStreaming: true })));
+		omp.rpc.setSubagentSubscription.mockClear();
+		const switching = useTabsStore.getState().switchTab("t0");
+		await vi.waitFor(() => expect(omp.rpc.setSubagentSubscription).toHaveBeenCalledWith("progress"));
+		expect(useMessagesStore.getState().messages.map(messageText)).toEqual(["hello-t0"]);
+		expect(useComposerStore.getState().draft).toBe("draft-t0");
+		expect(useSessionStore.getState().isStreaming).toBe(true);
+		transcript.resolve(ok({ messages: [msg("hello-t0")] }));
+		await switching;
+	});
+
 	it("derives run state from the tab entry when restoring a background-running tab", async () => {
 		seedTabs();
 		// t1's run kept going in the background; the pool reported it.

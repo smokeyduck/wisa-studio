@@ -17,8 +17,8 @@
  */
 
 import { ChevronDown, ChevronRight, CloudDownload, Eye, EyeOff, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { customProviderNeedsApiKey } from "../../../shared/custom-provider";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { customProviderNeedsApiKey, effectiveProviderApi } from "../../../shared/custom-provider";
 import type {
 	CustomProviderApi,
 	CustomProviderDiscoveryType,
@@ -26,7 +26,7 @@ import type {
 	CustomProviderView,
 } from "../../../shared/ipc-types";
 import { CUSTOM_PROVIDER_APIS } from "../../../shared/ipc-types";
-import type { DiscoveredModel } from "../../../shared/rpc-types";
+import type { DiscoveredModel, ModelInfo } from "../../../shared/rpc-types";
 import { describeError, describeProviderError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { useTabRpc } from "../../lib/tab-rpc";
@@ -132,10 +132,40 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 	const readonly = editing?.builtin ?? false;
 
 	const [id, setId] = useState(editing?.id ?? "");
-	const [api, setApi] = useState<CustomProviderApi>(
-		(editing?.api as CustomProviderApi | undefined) ?? PROVIDER_PROTOCOLS[0],
-	);
+	const [api, setApi] = useState<CustomProviderApi | undefined>(editing?.api);
 	const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? "");
+	const catalog = useModelStore(state => state.availableModels);
+	const [endpointModels, setEndpointModels] = useState<ModelInfo[]>([]);
+	useEffect(() => {
+		if (!editing) return;
+		let cancelled = false;
+		void rpc
+			.getAvailableModels()
+			.then(response => {
+				if (cancelled || !response.success) return;
+				const rows = (response.data as { models?: ModelInfo[] }).models ?? [];
+				setEndpointModels(rows.filter(row => row.provider === editing.id));
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [editing, rpc]);
+	const runtimeModels = useMemo(() => {
+		const rows = new Map<string, ModelInfo>();
+		for (const row of [...catalog, ...endpointModels]) if (row.provider === editing?.id) rows.set(row.id, row);
+		return [...rows.values()];
+	}, [catalog, endpointModels, editing?.id]);
+	const effectiveModelApi = (model: ModelRow) => {
+		const savedEndpoint = editing?.models.find(row => row.id === model.id)?.baseUrl ?? editing?.baseUrl;
+		return effectiveProviderApi(
+			model.baseUrl ?? baseUrl,
+			model.api ?? api,
+			editing && (model.baseUrl ?? baseUrl) === savedEndpoint
+				? runtimeModels.find(row => row.id === model.id)?.api
+				: undefined,
+		);
+	};
 	const [apiKey, setApiKey] = useState("");
 	const [clearKey, setClearKey] = useState(false);
 	const [showKey, setShowKey] = useState(false);
@@ -161,6 +191,13 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 			? editing.models.map(m => ({ key: nextKey.current++, ...m }))
 			: [{ key: nextKey.current++, id: "", name: "" }],
 	);
+	const discoveredModels: ModelRow[] = runtimeModels
+		.filter(model => !models.some(row => row.id.trim() === model.id))
+		.map((model, index) => ({ key: -index - 1, id: model.id, name: model.name }));
+	const updateDiscoveredModel = (row: ModelRow, patch: Partial<Omit<ModelRow, "key">>) => {
+		setModels(previous => [...previous.filter(model => model.id.trim() || model.name?.trim()), { ...row, ...patch, key: nextKey.current++ }]);
+		setErrors(previous => dropKey(previous, "models"));
+	};
 	const [headers, setHeaders] = useState<HeaderRow[]>(() =>
 		Object.entries(editing?.headers ?? {}).map(([name, value]) => ({
 			key: nextKey.current++,
@@ -213,7 +250,7 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 			const response = await rpc.discoverProviderModels({
 				// A saved key only ever goes with the provider it was saved for.
 				...(editing && !clearKey ? { provider: editing.id } : {}),
-				api,
+				api: effectiveProviderApi(url, api),
 				baseUrl: url,
 				...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
 				...(authHeader ? { authHeader: true } : {}),
@@ -340,7 +377,7 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 
 		const input: CustomProviderInput = {
 			id: editing ? editing.id : id.trim(),
-			api,
+			...(api ? { api } : discoveryType && discoveryType !== "proxy" ? { api: effectiveProviderApi(baseUrl) } : {}),
 			baseUrl: baseUrl.trim(),
 			...(apiKey.trim().length > 0 ? { apiKey: apiKey.trim() } : {}),
 			...(clearKey ? { clearApiKey: true } : {}),
@@ -367,6 +404,7 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 					return {
 						...modelInput,
 						id: modelInput.id.trim(),
+						...(!api && !modelInput.api ? { api: effectiveModelApi(row) } : {}),
 						...(modelInput.name && modelInput.name.trim().length > 0 ? { name: modelInput.name.trim() } : {}),
 					};
 				}),
@@ -434,16 +472,18 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 					<FieldLabel>{t("providerCfg.form.api")}</FieldLabel>
 					<select
 						className={SELECT_CLASS}
-						value={api}
+						value={api ?? ""}
 						disabled={readonly || submitting}
-						onChange={event => setApi(event.target.value as CustomProviderApi)}
+						onChange={event => setApi((event.target.value || undefined) as CustomProviderApi | undefined)}
 					>
+						<option value="">{t("providerCfg.form.apiAuto", { api: effectiveProviderApi(baseUrl) })}</option>
 						{PROVIDER_PROTOCOLS.map(protocol => (
 							<option key={protocol} value={protocol}>
 								{protocol}
 							</option>
 						))}
 					</select>
+					{!api && <p className="mt-1 text-omp-sm text-(--omp-dim)">{t("providerCfg.form.apiAutoHint")}</p>}
 				</div>
 
 				<Input
@@ -592,6 +632,7 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 							<ModelEditor
 								key={row.key}
 								model={row}
+								effectiveApi={effectiveModelApi(row)}
 								readonly={readonly}
 								disabled={submitting}
 								onUpdate={updateModel}
@@ -600,6 +641,15 @@ function ProviderForm({ editing, existing, directEdit, onBack, onSaved, onCancel
 							/>
 						))}
 					</div>
+					{discoveredModels.length > 0 && (
+						<div className="mt-3 flex flex-col gap-2">
+							<p className="text-omp-sm text-(--omp-dim)">{t("providerCfg.form.discoveredModelsHint")}</p>
+							{discoveredModels.map(row => (
+								<ModelEditor key={row.id} model={row} effectiveApi={effectiveModelApi(row)} readonly={readonly} disabled={submitting}
+									onUpdate={(_key, patch) => updateDiscoveredModel(row, patch)} canRemove={false} />
+							))}
+						</div>
+					)}
 					{!readonly && (
 						<Button
 							size="sm"

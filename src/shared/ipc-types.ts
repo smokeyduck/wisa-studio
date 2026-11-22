@@ -745,7 +745,8 @@ export interface CustomProviderModelInput {
 
 export interface CustomProviderInput {
 	id: string;
-	api: CustomProviderApi;
+	/** Omitted = Auto; each explicit model is saved with its effective protocol. */
+	api?: CustomProviderApi;
 	baseUrl: string;
 	apiKey?: string;
 	/** Erase the stored key. Blank `apiKey` alone cannot mean "delete": the field
@@ -767,7 +768,7 @@ export interface CustomProviderInput {
 /** A provider entry as shown in the GUI (apiKey masked, never the real value). */
 export interface CustomProviderView {
 	id: string;
-	api: string;
+	api?: CustomProviderApi;
 	baseUrl: string;
 	hasApiKey: boolean;
 	apiKeyPreview?: string;

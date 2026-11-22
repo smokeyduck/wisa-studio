@@ -129,19 +129,7 @@ describe("TodoDockCard", () => {
 		expect(container.querySelector('[title="Restored task 12"]')).not.toBeNull();
 	});
 
-	it("leaves scrolling to the surrounding transcript", async () => {
-		useTodoStore
-			.getState()
-			.setPhases([{ name: "Live", tasks: [{ content: "Visible task", status: "in_progress" }] }]);
-		await mount(<WorkspaceDock />);
-
-		const dock = container.querySelector('[data-testid="workspace-dock"]');
-		expect(dock).not.toBeNull();
-		const className = dock?.getAttribute("class") ?? "";
-		expect(className).not.toContain("overflow-y-auto");
-		expect(className).not.toContain("max-h-");
-	});
-	it("renders every task in the focused card without a separate scroll viewport", async () => {
+	it("keeps every task available in focus mode and restores the compact summary", async () => {
 		useTodoStore.getState().setPhases([
 			{
 				name: "Live",
@@ -158,16 +146,13 @@ describe("TodoDockCard", () => {
 		);
 		await act(async () => (viewAll as unknown as { click: () => void }).click());
 
-		const dock = container.querySelector('[data-testid="workspace-dock"]') as unknown as HTMLElement;
-		const style = dock?.getAttribute("style") ?? "";
-		expect(style).not.toContain("max-height");
-		expect(dock.querySelectorAll('[title^="Task "]')).toHaveLength(30);
+		expect(container.querySelectorAll('[title^="Task "]')).toHaveLength(30);
 		const card = container.querySelector("[data-dock-focused]") as unknown as HTMLElement;
 		expect(card).not.toBeNull();
-		const cardClass = card.getAttribute("class") ?? "";
-		expect(cardClass).toContain("shrink-0");
-		expect(cardClass).toContain("overflow-clip");
-		expect(card.firstElementChild?.getAttribute("class") ?? "").toContain("sticky");
+		const back = [...container.querySelectorAll("button")].find(button => button.textContent === "Back to summary");
+		await act(async () => (back as unknown as { click: () => void }).click());
+		expect(container.querySelector("[data-dock-focused]")).toBeNull();
+		expect(container.querySelectorAll('[title^="Task "]')).toHaveLength(3);
 	});
 
 	it("unwinds a status cycle the sidecar refused, even though the store re-normalised it", async () => {

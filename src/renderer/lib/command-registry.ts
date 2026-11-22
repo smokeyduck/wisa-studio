@@ -760,7 +760,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		label: t("cmd.thinking.cycle"),
 		description: t("cmd.thinking.cycle.desc"),
 		category: "model",
-		shortcut: "⇧Tab",
+		shortcut: "Tab",
 		affordance: { kind: "action", run: () => ctx.rpc.cycleThinkingLevel() },
 	});
 	// /effort <level>: prefill hands off to the composer's slash-arg completion,
@@ -1720,12 +1720,12 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		affordance: {
 			kind: "action",
 			run: () => {
-				// The dock card only renders while plan mode is on · point at the toggle otherwise.
+				// The plan panel only shows while plan mode is on · point at the toggle otherwise.
 				if (!useSessionStore.getState().planModeEnabled) {
 					toast({ variant: "info", message: translate("planPanel.statusOff") });
 					return;
 				}
-				ctx.focusDockCard("plan");
+				useUiStore.getState().setPanelTab("plan");
 			},
 		},
 	});
@@ -2008,6 +2008,18 @@ export async function forkSessionFromGui(): Promise<void> {
 	if (runtime) await hydrateTabSession(runtime.tabId);
 	else await hydrateSession();
 	toast({ variant: "success", message: translate("fork.success") });
+}
+
+/**
+ * Slash commands the GUI runs itself. The sidecar never advertises them, so the
+ * composer's `/` menu and submit planner list them next to the sidecar's own.
+ */
+export function withGuiNativeCommands(commands: AvailableCommand[]): AvailableCommand[] {
+	if (commands.some(command => command.name === "phone")) return commands;
+	return [
+		{ name: "phone", description: translate("cmd.phone.desc"), source: "builtin", textModeExecutable: false },
+		...commands,
+	];
 }
 
 /**

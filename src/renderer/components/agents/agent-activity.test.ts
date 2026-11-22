@@ -82,8 +82,8 @@ describe("subagentActivity", () => {
 	it.each([
 		["started", undefined, "working"],
 		["running", false, "stopped"],
-		["parked", undefined, "waiting"],
-		["idle", undefined, "waiting"],
+		["parked", undefined, "stopped"],
+		["idle", undefined, "stopped"],
 		["failed", undefined, "failed"],
 		["completed", undefined, "done"],
 		["aborted", undefined, "stopped"],
@@ -210,7 +210,7 @@ describe("This turn", () => {
 			[
 				agent("done", { parentToolCallId: "c" }),
 				agent("failed", { parentToolCallId: "c", status: "failed" }),
-				agent("waiting", { parentToolCallId: "c", status: "parked" }),
+				agent("waiting", { parentToolCallId: "c", status: "pending" }),
 				agent("working", { parentToolCallId: "c", status: "running" }),
 			],
 			[user("go"), task("c")],

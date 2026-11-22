@@ -37,6 +37,12 @@ describe("providerBrand — known ids", () => {
 		expect(brand.key).toBe("wisa");
 		expect(brand.label).toBe("Wisa");
 	});
+
+	it("keeps the WISA label when the gateway advertises an OpenAI api", () => {
+		const brand = providerBrand("wisa", "openai-responses");
+		expect(brand.key).toBe("wisa");
+		expect(brand.label).toBe("Wisa");
+	});
 });
 
 describe("providerBrand — id variants", () => {
@@ -58,8 +64,8 @@ describe("providerBrand — unknown ids", () => {
 		expect(typeof brand.Icon).toBe("function");
 	});
 
-	it("labels the fallback with the id as configured, upper-cased at the front", () => {
-		expect(providerBrand("mygateway").label).toBe("Mygateway");
+	it("labels the fallback with the id exactly as configured", () => {
+		expect(providerBrand("mygateway").label).toBe("mygateway");
 		expect(providerBrand("").label).toBe("Other");
 	});
 

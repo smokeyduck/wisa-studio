@@ -16,7 +16,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import { type Document, parseDocument } from "yaml";
-import { customProviderNeedsApiKey } from "../shared/custom-provider";
+import { customProviderNeedsApiKey, effectiveProviderApi } from "../shared/custom-provider";
 import {
 	CUSTOM_MODEL_EFFORTS,
 	CUSTOM_PROVIDER_APIS,
@@ -376,7 +376,7 @@ function toView(id: string, raw: unknown): CustomProviderView & { apiKey?: strin
 	const auth = asString(rec.auth);
 	return {
 		id,
-		api: asApi(rec.api) ?? "openai-completions",
+		api: asApi(rec.api),
 		baseUrl: asString(rec.baseUrl) ?? "",
 		hasApiKey,
 		apiKeyPreview,
@@ -472,7 +472,7 @@ export function upsertModelsProvider(input: CustomProviderInput): void {
 	const entry: Record<string, unknown> =
 		existingRaw && typeof existingRaw === "object" ? { ...(existingRaw as Record<string, unknown>) } : {};
 	entry.baseUrl = input.baseUrl;
-	entry.api = input.api;
+	setOrDelete(entry, "api", input.api);
 	setOrDelete(entry, "apiKey", apiKey);
 	setOrDelete(entry, "auth", input.auth);
 	setOrDelete(entry, "authHeader", input.authHeader);
@@ -497,7 +497,12 @@ export function upsertModelsProvider(input: CustomProviderInput): void {
 			`"${input.id}" lists models but has no API key. Add a key, or set the auth mode to none for a server that needs no key.`,
 		);
 	}
-	entry.models = input.models.map(m => mergeModel(entry.models, m));
+	entry.models = input.models.map(model =>
+		mergeModel(entry.models, {
+			...model,
+			api: model.api ?? (input.api ? undefined : effectiveProviderApi(model.baseUrl ?? input.baseUrl)),
+		}),
+	);
 	data.doc.setIn(["providers", input.id], entry);
 	writeModelsFile(data.doc);
 }

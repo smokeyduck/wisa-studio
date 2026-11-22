@@ -38,8 +38,9 @@ const STATUS_META: Record<string, StatusMeta> = {
 	started: { label: "running", variant: "info", live: true, labelKey: "subagent.status.started" },
 	running: { label: "running", variant: "info", live: true, labelKey: "subagent.status.started" },
 	pending: { label: "pending", variant: "default", live: true, labelKey: "subagent.status.pending" },
-	idle: { label: "idle", variant: "default", live: true, labelKey: "subagent.status.idle" },
-	parked: { label: "parked", variant: "default", live: true, labelKey: "subagent.status.parked" },
+	waiting: { label: "waiting", variant: "default", live: true, labelKey: "subagent.status.pending" },
+	idle: { label: "idle", variant: "default", live: false, labelKey: "subagent.status.idle" },
+	parked: { label: "parked", variant: "default", live: false, labelKey: "subagent.status.parked" },
 	stale: { label: "stale", variant: "warning", live: false, labelKey: "subagent.status.stale" },
 	completed: { label: "completed", variant: "success", live: false, labelKey: "subagent.status.completed" },
 	failed: { label: "failed", variant: "error", live: false, labelKey: "subagent.status.failed" },
@@ -73,7 +74,7 @@ export function isLiveSubagentStatus(status: string): boolean {
  * so their first lifecycle timestamp is the only honest fallback.
  */
 export function subagentElapsedMs(agent: SubagentSnapshot, now: number): number | null {
-	const live = isLiveSubagentStatus(agent.status);
+	const live = agent.live !== false && isLiveSubagentStatus(agent.status);
 	const sampled = agent.progress?.durationMs;
 	if (typeof sampled === "number" && Number.isFinite(sampled)) {
 		const sinceSample = live && Number.isFinite(agent.lastUpdate) ? Math.max(0, now - agent.lastUpdate) : 0;

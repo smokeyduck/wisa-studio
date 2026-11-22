@@ -1,9 +1,4 @@
-/**
- * PanelContainer chat filter: a tool-free chat tab renders only the files
- * drawer tab (diffs can't exist without tools); an agent tab also gets
- * diff. Logs live in their own dialog, never in the drawer. Todo/plan/agents/queue moved to the center dock — they must not
- * appear here. Same linkedom + react-dom harness as mode-visibility.test.tsx.
- */
+/** Inspector filtering and links: plan/review stay here, execution cards stay in chat. */
 
 import { parseHTML } from "linkedom";
 import { act, type ReactElement } from "react";
@@ -117,7 +112,7 @@ describe("PanelContainer chat tab filter", () => {
 		const labels = drawerTabLabels();
 		expect(labels).toContain("Files");
 		expect(labels).toContain("Side questions");
-		// Agents, diff, shells, and browsing need tools; todo/plan/queue live in the center dock.
+		// Agents, diff, shells and plan need a tool-enabled session.
 		for (const agentOnly of ["Agents", "Changes", "Terminal", "Browser"]) {
 			expect(labels).not.toContain(agentOnly);
 		}
@@ -137,13 +132,13 @@ describe("PanelContainer chat tab filter", () => {
 		await mount(<PanelContainer />);
 
 		const labels = drawerTabLabels();
-		for (const visible of ["Agents", "Side questions", "Changes", "Files", "Terminal"]) {
+		for (const visible of ["Plan", "Agents", "Side questions", "Changes", "Files", "Terminal"]) {
 			expect(labels).toContain(visible);
 		}
 		// The built-in browser is a window of its own, not an inspector view.
 		expect(labels).not.toContain("Browser");
-		// Live-execution tabs moved to the center dock, logs to their own dialog.
-		for (const moved of ["Todo", "Plan", "Queue", "Logs"]) {
+		// Live-execution tabs stay in chat; plans belong exclusively to the inspector.
+		for (const moved of ["Todo", "Queue", "Logs"]) {
 			expect(labels).not.toContain(moved);
 		}
 	});

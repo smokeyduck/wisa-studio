@@ -18,7 +18,6 @@ export const th: Record<string, string> = {
 	"settings.nav.system": "ระบบและตัวเลือกขั้นสูง",
 
 	"btw.ask": "ถามทันที",
-	"btw.enterToAsk": "Enter เพื่อถาม - Shift+Enter ขึ้นบรรทัดใหม่",
 	"live.start": "เริ่มเซสชันเสียง",
 	"live.ready": "พร้อม - ไมโครโฟนปิดอยู่",
 
@@ -1722,6 +1721,12 @@ export const th: Record<string, string> = {
 	"providerCfg.form.idSlug": "ขึ้นต้นด้วยตัวอักษรหรือตัวเลข ใช้ได้เฉพาะตัวอักษรพิมพ์เล็ก ตัวเลข ขีด และขีดล่าง",
 	"providerCfg.form.idExists": "มีผู้ให้บริการที่ใช้ ID นี้อยู่แล้ว",
 	"providerCfg.form.api": "โปรโตคอล (API)",
+	"providerCfg.form.apiAuto": "ค่าเริ่มต้น ({api})",
+	"providerCfg.form.apiAutoHint":
+		"API คือรูปแบบคำขอที่ส่งไปยังเกตเวย์ ไม่ใช่ผู้ผลิตโมเดล หากไม่ได้กำหนดเอง จะใช้การตั้งค่าผู้ให้บริการ เมทาดาทาโมเดลที่บันทึกไว้ หรือค่าเริ่มต้นของปลายทาง ปลายทางที่ไม่รู้จักจะใช้ Chat Completions ซึ่งไม่ใช่ผลจากการตรวจหาโปรโตคอล",
+	"providerCfg.form.modelApiAuto": "ค่าเริ่มต้น: {api}",
+	"providerCfg.form.discoveredModelsHint":
+		"รายการโมเดลอัปเดตอัตโนมัติ ส่วน API จะสืบทอดค่าที่ใช้งานอยู่หากไม่ได้กำหนดแยก การแก้ไขโมเดลด้านล่างจะบันทึกการกำหนดเองเฉพาะโมเดลนั้น",
 	"providerCfg.form.baseUrl": "Base URL",
 	"providerCfg.form.baseUrlPlaceholder": "https://api.example.com/v1",
 	"providerCfg.form.baseUrlRequired": "ต้องระบุ Base URL",
@@ -1791,7 +1796,7 @@ export const th: Record<string, string> = {
 	"providerCfg.form.modelCollapse": "ยุบรายละเอียดโมเดล",
 	"providerCfg.form.modelApi": "แก้ทับ API",
 	"providerCfg.form.modelApiInherit": "(สืบทอดจากผู้ให้บริการ)",
-	"providerCfg.form.modelApiHint": "เปลี่ยนโปรโตคอลเฉพาะโมเดลนี้",
+	"providerCfg.form.modelApiHint": "เว้นว่างเพื่อใช้ API เริ่มต้นที่แสดงด้านบน หรือกำหนดแยกเฉพาะโมเดลนี้ ชื่อโมเดลไม่ได้กำหนด API",
 	"providerCfg.form.modelBaseUrl": "แก้ทับ endpoint",
 	"providerCfg.form.modelBaseUrlPlaceholder": "https://...",
 	"providerCfg.form.modelBaseUrlHint": "เปลี่ยน Base URL เฉพาะโมเดลนี้",
@@ -2055,10 +2060,10 @@ export const th: Record<string, string> = {
 	"settings.gui.sidebarQuotasDesc":
 		"แสดงว่าโควตาของผู้ให้บริการแต่ละรายถูกใช้ไปเท่าไร เหนือหน้าการตั้งค่า: วงแหวนหนึ่งวงต่อช่วงเวลา จะปรากฏเมื่อผู้ให้บริการที่ล็อกอินอยู่รายงานค่าโควตา",
 	"settings.gui.transcriptDetail": "รายละเอียดบทสนทนา",
-	"settings.gui.transcript.compact": "กระชับ",
+	"settings.gui.transcript.compact": "กระชับ (แนะนำ)",
 	"settings.gui.transcript.compactDesc":
 		"แสดงคำตอบสุดท้ายและสรุปผลลัพธ์ โดยยุบ reasoning และขั้นตอนของเครื่องมือไว้ในแถว Process เดียวที่ขยายได้",
-	"settings.gui.transcript.full": "เต็ม (แนะนำ)",
+	"settings.gui.transcript.full": "เต็ม",
 	"settings.gui.transcript.fullDesc": "แสดงบล็อก reasoning และการ์ดเครื่องมือทุกชิ้น",
 	"settings.gui.proxy": "พรอกซี HTTP",
 	"settings.gui.proxyDesc":
@@ -2759,6 +2764,7 @@ export const th: Record<string, string> = {
 	"chat.copyCode": "คัดลอกโค้ด",
 	"chat.renderingDiagram": "กำลังเรนเดอร์ไดอะแกรม…",
 	"chat.diagram": "ไดอะแกรม",
+	"chat.starter.continue": "ดำเนินการต่อในแชต",
 	"markdown.imageFailed": "โหลดรูปภาพไม่สำเร็จ",
 	"markdown.remoteImage": "ยังไม่ได้โหลดรูปภาพระยะไกล",
 	"markdown.remoteImageOpen": "โหลดรูปภาพ",

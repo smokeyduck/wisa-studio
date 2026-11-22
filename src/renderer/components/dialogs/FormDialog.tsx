@@ -5,7 +5,7 @@
  */
 
 import { Check } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type Dispatch, type ReactNode, type SetStateAction, useMemo, useState } from "react";
 import type {
 	ExtensionFormBlock,
 	ExtensionFormChoiceField,
@@ -281,17 +281,42 @@ function ContextBlock({ block }: { block: Exclude<ExtensionFormBlock, { kind: "f
 	}
 }
 
+const questionDrafts = new WeakMap<object, unknown>();
+/** Request-object ownership prevents cross-session draft reuse and survives transcript remounts. */
+export function useQuestionDraft<T>(key: object, initial: () => T): [T, Dispatch<SetStateAction<T>>] {
+	const [value, setValue] = useState<T>(() => questionDrafts.has(key) ? questionDrafts.get(key) as T : initial());
+	return [value, next => setValue(previous => {
+		const value = typeof next === "function" ? (next as (value: T) => T)(previous) : next;
+		questionDrafts.set(key, value);
+		return value;
+	})];
+}
+/** Questions remain in the transcript; permission and sign-in surfaces stay modal. */
+export function QuestionSurface({ inline, title, onClose, children }: { inline?: boolean; title: string; onClose: () => void; children: ReactNode }) {
+	return inline ? (
+		<section aria-label={title} className="my-3 rounded-xl border border-(--omp-border-accent) bg-(--omp-bg-secondary) p-4" data-inline-question>
+			<h2 className="mb-3 text-omp-sm font-semibold text-(--omp-text)">{title}</h2>
+			{children}
+		</section>
+	) : <Modal onClose={onClose} open size="lg" title={title}>{children}</Modal>;
+}
+
+
 export function FormDialog({
 	sections,
 	footer,
 	onSubmit,
 	onCancel,
+	inline,
+	draftKey,
 }: {
 	sections: ExtensionFormSection[];
 	/** Countdown shown beside the buttons. */
 	footer: ReactNode;
 	onSubmit: (formData: Record<string, string | string[]>) => void;
 	onCancel: () => void;
+	inline?: boolean;
+	draftKey?: object;
 }) {
 	const t = useT();
 	const fields = useMemo(
@@ -301,7 +326,7 @@ export function FormDialog({
 			),
 		[sections],
 	);
-	const [drafts, setDrafts] = useState<FieldDraft[]>(() => fields.map(initialDraft));
+	const [drafts, setDrafts] = useQuestionDraft<FieldDraft[]>(draftKey ?? sections, () => fields.map(initialDraft));
 	const [missing, setMissing] = useState<ReadonlySet<number>>(new Set());
 
 	const update = (index: number, draft: FieldDraft) => {
@@ -348,7 +373,7 @@ export function FormDialog({
 	};
 
 	return (
-		<Modal onClose={onCancel} open size="lg" title={t("extDialog.ask.title")}>
+		<QuestionSurface inline={inline} onClose={onCancel} title={t("extDialog.ask.title")}>
 			<form
 				className="space-y-5"
 				onSubmit={event => {
@@ -382,6 +407,6 @@ export function FormDialog({
 					</div>
 				</div>
 			</form>
-		</Modal>
+		</QuestionSurface>
 	);
 }

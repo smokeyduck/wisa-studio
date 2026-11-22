@@ -82,7 +82,7 @@ describe("liveAgentRows", () => {
 			{ agent: spawnedBy(agent("a5", "completed", 5), "call_2"), depth: 0 },
 			{ agent: spawnedBy(agent("a6", "running", 6), "call_2"), depth: 0 },
 		];
-		expect(liveAgentRows(rows).map(row => row.agent.id)).toEqual(["a5", "a6"]);
+		expect(liveAgentRows(rows).map(row => row.agent.id)).toEqual(["a6"]);
 	});
 
 	it("keeps the agents above a working child so it is never an orphan, but not their finished batches", () => {
@@ -92,7 +92,7 @@ describe("liveAgentRows", () => {
 			{ agent: spawnedBy(agent("a3", "running", 3, "a1"), "call_a1_2"), depth: 1 },
 			{ agent: spawnedBy(agent("a4", "parked", 4), "call_3"), depth: 0 },
 		];
-		// a2's own batch is over; a3 works under a1; a parked agent still waits.
-		expect(liveAgentRows(rows).map(row => row.agent.id)).toEqual(["a1", "a3", "a4"]);
+		// a2's own batch is over; a3 works under a1; a parked agent is dormant, not work.
+		expect(liveAgentRows(rows).map(row => row.agent.id)).toEqual(["a1", "a3"]);
 	});
 });

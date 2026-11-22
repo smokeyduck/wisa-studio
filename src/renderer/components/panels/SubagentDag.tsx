@@ -158,8 +158,8 @@ export function SubagentDag({
 	const now = useNowTick(hasRunning);
 
 	useEffect(() => {
-		if (selectedId && !subagents.has(selectedId)) setSelectedId(null);
-	}, [selectedId, subagents]);
+		if (selectedId && !agents.some(agent => agent.id === selectedId)) setSelectedId(null);
+	}, [agents, selectedId]);
 
 	// Top-level spawn edges resolve against the main session's `task` tool calls.
 	const rootToolCallIds = useMemo(() => new Set(extractTaskToolCallIds(messages)), [messages]);
@@ -168,7 +168,7 @@ export function SubagentDag({
 		[agents, rootToolCallIds, toolCallOwners],
 	);
 
-	const selected = selectedId ? (subagents.get(selectedId) ?? null) : null;
+	const selected = selectedId && (!include || include.has(selectedId)) ? (subagents.get(selectedId) ?? null) : null;
 
 	if (agents.length === 0 && loadError) {
 		return (

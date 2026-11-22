@@ -39,32 +39,20 @@ export function buildTodoDockSummary(phases: UiTodoPhase[]): TodoDockSummary {
 	};
 }
 
-/** Agents one `task` call spawned; an agent with no known spawning call stands alone. */
-function batchKey(agent: SubagentListRow["agent"]): string {
-	return agent.parentToolCallId ?? `agent:${agent.id}`;
-}
-
 /**
- * The rows the live Agents card lists: every batch that still has an agent
- * working or waiting, plus the ancestors that place it in the tree. A batch
- * leaves as a whole once all of it has finished, so the completed, failed,
- * cancelled and stale agents of earlier work never come back with the next
- * task; the drawer's Agents tab, the sidebar and agent pages keep every one.
+ * Only unfinished work and its resolved ancestors belong in the live card.
+ * Sharing a task call does not keep finished siblings alive. The pre-order
+ * depths preserve parents resolved from transcript tool ownership too.
  */
 export function liveAgentRows(rows: SubagentListRow[]): SubagentListRow[] {
-	const liveBatches = new Set<string>();
-	for (const { agent } of rows) {
-		const activity = subagentActivity(agent);
-		if (activity === "working" || activity === "waiting") liveBatches.add(batchKey(agent));
-	}
-	const agentById = new Map(rows.map(row => [row.agent.id, row.agent]));
+	const ancestors: string[] = [];
 	const keep = new Set<string>();
-	for (const { agent } of rows) {
-		if (!liveBatches.has(batchKey(agent))) continue;
-		let current: SubagentListRow["agent"] | undefined = agent;
-		while (current && !keep.has(current.id)) {
-			keep.add(current.id);
-			current = current.parentSubagentId ? agentById.get(current.parentSubagentId) : undefined;
+	for (const { agent, depth } of rows) {
+		ancestors.length = Math.min(ancestors.length, depth);
+		ancestors.push(agent.id);
+		const activity = subagentActivity(agent);
+		if (activity === "working" || activity === "waiting") {
+			for (const id of ancestors) keep.add(id);
 		}
 	}
 	return rows.filter(({ agent }) => keep.has(agent.id));

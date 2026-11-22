@@ -27,7 +27,6 @@ import { LogsDialog } from "./components/dialogs/LogsDialog";
 import { ModelPicker } from "./components/dialogs/ModelPicker";
 import { ModelRestoreDialog } from "./components/dialogs/ModelRestoreDialog";
 import { PhoneDialog } from "./components/dialogs/PhoneDialog";
-import { PlanApprovalDialog } from "./components/dialogs/PlanApprovalDialog";
 import { RenameSessionDialog } from "./components/dialogs/RenameSessionDialog";
 import { SessionInfoDialog } from "./components/dialogs/SessionInfoDialog";
 import { SessionPickerDialog } from "./components/dialogs/SessionPickerDialog";
@@ -98,6 +97,8 @@ import { cycleTab, moveActiveTab, selectTabAt, useSessionTabs, useTabsStore } fr
 import { toast } from "./stores/toast";
 import { activeWorkspacePage, type PanelTab, useEffectiveKeymapOverrides, useUiStore } from "./stores/ui";
 import { subscribeUpdaterStatus } from "./stores/updater";
+import { usePlanApproval } from "./hooks/use-plan-approval";
+import { usePlanSidebar } from "./hooks/use-plan-sidebar";
 
 // Heavy overlays code-split: they render null while closed, so they download
 // only on first open instead of bloating the eager bundle.
@@ -151,6 +152,7 @@ const ProvidersWindow = lazy(() =>
 	import("./components/settings/ProvidersWindow").then(m => ({ default: m.ProvidersWindow })),
 );
 
+
 // Dev-only visual feedback overlay (dev/DevAgentation.tsx). The conditional is
 // `import.meta.env.DEV`, which Vite folds to `false` in a production build, so
 // Rollup drops the branch and never emits a chunk for the package — a plain
@@ -160,6 +162,7 @@ const DevAgentation = import.meta.env.DEV
 	: null;
 
 function FocusedSessionEffects() {
+	usePlanSidebar();
 	useTraySync();
 	useQuotaPolling();
 	useLearnedSkillsSync();
@@ -207,6 +210,7 @@ export function App() {
 	useRpcEvents();
 	useExtensionUi();
 	// Session tabs: GET_TABS boot reconciliation + TAB_STATUS subscription.
+	usePlanApproval();
 	useSessionTabs();
 	// Terminal output and browser state for every tab, plus drawer reveals.
 	useWorkspaceSurfaces();
@@ -325,9 +329,9 @@ export function App() {
 				) {
 					useUiStore.setState({ transcriptDetail: prefs.transcriptDetail });
 				} else if (!changedPreferences.has("transcriptDetail")) {
-					// Never chosen: the full transcript is the product default. The
-					// write is the marker, so a later Compact pick survives restarts.
-					void saveGuiPreference("transcriptDetail", "full", () => {});
+					// Never chosen: the compact transcript is the product default. The
+					// write is the marker, so a later Full pick survives restarts.
+					void saveGuiPreference("transcriptDetail", "compact", () => {});
 				}
 				if (
 					(prefs.tabWidth === "compact" || prefs.tabWidth === "default" || prefs.tabWidth === "wide") &&
@@ -640,23 +644,6 @@ export function App() {
 				return;
 			}
 
-			// ⇧Tab — cycle thinking level (TUI app.thinking.cycle). In the TUI the
-			// binding lives in the editor, so hijack it only while a textarea (the
-			// composer) owns focus; elsewhere Shift+Tab keeps its focus-traversal
-			// role. Focus-gated and NOT remappable.
-			if (event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
-				if (
-					acceptsActiveTabEvents() &&
-					!overlayOpen &&
-					!event.defaultPrevented &&
-					!document.querySelector('[role="dialog"]') &&
-					document.activeElement instanceof HTMLTextAreaElement
-				) {
-					event.preventDefault();
-					void runSessionCommand(focusedTabRpc().cycleThinkingLevel(), t("palette.failed"));
-				}
-				return;
-			}
 
 			// Remappable chords (B3): one O(1) lookup in the compiled keymap. The
 			// overlayOpen / defaultPrevented / [role=dialog] guards apply exactly
@@ -922,7 +909,6 @@ export function App() {
 				memoryOpen: <MemoryWindow />,
 				modelCompareOpen: <ModelCompare open={modelCompareOpen} onClose={closeModelCompare} />,
 				modelRolesOpen: <ModelRolesWindow />,
-				modesOpen: <ModesPanel open={modesOpen} onClose={closeModes} initialTab={modesTab} />,
 				pluginsOpen: <PluginsWindow />,
 				skillsOpen: <SkillsWindow />,
 				templatesOpen: <TemplatesWindow />,
@@ -999,6 +985,7 @@ export function App() {
 			<HandoffDialog />
 			<Suspense fallback={null}>
 				<SettingsWindow />
+				<ModesPanel key={activeTabId} open={modesOpen} onClose={closeModes} initialTab={modesTab} />
 				<BenchmarkDialog open={benchmarkOpen} onClose={closeBenchmark} />
 				<TaskEditorDialog />
 				<ConversationSearchDialog />
@@ -1010,7 +997,6 @@ export function App() {
 			</Suspense>
 			<ThemePickerDialog />
 			<ThemeEditorDialog />
-			<PlanApprovalDialog />
 			{importDialogOpen && <ImportForeignDialog />}
 			{composerEditorOpen && <ComposerEditorDialog />}
 			<Suspense fallback={null}>{feedbackOpen && <FeedbackDialog />}</Suspense>

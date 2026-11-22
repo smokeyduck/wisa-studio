@@ -1,11 +1,9 @@
 /**
  * Activity and turn scope for subagent rosters (plan/24 §4).
  *
- * The wire status is free-form and "live" lumps parked and idle agents in
- * with working ones. Every count and live signal goes through
- * `subagentActivity` instead, and the default roster shows the latest turn:
- * agents spawned since the last user message, plus anything older that is
- * still working.
+ * Registry idle/parked refs are reusable history, not unfinished work.
+ * Every count and live signal goes through `subagentActivity`; the default
+ * roster keeps this turn's outputs and unfinished work from any turn.
  */
 
 import type { AgentMessage, SubagentSnapshot } from "../../../shared/rpc-types";
@@ -18,13 +16,12 @@ export type SubagentActivity = "working" | "waiting" | "failed" | "done" | "stop
 const ACTIVITY_RANK: Record<SubagentActivity, number> = { working: 0, waiting: 1, failed: 2, done: 3, stopped: 4 };
 
 export function subagentActivity(agent: SubagentSnapshot): SubagentActivity {
+	if (agent.live === false && ["started", "running", "pending", "waiting"].includes(agent.status)) return "stopped";
 	switch (agent.status) {
 		case "started":
 		case "running":
-			return agent.live === false ? "stopped" : "working";
+			return "working";
 		case "pending":
-		case "idle":
-		case "parked":
 		case "waiting":
 			return "waiting";
 		case "failed":
@@ -80,19 +77,21 @@ export function latestTurn(messages: readonly AgentMessage[]): LatestTurn {
 /**
  * Agents that belong to the latest turn: those spawned since it started,
  * whoever spawned them, and every agent under a top-level agent the turn's
- * own tool calls spawned. Any agent still working belongs too, whatever turn
- * spawned it. `rows` is the spawn-order tree, so nesting follows the same
- * parent links the roster draws.
+ * own tool calls spawned. Unfinished work belongs too, whatever turn spawned
+ * it. Dormant registry refs never join through an old task id; ancestors are
+ * retained separately by buildAgentTree.
  */
 export function subagentTurnMembers(rows: readonly SubagentListRow[], turn: LatestTurn): Set<string> {
 	const members = new Set<string>();
 	let underTurnRoot = false;
 	for (const { agent, depth } of rows) {
+		if (agent.status === "idle" || agent.status === "parked" || agent.status === "stale") continue;
 		if (depth === 0)
 			underTurnRoot = agent.parentToolCallId !== undefined && turn.toolCallIds.has(agent.parentToolCallId);
 		const spawnedThisTurn =
 			turn.startedAt !== null && agent.spawnedAt !== undefined && agent.spawnedAt >= turn.startedAt;
-		if (underTurnRoot || spawnedThisTurn || subagentActivity(agent) === "working") members.add(agent.id);
+		const activity = subagentActivity(agent);
+		if (underTurnRoot || spawnedThisTurn || activity === "working" || activity === "waiting") members.add(agent.id);
 	}
 	return members;
 }

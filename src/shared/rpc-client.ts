@@ -66,27 +66,30 @@ function transcriptPageData(response: RpcResponse): MessagesPage | undefined {
 }
 
 async function fetchTranscript(transport: RpcTransport): Promise<RpcResponse> {
-	const legacy = () => transport({ type: "get_transcript" });
+	// Every page rebuilds the sidecar's entire transcript. Prefer one snapshot;
+	// engines with a smaller transport ceiling return an error and use paging.
+	const snapshot = await transport({ type: "get_transcript" });
+	if (snapshot.success) return snapshot;
 	let page = await transport({ type: "get_transcript_page", limit: TRANSCRIPT_PAGE_LIMIT });
-	if (!page.success) return legacy();
+	if (!page.success) return snapshot;
 
 	const messages: MessagesPage["messages"] = [];
 	const seenCursors = new Set<string>();
 	let totalMessages: number | undefined;
 	for (;;) {
 		const data = transcriptPageData(page);
-		if (!data || (totalMessages !== undefined && totalMessages !== data.totalMessages)) return legacy();
+		if (!data || (totalMessages !== undefined && totalMessages !== data.totalMessages)) return snapshot;
 		totalMessages = data.totalMessages;
 		messages.push(...data.messages);
 		const cursor = data.nextCursor;
 		if (!cursor) {
-			if (messages.length !== totalMessages) return legacy();
+			if (messages.length !== totalMessages) return snapshot;
 			return { id: page.id, type: "response", command: "get_transcript", success: true, data: { messages } };
 		}
-		if (seenCursors.has(cursor)) return legacy();
+		if (seenCursors.has(cursor)) return snapshot;
 		seenCursors.add(cursor);
 		page = await transport({ type: "get_transcript_page", cursor, limit: TRANSCRIPT_PAGE_LIMIT });
-		if (!page.success) return legacy();
+		if (!page.success) return page;
 	}
 }
 

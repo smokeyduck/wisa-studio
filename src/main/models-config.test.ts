@@ -66,6 +66,21 @@ describe("models-config", () => {
 			expect(saved?.models).toEqual([]);
 		});
 
+		test("Auto stays omitted on reload while every model receives a concrete API", () => {
+			upsertModelsProvider({
+				id: "auto-endpoint",
+				baseUrl: "https://api.openai.com/v1",
+				auth: "none",
+				models: [{ id: "gpt-test" }, { id: "override", api: "anthropic-messages" }],
+			});
+			const saved = listModelsProviders().find(provider => provider.id === "auto-endpoint");
+			expect(saved?.api).toBeUndefined();
+			expect(saved?.models.map(model => model.api)).toEqual(["openai-responses", "anthropic-messages"]);
+			const raw = parse(readFileSync(modelsPath(), "utf8")).providers["auto-endpoint"];
+			expect(raw.api).toBeUndefined();
+			expect(raw.models[0].api).toBe("openai-responses");
+		});
+
 		test("creates new provider with minimal fields", () => {
 			const input: CustomProviderInput = {
 				id: "test-provider",
@@ -509,7 +524,7 @@ providers:
 			const providers = listModelsProviders();
 			const saved = providers.find(p => p.id === "broken-provider");
 			expect(saved).toBeDefined();
-			expect(saved?.api).toBe("openai-completions"); // fallback
+			expect(saved?.api).toBeUndefined(); // invalid protocols are shown as Auto
 			expect(saved?.baseUrl).toBe("");
 			expect(saved?.models).toEqual([]);
 			expect(saved?.discovery).toBeUndefined();

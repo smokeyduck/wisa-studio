@@ -19,7 +19,6 @@ export const vi: Record<string, string> = {
 	"settings.nav.memory": "Bộ nhớ",
 	"settings.nav.system": "Hệ thống & nâng cao",
 	"btw.ask": "Hỏi ngay",
-	"btw.enterToAsk": "Enter để hỏi, Shift+Enter xuống dòng",
 	"live.start": "Bắt đầu phiên thoại",
 	"live.ready": "Sẵn sàng - micrô đang tắt",
 	"jobs.durationUnavailable": "Không có thời lượng",
@@ -1703,6 +1702,12 @@ export const vi: Record<string, string> = {
 		"Bắt đầu bằng chữ cái hoặc chữ số; chỉ dùng chữ thường, chữ số, dấu gạch ngang và gạch dưới",
 	"providerCfg.form.idExists": "Nhà cung cấp với ID này đã tồn tại",
 	"providerCfg.form.api": "Giao thức (API)",
+	"providerCfg.form.apiAuto": "Mặc định ({api})",
+	"providerCfg.form.apiAutoHint":
+		"API là định dạng yêu cầu gửi đến cổng, không phải hãng tạo mô hình. Khi không ghi đè, dùng cấu hình nhà cung cấp, siêu dữ liệu mô hình đã lưu hoặc mặc định của điểm cuối. Điểm cuối chưa biết dùng Chat Completions; đây không phải kết quả dò giao thức.",
+	"providerCfg.form.modelApiAuto": "Mặc định: {api}",
+	"providerCfg.form.discoveredModelsHint":
+		"Danh sách mô hình được cập nhật tự động; API của từng mô hình được kế thừa nếu chưa ghi đè. Sửa mô hình bên dưới chỉ lưu riêng mô hình đó thành cấu hình ghi đè.",
 	"providerCfg.form.baseUrl": "URL cơ sở",
 	"providerCfg.form.baseUrlPlaceholder": "https://api.example.com/v1",
 	"providerCfg.form.baseUrlRequired": "Cần có URL cơ sở",
@@ -1776,7 +1781,8 @@ export const vi: Record<string, string> = {
 	"providerCfg.form.modelCollapse": "Thu gọn chi tiết mô hình",
 	"providerCfg.form.modelApi": "Ghi đè API",
 	"providerCfg.form.modelApiInherit": "(kế thừa từ nhà cung cấp)",
-	"providerCfg.form.modelApiHint": "Ghi đè giao thức chỉ cho mô hình này.",
+	"providerCfg.form.modelApiHint":
+		"Để trống để dùng API mặc định hiển thị ở trên, hoặc ghi đè riêng mô hình này. Tên mô hình không quyết định API.",
 	"providerCfg.form.modelBaseUrl": "Ghi đè endpoint",
 	"providerCfg.form.modelBaseUrlPlaceholder": "https://...",
 	"providerCfg.form.modelBaseUrlHint": "Ghi đè URL cơ sở chỉ cho mô hình này.",
@@ -2047,10 +2053,10 @@ export const vi: Record<string, string> = {
 	"settings.gui.sidebarQuotasDesc":
 		"Hiện mức đã dùng của hạn mức mỗi nhà cung cấp, phía trên Cài đặt: một vòng cho mỗi khoảng thời gian. Chỉ xuất hiện khi có nhà cung cấp đã đăng nhập báo hạn mức.",
 	"settings.gui.transcriptDetail": "Chi tiết hội thoại",
-	"settings.gui.transcript.compact": "Thu gọn",
+	"settings.gui.transcript.compact": "Thu gọn (khuyến nghị)",
 	"settings.gui.transcript.compactDesc":
 		"Hiện câu trả lời cuối và tóm tắt kết quả; gộp phần suy luận và các bước công cụ vào một hàng Quy trình có thể mở rộng.",
-	"settings.gui.transcript.full": "Đầy đủ (khuyến nghị)",
+	"settings.gui.transcript.full": "Đầy đủ",
 	"settings.gui.transcript.fullDesc": "Hiện mọi khối suy luận và thẻ công cụ.",
 	"settings.gui.proxy": "Proxy HTTP",
 	"settings.gui.proxyDesc":
@@ -2680,6 +2686,7 @@ export const vi: Record<string, string> = {
 	"chat.copyCode": "Sao chép mã",
 	"chat.renderingDiagram": "Đang hiển thị sơ đồ…",
 	"chat.diagram": "Sơ đồ",
+	"chat.starter.continue": "Tiếp tục trong trò chuyện",
 	"markdown.imageFailed": "Không tải được ảnh",
 	"markdown.remoteImage": "Ảnh từ xa chưa được tải",
 	"markdown.remoteImageOpen": "Tải ảnh",

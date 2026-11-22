@@ -1,25 +1,8 @@
 import { useTabRpc } from "../../lib/tab-rpc";
-/**
- * Structured plan-approval dialog. The agent submits a plan by writing to
- * `propose` command while plan mode is active; the sidecar emits a
- * `plan_proposal` frame, silently stops the proposal turn, and waits for the
- * host's `plan_approval` answer. This dialog renders the proposal as
- * scrollable markdown with one approve button per advertised option:
- *
- * - execute      → planApproval(true, "execute")       (fresh session)
- * - compact      → planApproval(true, "compact")       (distill transcript first)
- * - keep_context → planApproval(true, "keep_context")  (intact transcript)
- * - refine       → planApproval(false, undefined, feedback) (re-plan with feedback)
- * - dismiss/Esc  → planApproval(false)                 (plain reject)
- *
- * Mirrors the TUI plan-review overlay ("Approve and execute" / "Approve and
- * compact context" / "keep context" / "Refine plan"). Zero props and
- * self-subscribing — mount once in App.
- */
+/** Structured plan approval lives exclusively in the owning session's inspector. */
 
 import { ClipboardList, History, ListCollapse, Play, Save, Send } from "lucide-react";
 import type { ReactNode } from "react";
-import { usePlanApproval } from "../../hooks/use-plan-approval";
 import { basename } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
@@ -31,7 +14,7 @@ import {
 import { useSessionStore } from "../../stores/session";
 import { settleTabPlanApproval, useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
-import { Button, LongTaskStatus, Modal, TextArea } from "../common";
+import { Button, LongTaskStatus, TextArea } from "../common";
 
 type SubmitKind = PlanApprovalSubmitState["kind"];
 
@@ -76,10 +59,8 @@ function approveOptionsOf(options: string[]): PlanApprovalOption[] {
 	return known.length > 0 ? known : ["execute"];
 }
 
-export function PlanApprovalDialog() {
+export function PlanApprovalPanel() {
 	const tabRpc = useTabRpc();
-	// Self-contained: mounting this component also subscribes to plan_proposal events.
-	usePlanApproval();
 	const t = useT();
 	const pending = usePlanApprovalStore(state => state.pending);
 	const feedback = usePlanApprovalStore(state => state.feedback);
@@ -171,7 +152,6 @@ export function PlanApprovalDialog() {
 		}
 	};
 
-	// Esc, backdrop click, and the X button all answer planApproval(false).
 	const requestDismiss = () => {
 		if (submitting !== null) return;
 		void respond("dismiss");
@@ -182,17 +162,8 @@ export function PlanApprovalDialog() {
 	const busy = submitting !== null;
 
 	return (
-		<Modal
-			onClose={requestDismiss}
-			open
-			size="lg"
-			title={
-				<span className="flex items-center gap-2">
-					<ClipboardList className="shrink-0 text-(--omp-accent)" size={14} />
-					{pending.title ?? t("planApproval.reviewFallback")}
-				</span>
-			}
-		>
+		<section aria-label={pending.title ?? t("planApproval.reviewFallback")} className="h-full overflow-y-auto">
+			<h2 className="flex items-center gap-2 px-4 pt-4 text-omp-sm font-semibold"><ClipboardList size={14} />{pending.title ?? t("planApproval.reviewFallback")}</h2>
 			<div className="flex flex-col gap-3 p-4">
 				<div className="flex items-center gap-2 text-omp-xs text-(--omp-dim)">
 					<span className="shrink-0">{t("planApproval.planFile")}</span>
@@ -276,6 +247,6 @@ export function PlanApprovalDialog() {
 					})}
 				</div>
 			</div>
-		</Modal>
+		</section>
 	);
 }

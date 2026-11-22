@@ -75,6 +75,7 @@ let prompt: Mock;
 let setThinkingLevel: Mock;
 let setSetting: Mock;
 let setPlanMode: Mock;
+let cycleThinkingLevel: Mock;
 
 async function flush(): Promise<void> {
 	await act(async () => {
@@ -124,7 +125,55 @@ async function pressEnter(
 		}),
 	);
 }
+/** React's props object for a DOM node; the only place the test reads React's internal key. */
+function reactProps(element: TestElement): { onKeyDown?: (event: unknown) => void } | undefined {
+	const record = element as unknown as Record<string, unknown>;
+	const propsKey = Object.getOwnPropertyNames(record).find(key => key.startsWith("__reactProps$"));
+	return propsKey ? (record[propsKey] as { onKeyDown?: (event: unknown) => void }) : undefined;
+}
 
+/** Drive the textarea's React onKeyDown with a Tab press; returns the event so callers can read defaultPrevented. */
+async function pressTab(element: TestElement, shiftKey: boolean): Promise<{ defaultPrevented: boolean }> {
+	const handler = reactProps(element)?.onKeyDown;
+	if (!handler) throw new Error("textarea onKeyDown not found");
+	const event = {
+		key: "Tab",
+		shiftKey,
+		ctrlKey: false,
+		metaKey: false,
+		altKey: false,
+		defaultPrevented: false,
+		nativeEvent: { isComposing: false },
+		keyCode: 9,
+		preventDefault() {
+			this.defaultPrevented = true;
+		},
+	};
+	await act(async () => handler(event));
+	return event;
+}
+
+describe("InputArea Tab contract", () => {
+	it("plain Tab cycles reasoning and never accepts a completion", async () => {
+		await mount();
+		cycleThinkingLevel.mockClear();
+		await typeInto(findTextarea(), "/");
+		await flush();
+		await pressTab(findTextarea(), false);
+		await flush();
+		expect(cycleThinkingLevel).toHaveBeenCalledOnce();
+		expect((findTextarea() as unknown as { value: string }).value).toBe("/");
+	});
+
+	it("Shift+Tab toggles plan mode and opens the plan panel", async () => {
+		await mount();
+		useUiStore.setState({ panelTab: "diff", panelVisible: false });
+		await pressTab(findTextarea(), true);
+		await flush();
+		expect(useUiStore.getState().panelTab).toBe("plan");
+		expect(useUiStore.getState().panelVisible).toBe(true);
+	});
+});
 async function click(element: TestElement): Promise<void> {
 	await act(async () => {
 		element.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
@@ -170,6 +219,7 @@ async function mount(withRuntime = false): Promise<void> {
 	setThinkingLevel = vi.fn(async (level: string) => ok({ thinkingLevel: level, thinkingConfigured: level }));
 	setSetting = vi.fn(async (_path: string, value: unknown) => ok({ value, provenance: { layers: ["global"] } }));
 	setPlanMode = vi.fn(async (enabled: boolean) => ok({ enabled }));
+	cycleThinkingLevel = vi.fn(async () => ok({ thinkingLevel: "xhigh", thinkingConfigured: "xhigh" }));
 	(window as unknown as Record<string, unknown>).omp = {
 		fs: { list: vi.fn(async () => ({ entries: [] })) },
 		events: { onCommandsUpdate: vi.fn(() => () => {}), onConfigUpdate: vi.fn(() => () => {}) },
@@ -185,6 +235,7 @@ async function mount(withRuntime = false): Promise<void> {
 			setThinkingLevel,
 			setSetting,
 			setPlanMode,
+			cycleThinkingLevel,
 		},
 	};
 	useModelStore.setState({

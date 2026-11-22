@@ -1,7 +1,6 @@
 /**
- * DOM smoke tests for PlanApprovalDialog + use-plan-approval: plan_proposal
- * event capture (latest wins), per-option approve/refine/dismiss RPC mapping,
- * empty-options fallback, dispatched/reason handling, and Esc dismissal.
+ * PlanApprovalPanel + use-plan-approval: proposal capture, per-option RPC mapping,
+ * refinement, dismissal, fallback options and persistent non-modal review.
  * Rendered with react-dom/client into a linkedom document (see
  * ForkHandoffDialogs.test.tsx for the pattern).
  */
@@ -15,7 +14,10 @@ import { I18nProvider } from "../../lib/i18n";
 import { usePlanApprovalStore } from "../../stores/plan-approval";
 import { useSessionStore } from "../../stores/session";
 import { useToastStore } from "../../stores/toast";
-import { PlanApprovalDialog } from "./PlanApprovalDialog";
+import { PlanApprovalPanel } from "./PlanApprovalPanel";
+import { usePlanApproval } from "../../hooks/use-plan-approval";
+
+function PlanReview() { usePlanApproval(); return <PlanApprovalPanel />; }
 
 const { document, window, Event, HTMLElement, Node } = parseHTML("<html><body></body></html>");
 
@@ -179,16 +181,16 @@ describe("plan-approval store", () => {
 	});
 });
 
-describe("PlanApprovalDialog", () => {
+describe("PlanApprovalPanel", () => {
 	it("renders nothing without a proposal and subscribes to plan_proposal events", async () => {
 		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: false, dispatched: false }));
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		expect(document.querySelector("[role='dialog']")).toBeNull();
 		expect(batchListener).not.toBeNull();
 
 		await emit([proposal("# The Plan\n\n1. Do the thing.")]);
-		expect(document.querySelector("[role='dialog']")).not.toBeNull();
+		expect(document.querySelector("section[aria-label]")).not.toBeNull();
 		expect(document.body.textContent).toContain("Auth refactor");
 		expect(document.body.textContent).toContain("Do the thing.");
 	});
@@ -196,7 +198,7 @@ describe("PlanApprovalDialog", () => {
 	it("shows one button per advertised option and approves with the matching option", async () => {
 		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: true, dispatched: true }));
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
 
 		expect(buttonWithText("Approve and execute")).toBeDefined();
@@ -229,7 +231,7 @@ describe("PlanApprovalDialog", () => {
 		);
 		const showSaveDialog = vi.fn<SaveDialogFn>(async () => "/work/auth-refactor.md");
 		installMockOmp(planApproval, showSaveDialog);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
 
 		const save = buttonWithText("Save plan");
@@ -257,7 +259,7 @@ describe("PlanApprovalDialog", () => {
 			}),
 		);
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
 
 		const save = buttonWithText("Save plan");
@@ -273,7 +275,7 @@ describe("PlanApprovalDialog", () => {
 	it("maps keep_context to planApproval(true, 'keep_context')", async () => {
 		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: true, dispatched: true }));
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
 
 		const keepContext = buttonWithText("Keep context");
@@ -287,7 +289,7 @@ describe("PlanApprovalDialog", () => {
 	it("sends refine feedback as planApproval(false, undefined, feedback)", async () => {
 		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: false, dispatched: true }));
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
 
 		// Refine stays disabled until feedback exists. (linkedom cannot drive
@@ -318,7 +320,7 @@ describe("PlanApprovalDialog", () => {
 			success({ approved: false, dispatched: false, reason: "rejected" }),
 		);
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
 
 		const dismiss = buttonWithText("Dismiss");
@@ -330,24 +332,20 @@ describe("PlanApprovalDialog", () => {
 		expect(document.querySelector("[role='dialog']")).toBeNull();
 	});
 
-	it("answers planApproval(false) on Escape", async () => {
-		const planApproval = vi.fn<PlanApprovalFn>(async () =>
-			success({ approved: false, dispatched: false, reason: "rejected" }),
-		);
+	it("does not dismiss the persistent sidebar on Escape", async () => {
+		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: false, dispatched: false }));
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
-
 		await act(async () => keydownOnDocument("Escape"));
-		await flush();
-		expect(planApproval).toHaveBeenCalledWith(false);
-		expect(usePlanApprovalStore.getState().pending).toBeNull();
+		expect(planApproval).not.toHaveBeenCalled();
+		expect(usePlanApprovalStore.getState().pending).not.toBeNull();
 	});
 
 	it("falls back to execute/refine/dismiss when options are empty", async () => {
 		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: true, dispatched: true }));
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan", { options: [] })]);
 
 		expect(buttonWithText("Approve and execute")).toBeDefined();
@@ -365,7 +363,7 @@ describe("PlanApprovalDialog", () => {
 	it("shows the latest proposal when rapid proposals arrive", async () => {
 		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: true, dispatched: true }));
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([
 			proposal("# Old plan", { title: "Old title", planFilePath: "/plans/old.md" }),
 			proposal("# New plan", { title: "New title", planFilePath: "/plans/new.md" }),
@@ -377,7 +375,7 @@ describe("PlanApprovalDialog", () => {
 	it("stays open with an error toast when the RPC fails", async () => {
 		const planApproval = vi.fn<PlanApprovalFn>(async () => failure("no plan is awaiting approval"));
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
 
 		const execute = buttonWithText("Approve and execute");
@@ -385,7 +383,7 @@ describe("PlanApprovalDialog", () => {
 		await act(async () => click(execute));
 		await flush();
 		expect(usePlanApprovalStore.getState().pending).not.toBeNull();
-		expect(document.querySelector("[role='dialog']")).not.toBeNull();
+		expect(document.querySelector("section[aria-label]")).not.toBeNull();
 		expect(useToastStore.getState().toasts.some(t => t.variant === "error")).toBe(true);
 	});
 
@@ -394,7 +392,7 @@ describe("PlanApprovalDialog", () => {
 			success({ approved: true, dispatched: false, reason: "compaction failed: model offline" }),
 		);
 		installMockOmp(planApproval);
-		await mount(<PlanApprovalDialog />);
+		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
 
 		const compact = buttonWithText("Approve and compact");

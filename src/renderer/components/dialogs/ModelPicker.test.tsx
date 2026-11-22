@@ -1,7 +1,6 @@
 /**
- * Model picker contract for the vendor-grouped list: group headers read as
- * display names with a brand mark (never a raw provider id), search matches
- * the brand label too, and the INT score carries the catalog-estimate hint.
+ * Model picker contract: manufacturer headers use display names and brand marks,
+ * connection metadata retains the provider, and INT explains its catalog estimate.
  * Same linkedom harness as the other dialog tests (no jsdom in this repo).
  */
 
@@ -113,7 +112,7 @@ afterEach(async () => {
 
 describe("ModelPicker vendor groups", () => {
 	it("labels each group with the vendor's display name, not the provider id", async () => {
-		// The current model's provider opens with the picker; the others stay shut.
+		// Known families get maker sections; unknown ids retain their connection label.
 		useModelStore.setState({ model: { provider: "wisa", id: "wisa-gpt" }, availableModels: CATALOG });
 		await openPicker();
 
@@ -154,7 +153,9 @@ describe("ModelPicker vendor groups", () => {
 		await openPicker();
 
 		const hint = translate("modelPicker.intelligenceHint");
-		const badge = Array.from(panel()?.querySelectorAll("[title]") ?? []).find(
+		const row = panel()?.querySelector("[role='option'][aria-selected='true']");
+		expect(row?.textContent).toContain("Wisa GPT");
+		const badge = Array.from(row?.querySelectorAll("[title]") ?? []).find(
 			element => element.getAttribute("title") === hint,
 		);
 		expect(badge).toBeDefined();

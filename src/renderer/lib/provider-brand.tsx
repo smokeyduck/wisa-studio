@@ -248,9 +248,8 @@ export function providerBrand(provider: string, api?: string): Brand {
 	if (direct) return { key: direct.key, label: direct.label, Icon: direct.Icon };
 	const hinted = api ? brandFromApi(api) : undefined;
 	if (hinted) return { key: hinted.key, label: hinted.label, Icon: hinted.Icon };
-	// Keep the id as configured — a user-defined gateway still reads as itself —
-	// but lift the first letter so a header never starts lower-case.
+	// Keep the id exactly as configured: a user-defined gateway still reads as itself.
 	const trimmed = id.trim();
-	const label = trimmed ? trimmed[0].toUpperCase() + trimmed.slice(1) : GENERIC_ENTRY.label;
+	const label = trimmed || GENERIC_ENTRY.label;
 	return { key: GENERIC_ENTRY.key, label, Icon: GENERIC_ENTRY.Icon };
 }

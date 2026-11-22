@@ -382,10 +382,8 @@ export async function hydrateTabSession(tabId: string, fallbackName?: string): P
 	// reports ready, and this is the key the transcript cache files it under.
 	const pendingSessionPath = useTabsStore.getState().tabs.find(tab => tab.id === tabId)?.pendingSessionPath;
 
-	const coreResult = Promise.allSettled([
-		runtime.command({ type: "get_state" }),
-		createSessionRpcClient(runtime.command).getTranscript(),
-	]);
+	const stateResultPromise = runtime.command({ type: "get_state" });
+	const messagesResultPromise = Promise.allSettled([createSessionRpcClient(runtime.command).getTranscript()]);
 	const subagentsResult = sessionRuntimeStore<SubagentsStore>(tabId, "subagents")
 		?.getState()
 		.refresh({ expect: isCurrent });
@@ -416,9 +414,9 @@ export async function hydrateTabSession(tabId: string, fallbackName?: string): P
 		settings?.syncDisplaySettings(),
 		settings?.syncApproval(),
 	]);
-	const [stateResult, messagesResult] = await coreResult;
+	const [stateResult] = await Promise.allSettled([stateResultPromise]);
 	if (!isCurrent()) return;
-	const eventsUnchanged =
+	const stateEventsUnchanged =
 		sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion === beforeEventVersion;
 	// `get_state` is the only witness to a live turn. A failed read counts as not
 	// live: a card left spinning never resolves, while a wrongly aborted card is
@@ -434,7 +432,7 @@ export async function hydrateTabSession(tabId: string, fallbackName?: string): P
 		!stateIsStreaming;
 
 	if (
-		eventsUnchanged &&
+		stateEventsUnchanged &&
 		stateResult.status === "fulfilled" &&
 		stateResult.value.success &&
 		stateResult.value.data != null
@@ -469,6 +467,11 @@ export async function hydrateTabSession(tabId: string, fallbackName?: string): P
 		// Idempotent server-side.
 		void runtime.command({ type: "set_subagent_subscription", level: SUBAGENT_SUBSCRIPTION_LEVEL });
 	}
+	// A large transcript must not hold the resumed session state or event subscription hostage.
+	const [messagesResult] = await messagesResultPromise;
+	if (!isCurrent()) return;
+	const eventsUnchanged =
+		sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion === beforeEventVersion;
 
 	if (messagesResult.status === "fulfilled" && messagesResult.value.success) {
 		const data = messagesResult.value.data as { messages?: AgentMessage[] } | undefined;

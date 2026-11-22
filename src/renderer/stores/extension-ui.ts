@@ -9,6 +9,14 @@ import {
 	onSessionRuntimeListChange,
 } from "./session-runtime-context";
 
+const receivedAt = new WeakMap<ExtensionUIRequest, number>();
+/** Stable across transcript remounts and tab switches, unlike a mounted countdown. */
+export function extensionRequestReceivedAt(request: ExtensionUIRequest): number {
+	let at = receivedAt.get(request);
+	if (at === undefined) { at = Date.now(); receivedAt.set(request, at); }
+	return at;
+}
+
 export interface ExtensionUiSnapshot {
 	pendingRequests: ExtensionUIRequest[];
 	statusWidgets: Record<string, string>;
@@ -28,6 +36,7 @@ export function applyExtensionUiRequest(
 	snapshot: ExtensionUiSnapshot,
 	request: ExtensionUIRequest,
 ): ExtensionUiSnapshot {
+	extensionRequestReceivedAt(request);
 	if (request.method === "setStatus") {
 		const statusWidgets = { ...snapshot.statusWidgets };
 		if (request.statusText) statusWidgets[request.statusKey] = request.statusText;

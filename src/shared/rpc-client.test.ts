@@ -20,7 +20,23 @@ describe("model RPC timeouts", () => {
 		]);
 	});
 
-	it("reassembles paged transcripts without requesting the oversized snapshot", async () => {
+	it("loads a complete long transcript in one snapshot instead of rebuilding every page", async () => {
+		const messages = Array.from({ length: 5000 }, (_, index) => ({
+			role: "user" as const,
+			content: `Message ${index}: ${"history ".repeat(100)}`,
+			timestamp: index,
+		}));
+		const calls: string[] = [];
+		const rpc = createSessionRpcClient(async command => {
+			calls.push(command.type);
+			return { type: "response", command: command.type, success: true, data: { messages } };
+		});
+		const result = await rpc.getTranscript();
+		expect(result.success && (result.data as { messages: unknown[] }).messages).toEqual(messages);
+		expect(calls).toEqual(["get_transcript"]);
+	});
+
+	it("reassembles a transport-limited transcript through paged fallback", async () => {
 		const messages = [
 			{ role: "user" as const, content: "first", timestamp: 1 },
 			{ role: "assistant" as const, content: [{ type: "text" as const, text: "second" }], timestamp: 2 },
@@ -47,6 +63,6 @@ describe("model RPC timeouts", () => {
 			success: true,
 			data: { messages },
 		});
-		expect(calls).toEqual(["get_transcript_page", "get_transcript_page"]);
+		expect(calls).toEqual(["get_transcript", "get_transcript_page", "get_transcript_page"]);
 	});
 });

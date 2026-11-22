@@ -20,7 +20,6 @@ export const en: Record<string, string> = {
 	"settings.nav.system": "System & advanced",
 
 	"btw.ask": "Ask now",
-	"btw.enterToAsk": "Enter to ask - Shift+Enter for a new line",
 	"live.start": "Start voice session",
 	"live.ready": "Ready - microphone is off",
 
@@ -1770,6 +1769,12 @@ export const en: Record<string, string> = {
 		"Start with a letter or digit; use only lowercase letters, digits, dashes and underscores",
 	"providerCfg.form.idExists": "A provider with this ID already exists",
 	"providerCfg.form.api": "Protocol (API)",
+	"providerCfg.form.apiAuto": "Default ({api})",
+	"providerCfg.form.apiAutoHint":
+		"API is the gateway's request format, not the model's manufacturer. Without an override, provider settings, saved model metadata or endpoint defaults apply. Unknown endpoints fall back to Chat Completions; this is not protocol detection.",
+	"providerCfg.form.modelApiAuto": "Default: {api}",
+	"providerCfg.form.discoveredModelsHint":
+		"The model list updates automatically; each model inherits its effective API unless overridden. Editing a model below saves only that model as an explicit override.",
 	"providerCfg.form.baseUrl": "Base URL",
 	"providerCfg.form.baseUrlPlaceholder": "https://api.example.com/v1",
 	"providerCfg.form.baseUrlRequired": "Base URL is required",
@@ -1842,7 +1847,8 @@ export const en: Record<string, string> = {
 	"providerCfg.form.modelCollapse": "Collapse model details",
 	"providerCfg.form.modelApi": "API override",
 	"providerCfg.form.modelApiInherit": "(inherit from provider)",
-	"providerCfg.form.modelApiHint": "Override the protocol for this model only.",
+	"providerCfg.form.modelApiHint":
+		"Leave unset to use the effective default shown above, or override only this model. The model name does not determine its API.",
 	"providerCfg.form.modelBaseUrl": "Endpoint override",
 	"providerCfg.form.modelBaseUrlPlaceholder": "https://...",
 	"providerCfg.form.modelBaseUrlHint": "Override the base URL for this model only.",
@@ -2113,10 +2119,10 @@ export const en: Record<string, string> = {
 	"settings.gui.sidebarQuotasDesc":
 		"Show how much of each provider's quota is used, above Settings: a ring per time window. Appears once a signed-in provider reports quotas.",
 	"settings.gui.transcriptDetail": "Conversation detail",
-	"settings.gui.transcript.compact": "Compact",
+	"settings.gui.transcript.compact": "Compact (recommended)",
 	"settings.gui.transcript.compactDesc":
 		"Show final answers and result summaries; fold reasoning and tool steps into one expandable Process row.",
-	"settings.gui.transcript.full": "Full (recommended)",
+	"settings.gui.transcript.full": "Full",
 	"settings.gui.transcript.fullDesc": "Show every reasoning block and tool card.",
 	"settings.gui.proxy": "HTTP proxy",
 	"settings.gui.proxyDesc":
@@ -2836,6 +2842,7 @@ export const en: Record<string, string> = {
 	"chat.copyCode": "Copy code",
 	"chat.renderingDiagram": "Rendering diagram…",
 	"chat.diagram": "Diagram",
+	"chat.starter.continue": "Continue in chat",
 	"markdown.imageFailed": "Image failed to load",
 	"markdown.remoteImage": "Remote image not loaded",
 	"markdown.remoteImageOpen": "Load image",

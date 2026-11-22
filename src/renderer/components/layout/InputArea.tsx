@@ -18,13 +18,15 @@ import {
 import type { ClipboardEvent, KeyboardEvent } from "react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { AvailableCommand, ImageContent } from "../../../shared/rpc-types";
+import { type AvailableCommand, type ImageContent, isThinkingLevel } from "../../../shared/rpc-types";
 import { useFollowUpModifierHeld } from "../../hooks/use-follow-up-modifier";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { splitAttachmentMentions } from "../../lib/attachment-mentions";
+import { buildCurrentCommandMenu, runSessionCommand, withGuiNativeCommands } from "../../lib/command-registry";
 import { useDisplayPreference } from "../../lib/display-preferences";
 import { tryEmojiInlineReplace } from "../../lib/emoji";
 import { describeError } from "../../lib/errors";
+import { fitLabel } from "../../lib/fit-label";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -104,6 +106,22 @@ export function InputArea() {
 	const model = useModelStore(s => s.model);
 	/** Display name for the model trigger: catalog name, else a prettified id. */
 	const modelName = modelLabel(model);
+	/** The model name shrinks to fit the trigger's width, then wraps: it never ellipsizes. Keyed on the text, so a new model remounts and re-fits. */
+	const modelLabelRef = useCallback((label: HTMLSpanElement | null) => {
+		if (!label) return;
+		// Fitting needs a layout engine; a DOM without getComputedStyle (test
+		// environments) keeps the CSS default size.
+		if (typeof getComputedStyle === "undefined") return;
+		const refit = (): void => {
+			label.style.fontSize = "";
+			fitLabel(label, Number.parseFloat(getComputedStyle(label).fontSize));
+		};
+		refit();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(refit);
+		observer.observe(label);
+		return () => observer.disconnect();
+	}, []);
 	const fastModeActive = useModelStore(s => s.fastModeActive);
 	const modelPickerOpen = useUiStore(s => s.modelPickerOpen) && runtimeTabId === activeTabId;
 	/** Agent `stt.enabled` setting: microphone dictation button in the composer. */
@@ -130,7 +148,7 @@ export function InputArea() {
 	useEffect(() => {
 		menuListRef.current?.querySelector('[data-menu-active="true"]')?.scrollIntoView?.({ block: "nearest" });
 	}, [menu?.index, menu?.items]);
-	const [commands, setCommands] = useState<AvailableCommand[]>([]);
+	const [commands, setCommands] = useState<AvailableCommand[]>(() => withGuiNativeCommands([]));
 	const sending = useComposerStore(state => state.sending);
 	const setSending = useComposerStore(state => state.setSending);
 	const submissionUncertain = useComposerStore(state => state.submissionUncertain);
@@ -289,7 +307,7 @@ export function InputArea() {
 	useEffect(() => {
 		let cancelled = false;
 		const applyCommands = (next: AvailableCommand[], tabId: string | null) => {
-			if (!cancelled && tabId === runtimeTabId) setCommands(next);
+			if (!cancelled && tabId === runtimeTabId) setCommands(withGuiNativeCommands(next));
 		};
 		const unsubscribe =
 			typeof window.omp.events.onTabCommandsUpdate === "function"
@@ -305,7 +323,7 @@ export function InputArea() {
 				)
 					return;
 				const data = res.data as { commands?: AvailableCommand[] } | undefined;
-				setCommands(data?.commands ?? []);
+				setCommands(withGuiNativeCommands(data?.commands ?? []));
 			});
 		};
 		load();
@@ -642,7 +660,7 @@ export function InputArea() {
 				setMenu({ ...menu, index: (menu.index - 1 + Math.max(1, count)) % Math.max(1, count) });
 				return;
 			}
-			if (e.key === "Tab" || e.key === "Enter") {
+			if (e.key === "Enter") {
 				e.preventDefault();
 				const item = menu.items[menu.index];
 				if (item) insertCompletion(item);
@@ -653,6 +671,31 @@ export function InputArea() {
 				setMenu(null);
 				return;
 			}
+		}
+		// Tab is reasoning-only in the composer and never accepts a completion.
+		// Shift+Tab toggles plan mode via the registry's `plan` command.
+		if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.defaultPrevented) {
+			e.preventDefault();
+			if (e.shiftKey) {
+				const plan = buildCurrentCommandMenu(commands).find(item => item.name === "plan");
+				if (plan?.affordance.kind === "toggle") {
+					void Promise.resolve(plan.affordance.set(!plan.affordance.get())).catch(cause =>
+						toast({ variant: "error", title: t("palette.failed"), message: String(cause) }),
+					);
+				}
+				useUiStore.getState().setPanelTab("plan");
+			} else {
+				void runSessionCommand(rpc.cycleThinkingLevel(), t("palette.failed"), data => {
+					if (!data || typeof data !== "object" || !("thinkingLevel" in data)) return;
+					const thinkingLevel = isThinkingLevel(data.thinkingLevel) ? data.thinkingLevel : undefined;
+					const configured = "thinkingConfigured" in data ? data.thinkingConfigured : undefined;
+					useModelStore.setState({
+						thinkingLevel,
+						thinkingConfigured: configured === "auto" || isThinkingLevel(configured) ? configured : undefined,
+					});
+				});
+			}
+			return;
 		}
 		// ⌃R unless remapped or turned off: history search overlay (TUI `app.history.search`).
 		const shortcuts = effectiveOverrides(useUiStore.getState().keymapOverrides, useUiStore.getState().keymapDisabled);
@@ -1166,10 +1209,14 @@ export function InputArea() {
 											? `${t("input.model")}: ${modelName} (${model.id})`
 											: `${t("input.model")}: ${modelName ?? t("input.chooseModel")}`
 									}
-									className="omp-composer-model omp-pressable flex h-8 min-w-0 max-w-52 items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
+									className="omp-composer-model omp-pressable flex h-auto min-h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
 								>
 									<Box aria-hidden="true" size={14} className="omp-composer-model-icon shrink-0" />
-									<span className="omp-composer-model-label min-w-0 truncate">
+									<span
+										className="omp-composer-model-label min-w-0 flex-1 leading-tight"
+										key={modelName ?? ""}
+										ref={modelLabelRef}
+									>
 										{modelName ?? t("input.chooseModel")}
 									</span>
 									<ChevronDown aria-hidden="true" size={13} className="shrink-0 text-[var(--omp-dim)]" />

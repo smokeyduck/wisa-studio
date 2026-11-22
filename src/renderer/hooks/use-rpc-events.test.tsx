@@ -26,12 +26,18 @@ import type {
 	TodoPhase,
 } from "../../shared/rpc-types";
 import { TurnStatusRow } from "../components/chat/ChatStream";
+import { StreamingText } from "../components/chat/StreamingText";
 import { formatClock } from "../lib/format";
 import { I18nProvider, translate } from "../lib/i18n";
 import { type MessagesStore, useMessagesStore } from "../stores/messages";
 import { type ModelStore, useModelStore } from "../stores/model";
 import { type SessionStore, useSessionStore } from "../stores/session";
-import { sessionRuntime, sessionRuntimeStore, setFocusedSessionRuntime } from "../stores/session-runtime-context";
+import {
+	SessionRuntimeProvider,
+	sessionRuntime,
+	sessionRuntimeStore,
+	setFocusedSessionRuntime,
+} from "../stores/session-runtime-context";
 import { useSettingsStore } from "../stores/settings";
 import { useSubagentsStore } from "../stores/subagents";
 import { ensureTabRuntime } from "../stores/tab-runtime";
@@ -1618,7 +1624,13 @@ describe("hydrateSession streaming reconcile (F-HYDRATE)", () => {
 		const original = commandForTab.getMockImplementation()!;
 		commandForTab.mockImplementation(async (tabId, command) => {
 			if (command.type === "get_transcript_page") return success({ messages: [hydrated], totalMessages: 1 });
-			if (command.type === "get_transcript") throw new Error("unbounded transcript RPC");
+			if (command.type === "get_transcript")
+				return {
+					type: "response",
+					command: command.type,
+					success: false,
+					error: "RPC response exceeded the transport limit",
+				};
 			return original(tabId, command);
 		});
 
@@ -1733,6 +1745,98 @@ describe("useRpcEvents tab-scoped routing guards", () => {
 		ensureTabRuntime("t-dead");
 		setFocusedSessionRuntime("t-live");
 	}
+
+	it("paints retained A history and new A events after A to B to A while its transcript is unresolved", async () => {
+		const { commandForTab, emitTabBatch } = installTabRoutedMockOmp();
+		seedTwoTabs();
+		const a = sessionRuntimeStore<MessagesStore>("t-live", "messages")!;
+		function TranscriptSurface() {
+			const active = useTabsStore(state => state.activeTabId);
+			return active ? (
+				<SessionRuntimeProvider runtime={ensureTabRuntime(active)}>
+					<PaintedTranscript />
+				</SessionRuntimeProvider>
+			) : null;
+		}
+		function PaintedTranscript() {
+			const messages = useMessagesStore(state => state.messages);
+			return (
+				<>
+					<div>
+						{messages.map(message => (typeof message.content === "string" ? message.content : "")).join("\n")}
+					</div>
+					<StreamingText />
+				</>
+			);
+		}
+		await mount(
+			<>
+				<RpcEventsProbe />
+				<TranscriptSurface />
+			</>,
+		);
+		await act(async () => {
+			a.getState().appendMessage({ role: "user", content: "Retained A history", timestamp: 1 });
+		});
+		await act(async () => {
+			await useTabsStore.getState().switchTab("t-dead");
+		});
+		commandForTab.mockClear();
+		const transcript = Promise.withResolvers<RpcResponse>();
+		const original = commandForTab.getMockImplementation()!;
+		commandForTab.mockImplementation((tabId, command) =>
+			tabId === "t-live" && (command.type === "get_transcript_page" || command.type === "get_transcript")
+				? transcript.promise
+				: original(tabId, command),
+		);
+		let switching: Promise<void>;
+		await act(async () => {
+			switching = useTabsStore.getState().switchTab("t-live");
+		});
+		expect(container.textContent).toContain("Retained A history");
+		const shell: AgentMessage = { role: "assistant", content: [], timestamp: 2 };
+		await act(async () => {
+			emitTabBatch(
+				[
+					{ type: "agent_start" },
+					{ type: "message_start", message: shell },
+					{
+						type: "message_update",
+						message: shell,
+						assistantMessageEvent: {
+							type: "text_delta",
+							contentIndex: 0,
+							delta: "Fresh A continuation",
+							partial: shell,
+						},
+					},
+				],
+				"t-live",
+			);
+			const frame = Promise.withResolvers<void>();
+			setTimeout(frame.resolve, 50);
+			await frame.promise;
+		});
+		expect(container.textContent).toContain("Fresh A continuation");
+		expect(container.textContent).toContain("Retained A history");
+		await act(async () => {
+			const history: AgentMessage[] = Array.from({ length: 5000 }, (_, index) => ({
+				role: "user",
+				content: `Restored history ${index}`,
+				timestamp: index + 10,
+			}));
+			transcript.resolve(success({ messages: history }));
+			await switching!;
+		});
+		expect(container.textContent).toContain("Fresh A continuation");
+		expect(container.textContent).toContain("Restored history 0");
+		expect(container.textContent).toContain("Restored history 4999");
+		expect(a.getState().messages).toHaveLength(5000);
+		expect(
+			commandForTab.mock.calls.filter(call => call[0] === "t-live" && call[1].type === "get_transcript"),
+		).toHaveLength(1);
+		expect(commandForTab.mock.calls.some(call => call[1].type === "get_transcript_page")).toBe(false);
+	});
 
 	it("refreshes automatic compaction without letting its delayed snapshot erase resumed work", async () => {
 		const { emitTabBatch, commandForTab } = installTabRoutedMockOmp();

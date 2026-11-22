@@ -19,7 +19,6 @@ export const ru: Record<string, string> = {
 	"settings.nav.memory": "Память",
 	"settings.nav.system": "Система и расширенные настройки",
 	"btw.ask": "Спросить сейчас",
-	"btw.enterToAsk": "Enter: спросить - Shift+Enter: новая строка",
 	"live.start": "Начать голосовую сессию",
 	"live.ready": "Готово - микрофон выключен",
 	"jobs.durationUnavailable": "Длительность недоступна",
@@ -1711,6 +1710,12 @@ export const ru: Record<string, string> = {
 		"Начни с буквы или цифры; используй только строчные латинские буквы, цифры, дефисы и подчёркивания",
 	"providerCfg.form.idExists": "Провайдер с таким ID уже существует",
 	"providerCfg.form.api": "Протокол (API)",
+	"providerCfg.form.apiAuto": "По умолчанию ({api})",
+	"providerCfg.form.apiAutoHint":
+		"API — формат запросов к шлюзу, а не производитель модели. Без переопределения используются настройки провайдера, сохранённые метаданные модели или стандартный API эндпоинта. Для неизвестных эндпоинтов выбран Chat Completions; это не результат определения протокола.",
+	"providerCfg.form.modelApiAuto": "По умолчанию: {api}",
+	"providerCfg.form.discoveredModelsHint":
+		"Список моделей обновляется автоматически; API наследуется, если не задан отдельно. Изменение модели ниже сохраняет только её как переопределение.",
 	"providerCfg.form.baseUrl": "Базовый URL",
 	"providerCfg.form.baseUrlPlaceholder": "https://api.example.com/v1",
 	"providerCfg.form.baseUrlRequired": "Укажи базовый URL",
@@ -1784,7 +1789,8 @@ export const ru: Record<string, string> = {
 	"providerCfg.form.modelCollapse": "Свернуть сведения о модели",
 	"providerCfg.form.modelApi": "Переопределение API",
 	"providerCfg.form.modelApiInherit": "(наследовать от провайдера)",
-	"providerCfg.form.modelApiHint": "Переопределить протокол только для этой модели.",
+	"providerCfg.form.modelApiHint":
+		"Оставьте пустым для использования показанного выше API по умолчанию или задайте API только для этой модели. Имя модели не определяет её API.",
 	"providerCfg.form.modelBaseUrl": "Переопределение конечной точки",
 	"providerCfg.form.modelBaseUrlPlaceholder": "https://...",
 	"providerCfg.form.modelBaseUrlHint": "Переопределить базовый URL только для этой модели.",
@@ -2056,10 +2062,10 @@ export const ru: Record<string, string> = {
 	"settings.gui.sidebarQuotasDesc":
 		"Показывать над «Настройками», сколько квоты каждого провайдера использовано: по кольцу на каждое окно времени. Появляется, когда провайдер, в который выполнен вход, сообщает квоты.",
 	"settings.gui.transcriptDetail": "Подробность переписки",
-	"settings.gui.transcript.compact": "Компактно",
+	"settings.gui.transcript.compact": "Компактно (рекомендуется)",
 	"settings.gui.transcript.compactDesc":
 		"Показывать итоговые ответы и сводки результатов; рассуждения и шаги инструментов сворачивать в одну раскрываемую строку процесса.",
-	"settings.gui.transcript.full": "Полностью (рекомендуется)",
+	"settings.gui.transcript.full": "Полностью",
 	"settings.gui.transcript.fullDesc": "Показывать каждый блок рассуждений и карточку инструмента.",
 	"settings.gui.proxy": "HTTP-прокси",
 	"settings.gui.proxyDesc":
@@ -2697,6 +2703,7 @@ export const ru: Record<string, string> = {
 	"chat.copyCode": "Скопировать код",
 	"chat.renderingDiagram": "Создание диаграммы…",
 	"chat.diagram": "Диаграмма",
+	"chat.starter.continue": "Продолжить в чате",
 	"markdown.imageFailed": "Не удалось загрузить изображение",
 	"markdown.remoteImage": "Удалённое изображение не загружено",
 	"markdown.remoteImageOpen": "Загрузить изображение",

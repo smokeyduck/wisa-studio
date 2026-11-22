@@ -11,7 +11,7 @@
 import type { AvailableCommand, ImageContent, RpcResponse } from "../../shared/rpc-types";
 import { hydrateSession } from "../hooks/use-rpc-events";
 import { toast } from "../stores/toast";
-import { buildCurrentCommandMenu, type CommandAffordance } from "./command-registry";
+import { buildCurrentCommandMenu, type CommandAffordance, withGuiNativeCommands } from "./command-registry";
 import { translate } from "./i18n";
 import { parseComposerMode } from "./input-modes";
 import type { TabRpc } from "./tab-rpc";
@@ -108,7 +108,8 @@ export function planComposerSubmit(input: {
 	commands: AvailableCommand[];
 	rpc?: Pick<TabRpc, "compact" | "followUp" | "prompt" | "steer">;
 }): ComposerSubmit {
-	const { message, wireMessage = message, images, isStreaming, mode, commands, rpc = window.omp.rpc } = input;
+	const { message, wireMessage = message, images, isStreaming, mode, rpc = window.omp.rpc } = input;
+	const commands = withGuiNativeCommands(input.commands);
 	const shortcut = parseComposerMode(message);
 	if (shortcut?.mode === "btw") {
 		return shortcut.body

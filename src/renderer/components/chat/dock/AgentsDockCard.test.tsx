@@ -129,16 +129,16 @@ function containerText(): string {
 	return container.textContent ?? "";
 }
 
-/** Seven agents of one task call, one working: two more than the summary keeps. */
+/** Seven agents of one task call, all still working: two more than the summary keeps. */
 function largeRoster(): SubagentSnapshot[] {
 	return [
-		snap({ id: "a1", index: 1, status: "running" }),
-		snap({ id: "a2", index: 2, status: "failed" }),
-		snap({ id: "a3", index: 3, status: "completed", lastUpdate: 3 }),
-		snap({ id: "a4", index: 4, status: "completed", lastUpdate: 4 }),
-		snap({ id: "a5", index: 5, status: "completed", lastUpdate: 5 }),
-		snap({ id: "a6", index: 6, status: "completed", lastUpdate: 6 }),
-		snap({ id: "a7", index: 7, status: "completed", lastUpdate: 7 }),
+		snap({ id: "a1", index: 1, status: "running", lastUpdate: 1 }),
+		snap({ id: "a2", index: 2, status: "running", lastUpdate: 2 }),
+		snap({ id: "a3", index: 3, status: "running", lastUpdate: 3 }),
+		snap({ id: "a4", index: 4, status: "running", lastUpdate: 4 }),
+		snap({ id: "a5", index: 5, status: "running", lastUpdate: 5 }),
+		snap({ id: "a6", index: 6, status: "running", lastUpdate: 6 }),
+		snap({ id: "a7", index: 7, status: "pending", lastUpdate: 7 }),
 	].map(agent => ({ ...agent, parentToolCallId: "call_1" }));
 }
 
@@ -191,7 +191,7 @@ describe("AgentsDockCard", () => {
 			snap({ id: "old1", index: 1, status: "completed", agent: "earlier", parentToolCallId: "call_1" }),
 			snap({ id: "old2", index: 2, status: "failed", agent: "earlier", parentToolCallId: "call_1" }),
 			snap({ id: "old3", index: 3, status: "running", live: false, agent: "earlier", parentToolCallId: "call_1" }),
-			// The current one: working, parked and done.
+			// The current one: working, parked and done. Parked and done rows are not work.
 			snap({ id: "a1", index: 4, status: "running", parentToolCallId: "call_2" }),
 			snap({ id: "a2", index: 5, status: "parked", parentToolCallId: "call_2" }),
 			snap({ id: "a3", index: 6, status: "parked", parentToolCallId: "call_2" }),
@@ -199,10 +199,9 @@ describe("AgentsDockCard", () => {
 		]);
 		await mount(<AgentsDockCard />);
 
-		// Only working agents count: parked ones wait (plan/24 §4.1). The current
-		// call's finished row stays while its batch works.
-		expect(containerText()).toContain("1/4");
-		expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(4);
+		// Only working agents are listed or counted; their parked and finished batch-mates drop out.
+		expect(containerText()).toContain("1/1");
+		expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(1);
 		expect(containerText()).toContain("scout");
 		expect(containerText()).not.toContain("earlier");
 	});
@@ -218,7 +217,7 @@ describe("AgentsDockCard", () => {
 		expect(containerText()).toContain("$0.4321");
 	});
 
-	it("summarizes rosters above five agents and expands them in focus mode", async () => {
+	it("lists every working agent of a large roster and expands the card in focus mode", async () => {
 		useSubagentsStore.getState().setSnapshots(largeRoster());
 		await mount(
 			<WorkspaceDockFocusProvider>
@@ -229,17 +228,10 @@ describe("AgentsDockCard", () => {
 			</WorkspaceDockFocusProvider>,
 		);
 
-		expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(5);
-		expect(containerText()).toContain("2 more - View all 7 agents");
-		expect(container.querySelector('[data-testid="other-card-body"]')).not.toBeNull();
-
-		await act(async () => {
-			button("View all 7 agents")?.click();
-		});
+		// Six running plus one pending: pending is waiting work, counted in the total but not as running.
 		expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(7);
-		expect(containerText()).toContain("Back to summary");
-		expect(containerText()).toContain("Todo");
-		expect(container.querySelector('[data-testid="other-card-body"]')).toBeNull();
+		expect(containerText()).toContain("6/7");
+		expect(container.querySelector('[data-testid="other-card-body"]')).not.toBeNull();
 
 		const agentsHeader = container.querySelector('section[aria-label="Agents"] button[aria-label="Collapse"]');
 		const agentsChevron = agentsHeader?.querySelectorAll("svg").item(1);
@@ -274,15 +266,13 @@ describe("AgentsDockCard", () => {
 				<AgentsDockCard />
 			</WorkspaceDockFocusProvider>,
 		);
-		await act(async () => {
-			button("View all 7 agents")?.click();
-		});
-		expect(container.querySelector('[data-testid="other-card-body"]')).toBeNull();
+		expect(container.querySelector('[data-testid="other-card-body"]')).not.toBeNull();
 
+		// Every working agent finishes: the Agents card gives the dock back.
 		await act(async () => {
 			useSubagentsStore
 				.getState()
-				.setSnapshots(largeRoster().map(agent => (agent.id === "a1" ? { ...agent, status: "completed" } : agent)));
+				.setSnapshots(largeRoster().map(agent => ({ ...agent, status: "completed", live: false })));
 		});
 		expect(container.querySelector('section[aria-label="Agents"]')).toBeNull();
 		expect(container.querySelector('[data-testid="other-card-body"]')).not.toBeNull();

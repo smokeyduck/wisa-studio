@@ -312,11 +312,11 @@ export function BtwPanel() {
 					rows={2}
 					value={draft}
 				/>
-				<div className="mt-1.5 flex items-center gap-2 text-omp-xs text-(--omp-dim)">
-					<span className="min-w-0 flex-1 truncate">{t("btw.enterToAsk")}</span>
-					{pending ? <Spinner size="sm" /> : null}
-				</div>
-				<div className="mt-1 text-omp-xs leading-snug text-(--omp-dim)">{t("btw.noToolsHint")}</div>
+				{pending ? (
+					<div className="mt-1.5 flex items-center gap-2 text-omp-xs text-(--omp-dim)">
+						<Spinner size="sm" />
+					</div>
+				) : null}
 			</div>
 		</div>
 	);

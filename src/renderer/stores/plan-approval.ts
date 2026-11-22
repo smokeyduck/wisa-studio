@@ -1,9 +1,9 @@
 /**
  * Plan-approval store: holds the pending structured plan proposal emitted by
- * the agent (`plan_proposal` event) for the PlanApprovalDialog. The sidecar
+ * the agent (`plan_proposal` event) for the owning session's plan inspector. The sidecar
  * can only have one plan awaiting approval at a time, so a new proposal
  * replaces the previous one (latest wins). The refine feedback lives here too
- * so it resets with the proposal lifecycle and survives dialog remounts.
+ * so it resets with the proposal lifecycle and survives inspector remounts.
  */
 
 import { createStore } from "zustand/vanilla";
@@ -22,7 +22,7 @@ export type PlanApprovalOption = "execute" | "compact" | "keep_context" | "save"
 export type PlanApprovalSubmitState = { kind: "approve"; option?: PlanApprovalOption } | { kind: "refine" | "dismiss" };
 
 export interface PlanApprovalSnapshot {
-	/** The proposal awaiting a host decision; null when the dialog is closed. */
+	/** The proposal awaiting a host decision; null when answered. */
 	pending: PendingPlanProposal | null;
 	/** Refine feedback sent back to the agent when the host asks for changes. */
 	feedback: string;

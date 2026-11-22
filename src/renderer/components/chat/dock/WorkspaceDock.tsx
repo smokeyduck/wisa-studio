@@ -8,34 +8,35 @@ import { useTodoStore } from "../../../stores/todo";
 import { PanelErrorBoundary } from "../../common";
 import { AgentsDockCard, useAgentsDockVisible } from "./AgentsDockCard";
 import { GoalDockBar } from "./GoalDockBar";
-import { PlanDockCard } from "./PlanDockCard";
 import { QueueDockChip } from "./QueueDockChip";
 import { TodoDockCard } from "./TodoDockCard";
 import { useWorkspaceDockFocus, WorkspaceDockFocusProvider } from "./WorkspaceDockFocus";
 
 function WorkspaceDockContent() {
 	const { focusedCard } = useWorkspaceDockFocus();
-	const planVisible = useSessionStore(state => state.planModeEnabled);
 	const goalVisible = useSessionStore(state => state.goal !== null);
 	const todoVisible = useTodoStore(state => state.phases.length > 0 || state.reminderVisible);
 	const agentsVisible = useAgentsDockVisible();
 	const queued = useQueuedMessages();
-	const cardsVisible =
-		planVisible || todoVisible || agentsVisible || queued.steering.length > 0 || queued.followUp.length > 0;
+	const cardsVisible = todoVisible || agentsVisible || queued.steering.length > 0 || queued.followUp.length > 0;
 	const rootRef = useRef<HTMLDivElement>(null);
 
 	useLayoutEffect(() => {
-		if (focusedCard) rootRef.current?.querySelector("[data-dock-focused]")?.scrollIntoView?.({ block: "start" });
+		if (focusedCard) rootRef.current?.querySelector("[data-dock-focused]")?.scrollIntoView?.({ block: "nearest" });
 	}, [focusedCard]);
 
 	if (!cardsVisible && !goalVisible) return null;
 	return (
-		<div ref={rootRef} className="flex flex-col gap-1.5 pt-2 pb-1.5" data-focused-card={focusedCard ?? undefined}>
+		<div
+			ref={rootRef}
+			className="omp-workspace-dock flex min-h-0 flex-col gap-1.5 pt-2 pb-1.5"
+			data-focused-card={focusedCard ?? undefined}
+		>
 			{cardsVisible && (
-				<div className="flex flex-col gap-1.5" data-testid="workspace-dock">
-					<PanelErrorBoundary>
-						<PlanDockCard />
-					</PanelErrorBoundary>
+				<div
+					className="flex min-h-0 flex-col gap-1.5 overflow-y-auto overscroll-contain"
+					data-testid="workspace-dock"
+				>
 					<PanelErrorBoundary>
 						<TodoDockCard />
 					</PanelErrorBoundary>

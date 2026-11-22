@@ -1,39 +1,52 @@
-/**
- * Plan dock card: plan-mode status + review rendered as a live card in the
- * center dock above the composer (previously the workspace drawer's plan
- * tab). Visible only while plan mode is enabled — the composer mode chips
- * carry the on/off affordance otherwise.
- *
- * The plan document is read from disk through the `fs:read-plan` main-process
- * IPC — kept OFF the RPC bus so the streaming poll never injects the plan
- * into the model context or appends bashExecution entries to the transcript.
- * Resolution mirrors the agent: `local://` lands in `<session file minus
- * .jsonl>/local/<name>`, absolute paths pass through, anything else resolves
- * against the session cwd; when the configured path is absent the main
- * process falls back to the newest `*plan.md` in the local root.
- *
- * Structured plan approval (the TUI's plan-proposal popup with its three
- * execute options) is NOT installed by the RPC host — approve / request
- * changes here send prompt/steer messages instead, and the footer says so.
- */
+/** Session-owned plan document and review, rendered exclusively in the inspector. */
 
 import { CheckCircle2, Circle, ClipboardList, FileWarning, MessageSquare, RefreshCw, Send } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PlanModeState } from "../../../../shared/rpc-types";
-import { useTabGuard } from "../../../hooks/use-tab-guard";
-import { describeError } from "../../../lib/errors";
-import { cx } from "../../../lib/format";
-import { useT } from "../../../lib/i18n";
-import { MarkdownRenderer } from "../../../lib/markdown";
-import { type TabRpc, useTabRpc } from "../../../lib/tab-rpc";
-import { type SessionStore, useSessionStore } from "../../../stores/session";
-import { sessionRuntimeStore, useRuntimeTabId } from "../../../stores/session-runtime-context";
-import { toast } from "../../../stores/toast";
-import { Badge, Button, Spinner, Tabs, TextArea } from "../../common";
-import { DockCard } from "./DockCard";
-import { useWorkspaceDockFocus } from "./WorkspaceDockFocus";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { PlanModeState } from "../../../shared/rpc-types";
+import { useTabGuard } from "../../hooks/use-tab-guard";
+import { describeError } from "../../lib/errors";
+import { cx } from "../../lib/format";
+import { useT } from "../../lib/i18n";
+import { MarkdownRenderer } from "../../lib/markdown";
+import { type TabRpc, useTabRpc } from "../../lib/tab-rpc";
+import { type SessionStore, useSessionStore } from "../../stores/session";
+import { sessionRuntimeStore, useRuntimeTabId } from "../../stores/session-runtime-context";
+import { toast } from "../../stores/toast";
+import { Button, Spinner, Tabs, TextArea } from "../common";
+import { useToolsStore, type ToolEntry } from "../../stores/tools";
 
-const POLL_STREAMING_MS = 3000;
+/** Decode only the completed prefix of a streamed JSON string. */
+function streamedString(json: string, field: string): string | null {
+	const match = new RegExp(`"${field}"\\s*:\\s*"`).exec(json);
+	if (!match) return null;
+	let end = match.index + match[0].length;
+	const start = end;
+	while (end < json.length) {
+		if (json[end] === '"') break;
+		if (json[end] === "\\") {
+			const width = json[end + 1] === "u" ? 6 : 2;
+			if (end + width > json.length) break;
+			end += width;
+		} else end++;
+	}
+	try { return JSON.parse(`"${json.slice(start, end)}"`) as string; } catch { return null; }
+}
+
+/** Write arguments expose the plan before the file is persisted. */
+export function streamingPlanContent(entries: Map<string, ToolEntry>, planPath: string | null): string | null {
+	let content: string | null = null;
+	for (const entry of entries.values()) {
+		if (entry.status !== "pending" && entry.status !== "running") continue;
+		if (entry.toolName && entry.toolName !== "write") continue;
+		const path = typeof entry.args.path === "string" ? entry.args.path : streamedString(entry.streamingArgs, "path");
+		if (!path || (path !== "propose" && path !== planPath)) continue;
+		const next = typeof entry.args.content === "string" ? entry.args.content : streamedString(entry.streamingArgs, "content");
+		if (next !== null) content = next;
+	}
+	return content;
+}
+
+const POLL_STREAMING_MS = 400;
 
 interface ResolvedPlanPath {
 	fsPath: string;
@@ -131,7 +144,7 @@ interface StepFeedbackState {
 	sending: boolean;
 }
 
-export function PlanDockCard() {
+export function PlanPanel() {
 	const t = useT();
 	const rpc = useTabRpc();
 	const tabId = useRuntimeTabId();
@@ -139,8 +152,11 @@ export function PlanDockCard() {
 	const { capture, isActive } = useTabGuard();
 	const planModeEnabled = useSessionStore(s => s.planModeEnabled);
 	const isStreaming = useSessionStore(s => s.isStreaming);
-	const { managed, focusedCard, clearFocus } = useWorkspaceDockFocus();
-	const full = !managed || focusedCard === "plan";
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const pinned = useRef(true);
+	const [following, setFollowing] = useState(true);
+	const generation = useRef(0);
+	const inFlight = useRef(false);
 	const [planFilePath, setPlanFilePath] = useState<string | null>(null);
 	const [planFile, setPlanFile] = useState<string | null>(null);
 	const [localRoot, setLocalRoot] = useState<string | null>(null);
@@ -154,31 +170,38 @@ export function PlanDockCard() {
 	const [planFeedback, setPlanFeedback] = useState("");
 	const [sendingPlan, setSendingPlan] = useState(false);
 	const [stepFeedback, setStepFeedback] = useState<StepFeedbackState | null>(null);
+	const streamedContent = useToolsStore(state => planModeEnabled ? streamingPlanContent(state.activeTools, planFilePath) : null);
+	const visibleContent = streamedContent ?? content;
+	const knownPath = useRef<string | null>(null);
 
 	const load = useCallback(
 		async (options?: { quiet?: boolean }) => {
 			const origin = capture();
 			if (!origin) return;
+			if (inFlight.current) return;
+			inFlight.current = true;
+			const version = ++generation.current;
+			const current = () => version === generation.current && isActive(origin);
 			const quiet = options?.quiet === true;
 			if (!quiet) setLoading(true);
 			if (!quiet) setError(null);
 			try {
-				const modeResponse = await rpc.getPlanMode();
-				if (!isActive(origin)) return;
-				if (!modeResponse.success) {
-					if (!quiet) setError(modeResponse.error);
-					return;
+				let path = knownPath.current;
+				if (!quiet || !path) {
+					const modeResponse = await rpc.getPlanMode();
+					if (!current()) return;
+					if (!modeResponse.success) { if (!quiet) setError(modeResponse.error); return; }
+					path = (modeResponse.data as PlanModeState | undefined)?.planFilePath ?? null;
+					knownPath.current = path;
+					setPlanFilePath(path);
 				}
-				const mode = modeResponse.data as PlanModeState | undefined;
-				const path = mode?.planFilePath ?? null;
-				setPlanFilePath(path);
-				if (!mode?.enabled || !path) {
+				if (!path) {
 					setPlanFile(null);
 					setLocalRoot(null);
 					setContent(null);
 					return;
 				}
-				const { sessionFile, cwd } = sessionStore?.getState() ?? { sessionFile: null, cwd: "" };
+				const { sessionFile, cwd } = sessionStore?.getState() ?? useSessionStore.getState();
 				const resolved = resolvePlanFsPath(path, sessionFile, cwd);
 				if (!resolved) {
 					setPlanFile(null);
@@ -192,7 +215,7 @@ export function PlanDockCard() {
 					localRoot: resolved.localRoot,
 					tabId: tabId ?? undefined,
 				});
-				if (!isActive(origin)) return;
+				if (!current()) return;
 				setLocalRoot(resolved.localRoot);
 				if (!response.ok) {
 					if (!quiet) setError(describeError(response.error));
@@ -206,9 +229,10 @@ export function PlanDockCard() {
 				setPlanFile(response.path);
 				setContent(response.content);
 			} catch (cause) {
-				if (isActive(origin) && !quiet) setError(describeError(cause));
+				if (current() && !quiet) setError(describeError(cause));
 			} finally {
-				if (isActive(origin)) {
+				inFlight.current = false;
+				if (current()) {
 					setLoading(false);
 					setLoaded(true);
 				}
@@ -217,20 +241,19 @@ export function PlanDockCard() {
 		[capture, isActive, rpc, t, sessionStore, tabId],
 	);
 
-	// Initial load + reset when plan mode flips.
+	useEffect(() => () => { generation.current++; }, []);
+	useLayoutEffect(() => {
+		if (pinned.current && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+	}, [visibleContent]);
 	useEffect(() => {
-		if (planModeEnabled) {
-			void load();
-		} else {
-			setPlanFilePath(null);
-			setPlanFile(null);
-			setLocalRoot(null);
-			setContent(null);
-			setError(null);
-			setLoaded(false);
-			setStepFeedback(null);
-		}
-	}, [planModeEnabled, load]);
+		const refresh = (events: { type: string }[], owner: string) => {
+			if (owner !== tabId || !planModeEnabled) return;
+			if (events.some(event => event.type === "tool_execution_end" || event.type === "agent_end")) void load({ quiet: true });
+		};
+		return window.omp.events.onTabBatch?.(refresh);
+	}, [load, tabId, planModeEnabled]);
+
+	useEffect(() => { void load(); }, [load]);
 
 	// The agent writes the plan during its turn — refresh when a turn ends…
 	const wasStreaming = useRef(isStreaming);
@@ -321,87 +344,38 @@ export function PlanDockCard() {
 		else setStepFeedback({ ...stepFeedback, sending: false });
 	}, [stepFeedback, displayPath, rpc, t, isStreaming]);
 
-	const sections = useMemo(() => parsePlanSections(content ?? ""), [content]);
-	const stepCount = useMemo(() => sections.reduce((n, section) => n + section.steps.length, 0), [sections]);
-	const doneCount = useMemo(
-		() => sections.reduce((n, section) => n + section.steps.filter(step => step.done).length, 0),
-		[sections],
-	);
+	const sections = useMemo(() => parsePlanSections(visibleContent ?? ""), [visibleContent]);
 	const hasChecklist = useMemo(() => sections.some(s => s.steps.some(step => step.checkbox)), [sections]);
+	const stepCount = sections.reduce((count, section) => count + section.steps.length, 0);
+	const doneCount = sections.reduce((count, section) => count + section.steps.filter(step => step.done).length, 0);
 
-	const reviewable = planModeEnabled && content != null && content.trim().length > 0;
-	const summary = sections.flatMap(section => section.steps).find(step => !step.done)?.text;
-
-	useEffect(() => {
-		if (focusedCard === "plan" && !planModeEnabled) clearFocus();
-	}, [clearFocus, focusedCard, planModeEnabled]);
-
-	if (!planModeEnabled) return null;
+	const reviewable = streamedContent === null && content != null && content.trim().length > 0;
 
 	return (
-		<DockCard
-			actions={
-				<span className="flex shrink-0 items-center gap-1.5">
-					<button
-						aria-label={t("planPanel.refresh")}
-						className={cx(
-							"omp-pressable text-(--omp-dim) transition-colors hover:text-(--omp-text)",
-							loading && "animate-spin",
-						)}
-						disabled={loading}
-						onClick={() => void load()}
-						title={t("planPanel.refreshHint")}
-						type="button"
-					>
-						<RefreshCw size={12} />
-					</button>
-					<button
-						aria-checked={planModeEnabled}
-						aria-label={t("planPanel.toggle")}
-						className={cx(
-							"relative h-4 w-7 shrink-0 rounded-full border transition-colors duration-150",
-							planModeEnabled
-								? "border-transparent bg-(--omp-accent)"
-								: "border-(--omp-border-muted) bg-(--omp-bg-primary)", // surface-ok: toggle switch track (unchecked state)
-							toggling && "opacity-50",
-						)}
-						disabled={toggling}
-						onClick={() => void togglePlanMode()}
-						role="switch"
-						title={t("planPanel.exit")}
-						type="button"
-					>
-						<span
-							className={cx(
-								"absolute top-1/2 left-0.5 size-3 -translate-y-1/2 rounded-full transition-transform duration-150",
-								planModeEnabled ? "translate-x-3 bg-white" : "translate-x-0 bg-(--omp-muted)",
-							)}
-						/>
-					</button>
-				</span>
-			}
-			badge={
-				<span className="flex shrink-0 items-center gap-1.5">
-					{stepCount > 0 && (
-						<span className="text-omp-xs tabular-nums text-[var(--omp-dim)]">
-							{hasChecklist ? `${doneCount}/${stepCount}` : stepCount}
-						</span>
-					)}
-					<Badge dot pulse={isStreaming} variant="success">
-						{t("planPanel.badge.on")}
-					</Badge>
-				</span>
-			}
-			icon={ClipboardList}
-			id="plan"
-			title={t("dock.plan")}
-			expandable
-		>
-			{loading && !loaded ? (
+		<section className="flex h-full min-h-0 flex-col" aria-label={t("dock.plan")}>
+			<div className="flex shrink-0 items-center justify-between border-b border-(--omp-border-muted) px-3 py-2">
+				<span className="flex items-center gap-2 text-omp-sm font-medium"><ClipboardList size={14} />{t("dock.plan")}</span>
+				<div className="flex items-center gap-2">
+					{isStreaming && <Spinner />}
+					<button type="button" aria-label={t("planPanel.refresh")} onClick={() => void load()}><RefreshCw size={14} /></button>
+					<button type="button" role="switch" aria-checked={planModeEnabled} aria-label={t("planPanel.toggle")} disabled={toggling} onClick={() => void togglePlanMode()}>{t(planModeEnabled ? "planPanel.exit" : "planPanel.badge.on")}</button>
+				</div>
+			</div>
+			<div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain" onWheel={event => {
+				if (event.deltaY < 0) { pinned.current = false; setFollowing(false); }
+			}} onTouchMove={() => { pinned.current = false; setFollowing(false); }} onKeyDown={event => {
+				if (["ArrowUp", "PageUp", "Home"].includes(event.key)) { pinned.current = false; setFollowing(false); }
+			}} onScroll={event => {
+				const el = event.currentTarget;
+				const latest = el.scrollHeight - el.scrollTop - el.clientHeight <= 1;
+				pinned.current = latest;
+				setFollowing(latest);
+			}} tabIndex={0}>
+			{loading && !loaded && visibleContent === null ? (
 				<div className="flex items-center justify-center py-6">
 					<Spinner />
 				</div>
-			) : error ? (
+			) : error && visibleContent === null ? (
 				<div className="flex flex-col items-center justify-center gap-2 px-6 py-4 text-center">
 					<FileWarning className="text-(--omp-warning)" size={20} />
 					<div className="text-omp-sm leading-snug text-(--omp-muted)">{error}</div>
@@ -409,7 +383,7 @@ export function PlanDockCard() {
 						{t("planPanel.retry")}
 					</Button>
 				</div>
-			) : content == null ? (
+			) : visibleContent == null ? (
 				<div className="flex flex-col items-center justify-center gap-2 px-6 py-4 text-center">
 					<ClipboardList className="text-(--omp-dim)" size={20} />
 					<div className="text-omp-xs text-(--omp-muted)">{t("planPanel.emptyTitle")}</div>
@@ -424,12 +398,6 @@ export function PlanDockCard() {
 						</div>
 					)}
 				</div>
-			) : !full ? (
-				summary && (
-					<div className="wrap-anywhere px-3 py-2 text-omp-md leading-relaxed text-(--omp-text-secondary)">
-						{summary}
-					</div>
-				)
 			) : (
 				<>
 					<Tabs
@@ -447,15 +415,15 @@ export function PlanDockCard() {
 					<div className="min-w-0 px-3 py-2.5">
 						{tab === "preview" ? (
 							<div className="min-w-0 wrap-anywhere text-omp-md" data-plan-preview>
-								<MarkdownRenderer content={content} />
+								<MarkdownRenderer content={visibleContent} />
 							</div>
 						) : tab === "raw" ? (
 							<pre className="font-mono text-omp-sm leading-relaxed whitespace-pre-wrap wrap-anywhere text-(--omp-text)">
-								{content}
+								{visibleContent}
 							</pre>
 						) : sections.length === 0 ? (
 							<div className="px-2 py-4 text-center text-omp-sm text-(--omp-dim)">
-								{content.trim().length === 0 ? t("planPanel.emptySoFar") : t("planPanel.noSteps")}
+								{visibleContent.trim().length === 0 ? t("planPanel.emptySoFar") : t("planPanel.noSteps")}
 							</div>
 						) : (
 							<>
@@ -579,6 +547,8 @@ export function PlanDockCard() {
 					</div>
 				</>
 			)}
-		</DockCard>
+			</div>
+			{!following && <Button className="shrink-0 self-center my-2" size="sm" onClick={() => { pinned.current = true; setFollowing(true); if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }}>{t("chat.jumpToLatest")}</Button>}
+		</section>
 	);
 }

@@ -23,13 +23,14 @@ export interface ModelRow extends Omit<CustomProviderModelInput, "id"> {
 interface ModelEditorProps {
 	model: ModelRow;
 	readonly: boolean;
+	effectiveApi?: string;
 	disabled: boolean;
 	onUpdate: (key: number, patch: Partial<Omit<ModelRow, "key">>) => void;
-	onRemove: (key: number) => void;
+	onRemove?: (key: number) => void;
 	canRemove: boolean;
 }
 
-function ModelEditor({ model, readonly, disabled, onUpdate, onRemove, canRemove }: ModelEditorProps) {
+function ModelEditor({ model, readonly, effectiveApi, disabled, onUpdate, onRemove, canRemove }: ModelEditorProps) {
 	const t = useT();
 	const [expanded, setExpanded] = useState(false);
 	const [costDrafts, setCostDrafts] = useState<Record<CostField, string>>(() => ({
@@ -105,6 +106,7 @@ function ModelEditor({ model, readonly, disabled, onUpdate, onRemove, canRemove 
 					className={`${INPUT_CLASS} flex-1`}
 					disabled={readonly || disabled}
 				/>
+				{!model.api && effectiveApi && <span className="shrink-0 text-omp-xs text-(--omp-dim)">{t("providerCfg.form.modelApiAuto", { api: effectiveApi })}</span>}
 				<Button
 					size="sm"
 					variant="ghost"
@@ -113,7 +115,7 @@ function ModelEditor({ model, readonly, disabled, onUpdate, onRemove, canRemove 
 					aria-label={expanded ? t("providerCfg.form.modelCollapse") : t("providerCfg.form.modelExpand")}
 					disabled={disabled}
 				/>
-				{canRemove && (
+				{canRemove && onRemove && (
 					<Button
 						size="sm"
 						variant="ghost"
@@ -140,7 +142,7 @@ function ModelEditor({ model, readonly, disabled, onUpdate, onRemove, canRemove 
 								className={INPUT_CLASS}
 								disabled={readonly || disabled}
 							>
-								<option value="">{t("providerCfg.form.modelApiInherit")}</option>
+								<option value="">{effectiveApi ? t("providerCfg.form.apiAuto", { api: effectiveApi }) : t("providerCfg.form.modelApiInherit")}</option>
 								{PROVIDER_PROTOCOLS.map(protocol => (
 									<option key={protocol} value={protocol}>
 										{protocol}

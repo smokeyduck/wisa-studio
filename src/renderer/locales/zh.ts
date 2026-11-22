@@ -18,7 +18,6 @@ export const zh: Record<string, string> = {
 	"settings.nav.system": "系统与高级",
 
 	"btw.ask": "发送旁问",
-	"btw.enterToAsk": "Enter 提问，Shift+Enter 换行",
 	"live.start": "开始语音会话",
 	"live.ready": "准备就绪，麦克风尚未开启",
 
@@ -1719,6 +1718,12 @@ export const zh: Record<string, string> = {
 	"providerCfg.form.idSlug": "以字母或数字开头，仅使用小写字母、数字、连字符和下划线",
 	"providerCfg.form.idExists": "已存在同名 ID 的提供商",
 	"providerCfg.form.api": "协议（API）",
+	"providerCfg.form.apiAuto": "默认（{api}）",
+	"providerCfg.form.apiAutoHint":
+		"API 指网关的请求格式，而非模型厂商。未覆盖时使用提供商配置、已保存的模型元数据或端点默认值。未知端点回退到 Chat Completions，并非自动检测协议。",
+	"providerCfg.form.modelApiAuto": "默认：{api}",
+	"providerCfg.form.discoveredModelsHint":
+		"模型列表自动更新；未单独覆盖的模型继承其有效 API。编辑下方模型时，仅将该模型保存为覆盖配置。",
 	"providerCfg.form.baseUrl": "Base URL",
 	"providerCfg.form.baseUrlPlaceholder": "https://api.example.com/v1",
 	"providerCfg.form.baseUrlRequired": "Base URL 为必填项",
@@ -1787,7 +1792,7 @@ export const zh: Record<string, string> = {
 	"providerCfg.form.modelCollapse": "收起模型详情",
 	"providerCfg.form.modelApi": "API 覆盖",
 	"providerCfg.form.modelApiInherit": "（继承提供商）",
-	"providerCfg.form.modelApiHint": "仅对此模型覆盖协议。",
+	"providerCfg.form.modelApiHint": "留空以使用上方显示的默认 API，或仅覆盖此模型。模型名称不决定 API。",
 	"providerCfg.form.modelBaseUrl": "端点覆盖",
 	"providerCfg.form.modelBaseUrlPlaceholder": "https://...",
 	"providerCfg.form.modelBaseUrlHint": "仅对此模型覆盖 base URL。",
@@ -2046,9 +2051,9 @@ export const zh: Record<string, string> = {
 	"settings.gui.sidebarQuotasDesc":
 		"在“设置”上方显示各提供商的配额用量，每个时间窗口一个圆环。已登录的提供商报告配额后才会出现。",
 	"settings.gui.transcriptDetail": "会话过程显示",
-	"settings.gui.transcript.compact": "精简",
+	"settings.gui.transcript.compact": "精简（推荐）",
 	"settings.gui.transcript.compactDesc": "仅展示正文和结果摘要；思考与工具步骤合并为一个可展开的“过程”框。",
-	"settings.gui.transcript.full": "完整（推荐）",
+	"settings.gui.transcript.full": "完整",
 	"settings.gui.transcript.fullDesc": "逐条显示全部思考和工具卡片。",
 	"settings.gui.proxy": "HTTP 代理",
 	"settings.gui.proxyDesc":
@@ -2759,6 +2764,7 @@ export const zh: Record<string, string> = {
 	"chat.copyCode": "复制代码",
 	"chat.renderingDiagram": "正在渲染图表…",
 	"chat.diagram": "图表",
+	"chat.starter.continue": "继续在聊天中编辑",
 	"markdown.imageFailed": "图片加载失败",
 	"markdown.remoteImage": "远程图片未加载",
 	"markdown.remoteImageOpen": "加载图片",

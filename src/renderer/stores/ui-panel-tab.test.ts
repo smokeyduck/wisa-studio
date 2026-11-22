@@ -1,10 +1,4 @@
-/**
- * setPanelTab chat clamp: a tool-free chat tab only carries files in the
- * workspace drawer (todo/plan/agents/queue moved to the center dock), so
- * force-opening the diff tab there is a no-op. The clamp lives in the ui
- * store — not just the PanelContainer tab list — because several call sites
- * force the panel open.
- */
+/** Tool-free chat drawer clamp and explicit inspector routing. */
 import { afterEach, describe, expect, it } from "vitest";
 import { useTabsStore } from "./tabs";
 import { useUiStore } from "./ui";

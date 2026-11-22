@@ -352,7 +352,8 @@ export const BUILT_IN_SHORTCUTS: readonly BuiltInShortcut[] = [
 	{ section: "input", keys: "/", labelKey: "hotkeys.row.commands", first: true },
 	{ section: "input", keys: "↑ / ↓", labelKey: "hotkeys.row.historyNav", first: true },
 	{ section: "generation", keys: "Esc", labelKey: "hotkeys.row.abort", first: true },
-	{ section: "generation", keys: "⇧Tab", labelKey: "hotkeys.row.thinkingCycle", first: true },
+	{ section: "generation", keys: "Tab", labelKey: "hotkeys.row.thinkingCycle", first: true },
+	{ section: "generation", keys: "⇧Tab", labelKey: "hotkeys.row.planToggle", first: true },
 	{ section: "view", keys: "Enter / ⇧Enter", labelKey: "hotkeys.row.findStep" },
 	// The menu's accelerators: ⌘G on macOS, F3 elsewhere (main/menu.ts).
 	{ section: "view", keys: IS_MAC ? "⌘G / ⇧⌘G" : "F3 / ⇧F3", labelKey: "hotkeys.row.findStepMenu" },

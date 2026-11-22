@@ -6,9 +6,9 @@
  * the card header switches the compact spawn tree for the graphical DAG.
  *
  * The card shows only while an agent is working; `display.pinnedAgents`
- * picks hidden, a summary, or the full list. It lists only the batches still
- * at work (`liveAgentRows`): earlier finished, failed and stale agents stay
- * reachable from the drawer's Agents tab, the sidebar, and agent pages. The
+ * picks hidden, a summary, or the full list. Only unfinished agents and their
+ * ancestors appear; reusable idle/parked sessions and finished siblings stay
+ * reachable from the drawer's All tab, the sidebar, and agent pages. The
  * stream-time get_subagents poll lives in the workspace dock, so a hidden
  * card cannot stall it.
  */
@@ -207,15 +207,17 @@ export function AgentsDockCard() {
 	const [view, setView] = useState<PanelView>("list");
 
 	const agents = useMemo(() => inSpawnOrder(subagents.values()), [subagents]);
-	const hasRunning = agents.some(agent => isLiveSubagentStatus(agent.status));
-	const runningCount = agents.filter(agent => subagentActivity(agent) === "working").length;
-	const now = useNowTick(hasRunning);
-
+	const now = useNowTick(visible);
 	const rootToolCallIds = useMemo(() => new Set(extractTaskToolCallIds(messages)), [messages]);
 	const rows = useMemo(
 		() => liveAgentRows(buildSubagentList(agents, rootToolCallIds, toolCallOwners)),
 		[agents, rootToolCallIds, toolCallOwners],
 	);
+	const liveWork = rows.filter(({ agent }) => {
+		const activity = subagentActivity(agent);
+		return activity === "working" || activity === "waiting";
+	});
+	const runningCount = liveWork.filter(({ agent }) => subagentActivity(agent) === "working").length;
 	const liveIds = useMemo(() => new Set(rows.map(row => row.agent.id)), [rows]);
 	const summary = useMemo(() => buildAgentDockSummary(rows), [rows]);
 	const displayedRows = showFull ? rows : summary.rows;
@@ -262,7 +264,7 @@ export function AgentsDockCard() {
 			actions={<ViewToggle onChange={changeView} view={view} />}
 			badge={
 				<span className="shrink-0 text-omp-xs tabular-nums text-[var(--omp-dim)]">
-					{runningCount}/{rows.length}
+					{runningCount}/{liveWork.length}
 				</span>
 			}
 			icon={Bot}

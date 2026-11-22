@@ -11,7 +11,7 @@ import { useTabsStore } from "./tabs";
 export type { ThemeMode };
 
 /** The inspector's views. The built-in browser is not one: it lives in its own window. */
-export type PanelTab = "overview" | "agents" | "btw" | "diff" | "files" | "terminal";
+export type PanelTab = "overview" | "plan" | "agents" | "btw" | "diff" | "files" | "terminal";
 const CLOSED_WORKSPACE_PAGES = {
 	activeToolsOpen: false,
 	agentHubOpen: false,
@@ -26,7 +26,6 @@ const CLOSED_WORKSPACE_PAGES = {
 	memoryOpen: false,
 	modelCompareOpen: false,
 	modelRolesOpen: false,
-	modesOpen: false,
 	pluginsOpen: false,
 	prCenterOpen: false,
 	providersOpen: false,
@@ -43,6 +42,7 @@ export type WorkspacePageId = keyof typeof CLOSED_WORKSPACE_PAGES | "tasks";
 function workspacePagePatch(page: WorkspacePageId | null): Partial<UiStore> {
 	return {
 		...CLOSED_WORKSPACE_PAGES,
+		modesOpen: false,
 		...(page && page !== "tasks" ? { [page]: true } : {}),
 		...(page ? { settingsOpen: false } : {}),
 		workspacePage: page,
@@ -67,8 +67,8 @@ export type MemoryTabId = "knowledge" | "skills" | "sources";
 export const CHAT_PANEL_TABS: ReadonlySet<PanelTab> = new Set(["overview", "btw", "files"]);
 /** What the Changes view compares: the checkout, this session's edits, their timeline, or virtual artifacts. */
 export type DiffScope = "repository" | "current" | "timeline" | "artifacts";
-/** Center-dock card identifiers: todo/plan/agents render as live cards above the composer. */
-export type DockCardId = "todo" | "plan" | "agents";
+/** Center-dock card identifiers. Plans render exclusively in the inspector. */
+export type DockCardId = "todo" | "agents";
 export type TranscriptDetail = "compact" | "full";
 /** Chip size on the tab strip (Settings → GUI → Tab bar). */
 export type TabWidth = "compact" | "default" | "wide";
@@ -436,7 +436,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	thinkingExpanded: false,
 	sidebarQuotas: false,
 	confirmSessionDelete: true,
-	transcriptDetail: "full",
+	transcriptDetail: "compact",
 	defaultPanelTab: "diff",
 	tabWidth: "default",
 	tabRows: "single",
@@ -558,7 +558,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	closeThemeEditor: backToPicker => set({ themeEditor: null, themePickerOpen: backToPicker === true }),
 	modesOpen: false,
 	modesTab: "vibe" as const,
-	openModes: tab => set({ ...workspacePagePatch("modesOpen"), modesTab: tab ?? "vibe" }),
+	openModes: tab => set({ ...workspacePagePatch(null), modesOpen: true, modesTab: tab ?? "vibe" }),
 	closeModes: () => set({ modesOpen: false }),
 	agentHubOpen: false,
 	agentHubTab: "definitions" as const,

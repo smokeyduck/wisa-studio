@@ -43,6 +43,14 @@ const emptyCatalog: ProvidersResult = {
 const upsertProvider = vi.fn(async (_input: CustomProviderInput) => {});
 const deleteProvider = vi.fn(async (_id: string) => {});
 const listProviders = vi.fn(async (): Promise<CustomProviderView[]> => []);
+const getAvailableModels = vi.fn(
+	async (): Promise<RpcResponse> => ({
+		type: "response",
+		command: "get_available_models",
+		success: true,
+		data: { models: [] },
+	}),
+);
 const getProviders = vi.fn(
 	async (): Promise<RpcResponse> => ({
 		type: "response",
@@ -71,7 +79,10 @@ function endpointLists(models: DiscoveredModel[]): void {
 	});
 }
 Object.assign(window as unknown as Record<string, unknown>, {
-	omp: { models: { listProviders, upsertProvider, deleteProvider }, rpc: { getProviders, discoverProviderModels } },
+	omp: {
+		models: { listProviders, upsertProvider, deleteProvider },
+		rpc: { getProviders, getAvailableModels, discoverProviderModels },
+	},
 });
 
 function mockProvider(): CustomProviderView {
@@ -132,8 +143,12 @@ async function change(selector: string, value: string): Promise<void> {
 	const record = element as unknown as Record<string, unknown>;
 	const propsKey = Object.getOwnPropertyNames(record).find(key => key.startsWith("__reactProps$"));
 	const props = propsKey ? (record[propsKey] as { onChange?: (event: object) => void }) : undefined;
-	(element as unknown as { value: string }).value = value;
-	await act(async () => props?.onChange?.({ target: element, currentTarget: element }));
+	if (element.tagName === "SELECT") {
+		await act(async () => props?.onChange?.({ target: { value }, currentTarget: { value } }));
+	} else {
+		(element as unknown as { value: string }).value = value;
+		await act(async () => props?.onChange?.({ target: element, currentTarget: element }));
+	}
 }
 
 async function fillLocalServer(): Promise<void> {
@@ -152,6 +167,13 @@ afterEach(async () => {
 	useUiStore.getState().closeProviders();
 	useModelStore.getState().reset();
 	upsertProvider.mockClear();
+	getAvailableModels.mockReset();
+	getAvailableModels.mockResolvedValue({
+		type: "response",
+		command: "get_available_models",
+		success: true,
+		data: { models: [] },
+	});
 	discoverProviderModels.mockClear();
 	deleteProvider.mockClear();
 	listProviders.mockReset();
@@ -186,6 +208,137 @@ describe("ProviderConfigDialog", () => {
 			auth: "none",
 			models: [{ id: "m1" }],
 		});
+	});
+
+	it("saves Auto with concrete endpoint protocols, not model-name guesses", async () => {
+		useUiStore.getState().openProviderConfig("new");
+		await mountDialog();
+		await fillLocalServer();
+		await change('input[type="password"]', "key");
+		await change(
+			`input[placeholder="${translate("providerCfg.form.modelIdPlaceholder")}"]`,
+			"claude-through-gateway",
+		);
+		await click(translate("providerCfg.form.add"));
+		expect(upsertProvider.mock.calls[0]?.[0]).toMatchObject({
+			models: [{ id: "claude-through-gateway", api: "openai-completions" }],
+		});
+		expect(upsertProvider.mock.calls[0]?.[0]?.api).toBeUndefined();
+	});
+
+	it.each([
+		["https://api.openai.com/v1", "openai-responses"],
+		["https://api.anthropic.com/v1", "anthropic-messages"],
+	])("uses native endpoint protocol for Auto at %s", async (url, api) => {
+		useUiStore.getState().openProviderConfig("new");
+		await mountDialog();
+		await fillLocalServer();
+		await change('input[type="password"]', "key");
+		await change(`input[placeholder="${translate("providerCfg.form.baseUrlPlaceholder")}"]`, url);
+		await click(translate("providerCfg.form.add"));
+		expect(upsertProvider.mock.calls[0]?.[0]?.models[0]?.api).toBe(api);
+	});
+
+	it("uses saved runtime metadata and preserves an explicit per-model override", async () => {
+		const saved = {
+			...mockProvider(),
+			api: undefined,
+			models: [{ id: "responses" }, { id: "messages", api: "anthropic-messages" as const }],
+		};
+		useModelStore.setState({
+			availableModels: [
+				{ provider: "mock", id: "responses", api: "openai-responses" },
+				{ provider: "mock", id: "messages", api: "openai-completions" },
+			],
+		});
+		useUiStore.getState().openProviderConfig(saved);
+		await mountDialog();
+		await click(translate("providerCfg.form.save"));
+		expect(upsertProvider.mock.calls[0]?.[0]?.models).toMatchObject([
+			{ id: "responses", api: "openai-responses" },
+			{ id: "messages", api: "anthropic-messages" },
+		]);
+	});
+
+	it("ignores saved catalog API after changing a model endpoint", async () => {
+		useModelStore.setState({ availableModels: [{ provider: "mock", id: "responses", api: "openai-responses" }] });
+		useUiStore.getState().openProviderConfig({ ...mockProvider(), api: undefined, models: [{ id: "responses" }] });
+		await mountDialog();
+		const expand = document.querySelector(`button[aria-label="${translate("providerCfg.form.modelExpand")}"]`);
+		await act(async () => { (expand as unknown as HTMLElement)?.click(); });
+		await change(`input[placeholder="${translate("providerCfg.form.modelBaseUrlPlaceholder")}"]`, "https://api.anthropic.com/v1");
+		await click(translate("providerCfg.form.save"));
+		expect(upsertProvider.mock.calls[0]?.[0]?.models[0]).toMatchObject({ baseUrl: "https://api.anthropic.com/v1", api: "anthropic-messages" });
+	});
+
+	it("shows automatically discovered models without pinning untouched rows, and saves an edited API override", async () => {
+		const runtimeModels = [{ provider: "mock", id: "runtime-a", name: "Runtime A", api: "openai-responses" }, { provider: "mock", id: "runtime-b", name: "Runtime B", api: "openai-completions" }];
+		getAvailableModels.mockResolvedValue({ type: "response", command: "get_available_models", success: true, data: { models: runtimeModels } });
+		useModelStore.setState({ availableModels: runtimeModels });
+		const saved = { ...mockProvider(), api: undefined, discovery: { type: "proxy" as const }, models: [] };
+		useUiStore.getState().openProviderConfig(saved);
+		await mountDialog();
+		const names = Array.from(document.querySelectorAll(`input[placeholder="${translate("providerCfg.form.modelNamePlaceholder")}"]`)) as unknown as HTMLInputElement[];
+		expect(names.map(input => input.value)).toContain("Runtime A");
+		expect(names.map(input => input.value)).toContain("Runtime B");
+		await click(translate("providerCfg.form.save"));
+		expect(upsertProvider.mock.calls[0]?.[0]?.models).toEqual([]);
+		await act(async () => { useUiStore.getState().openProviderConfig({ ...saved }); });
+		const ids = Array.from(document.querySelectorAll(`input[placeholder="${translate("providerCfg.form.modelIdPlaceholder")}"]`)) as unknown as HTMLInputElement[];
+		const row = ids.find(input => input.value === "runtime-a")?.parentElement;
+		expect(row).toBeDefined();
+		await act(async () => { row?.querySelector<HTMLButtonElement>(`button[aria-label="${translate("providerCfg.form.modelExpand")}"]`)?.click(); });
+		await change('label select:has(option[value="anthropic-messages"])', "anthropic-messages");
+		await click(translate("providerCfg.form.save"));
+		expect(upsertProvider.mock.calls[1]?.[0]?.models).toMatchObject([{ id: "runtime-a", api: "anthropic-messages" }]);
+		expect(upsertProvider.mock.calls[1]?.[0]?.models).toHaveLength(1);
+	});
+
+	it("inherits the gateway protocol for discovered vendor names without saving untouched overrides", async () => {
+		const ids = ["claude", "gpt", "gemini", "grok", "capcuttts"];
+		const runtimeModels = ids.map(id => ({ provider: "mock", id, api: "openai-completions" }));
+		getAvailableModels.mockResolvedValue({
+			type: "response",
+			command: "get_available_models",
+			success: true,
+			data: { models: runtimeModels },
+		});
+		useModelStore.setState({ availableModels: runtimeModels });
+		useUiStore.getState().openProviderConfig({
+			...mockProvider(),
+			discovery: { type: "openai-models-list" },
+			models: [{ id: "explicit", api: "openai-responses" }],
+		});
+		await mountDialog();
+		const modelInputs = Array.from(
+			document.querySelectorAll(`input[placeholder="${translate("providerCfg.form.modelIdPlaceholder")}"]`),
+		) as unknown as HTMLInputElement[];
+		for (const id of ids) {
+			const row = modelInputs.find(input => input.value === id)?.parentElement;
+			expect(row?.textContent).toContain(translate("providerCfg.form.modelApiAuto", { api: "openai-completions" }));
+		}
+		const explicitRow = modelInputs.find(input => input.value === "explicit")?.parentElement;
+		expect(explicitRow?.textContent).not.toContain(
+			translate("providerCfg.form.modelApiAuto", { api: "openai-completions" }),
+		);
+		await click(translate("providerCfg.form.save"));
+		expect(upsertProvider.mock.calls[0]?.[0]?.models).toEqual([{ id: "explicit", api: "openai-responses" }]);
+	});
+
+	it("reads effective saved endpoint routes through the existing catalog RPC before saving fetched models", async () => {
+		getAvailableModels.mockResolvedValue({
+			type: "response",
+			command: "get_available_models",
+			success: true,
+			data: { models: [{ provider: "mock", id: "resolved", api: "anthropic-messages" }] },
+		});
+		endpointLists([discovered("resolved")]);
+		useUiStore.getState().openProviderConfig({ ...mockProvider(), api: undefined, models: [] });
+		await mountDialog();
+		await click(translate("providerCfg.fetch.action"));
+		await click(translate("providerCfg.fetch.add", { count: 1 }));
+		await click(translate("providerCfg.form.save"));
+		expect(upsertProvider.mock.calls[0]?.[0]?.models).toMatchObject([{ id: "resolved", api: "anthropic-messages" }]);
 	});
 
 	it("fetches the endpoint's models into editable rows and saves them as an explicit list", async () => {

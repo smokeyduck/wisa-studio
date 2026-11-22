@@ -20,11 +20,11 @@ import type { ExtensionAskDialogResult, ExtensionUIRequest } from "../../../shar
 import { AnsiText } from "../../lib/ansi";
 import { useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
-import { removeExtensionRequest, useAllPendingRequests, useExtensionUiStore } from "../../stores/extension-ui";
+import { extensionRequestReceivedAt, removeExtensionRequest, useAllPendingRequests, useExtensionUiStore } from "../../stores/extension-ui";
 import { toast } from "../../stores/toast";
 import { Button, Input, Modal, Spinner } from "../common";
 import { ApprovalDialog } from "./ApprovalDialog";
-import { ChoiceRow, FormDialog } from "./FormDialog";
+import { ChoiceRow, FormDialog, QuestionSurface, useQuestionDraft } from "./FormDialog";
 
 /** The `open_url` request a sign-in prompt says it belongs to. */
 function signInOwner(request: ExtensionUIRequest): string | undefined {
@@ -92,11 +92,7 @@ function useCountdown(request: ExtensionUIRequest | null): number | null {
 	// whose auto-cancel effect then answered the new request as timed out
 	// before the reset could render.
 	const [, setTick] = useState(0);
-	const startedAtRef = useRef<{ id: string | null; at: number }>({ id: null, at: 0 });
-	if (startedAtRef.current.id !== requestId) {
-		startedAtRef.current = { id: requestId, at: Date.now() };
-	}
-	const startedAt = startedAtRef.current.at;
+	const startedAt = request ? extensionRequestReceivedAt(request) : Date.now();
 
 	useEffect(() => {
 		if (timeout === undefined) return;
@@ -124,19 +120,21 @@ function SelectDialog({
 	remaining,
 	onValue,
 	onCancel,
+	inline,
 }: {
 	request: Extract<ExtensionUIRequest, { method: "select" }>;
 	remaining: number | null;
 	onValue: (value: string) => void;
 	onCancel: () => void;
+	inline?: boolean;
 }) {
 	const t = useT();
 	return (
-		<Modal onClose={onCancel} open size="sm" title={request.title}>
+		<QuestionSurface inline={inline} onClose={onCancel} title={request.title}>
 			<div className="space-y-1">
 				{request.options.map((option, index) => (
 					<button
-						autoFocus={index === 0}
+						autoFocus={!inline && index === 0}
 						className="flex w-full items-center gap-2 rounded-md border border-(--omp-border-muted) px-3 py-2 text-left text-omp-xs text-(--omp-text) transition-colors hover:border-(--omp-border-accent) hover:bg-(--omp-selected-bg) focus-visible:outline-2 focus-visible:outline-(--omp-border-accent)"
 						key={option}
 						onClick={() => onValue(option)}
@@ -160,7 +158,7 @@ function SelectDialog({
 					</Button>
 				</div>
 			</div>
-		</Modal>
+		</QuestionSurface>
 	);
 }
 
@@ -201,16 +199,18 @@ function InputDialog({
 	remaining,
 	onValue,
 	onCancel,
+	inline,
 }: {
 	request: Extract<ExtensionUIRequest, { method: "input" }>;
 	remaining: number | null;
 	onValue: (value: string) => void;
 	onCancel: () => void;
+	inline?: boolean;
 }) {
 	const t = useT();
-	const [value, setValue] = useState("");
+	const [value, setValue] = useQuestionDraft(request, () => "");
 	return (
-		<Modal onClose={onCancel} open size="sm" title={request.title}>
+		<QuestionSurface inline={inline} onClose={onCancel} title={request.title}>
 			<form
 				className="space-y-3"
 				onSubmit={event => {
@@ -219,7 +219,8 @@ function InputDialog({
 				}}
 			>
 				<Input
-					autoFocus
+					autoFocus={!inline}
+					aria-label={request.title}
 					onChange={event => setValue(event.target.value)}
 					placeholder={request.placeholder}
 					value={value}
@@ -236,7 +237,7 @@ function InputDialog({
 					</div>
 				</div>
 			</form>
-		</Modal>
+		</QuestionSurface>
 	);
 }
 
@@ -257,14 +258,16 @@ function AskDialog({
 	remaining,
 	onSubmit,
 	onCancel,
+	inline,
 }: {
 	request: Extract<ExtensionUIRequest, { method: "askDialog" | "ask" }>;
 	remaining: number | null;
 	onSubmit: (result: ExtensionAskDialogResult) => void;
 	onCancel: () => void;
+	inline?: boolean;
 }) {
 	const t = useT();
-	const [answers, setAnswers] = useState<AskAnswerState[]>(() =>
+	const [answers, setAnswers] = useQuestionDraft<AskAnswerState[]>(request, () =>
 		request.questions.map(() => ({ selected: new Set<string>(), custom: "", note: "" })),
 	);
 
@@ -329,7 +332,7 @@ function AskDialog({
 	};
 
 	return (
-		<Modal onClose={onCancel} open size="lg" title={t("extDialog.ask.title")}>
+		<QuestionSurface inline={inline} onClose={onCancel} title={t("extDialog.ask.title")}>
 			<form
 				className="space-y-5"
 				onSubmit={event => {
@@ -386,11 +389,13 @@ function AskDialog({
 									</div>
 								))}
 							<Input
+								aria-label={`${question.question}: ${t("extDialog.ask.customPlaceholder")}`}
 								onChange={event => setCustom(questionIndex, event.target.value)}
 								placeholder={t("extDialog.ask.customPlaceholder")}
 								value={answer?.custom ?? ""}
 							/>
 							<Input
+								aria-label={`${question.question}: ${t("extDialog.ask.notePlaceholder")}`}
 								onChange={event => setNote(questionIndex, event.target.value)}
 								placeholder={t("extDialog.ask.notePlaceholder")}
 								value={answer?.note ?? ""}
@@ -420,7 +425,7 @@ function AskDialog({
 					</div>
 				</div>
 			</form>
-		</Modal>
+		</QuestionSurface>
 	);
 }
 
@@ -664,11 +669,13 @@ function ActiveDialog({
 	request,
 	remaining,
 	codePrompt,
+	inline = false,
 }: {
 	request: ExtensionUIRequest;
 	remaining: number | null;
 	/** The paste prompt that belongs to an `open_url` request. */
 	codePrompt?: CodePrompt;
+	inline?: boolean;
 }) {
 	const respond = (response: ExtensionResponse) => answerExtensionRequest(request.id, response);
 	const cancel = () => respond({ cancelled: true });
@@ -679,6 +686,7 @@ function ActiveDialog({
 				<ApprovalDialog onRespond={respond} request={request} />
 			) : (
 				<SelectDialog
+					inline={inline}
 					onCancel={cancel}
 					onValue={value => respond({ value })}
 					remaining={remaining}
@@ -699,6 +707,7 @@ function ActiveDialog({
 				// Keyed: consecutive input requests must not inherit the previous
 				// request's typed draft.
 				<InputDialog
+					inline={inline}
 					key={request.id}
 					onCancel={cancel}
 					onValue={value => respond({ value })}
@@ -709,6 +718,7 @@ function ActiveDialog({
 		case "askDialog":
 			return (
 				<AskDialog
+					inline={inline}
 					key={request.id}
 					onCancel={cancel}
 					onSubmit={result => respond({ askDialog: result })}
@@ -722,6 +732,7 @@ function ActiveDialog({
 			// question. "Chat instead" has no answers shape — report it as a cancel.
 			return (
 				<AskDialog
+					inline={inline}
 					key={request.id}
 					onCancel={cancel}
 					onSubmit={result =>
@@ -744,6 +755,8 @@ function ActiveDialog({
 		case "form":
 			return (
 				<FormDialog
+					inline={inline}
+					draftKey={request}
 					footer={<TimeoutFooter remaining={remaining} />}
 					key={request.id}
 					onCancel={cancel}
@@ -776,6 +789,20 @@ function ActiveDialog({
 	}
 }
 
+export function isInlineQuestion(request: ExtensionUIRequest): boolean {
+	return request.method === "ask" || request.method === "askDialog" || request.method === "form" ||
+		(request.method === "select" && !isApprovalRequest(request)) ||
+		(request.method === "input" && !request.authCodeFor && !request.loginPromptFor);
+}
+
+/** Only the owning transcript renders its pending question, without moving focus. */
+export function InlineExtensionQuestions() {
+	const pending = useExtensionUiStore(state => state.pendingRequests);
+	const request = pending.find(isInlineQuestion) ?? null;
+	const remaining = useCountdown(request);
+	return request ? <ActiveDialog inline key={request.id} remaining={remaining} request={request} /> : null;
+}
+
 export function ExtensionDialog() {
 	// Dialog surface is global: a blocking request parked in a background tab's
 	// queue still pops here (its agent waits). Side-effect requests do NOT
@@ -783,9 +810,21 @@ export function ExtensionDialog() {
 	// stay scoped to the focused tab and fire when that tab is on screen.
 	const pending = useAllPendingRequests();
 	const focusedPending = useExtensionUiStore(state => state.pendingRequests);
+	useEffect(() => {
+		const expire = () => {
+			for (const req of pending) {
+				if (!isInlineQuestion(req) || !("timeout" in req) || req.timeout === undefined) continue;
+				if (Date.now() - extensionRequestReceivedAt(req) < req.timeout) continue;
+				window.omp.ui.respondExtensionUi({ type: "extension_ui_response", id: req.id, cancelled: true, timedOut: true });
+				removeExtensionRequest(req.id);
+			}
+		};
+		const timer = setInterval(expire, 200);
+		return () => clearInterval(timer);
+	}, [pending]);
 
 	const request = useMemo(
-		() => pending.find(req => !NON_DIALOG_METHODS.has(req.method) && !belongsToOpenUrl(req, pending)) ?? null,
+		() => pending.find(req => !NON_DIALOG_METHODS.has(req.method) && !isInlineQuestion(req) && !belongsToOpenUrl(req, pending)) ?? null,
 		[pending],
 	);
 	const codePrompt = useMemo(

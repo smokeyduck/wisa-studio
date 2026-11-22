@@ -7,6 +7,30 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+### Changed
+
+- **The 368px model picker opens directly on a manufacturer index.** Alphabetic sections are expanded initially, with larger bold headers, instead of hiding makers inside a Wisa connection group. The full reported gateway catalog is classified, including Codex, Qwen, and CapCut; unknown routes such as `auto` stay under their connection label. Manufacturer names are searchable, and explicit `vendor/name` namespaces retain their spelling. Rows show their actual connection and sign-in status; selection and keyboard navigation preserve the original provider/model pair.
+- **The composer model name is never cut off.** It shrinks to fit the trigger and wraps onto more lines when even the smallest size is not enough.
+- **`/phone` opens the phone dialog from the composer.** The command works even when the backend does not advertise it.
+- **Shift+Tab toggles plan mode, and Tab cycles reasoning in the composer.** Tab no longer accepts a completion there; other screens keep normal Tab focus movement.
+- **Provider settings show a per-model API choice.** Default means the effective inherited or fallback request protocol, not automatic protocol detection or the model's manufacturer. Discovered lists still update automatically; only edited models become saved overrides.
+- **Switching sessions no longer rebuilds long transcripts page by page.** A complete transcript is requested in one call; paged loading remains the fallback when a response is too large. End-to-end timing has not been measured yet.
+- **Unknown provider ids keep their configured spelling.** Only known names are re-cased; `wisa` displays as "Wisa".
+- **Agent clarification questions appear inline in the session that asked them.** Answering keeps your place in the chat scroll.
+- **Plans and approvals open in the right inspector, one per project.** The inspector reveals them automatically. While a plan streams, its content and intent drive whether the view follows new text.
+- **Vibe, Goal, Loop, and starter setup use compact, responsive, centered modals.** They fit narrow windows and keep the same actions.
+- **Discovered models are listed and editable separately from your saved list.** Only models you change are saved as overrides; discovered models stay automatic.
+- **The Agents dock lists only agents doing work.** Idle and parked agents are reusable history, not work, so they leave the dock whatever their age. Finished and failed rows of an earlier task call drop out with their batch-mates, and a row leaves as soon as its terminal frame arrives. The count covers only the listed working agents. History stays in the agent hub, the sidebar, and the drawer.
+- **The conversation detail defaults to Compact.** A profile that has never chosen gets the folded view (reasoning and tool steps in one Process row); an explicit Full choice is kept as-is.
+- **Agents and To-Do share a bounded dock instead of filling the chat.** Together they use at most 360px or 40% of the available transcript height, whichever is smaller. Lists and transcripts scroll inside each card beneath fixed headers; focused/full and graph views keep the same limit. Very short panes can scroll the dock itself to reach every header without moving the composer.
+- Source and test details for these items are recorded in `docs/feedback-workflow-research.md`.
+
+### Removed
+
+- The Btw panel's Enter / Shift+Enter hint and its read-only footer line. The disclosure stays in the empty state.
+
+
+
 ## [0.9.51] - 2026-11-22
 
 ### Changed

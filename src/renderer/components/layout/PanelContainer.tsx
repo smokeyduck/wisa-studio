@@ -1,4 +1,4 @@
-import { Bot, Diff, FolderTree, LayoutDashboard, MessageCircleQuestion, SquareTerminal, X } from "lucide-react";
+import { Bot, ClipboardList, Diff, FolderTree, LayoutDashboard, MessageCircleQuestion, SquareTerminal, X } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
@@ -7,6 +7,10 @@ import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { scrollStripOnWheel, useActiveChipInView } from "../../lib/strip-scroll";
 import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
+import { useSessionStore } from "../../stores/session";
+import { usePlanApprovalStore } from "../../stores/plan-approval";
+import { PlanPanel } from "../panels/PlanPanel";
+import { PlanApprovalPanel } from "../dialogs/PlanApprovalPanel";
 import { CHAT_PANEL_TABS, type PanelTab, useUiStore } from "../../stores/ui";
 import { AgentRoster, useAgentsTabSignal } from "../agents/AgentRoster";
 import { PanelErrorBoundary } from "../common";
@@ -27,6 +31,7 @@ function defaultPanelWidth(viewportWidth: number): number {
 
 const TABS: { id: PanelTab; labelKey: string; icon: typeof Diff }[] = [
 	{ id: "overview", labelKey: "panel.tabs.overview", icon: LayoutDashboard },
+	{ id: "plan", labelKey: "dock.plan", icon: ClipboardList },
 	{ id: "agents", labelKey: "panel.tabs.agents", icon: Bot },
 	{ id: "btw", labelKey: "panel.tabs.btw", icon: MessageCircleQuestion },
 	{ id: "diff", labelKey: "panel.tabs.diff", icon: Diff },
@@ -72,13 +77,7 @@ function InspectorTab({ label, description, icon: Icon, active, signal, onSelect
 	);
 }
 
-/**
- * Review drawer: an overview of the session, what the agent changed and the
- * files it touched. Hidden by default; the bare toggle opens it on Overview,
- * while the transcript's "Review" link, a file link or /btw open their own tab. Live execution
- * state (todos, plan, subagents, queue) renders in the center dock above the
- * composer, and application logs live in their own dialog.
- */
+/** Session inspector: plans and approvals live here; execution cards stay in the transcript. */
 export function PanelContainer() {
 	const t = useT();
 	const panelTab = useUiStore(s => s.panelTab);
@@ -87,6 +86,8 @@ export function PanelContainer() {
 	const activeTabId = useTabsStore(s => s.activeTabId);
 	const split = useTabsStore(s => s.split);
 	const routeReady = useActiveTabRouteReady();
+	const sessionKey = useSessionStore(state => `${state.cwd}:${state.sessionId ?? state.sessionFile ?? "new"}`);
+	const proposal = usePlanApprovalStore(state => state.pending);
 	/** Chat tabs expose only Overview, btw and Files — diffs, shells and agent browsing need tools. */
 	const isChat = useActiveTabKind() === "chat";
 	const visibleTabs = isChat ? TABS.filter(tab => CHAT_PANEL_TABS.has(tab.id)) : TABS;
@@ -208,6 +209,7 @@ export function PanelContainer() {
 					{visiblePanelTab === "diff" && <DiffPanel />}
 					{visiblePanelTab === "files" && <FilesPanel />}
 					{visiblePanelTab === "terminal" && <TerminalPanel />}
+					{visiblePanelTab === "plan" && <div key={`${activeTabId}:${sessionKey}`} className="h-full">{proposal ? <PlanApprovalPanel /> : <PlanPanel />}</div>}
 				</PanelErrorBoundary>
 			</div>
 			<div

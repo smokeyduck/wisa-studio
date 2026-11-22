@@ -1,10 +1,7 @@
 /**
- * DockCard: shared chrome for the center-dock live cards (todo/plan/agents)
- * mounted between the transcript and the composer. Collapse state lives in
- * the ui store so it survives card unmounts (tab switches, content-driven
- * hide/show); `focusDockCard(id)` deep links expand the card and flash a
- * ring — that is how command-palette entries (todo edit, plan-review) land
- * here now that the workspace drawer no longer carries these surfaces.
+ * DockCard: shared chrome for center-dock execution cards (todo/agents).
+ * Collapse state survives tab switches; focusDockCard deep links expand
+ * the selected card. Plan documents and approval live only in the inspector.
  */
 
 import { ArrowLeft, ChevronRight, type LucideIcon, Maximize2 } from "lucide-react";
@@ -23,7 +20,7 @@ interface DockCardProps {
 	/** Right-side header controls (view toggles, refresh buttons). */
 	actions?: ReactNode;
 	expandable?: boolean;
-	/** Body content; WorkspaceDock owns vertical scrolling for every card. */
+	/** Body content scrolls independently beneath the fixed card header. */
 	children: ReactNode;
 }
 
@@ -73,17 +70,18 @@ export function DockCard({ id, icon: Icon, title, badge, actions, expandable, ch
 		<section
 			aria-label={title}
 			className={cx(
-				"shrink-0 overflow-clip rounded-xl border transition-shadow duration-300",
+				"flex min-h-min flex-col overflow-hidden rounded-xl border transition-shadow duration-300",
 				flash
 					? "border-[var(--omp-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--omp-accent)_35%,transparent)]"
 					: "border-[var(--omp-border)]",
 				hiddenForFocus && "opacity-75",
 				focused && "order-first",
+				expanded ? "flex-[1_1_280px]" : "shrink-0",
 			)}
 			data-dock-focused={focused || undefined}
 		>
 			<div
-				className="sticky top-0 z-20 flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 bg-[var(--omp-bg-secondary)] px-3 py-1.5" // surface-ok: dock-card sticky navigation chrome
+				className="z-20 flex min-h-10 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 bg-[var(--omp-bg-secondary)] px-3 py-1.5" // surface-ok: dock-card navigation chrome
 			>
 				<button
 					aria-expanded={expanded}
@@ -125,7 +123,13 @@ export function DockCard({ id, icon: Icon, title, badge, actions, expandable, ch
 				)}
 				{!hiddenForFocus && actions}
 			</div>
-			{expanded && <div className="border-t border-[var(--omp-border-muted)]">{children}</div>}
+			{expanded && (
+				/* Keep long lists out of the card's intrinsic minimum; the dock shares
+				 * its budget between cards, with enough body left to scroll. */
+				<div className="min-h-10 flex-1 overflow-y-auto overscroll-contain border-t border-[var(--omp-border-muted)] [contain:size]">
+					{children}
+				</div>
+			)}
 		</section>
 	);
 }
