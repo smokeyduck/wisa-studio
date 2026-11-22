@@ -7,7 +7,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [0.9.52] - 2026-11-23
 
-Core source: `smokeyduck/oh-my-pi@d949c6d91b33590c52fcbe1c127666b9f75ca583`, including the mandatory upstream sync and WISA isolation, routing, and native-lock fixes.
+Core source: `smokeyduck/oh-my-pi@bf5f8a1eb86ccb737493358c1c716b7f62f973c6`, including the mandatory upstream sync and WISA isolation, routing, native-lock, and native-build variant-selection fixes.
 
 ### Changed
 
