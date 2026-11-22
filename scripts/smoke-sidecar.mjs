@@ -27,6 +27,8 @@ console.log(`probing: ${spawnCmd} ${spawnArgs.join(" ")}`);
 // never reach the user's real agent profile. Only the allowlisted process
 // variables are inherited; every OMP_* / PI_* value from the caller is dropped.
 const home = await mkdtemp(join(tmpdir(), "omp-smoke-"));
+const childTmp = join(home, "tmp");
+await mkdir(childTmp);
 // Fixture project. Never run in the repo: an old binary would read its .omp/.claude.
 // Sentinels: legacy .omp compaction.enabled=true; ambient .claude display.showTokenUsage=true.
 // WISA project compaction.enabled=false, no display key. Expected: compaction.enabled=false
@@ -59,9 +61,9 @@ const spawnOptions = {
 		XDG_DATA_HOME: join(home, "xdg", "data"),
 		XDG_STATE_HOME: join(home, "xdg", "state"),
 		XDG_CACHE_HOME: join(home, "xdg", "cache"),
-		TMPDIR: join(home, "tmp"),
-		TMP: join(home, "tmp"),
-		TEMP: join(home, "tmp"),
+		TMPDIR: childTmp,
+		TMP: childTmp,
+		TEMP: childTmp,
 		PI_CODING_AGENT_DIR: join(home, ".wisa-studio", "agent"),
 		PI_NATIVES_DIR: join(home, ".wisa-studio", "natives"),
 		PI_CONFIG_DIR: ".wisa-studio",
@@ -94,13 +96,20 @@ const startChild = () => {
 	readyDone = false;
 	child = spawn(spawnCmd, spawnArgs, spawnOptions);
 	const rl = createInterface({ input: child.stdout });
+	let startupLines = 0;
 	const ready = new Promise(resolve => {
 		rl.on("line", line => {
 			let f;
 			try {
 				f = JSON.parse(line);
 			} catch {
+				if (!readyDone && startupLines++ < 4) {
+					process.stderr.write(`[sidecar stdout] ${line.slice(0, 200)}\n`);
+				}
 				return;
+			}
+			if (!readyDone && f?.type !== "ready" && f?.type !== "response" && startupLines++ < 4) {
+				process.stderr.write(`[sidecar startup] ${line.slice(0, 200)}\n`);
 			}
 			if (f.type === "ready") {
 				readyDone = true;
@@ -123,7 +132,8 @@ const startChild = () => {
 		clearTimeout(hardKill);
 		process.exit(1);
 	});
-	child.on("exit", code => {
+	// 'exit' can precede the final stdout/stderr data; wait until pipes drain.
+	child.on("close", code => {
 		if (finished || stopping) return;
 		console.log(`SIDECAR_EXIT code=${code} readyDone=${readyDone} — aborting`);
 		clearTimeout(hardKill);
@@ -134,7 +144,7 @@ const startChild = () => {
 
 const stopChild = async () => {
 	stopping = true;
-	const exited = new Promise(resolve => child.once("exit", resolve));
+	const exited = new Promise(resolve => child.once("close", resolve));
 	const forceKill = setTimeout(() => child.kill("SIGKILL"), 1500);
 	child.kill("SIGTERM");
 	await exited;
