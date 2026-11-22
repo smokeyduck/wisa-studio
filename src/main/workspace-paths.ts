@@ -8,7 +8,7 @@ import path from "node:path";
 import type { IpcResolvedPath } from "../shared/ipc-types";
 
 /** Resolve `rel` against `root`, refusing escapes outside the workspace. */
-export function resolveWithin(root: string, rel: string, paths: path.PlatformPath = path): string | null {
+export function resolveWithin(root: string, rel: string, paths: typeof path = path): string | null {
 	const resolved = paths.resolve(root, rel);
 	const rootWithSep = root.endsWith(paths.sep) ? root : root + paths.sep;
 	if (resolved !== root && !resolved.startsWith(rootWithSep)) return null;
@@ -25,7 +25,7 @@ export function resolveWithin(root: string, rel: string, paths: path.PlatformPat
 export function toAbsolutePath(
 	target: string,
 	cwd: string | null,
-	paths: path.PlatformPath = path,
+	paths: typeof path = path,
 ): { path: string } | { error: string } {
 	const windows = paths.sep === "\\";
 	let raw = windows && /^[\\/][A-Za-z]:[\\/]/.test(target) ? target.slice(1) : target;

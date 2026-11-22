@@ -31,10 +31,10 @@ describe("subagent status lookups", () => {
 	});
 
 	it("treats in-flight statuses as live and settled ones as not", () => {
-		for (const status of ["started", "running", "pending", "idle", "parked"]) {
+		for (const status of ["started", "running", "pending"]) {
 			expect(isLiveSubagentStatus(status)).toBe(true);
 		}
-		for (const status of ["completed", "failed", "cancelled", "aborted"]) {
+		for (const status of ["idle", "parked", "completed", "failed", "cancelled", "aborted"]) {
 			expect(isLiveSubagentStatus(status)).toBe(false);
 		}
 	});

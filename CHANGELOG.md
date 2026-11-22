@@ -5,7 +5,9 @@ build is based on, so `0.9.46` here is the first WISA STUDIO release and also
 the point where the upstream GUI's history ends in this file. Release notes for
 earlier versions belong to that project; see [NOTICE](NOTICE).
 
-## [Unreleased]
+## [0.9.52] - 2026-11-23
+
+Core source: `smokeyduck/oh-my-pi@d949c6d91b33590c52fcbe1c127666b9f75ca583`, including the mandatory upstream sync and WISA isolation, routing, and native-lock fixes.
 
 ### Changed
 
