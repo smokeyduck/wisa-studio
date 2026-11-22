@@ -12,7 +12,7 @@ import type { BrowserWindow } from "electron";
 import { describe, expect, it, vi } from "vitest";
 import type { CollabPhoneEntry } from "../shared/collab-phone";
 import type { IpcTabInfo } from "../shared/ipc-types";
-import { formatPhoneHubLink, PHONE_HUB_ROOM_MARKER, parsePhoneHubLink } from "../shared/phone-hub";
+import { formatPhoneHubLink, PHONE_HUB_PAGE_URL, PHONE_HUB_ROOM_MARKER, parsePhoneHubLink } from "../shared/phone-hub";
 import type { PhoneHubDeps } from "./phone-hub";
 import { PhoneHub } from "./phone-hub";
 
@@ -156,10 +156,20 @@ describe("hub link grammar", () => {
 	it("round-trips, and parses a link pasted behind the page URL", () => {
 		const bare = formatPhoneHubLink("wss://my.omp.sh", link);
 		expect(parsePhoneHubLink(bare)).toEqual({ relayUrl: "wss://my.omp.sh", link });
-		// A QR may carry the hub page URL, which has a fragment of its own. The key
-		// is everything after the FIRST "#", so this still parses.
-		const pasted = `https://smokeyduck.github.io/wisa-studio/phone/#${bare}`;
-		expect(parsePhoneHubLink(pasted)?.link).toEqual(link);
+		// A QR carries the hub page URL, which has a fragment of its own. The
+		// fragment is parsed on its own, so the relay URL stays clean.
+		const pasted = `${PHONE_HUB_PAGE_URL}#${bare}`;
+		expect(parsePhoneHubLink(pasted)).toEqual({ relayUrl: "wss://my.omp.sh", link });
+	});
+
+	it("hands the phone a page URL, not the relay's own socket path", () => {
+		// A browser can only open a page: a GET of `/r/<room>` is a 400 from the
+		// relay, because that path answers WebSocket upgrades only.
+		const page = `${PHONE_HUB_PAGE_URL}#${formatPhoneHubLink("wss://my.omp.sh", link)}`;
+		expect(page.startsWith("https://")).toBe(true);
+		expect(parsePhoneHubLink(page)?.link).toEqual(link);
+		// The key still never reaches a server: it is behind the page's "#".
+		expect(page.split("#")[0]).not.toContain(link.key);
 	});
 
 	it("rejects links that are not hub rooms", () => {

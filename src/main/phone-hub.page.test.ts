@@ -13,6 +13,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	formatPhoneHubLink,
+	PHONE_HUB_PAGE_URL,
 	PHONE_HUB_PING_MS,
 	PHONE_HUB_PROTO,
 	PHONE_HUB_ROOM_MARKER,
@@ -60,8 +61,9 @@ describe("phone page mirrors the shared protocol", () => {
 		expect(parsePhoneHubLink(link)?.link.roomId).toBe(`${PHONE_HUB_ROOM_MARKER}abc123`);
 		// The fragment the page receives is the link itself, with the page URL's
 		// own fragment in front of it; the shared parser handles both shapes.
-		expect(parsePhoneHubLink(`https://smokeyduck.github.io/wisa-studio/phone/#${link}`)?.link.key).toBe(
-			"k".repeat(43),
-		);
+		expect(parsePhoneHubLink(`${PHONE_HUB_PAGE_URL}#${link}`)?.link.key).toBe("k".repeat(43));
+		// The page URL must point at the published site path this file lives
+		// under (`site/phone/` on Pages), or every QR scans into a 404.
+		expect(PHONE_HUB_PAGE_URL).toMatch(/^https:\/\/smokeyduck\.github\.io\/wisa-studio\/phone\/$/);
 	});
 });

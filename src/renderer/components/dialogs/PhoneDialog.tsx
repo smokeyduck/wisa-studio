@@ -99,6 +99,13 @@ function HubRow() {
 	}, [refresh]);
 
 	const link = state?.link ?? "";
+	/**
+	 * The link shown in the dialog. It is the room and key with no scheme: the
+	 * page URL in front of them is plumbing (the QR and Copy carry the full
+	 * URL), and the relay's own path cannot be opened on its own, so showing
+	 * the bare socket URL would invite a 400 in a phone browser.
+	 */
+	const shown = (state?.socketLink ?? "").replace(/^wss?:\/\//, "");
 	const copy = useCallback(
 		async (value: string) => {
 			if (await copyText(value)) toast({ variant: "success", message: t("phone.copied") });
@@ -140,8 +147,11 @@ function HubRow() {
 				<div className="flex items-start gap-3">
 					<QrCode value={link} />
 					<div className="min-w-0 flex-1 space-y-2">
-						<code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded bg-(--omp-code-bg) px-2 py-1 text-omp-xs text-(--omp-text)">
-							{link}
+						<code
+							className="block overflow-hidden text-ellipsis whitespace-nowrap rounded bg-(--omp-code-bg) px-2 py-1 text-omp-xs text-(--omp-text)"
+							title={link}
+						>
+							{shown}
 						</code>
 						<div className="flex items-center gap-3 text-omp-xs text-(--omp-dim)">
 							<span className="flex items-center gap-1">

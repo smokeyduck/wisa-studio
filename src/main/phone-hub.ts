@@ -29,6 +29,7 @@ import {
 	formatPhoneHubLink,
 	PHONE_HUB_IV_BYTES,
 	PHONE_HUB_KEY_BYTES,
+	PHONE_HUB_PAGE_URL,
 	PHONE_HUB_PROTO,
 	PHONE_HUB_ROOM_MARKER,
 	PHONE_HUB_SILENCE_LIMIT_MS,
@@ -135,8 +136,21 @@ export class PhoneHub {
 		this.#deps = deps;
 	}
 
-	/** The link a phone scans, or null while the hub is not running. */
+	/**
+	 * The link a phone opens, or null while the hub is not running.
+	 *
+	 * This is the *page* URL, not the socket URL: a phone has to land on a page
+	 * that speaks this protocol, and the relay rejects a plain GET of its own
+	 * room path. The room and key ride in the page's fragment, which never
+	 * reaches a server.
+	 */
 	get link(): string | null {
+		if (!this.#link) return null;
+		return `${PHONE_HUB_PAGE_URL}#${formatPhoneHubLink(this.#deps.relayUrl() || DEFAULT_RELAY_URL, this.#link)}`;
+	}
+
+	/** The bare socket link (`wss://relay/r/<room>#<key>`), for logs and tests. */
+	get socketLink(): string | null {
 		if (!this.#link) return null;
 		return formatPhoneHubLink(this.#deps.relayUrl() || DEFAULT_RELAY_URL, this.#link);
 	}

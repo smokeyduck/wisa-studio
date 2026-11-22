@@ -155,7 +155,12 @@ export interface IpcDeps {
  */
 /** The hub's state as the dialog reads it. */
 function phoneHubState(deps: IpcDeps): IpcPhoneHubState {
-	return { link: deps.phoneHub.link, live: deps.phoneHub.live, listeners: deps.phoneHub.listeners };
+	return {
+		link: deps.phoneHub.link,
+		socketLink: deps.phoneHub.socketLink,
+		live: deps.phoneHub.live,
+		listeners: deps.phoneHub.listeners,
+	};
 }
 
 function sidecarFor(deps: IpcDeps, event: Electron.IpcMainInvokeEvent): SidecarManager | null {

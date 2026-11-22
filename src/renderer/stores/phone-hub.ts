@@ -26,7 +26,7 @@ interface PhoneHubStore {
 	revoke: () => Promise<void>;
 }
 
-const OFF: IpcPhoneHubState = { link: null, live: false, listeners: 0 };
+const OFF: IpcPhoneHubState = { link: null, socketLink: null, live: false, listeners: 0 };
 
 export const usePhoneHubStore = create<PhoneHubStore>(set => ({
 	state: null,

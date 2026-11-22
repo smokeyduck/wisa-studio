@@ -38,6 +38,13 @@ export const PHONE_HUB_ROOM_PREFIX = "/r/";
  */
 export const PHONE_HUB_ROOM_MARKER = "hub-";
 
+/**
+ * The page a phone opens. The relay answers only WebSocket upgrades on
+ * `/r/<room>`, so a plain GET of the socket URL is a 400 (`bad request`): the
+ * hub link therefore has to travel inside a fragment of a real page.
+ */
+export const PHONE_HUB_PAGE_URL = "https://smokeyduck.github.io/wisa-studio/phone/";
+
 /** AES-256-GCM key length, matching the agent's collab rooms. */
 export const PHONE_HUB_KEY_BYTES = 32;
 /** Sealed layout is `[12B IV][ciphertext+tag]`, matching the agent's collab rooms. */
@@ -131,13 +138,18 @@ export function formatPhoneHubLink(relayUrl: string, link: PhoneHubLink): string
 export function parsePhoneHubLink(text: string): { relayUrl: string; link: PhoneHubLink } | null {
 	const trimmed = text.trim();
 	if (!trimmed) return null;
-	// The key is what follows the LAST "#". A link is often pasted with the hub
-	// page URL in front of it, and that URL has a fragment of its own
-	// (`…/phone/#wss://relay/r/room#key`), so the first "#" is the page's.
-	const hashAt = trimmed.lastIndexOf("#");
-	if (hashAt < 0) return null;
-	const key = trimmed.slice(hashAt + 1).trim();
-	const beforeHash = trimmed.slice(0, hashAt);
+	// A link is usually pasted behind the page URL, whose fragment then carries
+	// it (`…/phone/#wss://relay/r/room#key`). Two "#" mean that shape: everything
+	// from the page URL is plumbing, so parse the fragment on its own and keep
+	// the relay URL clean.
+	const first = trimmed.indexOf("#");
+	const last = trimmed.lastIndexOf("#");
+	if (first >= 0 && first !== last) return parsePhoneHubLink(trimmed.slice(first + 1));
+	// The key is what follows the "#", and the relay URL is everything before
+	// the room path.
+	if (last < 0) return null;
+	const key = trimmed.slice(last + 1).trim();
+	const beforeHash = trimmed.slice(0, last);
 	const roomAt = beforeHash.indexOf(PHONE_HUB_ROOM_PREFIX);
 	if (roomAt < 0) return null;
 	const roomId = beforeHash.slice(roomAt + PHONE_HUB_ROOM_PREFIX.length).replace(/\/+$/, "");

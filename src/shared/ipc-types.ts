@@ -1233,8 +1233,14 @@ export interface IpcCollabPhoneAutoStartPayload {
  * rotated, so the dialog must render whatever it is told rather than cache it.
  */
 export interface IpcPhoneHubState {
-	/** The URL to encode as a QR, or null when the hub is off. */
+	/** The page URL to encode as a QR and open, or null when the hub is off. */
 	link: string | null;
+	/**
+	 * The same room as a bare socket link (`wss://relay/r/<room>#<key>`), which
+	 * is what the dialog shows: short enough to read, and the form the page's
+	 * own fragment carries. Null when the hub is off.
+	 */
+	socketLink: string | null;
 	/** The relay socket is up right now. */
 	live: boolean;
 	/** How many phones are attached. */
