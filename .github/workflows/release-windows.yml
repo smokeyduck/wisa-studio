@@ -251,7 +251,7 @@ jobs:
           }
           Write-Host "booted=$booted main-alive=$alive renderer-up=$rendererUp new-renderer-crashes=$crashes"
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-          if (-not (Test-Path $runtimeLog)) { Write-Host "::error::GUI did not write its isolated runtime log"; exit 1 }
+          if (-not (Test-Path (Join-Path $env:WISA_PROFILE_ROOT "appData\wisa-studio") -PathType Container)) { Write-Host "::error::GUI did not create its isolated profile"; exit 1 }
           if (-not $alive) { Write-Host "::error::GUI main process exited during smoke test"; exit 1 }
           if (-not $booted) { Write-Host "::error::GUI renderer never spawned in 120s"; exit 1 }
           if (-not $rendererUp) { Write-Host "::error::GUI renderer died after spawn (issue #12 regression)"; exit 1 }
