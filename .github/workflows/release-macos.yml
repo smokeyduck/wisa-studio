@@ -275,6 +275,7 @@ jobs:
             arch: x64
             machine: x86_64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     steps:
       - name: Download the exact produced packages
         uses: actions/download-artifact@v4
@@ -288,6 +289,7 @@ jobs:
           bun-version-file: release-proof/core-package.json
 
       - name: Verify seals and execute both release packages on native hardware
+        timeout-minutes: 10
         shell: bash
         env:
           ARCH: ${{ matrix.arch }}
@@ -298,9 +300,35 @@ jobs:
           root=$(mktemp -d)
           pid=
           mounted=0
+          wait_bounded() {
+            local child_pid="$1" label="$2" seconds="${3:-10}"
+            for _ in $(seq 1 "$seconds"); do
+              if ! kill -0 "$child_pid" 2>/dev/null; then
+                wait "$child_pid"
+                return $?
+              fi
+              sleep 1
+            done
+            echo "::warning::$label did not exit within ${seconds}s; sending SIGKILL"
+            kill -KILL "$child_pid" 2>/dev/null || true
+            wait "$child_pid" 2>/dev/null || true
+            return 124
+          }
+          stop_gui() {
+            if [ -z "$pid" ]; then return; fi
+            echo "stopping GUI pid=$pid"
+            kill -TERM -- "-$pid" 2>/dev/null || true
+            wait_bounded "$pid" 'GUI shutdown' || true
+            # Kill surviving helpers/sidecars before deleting their profile or app.
+            kill -KILL -- "-$pid" 2>/dev/null || true
+            pid=
+          }
           cleanup() {
-            if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
-            if [ "$mounted" = 1 ]; then hdiutil detach "$root/mount" >/dev/null || true; fi
+            stop_gui
+            if [ "$mounted" = 1 ]; then
+              hdiutil detach "$root/mount" -force >/dev/null &
+              wait_bounded "$!" 'DMG cleanup' || true
+            fi
             rm -rf "$root"
           }
           trap cleanup EXIT
@@ -308,16 +336,22 @@ jobs:
           packages=(release-proof/*-"$ARCH".dmg release-proof/*-"$ARCH".zip)
           test "${#packages[@]}" = 2
           for package in "${packages[@]}"; do
+            echo "verifying package: $package"
             mkdir -p "$root/extracted" "$root/mount"
             case "$package" in
               *.dmg)
-                hdiutil attach "$package" -nobrowse -readonly -mountpoint "$root/mount" >/dev/null
+                echo 'mounting DMG'
                 mounted=1
+                hdiutil attach "$package" -nobrowse -readonly -mountpoint "$root/mount" </dev/null >/dev/null &
+                wait_bounded "$!" 'DMG mount' 120
                 apps=("$root/mount/"*.app)
                 test "${#apps[@]}" = 1
+                echo 'verifying mounted app seal'
                 codesign --verify --deep --strict --verbose=2 "${apps[0]}"
                 ditto "${apps[0]}" "$root/extracted/$(basename "${apps[0]}")"
-                hdiutil detach "$root/mount" >/dev/null
+                echo 'unmounting DMG'
+                hdiutil detach "$root/mount" >/dev/null &
+                wait_bounded "$!" 'DMG unmount' 30
                 mounted=0
                 ;;
               *.zip) ditto -x -k "$package" "$root/extracted" ;;
@@ -326,27 +360,31 @@ jobs:
             test "${#apps[@]}" = 1
             app="${apps[0]}"
             executable="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+            echo 'verifying extracted app seal and native architectures'
             codesign --verify --deep --strict --verbose=2 "$app"
             file -b "$executable" | grep -q "$MACHINE"
             file -b "$app/Contents/Resources/omp" | grep -q "$MACHINE"
+            echo 'probing packaged sidecar RPC and persistence'
             bun release-proof/smoke-sidecar.mjs "$app/Contents/Resources/omp"
             profile=$(mktemp -d "$root/profile.XXXXXX")
             echo "launching $package: $app"
+            # A private job-control process group keeps cleanup off the runner.
+            set -m
             env -u ELECTRON_RUN_AS_NODE WISA_PROFILE_ROOT="$profile" "$executable" >"$root/gui.log" 2>&1 &
             pid=$!
+            set +m
             renderer_up=0
             for _ in $(seq 1 40); do
               sleep 3
               if ! kill -0 "$pid" 2>/dev/null; then break; fi
               if pgrep -P "$pid" -f -- '--type=renderer' >/dev/null 2>&1; then renderer_up=1; break; fi
             done
+            echo "renderer_up=$renderer_up; checking GUI stability for 10s"
             sleep 10
             alive=0
             kill -0 "$pid" 2>/dev/null && alive=1
             tail -20 "$root/gui.log"
-            kill "$pid" 2>/dev/null || true
-            wait "$pid" 2>/dev/null || true
-            pid=
+            stop_gui
             test "$alive" = 1 || { echo '::error::GUI main process exited during smoke test'; exit 1; }
             test "$renderer_up" = 1 || { echo '::error::GUI renderer never spawned'; exit 1; }
             rm -rf "$root/extracted"
