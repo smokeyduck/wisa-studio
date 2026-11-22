@@ -1506,6 +1506,9 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		description:
 			"Hành vi mặc định khi phê duyệt lệnh gọi công cụ. «Always ask» chỉ tự động phê duyệt các công cụ đọc. «Ask and remember» cũng hỏi trước khi đọc và có thể ghi nhớ quyền theo tệp hoặc thư mục. «Write» tự động phê duyệt việc đọc và ghi trong không gian làm việc. «Yolo» tự động phê duyệt mọi cấp; chính sách của người dùng vẫn có thể yêu cầu phê duyệt hoặc chặn lệnh gọi.",
 	},
+	"todo.backend": {
+		label: "Nơi lưu danh sách tác vụ",
+	},
 	"todo.enabled": {
 		label: "Danh sách tác vụ",
 		description: "Bật công cụ todo để theo dõi tác vụ",
