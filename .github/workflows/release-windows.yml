@@ -10,8 +10,7 @@ name: Release Windows builds
 # recorded in that GUI revision's sidecar-source.json (the same pin
 # release-linux.yml uses).
 #
-# The macOS artifacts (DMGs, ZIPs) are unchanged: they still follow the local
-# Release Runbook in AGENTS.md, which needs a Mac for signing/inspection anyway.
+# macOS artifacts are built separately by release-macos.yml.
 
 on:
   release:
@@ -115,25 +114,16 @@ jobs:
         working-directory: oh-my-pi
         run: bun install
 
-      - name: Provision natives addon (source build when the npm leaf lags)
+      - name: Build natives from the pinned Core source
         working-directory: oh-my-pi
         shell: bash
-        # build:omp downloads @oh-my-pi/pi-natives-<platform>@<ver> from npm,
-        # but upstream's publish can lag the monorepo version bump — when the
-        # leaf is absent, compile the host addon from crates/pi-natives instead
-        # (rust-toolchain.toml pins the toolchain; rustup installs it on first
-        # cargo invocation). Both x64 ISA variants are built so the sidecar
-        # keeps the modern/baseline split it gets from the npm package.
+        env:
+          OMP_NATIVE_CARGO_PROFILE: ci
+        # npm's same-version addon does not contain fork-only Rust fixes.
+        # Windows ships the baseline addon; build:omp reuses this local output.
         run: |
-          VER=$(jq -r .version packages/natives/package.json)
-          LEAF="@oh-my-pi/pi-natives-win32-x64"
-          if npm view "$LEAF@$VER" version >/dev/null 2>&1; then
-            echo "npm leaf $LEAF@$VER published — build:omp will download it"
-          else
-            echo "$LEAF@$VER not on npm — building natives from source"
-            bun --cwd=packages/natives run build
-            PI_NATIVE_VARIANT=baseline bun --cwd=packages/natives run build
-          fi
+          PI_NATIVE_VARIANT=baseline bun --cwd=packages/natives run build
+          test -s packages/natives/native/pi_natives.win32-x64-baseline.node
 
       - name: Build the bundled Windows sidecar
         working-directory: oh-my-pi
@@ -212,15 +202,15 @@ jobs:
       - name: Smoke-test the packaged GUI (launch, no renderer crash)
         working-directory: oh-my-pi/packages/gui
         shell: pwsh
-        # Launch the real unpacked build exactly as a user would (no flags).
+        # Launch the real unpacked build with an isolated automation profile.
         # Healthy boot = the `--type=renderer` child of the main process exists.
         # The issue #12 failure = that child dies within ~1s of appearing, which
         # also appends `renderer-process … crashed` to the runtime log — both are
         # checked. Only log lines written after this launch are considered.
         run: |
-          $runtimeLog = Join-Path $env:APPDATA "omp\logs\gui-runtime.jsonl"
-          $before = 0
-          if (Test-Path $runtimeLog) { $before = (Get-Content $runtimeLog | Measure-Object -Line).Lines }
+          $env:WISA_PROFILE_ROOT = Join-Path $env:RUNNER_TEMP "wisa-gui-smoke-$([guid]::NewGuid())"
+          New-Item -ItemType Directory -Path $env:WISA_PROFILE_ROOT -Force | Out-Null
+          $runtimeLog = Join-Path $env:WISA_PROFILE_ROOT "appData\wisa-studio\logs\gui-runtime.jsonl"
 
           # The executable is named after productName ("WISA STUDIO.exe"), so it
           # cannot be hardcoded; the sidecar is the only other .exe in the folder.
@@ -246,11 +236,12 @@ jobs:
           if ($alive -and $booted) { $rendererUp = [bool](Get-Renderer $proc.Id) }
           $crashes = 0
           if (Test-Path $runtimeLog) {
-            $new = Get-Content $runtimeLog | Select-Object -Skip $before
+            $new = Get-Content $runtimeLog
             $crashes = ($new | Where-Object { $_ -match 'renderer-process' -and $_ -match '"crashed"' }).Count
           }
           Write-Host "booted=$booted main-alive=$alive renderer-up=$rendererUp new-renderer-crashes=$crashes"
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          if (-not (Test-Path $runtimeLog)) { Write-Host "::error::GUI did not write its isolated runtime log"; exit 1 }
           if (-not $alive) { Write-Host "::error::GUI main process exited during smoke test"; exit 1 }
           if (-not $booted) { Write-Host "::error::GUI renderer never spawned in 120s"; exit 1 }
           if (-not $rendererUp) { Write-Host "::error::GUI renderer died after spawn (issue #12 regression)"; exit 1 }
@@ -267,6 +258,10 @@ jobs:
           # (wisa-studio-<version>-setup.exe / -portable.exe); a fixed `omp-*`
           # prefix would upload nothing.
           files=(*-setup.exe *-setup.exe.blockmap *-portable.exe latest.yml)
+          test "${#files[@]}" -ge 3
+          test -s latest.yml
+          compgen -G '*-setup.exe' >/dev/null
+          compgen -G '*-portable.exe' >/dev/null
           printf 'uploading: %s\n' "${files[@]}"
           gh release upload "${{ steps.refs.outputs.tag }}" \
             "${files[@]}" --repo "$GUI_REPO" --clobber

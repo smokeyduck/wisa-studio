@@ -1,15 +1,6 @@
-// Sidecar deadlock smoke probe (dev only — requires the native addon at
-// packages/natives/native/pi_natives.darwin-arm64.node).
-//
-// Boots the SAME spawn the GUI uses for source sidecars —
-//   `bun packages/coding-agent/src/cli.ts --mode rpc-ui`
-// then replays the deadlock sequence:
-//   get_state → get_available_models (the command that wedged the serial queue)
-//   → get_state (must still answer) → set_thinking_level (mutating).
-//
-// Wedge signal is post-discovery LATENCY: a bricked serial queue returns
-// nothing, so any post-discovery command exceeding WEDGE_MS means the queue is
-// still bricked. Run: `bun run packages/gui/scripts/smoke-sidecar.mjs`.
+// Release sidecar probe: RPC readiness, discovery latency, profile isolation,
+// settings round-trip, and persistence across a process restart in one profile.
+// Pass the packaged executable, or omit it to probe the source CLI with Bun.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -54,7 +45,7 @@ const inherited = Object.fromEntries(
 		.filter(name => process.env[name] !== undefined)
 		.map(name => [name, process.env[name]]),
 );
-const child = spawn(spawnCmd, spawnArgs, {
+const spawnOptions = {
 	cwd: project,
 	stdio: ["pipe", "pipe", "pipe"],
 	env: {
@@ -80,13 +71,15 @@ const child = spawn(spawnCmd, spawnArgs, {
 		PI_NO_PTY: "1",
 		PI_NOTIFICATIONS: "off",
 	},
-});
+};
 
 const pending = new Map();
 const results = [];
 let readyDone = false;
 let finished = false;
 let seq = 0;
+let child;
+let stopping = false;
 
 const send = (type, extra = {}) => {
 	const id = `probe-${++seq}`;
@@ -96,51 +89,66 @@ const send = (type, extra = {}) => {
 	return p;
 };
 
-const rl = createInterface({ input: child.stdout });
-rl.on("line", line => {
-	let f;
-	try {
-		f = JSON.parse(line);
-	} catch {
-		return;
-	}
-	if (f.type === "response" && f.id && pending.has(f.id)) {
-		const { res, t0 } = pending.get(f.id);
-		pending.delete(f.id);
-		results.push({ id: f.id, ok: f.success, ms: Date.now() - t0 });
-		res(f);
-	}
-});
-child.stderr.on("data", d => {
-	const t = d.toString().trim();
-	if (t) process.stderr.write(`[sidecar] ${t.slice(0, 200)}\n`);
-});
+const startChild = () => {
+	stopping = false;
+	readyDone = false;
+	child = spawn(spawnCmd, spawnArgs, spawnOptions);
+	const rl = createInterface({ input: child.stdout });
+	const ready = new Promise(resolve => {
+		rl.on("line", line => {
+			let f;
+			try {
+				f = JSON.parse(line);
+			} catch {
+				return;
+			}
+			if (f.type === "ready") {
+				readyDone = true;
+				resolve(f);
+			}
+			if (f.type === "response" && f.id && pending.has(f.id)) {
+				const { res, t0 } = pending.get(f.id);
+				pending.delete(f.id);
+				results.push({ id: f.id, ok: f.success, ms: Date.now() - t0 });
+				res(f);
+			}
+		});
+	});
+	child.stderr.on("data", d => {
+		const t = d.toString().trim();
+		if (t) process.stderr.write(`[sidecar] ${t.slice(0, 200)}\n`);
+	});
+	child.on("error", error => {
+		console.error(error);
+		clearTimeout(hardKill);
+		process.exit(1);
+	});
+	child.on("exit", code => {
+		if (finished || stopping) return;
+		console.log(`SIDECAR_EXIT code=${code} readyDone=${readyDone} — aborting`);
+		clearTimeout(hardKill);
+		process.exit(code || 3);
+	});
+	return ready;
+};
+
+const stopChild = async () => {
+	stopping = true;
+	const exited = new Promise(resolve => child.once("exit", resolve));
+	const forceKill = setTimeout(() => child.kill("SIGKILL"), 1500);
+	child.kill("SIGTERM");
+	await exited;
+	clearTimeout(forceKill);
+};
 
 const hardKill = setTimeout(() => {
 	console.log(`HARD_TIMEOUT — sidecar wedged past ${HARD_TIMEOUT_MS}ms`);
 	child.kill("SIGKILL");
 }, HARD_TIMEOUT_MS);
-child.on("exit", code => {
-	if (finished) return;
-	console.log(`SIDECAR_EXIT code=${code} readyDone=${readyDone} — aborting`);
-	clearTimeout(hardKill);
-	process.exit(code || 3);
-});
+const initialReady = startChild();
 
 (async () => {
-	const ready = await new Promise(res => {
-		const onLine = line => {
-			try {
-				const f = JSON.parse(line);
-				if (f.type === "ready") {
-					readyDone = true;
-					rl.off("line", onLine);
-					res(f);
-				}
-			} catch {}
-		};
-		rl.on("line", onLine);
-	});
+	const ready = await initialReady;
 	console.log(`READY protocolVersion=${ready.protocolVersion}`);
 
 	await send("negotiate_protocol", { protocolVersion: 2 });
@@ -179,7 +187,15 @@ child.on("exit", code => {
 		const settingsAfter = await send("get_settings", { paths: ["colorBlindMode"] });
 		settingsPersisted = toggle.success && settingsAfter.data?.values?.colorBlindMode === toggledColorBlindMode;
 		console.log(`set_setting round-trip  ${settingsPersisted ? "ok " : "ERR"} ${results.at(-2).ms + results.at(-1).ms}ms`);
-		await send("set_setting", { path: "colorBlindMode", value: originalColorBlindMode });
+		await stopChild();
+		await startChild();
+		await send("negotiate_protocol", { protocolVersion: 2 });
+		const settingsRestarted = await send("get_settings", { paths: ["colorBlindMode"] });
+		settingsPersisted = settingsPersisted && settingsRestarted.success &&
+			settingsRestarted.data?.values?.colorBlindMode === toggledColorBlindMode;
+		console.log(`settings after restart ${settingsPersisted ? "ok " : "ERR"}`);
+		const restore = await send("set_setting", { path: "colorBlindMode", value: originalColorBlindMode });
+		settingsPersisted = settingsPersisted && restore.success;
 	}
 
 	const postDiscovery = [follow, mutate];
@@ -194,8 +210,8 @@ child.on("exit", code => {
 	if (!modelsReturned) console.log("FAIL get_available_models hung past the bound — discovery await not bounded");
 	if (wedged) console.log("FAIL a post-discovery command wedged — serial queue still bricked");
 
+	process.exitCode = pass ? 0 : 1;
 	finished = true;
 	clearTimeout(hardKill);
-	child.kill("SIGTERM");
-	setTimeout(() => child.kill("SIGKILL"), 1500);
+	await stopChild();
 })();

@@ -1,10 +1,7 @@
 name: Release macOS builds
 
-# Builds both macOS artifacts (arm64 + Intel DMGs and ZIPs, plus the
-# latest-mac.yml feed both updaters resolve) on macOS runners and attaches them
-# to the release. Until this workflow existed, every DMG came from a hand-run
-# local `package:mac:*`, which is why releases shipped without any macOS asset
-# and the updater had no feed to read.
+# Builds both macOS architectures, then executes each exact DMG and ZIP on a
+# matching host before attaching any asset or updater feed to the release.
 #
 # Like the Linux and Windows workflows, the bundled sidecar must come from the
 # monorepo fork — upstream lacks the GUI-only flags — so this checks out BOTH
@@ -38,6 +35,8 @@ jobs:
     # Intel sidecar; both DMGs are signed ad-hoc (`identity: "-"`), so no
     # Developer ID certificate is needed and `notarize: false` stands.
     runs-on: macos-15
+    outputs:
+      tag: ${{ steps.refs.outputs.tag }}
     steps:
       - name: Resolve release tag
         id: refs
@@ -156,11 +155,6 @@ jobs:
 
       - name: Smoke-test the arm64 sidecar (RPC handshake + settings round-trip)
         working-directory: oh-my-pi/packages/gui
-        # Only the native binary can be smoke-tested here. The Intel one is a
-        # cross-build and this runner is arm64; running it under Rosetta wedges
-        # the handshake (40 s hard timeout, no READY), which says nothing about
-        # the binary on a real Intel Mac. Its architecture is verified below
-        # instead, and the packaged Intel app is launched only on Intel hosts.
         run: bun scripts/smoke-sidecar.mjs resources/omp
 
       - name: Verify ru + vi cover every bundled setting
@@ -245,79 +239,138 @@ jobs:
             console.log("latest-mac.yml:", files.map(file => file.url).join(", "));
           '
 
-      - name: Verify the bundled sidecar matches each DMG's architecture
+      - name: Stage the exact packages and runtime probe
         working-directory: oh-my-pi/packages/gui
         shell: bash
         run: |
-          mount_dir=$(mktemp -d)
-          for dmg in dist/*.dmg; do
-            case "$dmg" in
-              *-arm64.dmg) want=arm64 ;;
-              *) want=x86_64 ;;
-            esac
-            /usr/bin/hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_dir" >/dev/null
-            app=$(find "$mount_dir" -maxdepth 1 -name "*.app" | head -1)
-            got=$(file -b "$app/Contents/Resources/omp")
-            /usr/bin/hdiutil detach "$mount_dir" >/dev/null
-            echo "$dmg: $got (want $want)"
-            case "$got" in
-              *"$want"*) ;;
-              *) echo "::error::$dmg bundles the wrong sidecar architecture"; exit 1 ;;
-            esac
+          version=$(jq -r .version package.json)
+          mkdir -p release-proof
+          for arch in arm64 x64; do
+            for ext in dmg zip; do
+              file="dist/wisa-studio-$version-$arch.$ext"
+              test -s "$file"
+              cp "$file" release-proof/
+            done
           done
-          rmdir "$mount_dir"
+          cp dist/latest-mac.yml scripts/smoke-sidecar.mjs release-proof/
+          cp ../../package.json release-proof/core-package.json
 
-      - name: Verify the app bundle seal
-        working-directory: oh-my-pi/packages/gui
+      - name: Pass immutable packages to native runtime gates
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-proof
+          path: oh-my-pi/packages/gui/release-proof/
+          if-no-files-found: error
+
+  runtime:
+    needs: macos
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            machine: arm64
+          - runner: macos-15-intel
+            arch: x64
+            machine: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Download the exact produced packages
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-release-proof
+          path: release-proof
+
+      - name: Setup the pinned Core Bun for the runtime probe
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: release-proof/core-package.json
+
+      - name: Verify seals and execute both release packages on native hardware
         shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          MACHINE: ${{ matrix.machine }}
         run: |
-          find dist -maxdepth 2 -name "*.app" -type d | while read -r app; do
-            echo "verifying $app"
+          set -euo pipefail
+          test "$(uname -m)" = "$MACHINE"
+          root=$(mktemp -d)
+          pid=
+          mounted=0
+          cleanup() {
+            if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+            if [ "$mounted" = 1 ]; then hdiutil detach "$root/mount" >/dev/null || true; fi
+            rm -rf "$root"
+          }
+          trap cleanup EXIT
+          shopt -s nullglob
+          packages=(release-proof/*-"$ARCH".dmg release-proof/*-"$ARCH".zip)
+          test "${#packages[@]}" = 2
+          for package in "${packages[@]}"; do
+            mkdir -p "$root/extracted" "$root/mount"
+            case "$package" in
+              *.dmg)
+                hdiutil attach "$package" -nobrowse -readonly -mountpoint "$root/mount" >/dev/null
+                mounted=1
+                apps=("$root/mount/"*.app)
+                test "${#apps[@]}" = 1
+                codesign --verify --deep --strict --verbose=2 "${apps[0]}"
+                ditto "${apps[0]}" "$root/extracted/$(basename "${apps[0]}")"
+                hdiutil detach "$root/mount" >/dev/null
+                mounted=0
+                ;;
+              *.zip) ditto -x -k "$package" "$root/extracted" ;;
+            esac
+            apps=("$root/extracted/"*.app)
+            test "${#apps[@]}" = 1
+            app="${apps[0]}"
+            executable="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
             codesign --verify --deep --strict --verbose=2 "$app"
+            file -b "$executable" | grep -q "$MACHINE"
+            file -b "$app/Contents/Resources/omp" | grep -q "$MACHINE"
+            bun release-proof/smoke-sidecar.mjs "$app/Contents/Resources/omp"
+            profile=$(mktemp -d "$root/profile.XXXXXX")
+            echo "launching $package: $app"
+            env -u ELECTRON_RUN_AS_NODE WISA_PROFILE_ROOT="$profile" "$executable" >"$root/gui.log" 2>&1 &
+            pid=$!
+            renderer_up=0
+            for _ in $(seq 1 40); do
+              sleep 3
+              if ! kill -0 "$pid" 2>/dev/null; then break; fi
+              if pgrep -P "$pid" -f -- '--type=renderer' >/dev/null 2>&1; then renderer_up=1; break; fi
+            done
+            sleep 10
+            alive=0
+            kill -0 "$pid" 2>/dev/null && alive=1
+            tail -20 "$root/gui.log"
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            pid=
+            test "$alive" = 1 || { echo '::error::GUI main process exited during smoke test'; exit 1; }
+            test "$renderer_up" = 1 || { echo '::error::GUI renderer never spawned'; exit 1; }
+            rm -rf "$root/extracted"
           done
 
-      - name: Smoke-test the packaged GUI (launch, no renderer crash)
-        working-directory: oh-my-pi/packages/gui
-        shell: bash
-        # Launch the real unpacked build exactly as a user would, from a
-        # throwaway user-data dir so the single-instance lock of any installed
-        # copy cannot block it, and with ELECTRON_RUN_AS_NODE cleared — a leaked
-        # one makes Electron exit 0 before any window exists.
-        run: |
-          app=$(find dist/mac-arm64 dist/mac -maxdepth 1 -name "*.app" | head -1)
-          echo "launching $app"
-          profile=$(mktemp -d)
-          env -u ELECTRON_RUN_AS_NODE WISA_PROFILE_ROOT="$profile" "$app/Contents/MacOS/$(basename "$app" .app)" \
-            >/tmp/gui.log 2>&1 &
-          pid=$!
-          renderer_up=0
-          for _ in $(seq 1 40); do
-            sleep 3
-            if ! kill -0 "$pid" 2>/dev/null; then break; fi
-            if pgrep -P "$pid" -f -- "--type=renderer" >/dev/null 2>&1; then renderer_up=1; break; fi
-          done
-          sleep 10
-          alive=0
-          kill -0 "$pid" 2>/dev/null && alive=1
-          echo "main-alive=$alive renderer-up=$renderer_up"
-          tail -20 /tmp/gui.log || true
-          kill "$pid" 2>/dev/null || true
-          if [ "$alive" != 1 ]; then echo "::error::GUI main process exited during smoke test"; exit 1; fi
-          if [ "$renderer_up" != 1 ]; then echo "::error::GUI renderer never spawned"; exit 1; fi
+  upload:
+    needs: [macos, runtime]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packages proven on both native hosts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-release-proof
+          path: release-proof
 
-      - name: Upload macOS assets to the release
-        working-directory: oh-my-pi/packages/gui/dist
+      - name: Upload macOS assets only after every runtime gate succeeds
+        working-directory: release-proof
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.macos.outputs.tag }}
         run: |
+          set -euo pipefail
           shopt -s nullglob
-          # Artifact names are pinned in electron-builder.yml / .x64.yml:
-          # wisa-studio-<ver>-arm64.dmg and wisa-studio-<ver>-x64.dmg, plus the
-          # zips the updater actually downloads. latest-mac.yml carries both
-          # architectures, so both DMGs must exist before it is uploaded.
-          rm -f latest-mac-arm64.yml
           files=(*.dmg *.zip latest-mac.yml)
-          printf 'uploading: %s\n' "${files[@]}"
-          gh release upload "${{ steps.refs.outputs.tag }}" \
-            "${files[@]}" --repo "$GUI_REPO" --clobber
+          test "${#files[@]}" = 5
+          gh release upload "$RELEASE_TAG" "${files[@]}" --repo "$GUI_REPO" --clobber
