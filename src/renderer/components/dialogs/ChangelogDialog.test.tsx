@@ -52,34 +52,35 @@ afterEach(async () => {
 describe("ChangelogDialog", () => {
 	it("stays hidden until the ui store opens it", async () => {
 		await mount(<ChangelogDialog />);
-		expect(document.body.textContent ?? "").not.toContain("[Unreleased]");
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
 		await act(async () => {
 			useUiStore.getState().openChangelog();
 		});
-		expect(document.body.textContent ?? "").toContain("[Unreleased]");
+		expect(document.querySelector('[role="dialog"]')).not.toBeNull();
 	});
 
-	it("renders the bundled changelog as sanitized markdown", async () => {
+	it("renders the bundled changelog with navigable markdown headings", async () => {
 		useUiStore.getState().openChangelog();
 		await mount(<ChangelogDialog />);
-		const text = document.body.textContent ?? "";
-		expect(text).toContain("Changelog");
-		expect(text).toContain("[Unreleased]");
-		// The markdown pipeline renders headings as elements, not literal "#".
-		expect(document.querySelector("h1, h2")).not.toBeNull();
+		const dialog = document.querySelector('[role="dialog"]');
+		expect(dialog).not.toBeNull();
+		expect(dialog?.querySelector("h1")).not.toBeNull();
+		expect(dialog?.querySelectorAll("h2").length).toBeGreaterThan(0);
 	});
 
 	it("closes back to an empty body", async () => {
 		useUiStore.getState().openChangelog();
 		await mount(<ChangelogDialog />);
-		expect(document.body.textContent ?? "").toContain("[Unreleased]");
+		const dialog = document.querySelector('[role="dialog"]');
+		expect(dialog).not.toBeNull();
 		await act(async () => {
-			useUiStore.getState().closeChangelog();
+			(dialog?.querySelector("button") as HTMLElement | null)?.click();
 		});
 		// The modal lingers ~240ms for its exit animation before unmounting.
 		await act(async () => {
 			await new Promise(resolve => setTimeout(resolve, 300));
 		});
-		expect(document.body.textContent ?? "").not.toContain("[Unreleased]");
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
+		expect(useUiStore.getState().changelogOpen).toBe(false);
 	});
 });

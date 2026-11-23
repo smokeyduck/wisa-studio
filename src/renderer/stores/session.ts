@@ -10,7 +10,7 @@ import type {
 	RpcSessionState,
 	SidecarStatus,
 } from "../../shared/rpc-types";
-import { createScopedStoreHook } from "./session-runtime-context";
+import { createScopedStoreApi, useScopedStore } from "./session-runtime-context";
 
 export interface TranscriptView {
 	sessionId: string;
@@ -175,4 +175,9 @@ export const createSessionStore = () =>
 	}));
 
 const defaultSessionStore = createSessionStore();
-export const useSessionStore = createScopedStoreHook("session", defaultSessionStore);
+function useSession(): SessionStore;
+function useSession<U>(selector: (state: SessionStore) => U): U;
+function useSession<U = SessionStore>(selector?: (state: SessionStore) => U): U {
+	return useScopedStore("session", defaultSessionStore, selector);
+}
+export const useSessionStore = Object.assign(useSession, createScopedStoreApi("session", defaultSessionStore));

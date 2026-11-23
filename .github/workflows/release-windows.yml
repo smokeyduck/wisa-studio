@@ -209,53 +209,61 @@ jobs:
           test "$count" -ge 1
           test -f dist/win-unpacked/locales/en-US.pak
 
-      - name: Smoke-test the packaged GUI (launch, no renderer crash)
+      - name: Verify unpacked, installed NSIS, and portable GUI settings persistence
         working-directory: oh-my-pi/packages/gui
+        timeout-minutes: 16
         shell: pwsh
-        # Launch the real unpacked build with an isolated automation profile.
-        # Healthy boot = the `--type=renderer` child of the main process exists.
-        # The issue #12 failure = that child dies within ~1s of appearing, which
-        # also appends `renderer-process … crashed` to the runtime log — both are
-        # checked. Only log lines written after this launch are considered.
         run: |
-          $env:WISA_PROFILE_ROOT = Join-Path $env:RUNNER_TEMP "wisa-gui-smoke-$([guid]::NewGuid())"
-          New-Item -ItemType Directory -Path $env:WISA_PROFILE_ROOT -Force | Out-Null
-          $runtimeLog = Join-Path $env:WISA_PROFILE_ROOT "appData\wisa-studio\logs\gui-runtime.jsonl"
+          $ErrorActionPreference = 'Stop'
+          # Resolve the actual product executable; reject an ambiguous unpacked payload.
+          $executables = @(Get-ChildItem 'dist\win-unpacked\*.exe' | Where-Object { $_.Name -ne 'omp.exe' })
+          if ($executables.Count -ne 1) { throw 'Expected one unpacked GUI executable' }
+          node scripts/smoke-packaged-gui.mjs $executables[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Unpacked GUI settings proof failed' }
 
-          # The executable is named after productName ("WISA STUDIO.exe"), so it
-          # cannot be hardcoded; the sidecar is the only other .exe in the folder.
-          $exe = (Get-ChildItem "dist\win-unpacked\*.exe" |
-            Where-Object { $_.Name -ne "omp.exe" } | Select-Object -First 1).Name
-          if (-not $exe) { Write-Host "::error::No GUI executable in dist\win-unpacked"; exit 1 }
-          Write-Host "launching $exe"
-          $proc = Start-Process -FilePath "dist\win-unpacked\$exe" -PassThru
-          function Get-Renderer($mainId) {
-            Get-CimInstance Win32_Process -Filter "Name='$exe'" |
-              Where-Object { $_.CommandLine -match '--type=renderer' -and $_.ParentProcessId -eq $mainId }
+          $setups = @(Get-ChildItem 'dist\*-setup.exe')
+          $portables = @(Get-ChildItem 'dist\*-portable.exe')
+          if ($setups.Count -ne 1 -or $portables.Count -ne 1) { throw 'Expected one setup and one portable artifact' }
+          $proofRoot = Join-Path $env:RUNNER_TEMP "WISA installer proof Tiếng Việt $([guid]::NewGuid())"
+          $installDir = Join-Path $proofRoot 'Installed App'
+          New-Item -ItemType Directory -Path $proofRoot | Out-Null
+
+          # /D must be the final, unquoted NSIS argument, including when the path has spaces.
+          $start = [Diagnostics.ProcessStartInfo]::new($setups[0].FullName)
+          $start.UseShellExecute = $false
+          $start.Arguments = "/S /currentuser /D=$installDir"
+          $start.Environment.Clear()
+          foreach ($name in @('PATH', 'SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData')) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if ($null -ne $value) { $start.Environment[$name] = $value }
           }
-          # Wait for the renderer to spawn (or the main process to die).
-          $booted = $false
-          for ($i = 0; $i -lt 40 -and -not $proc.HasExited; $i++) {
-            Start-Sleep -Seconds 3
-            if (Get-Renderer $proc.Id) { $booted = $true; break }
+          $start.Environment['WISA_PROFILE_ROOT'] = Join-Path $proofRoot 'installer-profile'
+          $installer = [Diagnostics.Process]::Start($start)
+          if (-not $installer.WaitForExit(120000)) {
+            $installer.Kill($true)
+            $null = $installer.WaitForExit(10000)
+            throw 'NSIS installation exceeded its deadline'
           }
-          # Renderer crashes land ~1s after spawn — give it a grace window.
-          Start-Sleep -Seconds 10
-          $alive = -not $proc.HasExited
-          $rendererUp = $false
-          if ($alive -and $booted) { $rendererUp = [bool](Get-Renderer $proc.Id) }
-          $crashes = 0
-          if (Test-Path $runtimeLog) {
-            $new = Get-Content $runtimeLog
-            $crashes = ($new | Where-Object { $_ -match 'renderer-process' -and $_ -match '"crashed"' }).Count
+          if ($installer.ExitCode -ne 0) { throw 'NSIS installation failed' }
+          $installedExe = Join-Path $installDir $executables[0].Name
+          # Check the installed payload against the exact candidate, not a previous installation.
+          foreach ($relative in @($executables[0].Name, 'resources\app.asar', 'resources\omp.exe', 'locales\en-US.pak')) {
+            $installed = Join-Path $installDir $relative
+            $unpacked = Join-Path 'dist\win-unpacked' $relative
+            if (-not (Test-Path $installed -PathType Leaf)) { throw 'NSIS payload is incomplete' }
+            if ((Get-FileHash $installed).Hash -ne (Get-FileHash $unpacked).Hash) { throw 'NSIS payload differs from candidate' }
           }
-          Write-Host "booted=$booted main-alive=$alive renderer-up=$rendererUp new-renderer-crashes=$crashes"
-          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-          if (-not (Test-Path (Join-Path $env:WISA_PROFILE_ROOT "appData\wisa-studio") -PathType Container)) { Write-Host "::error::GUI did not create its isolated profile"; exit 1 }
-          if (-not $alive) { Write-Host "::error::GUI main process exited during smoke test"; exit 1 }
-          if (-not $booted) { Write-Host "::error::GUI renderer never spawned in 120s"; exit 1 }
-          if (-not $rendererUp) { Write-Host "::error::GUI renderer died after spawn (issue #12 regression)"; exit 1 }
-          if ($crashes -gt 0) { Write-Host "::error::renderer crashed during smoke test (issue #12 regression)"; exit 1 }
+          $shell = New-Object -ComObject WScript.Shell
+          foreach ($folder in @('Desktop', 'Programs')) {
+            $shortcut = Join-Path ([Environment]::GetFolderPath($folder)) 'WISA STUDIO.lnk'
+            if (-not (Test-Path $shortcut -PathType Leaf)) { throw 'NSIS shortcut is missing' }
+            if ($shell.CreateShortcut($shortcut).TargetPath -ne $installedExe) { throw 'NSIS shortcut targets the wrong executable' }
+          }
+          node scripts/smoke-packaged-gui.mjs $installedExe
+          if ($LASTEXITCODE -ne 0) { throw 'Installed NSIS GUI settings proof failed' }
+          # Execute the shipped wrapper: NSIS forwards Playwright's launch flags to its extracted GUI.
+          node scripts/smoke-packaged-gui.mjs $portables[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Portable wrapper GUI settings proof failed' }
 
       - name: Upload Windows assets to the release
         working-directory: oh-my-pi/packages/gui/dist

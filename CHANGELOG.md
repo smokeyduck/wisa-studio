@@ -5,6 +5,21 @@ build is based on, so `0.9.46` here is the first WISA STUDIO release and also
 the point where the upstream GUI's history ends in this file. Release notes for
 earlier versions belong to that project; see [NOTICE](NOTICE).
 
+## [0.9.53] - 2026-11-23
+
+Core source: `smokeyduck/oh-my-pi@e256db57a616865c8768bdf83c649faa1c691de1`, including the mandatory upstream sync to Core 19.1.1 and the startup-warning fix. Wisa family routing, cached-roster restoration and explicit API overrides remain included.
+
+### Fixed
+
+- **Composer controls stay usable in narrow split panes.** Long model labels scale and then ellipsize at a readable minimum; lower-priority controls move into the existing overflow without displacing send/stop or active recording controls.
+- **Tab accepts the active composer suggestion before changing reasoning.** Shift+Tab still toggles plan mode, and other screens keep normal Tab focus movement.
+- **The startup "no model" diagnostic clears once a model selection completes.** Only that diagnostic clears: unrelated diagnostics remain, and auth or catalog availability alone does not clear it. An already-running older sidecar needs a safe restart before this takes effect.
+
+### Changed
+
+- **Session hydration shares in-flight work and avoids unnecessary transcript re-fetches.** Complete snapshots remain preferred, with paged loading as a size-bound fallback. Cold transcripts start at their pinned tail, and reasoning-only updates avoid rebuilding the answer wrapper. Isolated fixtures verify less repeated work; the reported live 5–10 second delay is not claimed fixed.
+- Scoped session-store hooks use module-level bindings without changing per-pane subscription behavior.
+
 ## [0.9.52] - 2026-11-23
 
 Core source: `smokeyduck/oh-my-pi@bf5f8a1eb86ccb737493358c1c716b7f62f973c6`, including the mandatory upstream sync and WISA isolation, routing, native-lock, and native-build variant-selection fixes.
@@ -21,9 +36,7 @@ Core source: `smokeyduck/oh-my-pi@bf5f8a1eb86ccb737493358c1c716b7f62f973c6`, inc
 - **Changing Wisa's request API no longer discards its discovered model cache.** Existing rosters remain available through a failed refresh; family defaults and explicit overrides are applied when the roster is loaded. Discovery errors remain visible, without an incorrect instruction to sign in again.
 - **Linux SQLite lock protection works when WISA is installed under a path containing spaces.** The native process-map parser retains the complete executable path, allowing the existing OFD-lock guard to activate instead of incorrectly reporting an unsupported Bun build.
 - **macOS release checks bound GUI shutdown instead of hanging indefinitely.** Both DMG and ZIP packages still require native ARM64/Intel seal, sidecar, settings-persistence, isolation, and renderer checks before upload; teardown now escalates from TERM to KILL after a fixed grace period.
-- **The startup "no model" diagnostic clears once a model selection completes.** Only that diagnostic clears: unrelated diagnostics remain, and auth or catalog availability alone does not clear it. An already-running older sidecar needs a safe restart before this takes effect.
 - **Switching sessions no longer rebuilds long transcripts page by page.** A complete transcript is requested in one call; paged loading remains the fallback when a response is too large. End-to-end timing has not been measured yet.
-- **Focusing an already-hydrated visible split pane no longer re-fetches its whole session.** Overlapping hydrations share one snapshot; returning from a hidden interval still refreshes missed lifecycle state. Parked running sessions retain partial message delivery without mounting their transcripts. Session changes, restarts and superseded routes cannot apply old snapshots. Cold transcripts start at their pinned tail instead of parsing old rows first, and reasoning-only deltas no longer re-render the live answer wrapper. Isolated fixtures show less repeated work, not a verified fix for the reported live 5–10 second delay; measurements and limits are in `docs/feedback-workflow-research.md`.
 - **Unknown provider ids keep their configured spelling.** Only known names are re-cased; `wisa` displays as "Wisa".
 - **Agent clarification questions appear inline in the session that asked them.** Answering keeps your place in the chat scroll.
 - **Plans and approvals open in the right inspector, one per project.** The inspector reveals them automatically. While a plan streams, its content and intent drive whether the view follows new text.

@@ -7,7 +7,7 @@
  */
 
 import { createStore } from "zustand/vanilla";
-import { createScopedStoreHook } from "./session-runtime-context";
+import { createScopedStoreApi, useScopedStore } from "./session-runtime-context";
 
 export interface PendingPlanProposal {
 	planFilePath: string;
@@ -56,7 +56,15 @@ export const createPlanApprovalStore = () =>
 	}));
 
 const defaultPlanApprovalStore = createPlanApprovalStore();
-export const usePlanApprovalStore = createScopedStoreHook("planApproval", defaultPlanApprovalStore);
+function usePlanApproval(): PlanApprovalStore;
+function usePlanApproval<U>(selector: (state: PlanApprovalStore) => U): U;
+function usePlanApproval<U = PlanApprovalStore>(selector?: (state: PlanApprovalStore) => U): U {
+	return useScopedStore("planApproval", defaultPlanApprovalStore, selector);
+}
+export const usePlanApprovalStore = Object.assign(
+	usePlanApproval,
+	createScopedStoreApi("planApproval", defaultPlanApprovalStore),
+);
 
 /** Fire-and-forget helper for non-component call sites. */
 export function clearPendingPlanProposal(): void {

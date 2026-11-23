@@ -252,7 +252,8 @@ jobs:
               cp "$file" release-proof/
             done
           done
-          cp dist/latest-mac.yml scripts/smoke-sidecar.mjs release-proof/
+          cp dist/latest-mac.yml scripts/smoke-sidecar.mjs scripts/smoke-packaged-gui.mjs release-proof/
+          node -e 'require("fs").writeFileSync("release-proof/package.json", JSON.stringify({private: true, dependencies: {playwright: require("playwright/package.json").version}}))'
           cp ../../package.json release-proof/core-package.json
 
       - name: Pass immutable packages to native runtime gates
@@ -288,8 +289,12 @@ jobs:
         with:
           bun-version-file: release-proof/core-package.json
 
+      - name: Install the exact Playwright used by the build (no browsers)
+        working-directory: release-proof
+        run: bun install --ignore-scripts
+
       - name: Verify seals and execute both release packages on native hardware
-        timeout-minutes: 10
+        timeout-minutes: 12
         shell: bash
         env:
           ARCH: ${{ matrix.arch }}
@@ -298,7 +303,6 @@ jobs:
           set -euo pipefail
           test "$(uname -m)" = "$MACHINE"
           root=$(mktemp -d)
-          pid=
           mounted=0
           wait_bounded() {
             local child_pid="$1" label="$2" seconds="${3:-10}"
@@ -314,17 +318,7 @@ jobs:
             wait "$child_pid" 2>/dev/null || true
             return 124
           }
-          stop_gui() {
-            if [ -z "$pid" ]; then return; fi
-            echo "stopping GUI pid=$pid"
-            kill -TERM -- "-$pid" 2>/dev/null || true
-            wait_bounded "$pid" 'GUI shutdown' || true
-            # Kill surviving helpers/sidecars before deleting their profile or app.
-            kill -KILL -- "-$pid" 2>/dev/null || true
-            pid=
-          }
           cleanup() {
-            stop_gui
             if [ "$mounted" = 1 ]; then
               hdiutil detach "$root/mount" -force >/dev/null &
               wait_bounded "$!" 'DMG cleanup' || true
@@ -366,27 +360,8 @@ jobs:
             file -b "$app/Contents/Resources/omp" | grep -q "$MACHINE"
             echo 'probing packaged sidecar RPC and persistence'
             bun release-proof/smoke-sidecar.mjs "$app/Contents/Resources/omp"
-            profile=$(mktemp -d "$root/profile.XXXXXX")
-            echo "launching $package: $app"
-            # A private job-control process group keeps cleanup off the runner.
-            set -m
-            env -u ELECTRON_RUN_AS_NODE WISA_PROFILE_ROOT="$profile" "$executable" >"$root/gui.log" 2>&1 &
-            pid=$!
-            set +m
-            renderer_up=0
-            for _ in $(seq 1 40); do
-              sleep 3
-              if ! kill -0 "$pid" 2>/dev/null; then break; fi
-              if pgrep -P "$pid" -f -- '--type=renderer' >/dev/null 2>&1; then renderer_up=1; break; fi
-            done
-            echo "renderer_up=$renderer_up; checking GUI stability for 10s"
-            sleep 10
-            alive=0
-            kill -0 "$pid" 2>/dev/null && alive=1
-            tail -20 "$root/gui.log"
-            stop_gui
-            test "$alive" = 1 || { echo '::error::GUI main process exited during smoke test'; exit 1; }
-            test "$renderer_up" = 1 || { echo '::error::GUI renderer never spawned'; exit 1; }
+            echo 'probing packaged GUI READY, settings IPC, persistence, and live renderer'
+            node release-proof/smoke-packaged-gui.mjs "$executable"
             rm -rf "$root/extracted"
           done
 

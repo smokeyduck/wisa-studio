@@ -3,11 +3,14 @@
  * agent against a local server, and the guard messages the main process sends.
  * If one stops mapping, a user reads the raw text again.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { en } from "../locales/en";
 import { ru } from "../locales/ru";
 import { zh } from "../locales/zh";
 import { describeError, describeProviderError, isCyberPolicyError } from "./errors";
+
+// Keep the expected English messages independent of the host's locale and time zone.
+beforeEach(() => vi.stubGlobal("localStorage", { getItem: () => "en", setItem: () => {} }));
 
 afterEach(() => vi.unstubAllGlobals());
 

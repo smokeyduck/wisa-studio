@@ -1,7 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { AgentMessage, TodoPhase, TodoTask } from "../../shared/rpc-types";
 import { messageTimestampMs } from "../lib/message-identity";
-import { createScopedStoreHook } from "./session-runtime-context";
+import { createScopedStoreApi, useScopedStore } from "./session-runtime-context";
 
 export interface UiTodoTask extends TodoTask {
 	id: string;
@@ -181,4 +181,9 @@ export const createTodoStore = () =>
 	}));
 
 const defaultTodoStore = createTodoStore();
-export const useTodoStore = createScopedStoreHook("todo", defaultTodoStore);
+function useTodo(): TodoStore;
+function useTodo<U>(selector: (state: TodoStore) => U): U;
+function useTodo<U = TodoStore>(selector?: (state: TodoStore) => U): U {
+	return useScopedStore("todo", defaultTodoStore, selector);
+}
+export const useTodoStore = Object.assign(useTodo, createScopedStoreApi("todo", defaultTodoStore));

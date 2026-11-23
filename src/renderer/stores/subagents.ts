@@ -1,7 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { SubagentFrame, SubagentSnapshot, SubagentSubscriptionLevel } from "../../shared/rpc-types";
 import { describeError } from "../lib/errors";
-import { activeTabCommand, createScopedStoreHook, type TabCommand } from "./session-runtime-context";
+import { activeTabCommand, createScopedStoreApi, type TabCommand, useScopedStore } from "./session-runtime-context";
 
 /**
  * Subagent frames every tab subscribes to. `progress` carries lifecycle and
@@ -205,4 +205,9 @@ export const createSubagentsStore = (command: TabCommand = activeTabCommand) => 
 };
 
 const defaultSubagentsStore = createSubagentsStore();
-export const useSubagentsStore = createScopedStoreHook("subagents", defaultSubagentsStore);
+function useSubagents(): SubagentsStore;
+function useSubagents<U>(selector: (state: SubagentsStore) => U): U;
+function useSubagents<U = SubagentsStore>(selector?: (state: SubagentsStore) => U): U {
+	return useScopedStore("subagents", defaultSubagentsStore, selector);
+}
+export const useSubagentsStore = Object.assign(useSubagents, createScopedStoreApi("subagents", defaultSubagentsStore));

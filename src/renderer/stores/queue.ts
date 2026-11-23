@@ -11,7 +11,7 @@
 import { useEffect } from "react";
 import { createStore } from "zustand/vanilla";
 import type { RpcGetQueueResult, RpcQueuedMessage } from "../../shared/rpc-types";
-import { activeTabCommand, createScopedStoreHook, type TabCommand } from "./session-runtime-context";
+import { activeTabCommand, createScopedStoreApi, type TabCommand, useScopedStore } from "./session-runtime-context";
 
 export type QueueLane = "steering" | "followUp";
 
@@ -50,7 +50,12 @@ export const createQueueStore = (command: TabCommand = activeTabCommand) => {
 };
 
 const defaultQueueStore = createQueueStore();
-export const useQueueStore = createScopedStoreHook("queue", defaultQueueStore);
+function useQueue(): QueueStore;
+function useQueue<U>(selector: (state: QueueStore) => U): U;
+function useQueue<U = QueueStore>(selector?: (state: QueueStore) => U): U {
+	return useScopedStore("queue", defaultQueueStore, selector);
+}
+export const useQueueStore = Object.assign(useQueue, createScopedStoreApi("queue", defaultQueueStore));
 
 /**
  * Queue data plus the hydrate-fallback wiring: pull get_queue on mount (the

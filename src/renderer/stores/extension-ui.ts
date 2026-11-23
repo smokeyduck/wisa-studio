@@ -3,17 +3,21 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ExtensionUIRequest } from "../../shared/rpc-types";
 import {
 	allSessionRuntimes,
-	createScopedStoreHook,
+	createScopedStoreApi,
 	focusedRuntimeTabId,
 	onFocusedSessionRuntimeChange,
 	onSessionRuntimeListChange,
+	useScopedStore,
 } from "./session-runtime-context";
 
 const receivedAt = new WeakMap<ExtensionUIRequest, number>();
 /** Stable across transcript remounts and tab switches, unlike a mounted countdown. */
 export function extensionRequestReceivedAt(request: ExtensionUIRequest): number {
 	let at = receivedAt.get(request);
-	if (at === undefined) { at = Date.now(); receivedAt.set(request, at); }
+	if (at === undefined) {
+		at = Date.now();
+		receivedAt.set(request, at);
+	}
 	return at;
 }
 
@@ -84,7 +88,15 @@ export const createExtensionUiStore = () =>
 	}));
 
 const defaultExtensionUiStore = createExtensionUiStore();
-export const useExtensionUiStore = createScopedStoreHook("extensionUi", defaultExtensionUiStore);
+function useExtensionUi(): ExtensionUiStore;
+function useExtensionUi<U>(selector: (state: ExtensionUiStore) => U): U;
+function useExtensionUi<U = ExtensionUiStore>(selector?: (state: ExtensionUiStore) => U): U {
+	return useScopedStore("extensionUi", defaultExtensionUiStore, selector);
+}
+export const useExtensionUiStore = Object.assign(
+	useExtensionUi,
+	createScopedStoreApi("extensionUi", defaultExtensionUiStore),
+);
 
 /**
  * Cross-tab view of pendingRequests. Requests live in per-tab stores, but the

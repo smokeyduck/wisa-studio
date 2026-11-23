@@ -1123,6 +1123,11 @@ describe("tabs store applyTabStatus", () => {
 	});
 });
 
+function Probe(): null {
+	useSessionTabs();
+	return null;
+}
+
 describe("useSessionTabs hook", () => {
 	let container: { remove(): void };
 	let root: Root;
@@ -1135,11 +1140,6 @@ describe("useSessionTabs hook", () => {
 		await act(async () => {
 			root.render(<Probe />);
 		});
-	}
-
-	function Probe(): null {
-		useSessionTabs();
-		return null;
 	}
 
 	afterEach(async () => {

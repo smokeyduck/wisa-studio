@@ -342,7 +342,14 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	const [quickAction, setQuickAction] = useState<{ title: string; prompt: string } | null>(null);
 	const [quickDraft, setQuickDraft] = useState("");
 	const activeTabId = useTabsStore(state => state.activeTabId);
-	useEffect(() => { setQuickAction(null); }, [activeTabId, sessionId]);
+	const quickActionTab = useRef(activeTabId);
+	const quickActionSession = useRef(sessionId);
+	useEffect(() => {
+		if (quickActionTab.current === activeTabId && quickActionSession.current === sessionId) return;
+		quickActionTab.current = activeTabId;
+		quickActionSession.current = sessionId;
+		setQuickAction(null);
+	}, [activeTabId, sessionId]);
 
 	const virtualizer = useVirtualizer({
 		count: rows.length,
@@ -875,7 +882,10 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 									<button
 										key={title}
 										type="button"
-										onClick={() => { setQuickAction({ title, prompt }); setQuickDraft(prompt); }}
+										onClick={() => {
+											setQuickAction({ title, prompt });
+											setQuickDraft(prompt);
+										}}
 										className="omp-starter-card omp-lift group flex min-h-20 items-start gap-3 rounded-2xl border border-[var(--omp-border)] p-4 text-left shadow-[var(--omp-shadow-sm)] hover:border-[var(--omp-border-accent)] hover:bg-[var(--omp-bg-secondary)]"
 									>
 										<span className="omp-starter-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--omp-selected-bg)] text-[var(--omp-accent)]">
@@ -952,7 +962,11 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 							);
 						})}
 					</div>
-					{readOnly === null && <div ref={questionsRef} className="omp-transcript-row"><InlineExtensionQuestions /></div>}
+					{readOnly === null && (
+						<div ref={questionsRef} className="omp-transcript-row">
+							<InlineExtensionQuestions />
+						</div>
+					)}
 					{footer && (
 						<div className="omp-composer-shell" ref={footerRef}>
 							{footer}
@@ -978,16 +992,29 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 				onNavigate={jumpToConversation}
 			/>
 			<Modal open={quickAction !== null} onClose={() => setQuickAction(null)} size="md" title={quickAction?.title}>
-				<form className="space-y-3" onSubmit={event => {
-					event.preventDefault();
-					if (!quickDraft.trim()) return;
-					window.dispatchEvent(new CustomEvent("omp:fill-composer", { detail: { text: quickDraft, tabId } }));
-					setQuickAction(null);
-				}}>
-					<TextArea autoFocus aria-label={quickAction?.title} rows={4} value={quickDraft} onChange={event => setQuickDraft(event.target.value)} />
+				<form
+					className="space-y-3"
+					onSubmit={event => {
+						event.preventDefault();
+						if (!quickDraft.trim()) return;
+						window.dispatchEvent(new CustomEvent("omp:fill-composer", { detail: { text: quickDraft, tabId } }));
+						setQuickAction(null);
+					}}
+				>
+					<TextArea
+						autoFocus
+						aria-label={quickAction?.title}
+						rows={4}
+						value={quickDraft}
+						onChange={event => setQuickDraft(event.target.value)}
+					/>
 					<div className="flex justify-end gap-2">
-						<Button type="button" variant="ghost" onClick={() => setQuickAction(null)}>{t("common.cancel")}</Button>
-						<Button type="submit" variant="primary" disabled={!quickDraft.trim()}>{t("chat.starter.continue")}</Button>
+						<Button type="button" variant="ghost" onClick={() => setQuickAction(null)}>
+							{t("common.cancel")}
+						</Button>
+						<Button type="submit" variant="primary" disabled={!quickDraft.trim()}>
+							{t("chat.starter.continue")}
+						</Button>
 					</div>
 				</form>
 			</Modal>

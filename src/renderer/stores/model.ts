@@ -11,7 +11,7 @@ import {
 	type ThinkingLevel,
 } from "../../shared/rpc-types";
 import { translate } from "../lib/i18n";
-import { activeTabCommand, createScopedStoreHook, type TabCommand } from "./session-runtime-context";
+import { activeTabCommand, createScopedStoreApi, type TabCommand, useScopedStore } from "./session-runtime-context";
 import { toast } from "./toast";
 
 export type ModelSpeed = "standard" | "fast" | "ultrafast";
@@ -224,4 +224,9 @@ export const createModelStore = (command: TabCommand = activeTabCommand) =>
 	});
 
 const defaultModelStore = createModelStore();
-export const useModelStore = createScopedStoreHook("model", defaultModelStore);
+function useModel(): ModelStore;
+function useModel<U>(selector: (state: ModelStore) => U): U;
+function useModel<U = ModelStore>(selector?: (state: ModelStore) => U): U {
+	return useScopedStore("model", defaultModelStore, selector);
+}
+export const useModelStore = Object.assign(useModel, createScopedStoreApi("model", defaultModelStore));

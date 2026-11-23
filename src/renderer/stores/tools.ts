@@ -1,6 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import type { AgentMessage, AgentSessionEvent, ToolCallContent } from "../../shared/rpc-types";
-import { createScopedStoreHook } from "./session-runtime-context";
+import { createScopedStoreApi, useScopedStore } from "./session-runtime-context";
 
 export interface ToolEntry {
 	toolName: string;
@@ -348,4 +348,9 @@ export const createToolsStore = () => {
 };
 
 const defaultToolsStore = createToolsStore();
-export const useToolsStore = createScopedStoreHook("tools", defaultToolsStore);
+function useTools(): ToolsStore;
+function useTools<U>(selector: (state: ToolsStore) => U): U;
+function useTools<U = ToolsStore>(selector?: (state: ToolsStore) => U): U {
+	return useScopedStore("tools", defaultToolsStore, selector);
+}
+export const useToolsStore = Object.assign(useTools, createScopedStoreApi("tools", defaultToolsStore));

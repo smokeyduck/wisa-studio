@@ -1,7 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { RpcSessionState, SettingProvenance } from "../../shared/rpc-types";
 import { translate } from "../lib/i18n";
-import { activeTabCommand, createScopedStoreHook, type TabCommand } from "./session-runtime-context";
+import { activeTabCommand, createScopedStoreApi, type TabCommand, useScopedStore } from "./session-runtime-context";
 import { toast } from "./toast";
 
 export type ApprovalMode = "always-ask" | "always-ask-cached" | "write" | "yolo";
@@ -296,4 +296,9 @@ export const createSettingsStore = (command: TabCommand = activeTabCommand) => {
 };
 
 const defaultSettingsStore = createSettingsStore();
-export const useSettingsStore = createScopedStoreHook("settings", defaultSettingsStore);
+function useSettings(): SettingsStore;
+function useSettings<U>(selector: (state: SettingsStore) => U): U;
+function useSettings<U = SettingsStore>(selector?: (state: SettingsStore) => U): U {
+	return useScopedStore("settings", defaultSettingsStore, selector);
+}
+export const useSettingsStore = Object.assign(useSettings, createScopedStoreApi("settings", defaultSettingsStore));

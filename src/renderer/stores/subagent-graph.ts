@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import { createScopedStoreHook } from "./session-runtime-context";
+import { createScopedStoreApi, useScopedStore } from "./session-runtime-context";
 
 export interface SubagentGraphStore {
 	/** Maps a `task` tool call id to the id of the subagent whose transcript contains it. */
@@ -24,4 +24,13 @@ export const createSubagentGraphStore = () =>
 		},
 	}));
 
-export const useSubagentGraphStore = createScopedStoreHook("subagentGraph", createSubagentGraphStore());
+const defaultSubagentGraphStore = createSubagentGraphStore();
+function useSubagentGraph(): SubagentGraphStore;
+function useSubagentGraph<U>(selector: (state: SubagentGraphStore) => U): U;
+function useSubagentGraph<U = SubagentGraphStore>(selector?: (state: SubagentGraphStore) => U): U {
+	return useScopedStore("subagentGraph", defaultSubagentGraphStore, selector);
+}
+export const useSubagentGraphStore = Object.assign(
+	useSubagentGraph,
+	createScopedStoreApi("subagentGraph", defaultSubagentGraphStore),
+);

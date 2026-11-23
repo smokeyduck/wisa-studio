@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useContext } from "react";
-import { type UseBoundStore, useStore } from "zustand";
+import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import type { RpcCommand, RpcResponse } from "../../shared/rpc-types";
 
@@ -171,44 +171,50 @@ function runtimeStore<T>(runtime: SessionRuntime | null, key: RuntimeStoreKey, f
 	return (runtime?.stores.get(key) as StoreApi<T> | undefined) ?? fallback;
 }
 
+function identity<T>(state: T): T {
+	return state;
+}
+
+/** Subscribe to the provider's store without creating a hook during initialization. */
+export function useScopedStore<T, U = T>(key: RuntimeStoreKey, fallback: StoreApi<T>, selector?: (state: T) => U): U {
+	const store = runtimeStore(useContext(SessionRuntimeContext), key, fallback);
+	return useStore(store, selector ?? (identity as (state: T) => U));
+}
+
 /**
- * Bind an existing zustand store API to the nearest session runtime. Static
+ * Bind an existing zustand store API to the focused session runtime. Static
  * `getState`/`setState`/`subscribe` calls follow the focused runtime so legacy
  * window-level actions keep targeting the pane the user most recently focused.
  */
-export function createScopedStoreHook<T>(key: RuntimeStoreKey, fallback: StoreApi<T>): UseBoundStore<StoreApi<T>> {
-	const useScopedStore = (<U,>(selector?: (state: T) => U): T | U => {
-		const store = runtimeStore(useContext(SessionRuntimeContext), key, fallback);
-		const select = selector ?? ((state: T) => state as unknown as U);
-		return useStore(store, select);
-	}) as UseBoundStore<StoreApi<T>>;
-
-	useScopedStore.getState = () => runtimeStore(focusedSessionRuntime(), key, fallback).getState();
-	useScopedStore.getInitialState = () => runtimeStore(focusedSessionRuntime(), key, fallback).getInitialState();
-	useScopedStore.setState = (partial, replace) => {
-		const store = runtimeStore(focusedSessionRuntime(), key, fallback);
-		if (replace === true) store.setState(partial as T, true);
-		else store.setState(partial);
+export function createScopedStoreApi<T>(key: RuntimeStoreKey, fallback: StoreApi<T>): StoreApi<T> {
+	const api: StoreApi<T> = {
+		getState: () => runtimeStore(focusedSessionRuntime(), key, fallback).getState(),
+		getInitialState: () => runtimeStore(focusedSessionRuntime(), key, fallback).getInitialState(),
+		setState: (partial, replace) => {
+			const store = runtimeStore(focusedSessionRuntime(), key, fallback);
+			if (replace === true) store.setState(partial as T, true);
+			else store.setState(partial);
+		},
+		subscribe: listener => {
+			let store = runtimeStore(focusedSessionRuntime(), key, fallback);
+			let unsubscribe = store.subscribe(listener);
+			const stopFollowingFocus = onFocusedSessionRuntimeChange(() => {
+				unsubscribe();
+				store = runtimeStore(focusedSessionRuntime(), key, fallback);
+				// Follow the newly focused store SILENTLY: synthesizing a cross-store
+				// (state, previous) pair here would look like a real transition to
+				// diffing subscribers (voice auto-speak would re-read the newly focused
+				// tab's last message as "new"), and a throwing listener would leave the
+				// resubscribe below permanently unexecuted.
+				unsubscribe = store.subscribe(listener);
+			});
+			return () => {
+				stopFollowingFocus();
+				unsubscribe();
+			};
+		},
 	};
-	useScopedStore.subscribe = listener => {
-		let store = runtimeStore(focusedSessionRuntime(), key, fallback);
-		let unsubscribe = store.subscribe(listener);
-		const stopFollowingFocus = onFocusedSessionRuntimeChange(() => {
-			unsubscribe();
-			store = runtimeStore(focusedSessionRuntime(), key, fallback);
-			// Follow the newly focused store SILENTLY: synthesizing a cross-store
-			// (state, previous) pair here would look like a real transition to
-			// diffing subscribers (voice auto-speak would re-read the newly focused
-			// tab's last message as "new"), and a throwing listener would leave the
-			// resubscribe below permanently unexecuted.
-			unsubscribe = store.subscribe(listener);
-		});
-		return () => {
-			stopFollowingFocus();
-			unsubscribe();
-		};
-	};
-	return useScopedStore;
+	return api;
 }
 
 export function addRuntimeStore<T>(runtime: SessionRuntime, key: RuntimeStoreKey, store: StoreApi<T>): void {

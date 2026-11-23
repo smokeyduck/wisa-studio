@@ -166,6 +166,11 @@ jobs:
           bun ../../node_modules/electron-builder/cli.js \
             --config electron-builder.yml --linux AppImage deb --publish never
 
+      - name: Verify packaged GUI READY and settings persistence
+        working-directory: oh-my-pi/packages/gui
+        timeout-minutes: 5
+        run: xvfb-run -a node scripts/smoke-packaged-gui.mjs dist/linux-unpacked/wisa-studio
+
       - name: Upload Linux assets to the release
         working-directory: oh-my-pi/packages/gui/dist
         shell: bash

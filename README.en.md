@@ -10,14 +10,20 @@ Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding age
 
 | Platform | Package |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-0.9.52-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.52) |
-| macOS Intel | `wisa-studio-0.9.52-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.52) |
-| Windows x64 | [`wisa-studio-0.9.52-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.52/wisa-studio-0.9.52-setup.exe) |
-| Linux x64 | [`wisa-studio-0.9.52.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.52/wisa-studio-0.9.52.AppImage) |
+| macOS Apple Silicon | `wisa-studio-0.9.53-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.53) |
+| macOS Intel | `wisa-studio-0.9.53-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.53) |
+| Windows x64 | [`wisa-studio-0.9.53-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.53/wisa-studio-0.9.53-setup.exe) |
+| Linux x64 | [`wisa-studio-0.9.53.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.53/wisa-studio-0.9.53.AppImage) |
 
 [All releases](https://github.com/smokeyduck/wisa-studio/releases) · [Install guide (vi)](docs/vi/cai-dat.md)
 
 macOS builds are ad-hoc signed (not notarized) and Windows builds are unsigned, so the first launch may need confirmation: macOS → right-click → **Open**, or System Settings → Privacy & Security → **Open Anyway**; Windows → **More info** → **Run anyway**.
+
+**Windows requirements:** Windows 10 x64 version 1809 (build 17763) or later, including Windows 11, and an x86-64-v2 CPU with SSE4.2. This minimum comes from the Electron, Bun and native-addon runtime requirements; it is not a claim that this release was tested on a Windows 10 machine.
+
+### 0.9.53 hotfix
+
+This update refines narrow-pane composer controls and Tab completion, avoids repeated session hydration, and clears the startup no-model warning after a successful selection. The bundled engine follows Core 19.1.1 while retaining Wisa family routing, cached model rosters and explicit API overrides. Fixture timings do not establish a fix for the reported live session-switch delay. See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ## Get an API key
 

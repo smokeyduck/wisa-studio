@@ -331,6 +331,25 @@ function RpcEventsProbe({ heartbeatMs }: { heartbeatMs?: number } = {}) {
 	return null;
 }
 
+function TranscriptSurface() {
+	const active = useTabsStore(state => state.activeTabId);
+	return active ? (
+		<SessionRuntimeProvider runtime={ensureTabRuntime(active)}>
+			<PaintedTranscript />
+		</SessionRuntimeProvider>
+	) : null;
+}
+
+function PaintedTranscript() {
+	const messages = useMessagesStore(state => state.messages);
+	return (
+		<>
+			<div>{messages.map(message => (typeof message.content === "string" ? message.content : "")).join("\n")}</div>
+			<StreamingText />
+		</>
+	);
+}
+
 it("does not let a delayed startup snapshot clear the task selected after the request", async () => {
 	installTabRoutedMockOmp();
 	const status = Promise.withResolvers<IpcSidecarStatusPayload>();
@@ -1855,25 +1874,6 @@ describe("useRpcEvents tab-scoped routing guards", () => {
 		const { commandForTab, emitTabBatch } = installTabRoutedMockOmp();
 		seedTwoTabs();
 		const a = sessionRuntimeStore<MessagesStore>("t-live", "messages")!;
-		function TranscriptSurface() {
-			const active = useTabsStore(state => state.activeTabId);
-			return active ? (
-				<SessionRuntimeProvider runtime={ensureTabRuntime(active)}>
-					<PaintedTranscript />
-				</SessionRuntimeProvider>
-			) : null;
-		}
-		function PaintedTranscript() {
-			const messages = useMessagesStore(state => state.messages);
-			return (
-				<>
-					<div>
-						{messages.map(message => (typeof message.content === "string" ? message.content : "")).join("\n")}
-					</div>
-					<StreamingText />
-				</>
-			);
-		}
 		await mount(
 			<>
 				<RpcEventsProbe />

@@ -10,7 +10,7 @@
 import { createStore } from "zustand/vanilla";
 import { type BtwHistoryRecord, type BtwHistoryTurn, getBtwLatestTurn, type RpcBtwFrame } from "../../shared/rpc-types";
 import { describeError } from "../lib/errors";
-import { activeTabCommand, createScopedStoreHook, type TabCommand } from "./session-runtime-context";
+import { activeTabCommand, createScopedStoreApi, type TabCommand, useScopedStore } from "./session-runtime-context";
 
 export interface BtwStore {
 	/** Newest first, exactly as the sidecar returns them. */
@@ -200,4 +200,9 @@ export function createBtwStore(command: TabCommand = activeTabCommand) {
 }
 
 const defaultBtwStore = createBtwStore();
-export const useBtwStore = createScopedStoreHook("btw", defaultBtwStore);
+function useBtw(): BtwStore;
+function useBtw<U>(selector: (state: BtwStore) => U): U;
+function useBtw<U = BtwStore>(selector?: (state: BtwStore) => U): U {
+	return useScopedStore("btw", defaultBtwStore, selector);
+}
+export const useBtwStore = Object.assign(useBtw, createScopedStoreApi("btw", defaultBtwStore));

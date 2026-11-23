@@ -9,7 +9,7 @@
  */
 import { createStore } from "zustand/vanilla";
 import type { ImageContent } from "../../shared/rpc-types";
-import { createScopedStoreHook } from "./session-runtime-context";
+import { createScopedStoreApi, useScopedStore } from "./session-runtime-context";
 
 export interface ComposerImage {
 	content: ImageContent;
@@ -62,4 +62,9 @@ export const createComposerStore = () =>
 	}));
 
 const defaultComposerStore = createComposerStore();
-export const useComposerStore = createScopedStoreHook("composer", defaultComposerStore);
+function useComposer(): ComposerStore;
+function useComposer<U>(selector: (state: ComposerStore) => U): U;
+function useComposer<U = ComposerStore>(selector?: (state: ComposerStore) => U): U {
+	return useScopedStore("composer", defaultComposerStore, selector);
+}
+export const useComposerStore = Object.assign(useComposer, createScopedStoreApi("composer", defaultComposerStore));

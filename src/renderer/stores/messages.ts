@@ -1,7 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { AgentMessage, AgentSessionEvent, MessagesPage } from "../../shared/rpc-types";
 import { isStrippedCopyOf, messageIdentity, sameMessageContent } from "../lib/message-identity";
-import { createScopedStoreHook } from "./session-runtime-context";
+import { createScopedStoreApi, useScopedStore } from "./session-runtime-context";
 
 /**
  * Session-tab snapshot of committed history plus the active run overlay. The
@@ -410,4 +410,9 @@ export const createMessagesStore = () =>
 	}));
 
 const defaultMessagesStore = createMessagesStore();
-export const useMessagesStore = createScopedStoreHook("messages", defaultMessagesStore);
+function useMessages(): MessagesStore;
+function useMessages<U>(selector: (state: MessagesStore) => U): U;
+function useMessages<U = MessagesStore>(selector?: (state: MessagesStore) => U): U {
+	return useScopedStore("messages", defaultMessagesStore, selector);
+}
+export const useMessagesStore = Object.assign(useMessages, createScopedStoreApi("messages", defaultMessagesStore));
