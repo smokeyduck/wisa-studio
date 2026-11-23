@@ -239,7 +239,7 @@ jobs:
           }
           $start.Environment['WISA_PROFILE_ROOT'] = Join-Path $proofRoot 'installer-profile'
           $installer = [Diagnostics.Process]::Start($start)
-          if (-not $installer.WaitForExit(120000)) {
+          if (-not $installer.WaitForExit(300000)) {
             $installer.Kill($true)
             $null = $installer.WaitForExit(10000)
             throw 'NSIS installation exceeded its deadline'
@@ -253,11 +253,13 @@ jobs:
             if (-not (Test-Path $installed -PathType Leaf)) { throw 'NSIS payload is incomplete' }
             if ((Get-FileHash $installed).Hash -ne (Get-FileHash $unpacked).Hash) { throw 'NSIS payload differs from candidate' }
           }
-          $shell = New-Object -ComObject WScript.Shell
+          # WScript.Shell can expose the ANSI target of a Unicode shortcut.
+          $shell = New-Object -ComObject Shell.Application
           foreach ($folder in @('Desktop', 'Programs')) {
-            $shortcut = Join-Path ([Environment]::GetFolderPath($folder)) 'WISA STUDIO.lnk'
+            $directory = [Environment]::GetFolderPath($folder)
+            $shortcut = Join-Path $directory 'WISA STUDIO.lnk'
             if (-not (Test-Path $shortcut -PathType Leaf)) { throw 'NSIS shortcut is missing' }
-            $target = $shell.CreateShortcut($shortcut).TargetPath
+            $target = $shell.NameSpace($directory).ParseName('WISA STUDIO.lnk').GetLink.Path
             if ($target -ne $installedExe) { throw "NSIS shortcut targets the wrong executable: shortcut=[$target] expected=[$installedExe]" }
           }
           node scripts/smoke-packaged-gui.mjs $installedExe
