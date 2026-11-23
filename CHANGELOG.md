@@ -16,6 +16,7 @@ Core source: `smokeyduck/oh-my-pi@e256db57a616865c8768bdf83c649faa1c691de1` (Cor
 ### Release verification
 
 - Packaged GUI gates require their own sidecar READY, settings IPC readback and persistence after restart, and a live renderer. Windows checks the installed NSIS payload and shortcuts plus the actual portable wrapper; macOS checks both native architectures in DMG and ZIP packages.
+- Windows preflight passed on Windows Server 2025 for the unpacked app, the installed NSIS app with Unicode-path shortcuts, and the shipped portable wrapper. All three reached sidecar READY and retained a setting after restart.
 - Windows requirements remain runtime-derived: Windows 10 x64 1809+ / Windows 11 and an x86-64-v2 CPU with SSE4.2. An actual Windows 10 host was unavailable; the reported Windows startup issue was not reproduced on Windows Server 2025 and is not claimed fixed.
 - The failed 0.9.53 candidate remains unpublished; its tag is preserved rather than retagged.
 
