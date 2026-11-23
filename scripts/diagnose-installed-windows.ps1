@@ -118,8 +118,25 @@ $installInfo.UseShellExecute = $false
 $installInfo.Arguments = "/S /currentuser /D=$installed"
 Child-Environment $installInfo (Join-Path $root 'profile-install')
 $install = [Diagnostics.Process]::Start($installInfo)
-if (-not $install.WaitForExit(120000)) { $install.Kill($true); throw 'NSIS install timeout' }
-Save-Evidence 'installation.json' @{ exitCode = $install.ExitCode; destination = $installed; switches = '/S /currentuser /D=<runner-owned path> (D last, no quotes)' }
+$installHistory = [Collections.Generic.List[object]]::new()
+$installWindows = [Collections.Generic.HashSet[string]]::new()
+$installTimer = [Diagnostics.Stopwatch]::StartNew()
+$autoLaunchAt = $null
+while (-not $install.HasExited -and $installTimer.Elapsed.TotalSeconds -lt 300) {
+  $owned = @(Get-Owned $install.Id)
+  foreach ($window in [OwnedWindows]::Read([int[]]@($owned | ForEach-Object { $_.ProcessId }))) { [void]$installWindows.Add($window) }
+  $autoApp = @($owned | Where-Object { $_.ExecutablePath -eq (Join-Path $installed 'WISA STUDIO.exe') })
+  $installHistory.Add(@{ elapsedMs = $installTimer.ElapsedMilliseconds; processes = @($owned | ForEach-Object { @{ pid = $_.ProcessId; parent = $_.ParentProcessId; name = $_.Name; executable = $_.ExecutablePath; renderer = $_.CommandLine -match '--type=renderer' } }); installedFiles = @(Get-ChildItem $installed -File -ErrorAction SilentlyContinue).Count; installedExeExists = Test-Path (Join-Path $installed 'WISA STUDIO.exe'); autoAppCount = $autoApp.Count })
+  if ($autoApp.Count -gt 0 -and $null -eq $autoLaunchAt) { $autoLaunchAt = $installTimer.Elapsed.TotalSeconds }
+  if ($autoApp.Count -gt 0 -and ($installTimer.Elapsed.TotalSeconds - $autoLaunchAt) -gt 12) {
+    Save-Evidence 'installer-auto-launched-app.json' @{ windows = @($installWindows); samples = @($installHistory.ToArray()); note = 'Installer-owned app observed before installer exit; stopping only that owned app to release run-after-finish wait.' }
+    foreach ($p in $autoApp) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+  }
+  Start-Sleep -Seconds 2
+  $install.Refresh()
+}
+Save-Evidence 'installation.json' @{ exited = $install.HasExited; exitCode = if ($install.HasExited) { $install.ExitCode } else { $null }; destination = $installed; switches = '/S /currentuser /D=<runner-owned path> (D last, no quotes)'; windows = @($installWindows); samples = @($installHistory.ToArray()) }
+if (-not $install.HasExited) { $install.Kill($true); throw 'NSIS install timeout; see installation.json owned dialogs/processes' }
 if ($install.ExitCode -ne 0) { throw "NSIS installation failed: $($install.ExitCode)" }
 $exe = Join-Path $installed 'WISA STUDIO.exe'
 if (-not (Test-Path $exe)) { throw 'Installed GUI executable missing' }
