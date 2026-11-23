@@ -103,14 +103,19 @@ async function launchGui() {
 	await page.evaluate(() => {
 		const trace = [];
 		window.__sidecarTrace = trace;
+		const push = entry => {
+			if (trace.length < 400) trace.push({ at: Date.now(), ...entry });
+		};
 		window.omp.events.onSidecarStatus(payload => {
-			trace.push({
-				at: Date.now(),
-				status: payload.status,
-				msgLen: typeof payload.message === "string" ? payload.message.length : -1,
-				hasRestart: payload.restart !== undefined,
-			});
+			push({ src: "status", status: payload.status, msgLen: typeof payload.message === "string" ? payload.message.length : -1, hasRestart: payload.restart !== undefined });
 		});
+		window.omp.events.onTabSidecarStatus(payload => {
+			push({ src: "tab", status: payload.status, msgLen: typeof payload.message === "string" ? payload.message.length : -1, hasRestart: payload.restart !== undefined });
+		});
+		setInterval(async () => {
+			const tabs = await window.omp.tabs.list();
+			push({ src: "sample", tabs: tabs.map(tab => `${tab.active === true ? "A" : "-"}:${tab.status}`).join(",") });
+		}, 100);
 	});
 	stage = "own sidecar READY";
 	await page.waitForFunction(
