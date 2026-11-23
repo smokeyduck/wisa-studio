@@ -65,7 +65,18 @@ async function closeGui() {
 	gui = undefined;
 	if (!owned) return;
 	try {
-		await bounded(owned.close(), 15_000);
+		// Use the application's quit IPC so its quit latch runs normal sidecar teardown.
+		await bounded(
+			Promise.all([
+				owned.waitForEvent("close", { timeout: 15_000 }),
+				// The context can disappear before evaluate resolves; actual process exit is still required.
+				owned
+					.windows()[0]
+					.evaluate(() => window.omp.app.quit())
+					.catch(() => {}),
+			]),
+			15_000,
+		);
 	} catch {
 		cleanupFailed = true;
 		throw new Error("GUI shutdown failed");
@@ -106,8 +117,17 @@ async function readSetting(page) {
 	return await bounded(
 		page.evaluate(async () => {
 			const response = await window.omp.rpc.getSettings(["colorBlindMode"]);
-			if (!response.success || typeof response.data?.values?.colorBlindMode !== "boolean") {
-				throw new Error("getSettings did not return the existing boolean");
+			if (!response.success) {
+				const code =
+					response.code === "rpc_delivery_unknown"
+						? "settings-delivery-unknown"
+						: response.error === "Sidecar not connected"
+							? "settings-not-connected"
+							: "settings-response-failed";
+				throw new Error(code);
+			}
+			if (typeof response.data?.values?.colorBlindMode !== "boolean") {
+				throw new Error("settings-boolean-missing");
 			}
 			return response.data.values.colorBlindMode;
 		}),
@@ -175,9 +195,21 @@ try {
 	stage = "renderer stability after restart";
 	await verifyRenderer(page);
 	passed = true;
-} catch {
-	// Playwright errors can include app output, arguments, and paths. Report only our fixed stage label.
-	console.error(`FAIL packaged GUI proof: ${stage}`);
+} catch (error) {
+	// Never print raw Playwright messages: they can include process output and arguments.
+	const message = error instanceof Error ? error.message : "";
+	const code =
+		[
+			"settings-delivery-unknown",
+			"settings-not-connected",
+			"settings-response-failed",
+			"settings-boolean-missing",
+			"operation timed out",
+		].find(value => message.includes(value)) ??
+		(error instanceof Error && ["TypeError", "AssertionError", "TimeoutError"].includes(error.name)
+			? error.name
+			: "unclassified");
+	console.error(`FAIL packaged GUI proof: ${stage}; code=${code}`);
 } finally {
 	try {
 		await closeGui();
