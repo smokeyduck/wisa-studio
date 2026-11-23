@@ -1,6 +1,8 @@
 name: Packaged GUI diagnostic
 on:
   workflow_dispatch:
+  push:
+    branches: [diagnostic/packaged-gui-0.9.54]
 permissions:
   contents: read
   actions: read
