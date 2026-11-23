@@ -114,37 +114,63 @@ async function launchGui() {
 }
 
 async function readSetting(page) {
-	return await bounded(
+	const result = await bounded(
 		page.evaluate(async () => {
-			const response = await window.omp.rpc.getSettings(["colorBlindMode"]);
-			if (!response.success) {
-				const knownErrors = [
-					["Sidecar not ready", "settings-not-ready"],
-					["No window", "settings-no-window"],
-					["Unknown command:", "settings-unknown-command"],
-					["Unknown setting path:", "settings-unknown-path"],
-					["This collaboration session is read-only", "settings-read-only"],
-					["Cannot read properties of undefined", "settings-undefined-property"],
-					["is not iterable", "settings-not-iterable"],
-					["is not a function", "settings-not-function"],
-				];
+			const hash = async value => {
+				const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value))));
+				return [...bytes.slice(0, 4)].map(b => b.toString(16).padStart(2, "0")).join("");
+			};
+			const snapshot = async () =>
+				Promise.all(
+					(await window.omp.tabs.list()).map(async tab => ({
+						tab: await hash(tab.tabId),
+						cwd: await hash(tab.cwd),
+						status: tab.status,
+						active: tab.active === true,
+						visible: tab.visible === true,
+						at: Date.now(),
+					})),
+				);
+			const knownErrors = [
+				["Sidecar not ready", "settings-not-ready"],
+				["No window", "settings-no-window"],
+				["Unknown command:", "settings-unknown-command"],
+				["Unknown setting path:", "settings-unknown-path"],
+				["This collaboration session is read-only", "settings-read-only"],
+				["Cannot read properties of undefined", "settings-undefined-property"],
+				["is not iterable", "settings-not-iterable"],
+				["is not a function", "settings-not-function"],
+			];
+			const codeOf = response => {
+				if (response.success) return "ok";
 				const known = knownErrors.find(([prefix]) => response.error?.includes(prefix));
-				if (known) throw new Error(known[1]);
-				const code =
-					response.code === "rpc_delivery_unknown"
-						? "settings-delivery-unknown"
-						: response.error === "Sidecar not connected"
-							? "settings-not-connected"
-							: "settings-response-failed";
-				throw new Error(code);
+				if (known) return known[1];
+				if (response.code === "rpc_delivery_unknown") return "settings-delivery-unknown";
+				if (response.error === "Sidecar not connected") return "settings-not-connected";
+				return "settings-response-failed";
+			};
+			const before = await snapshot();
+			const response = await window.omp.rpc.getSettings(["colorBlindMode"]);
+			if (response.success) {
+				if (typeof response.data?.values?.colorBlindMode !== "boolean") return { code: "settings-boolean-missing" };
+				return { value: response.data.values.colorBlindMode };
 			}
-			if (typeof response.data?.values?.colorBlindMode !== "boolean") {
-				throw new Error("settings-boolean-missing");
-			}
-			return response.data.values.colorBlindMode;
+			const activeTab = (await window.omp.tabs.list()).find(tab => tab.active === true);
+			const perTab = activeTab
+				? await window.omp.rpc.commandForTab(activeTab.tabId, { type: "get_settings", paths: ["colorBlindMode"] })
+				: null;
+			return {
+				code: codeOf(response),
+				perTabCode: perTab ? codeOf(perTab) : "no-active-tab",
+				before,
+				after: await snapshot(),
+			};
 		}),
 		15_000,
 	);
+	if ("value" in result) return result.value;
+	console.log(`SETTINGS-DIAG ${JSON.stringify(result)}`);
+	throw new Error(result.code);
 }
 
 async function verifyRenderer(page) {
