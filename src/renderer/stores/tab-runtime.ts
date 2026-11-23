@@ -58,7 +58,6 @@ function replacedSessionResponse(command: RpcCommand): RpcResponseError {
 }
 
 export function createTabRuntime(tabId: string): SessionRuntime {
-	let generation = 0;
 	// The chat's status row shows a manual compaction or handoff for as long as
 	// its request is out, however it was started (composer, palette, dialogs).
 	const command = async (rpcCommand: RpcCommand, timeoutMs?: number): Promise<RpcResponse> => {
@@ -77,8 +76,8 @@ export function createTabRuntime(tabId: string): SessionRuntime {
 		// An old dialog/continuation must not send a mutation to this tab's new owner.
 		if (sessionRuntime(tabId) !== runtime) return replacedSessionResponse(rpcCommand);
 		const changesSession = SESSION_CHANGING_COMMANDS.has(rpcCommand.type);
-		if (changesSession) generation++;
-		const requestGeneration = generation;
+		if (changesSession) runtime.sessionGeneration = (runtime.sessionGeneration ?? 0) + 1;
+		const requestGeneration = runtime.sessionGeneration;
 		const origin = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionId;
 		const response =
 			typeof window.omp.rpc.commandForTab === "function"
@@ -88,7 +87,7 @@ export function createTabRuntime(tabId: string): SessionRuntime {
 		// Preserve the execution outcome; callers guard any subsequent UI writes.
 		if (changesSession) return response;
 		if (
-			requestGeneration !== generation ||
+			requestGeneration !== runtime.sessionGeneration ||
 			sessionRuntime(tabId) !== runtime ||
 			(origin && sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionId !== origin)
 		) {
@@ -100,7 +99,7 @@ export function createTabRuntime(tabId: string): SessionRuntime {
 		return response;
 	};
 
-	const runtime: SessionRuntime = { tabId, command, stores: new Map() };
+	const runtime: SessionRuntime = { tabId, command, stores: new Map(), sessionGeneration: 0 };
 	addRuntimeStore(runtime, "btw", createBtwStore(command));
 	addRuntimeStore(runtime, "composer", createComposerStore());
 	addRuntimeStore(runtime, "extensionUi", createExtensionUiStore());

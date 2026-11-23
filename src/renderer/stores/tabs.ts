@@ -26,7 +26,12 @@ import type {
 	TabStatus,
 } from "../../shared/ipc-types";
 import type { ExtensionUIRequest, RpcResponse, RpcSessionState } from "../../shared/rpc-types";
-import { hydrateTabSession, notifyBackgroundSettle } from "../hooks/use-rpc-events";
+import {
+	hydrateTabSession,
+	invalidateTabSessionHydration,
+	isTabSessionHydrated,
+	notifyBackgroundSettle,
+} from "../hooks/use-rpc-events";
 import { basename } from "../lib/format";
 import { translate } from "../lib/i18n";
 import { sessionDisplayTitle } from "../lib/session-title";
@@ -40,6 +45,7 @@ import {
 } from "./composer";
 import type { ExtensionUiStore } from "./extension-ui";
 import { useForkHandoffStore } from "./fork-handoff";
+import type { MessagesStore } from "./messages";
 import {
 	type PendingPlanProposal,
 	type PlanApprovalStore,
@@ -381,6 +387,9 @@ export const useTabsStore = create<TabsStore>()((set, get) => {
 		const split = groupOf(groups, id);
 		const visible = split ? [split.firstTabId, split.secondTabId] : [id];
 		const previouslyVisible = visibleTabIds(state);
+		for (const tabId of previouslyVisible) {
+			if (!visible.includes(tabId)) invalidateTabSessionHydration(tabId);
+		}
 		const focusChanged = id !== state.activeTabId;
 		const version = ++switchVersion;
 		for (const tabId of visible) ensureTabRuntime(tabId);
@@ -437,7 +446,7 @@ export const useTabsStore = create<TabsStore>()((set, get) => {
 		// status here — the newly focused tab, and a partner that just came on
 		// screen beside it. A still-starting sidecar will deliver its normal full
 		// ready event after the route is attached.
-		const hydrate = visible.filter(tabId => (focusChanged && tabId === id) || !previouslyVisible.includes(tabId));
+		const hydrate = visible.filter(tabId => !previouslyVisible.includes(tabId) || !isTabSessionHydrated(tabId));
 		await Promise.all(
 			hydrate.map(async tabId => {
 				const routedTab = get().tabs.find(tab => tab.id === tabId);
@@ -762,7 +771,10 @@ export const useTabsStore = create<TabsStore>()((set, get) => {
 			const active = state.activeTabId === payload.tabId;
 			const previous = state.tabs.find(tab => tab.id === payload.tabId);
 			if (payload.status === "starting" || payload.status === "restarting") {
-				ensureTabRuntime(payload.tabId).recovering = true;
+				const runtime = ensureTabRuntime(payload.tabId);
+				runtime.recovering = true;
+				runtime.sessionGeneration = (runtime.sessionGeneration ?? 0) + 1;
+				invalidateTabSessionHydration(payload.tabId);
 			}
 			const sessionChanged =
 				(previous?.sessionId !== undefined &&
@@ -840,6 +852,16 @@ export const useTabsStore = create<TabsStore>()((set, get) => {
 			}
 			if (session) {
 				session.getState().setStatus(payload.status === "running" ? "ready" : payload.status, payload.cwd);
+				// Parked tabs miss lifecycle frames, so a running -> ready transition
+				// retires an aborted stream even without message_end. Ready metadata
+				// must not erase a visible pane's text or an already-ready partial.
+				if (
+					payload.status !== "running" &&
+					(payload.status !== "ready" ||
+						(previous?.status === "running" && !visibleTabIds(state).includes(payload.tabId)))
+				) {
+					sessionRuntimeStore<MessagesStore>(payload.tabId, "messages")?.getState().clearStreaming();
+				}
 				session.setState({
 					isStreaming: payload.status === "running",
 					isCompacting: payload.compacting ?? session.getState().isCompacting,

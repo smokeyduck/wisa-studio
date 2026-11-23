@@ -1317,3 +1317,54 @@ describe("SidecarPool warm spare", () => {
 		expect(spare.disposed).toBe(true);
 	});
 });
+
+describe("parked partial message continuity", () => {
+	it("forwards each visible batch once and only message/decision frames while parked", () => {
+		const { pool, sidecars } = fakePool();
+		const fw = fakeWindow(1);
+		pool.acquire("/a", fw.win, "a");
+		pool.acquire("/b", fw.win, "b");
+		sidecars[0]!.emitStatus("ready");
+		sidecars[1]!.emitStatus("ready");
+		const shell = { role: "assistant", content: [], timestamp: 1 };
+		const batch = [
+			{ type: "agent_start" },
+			{ type: "message_start", message: shell },
+			{
+				type: "message_update",
+				message: shell,
+				assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "partial" },
+			},
+			{ type: "message_end", message: { ...shell, content: "partial", stopReason: "error" } },
+			{ type: "agent_end", messages: [] },
+		];
+		fw.sent.length = 0;
+		sidecars[0]!.emit("events", batch);
+		expect(fw.sentTo(IPC_EVENTS.EVENTS_BATCH).map(item => item.data)).toEqual([{ tabId: "a", payload: batch }]);
+		fw.sent.length = 0;
+		sidecars[1]!.emit("events", batch);
+		expect(fw.sentTo(IPC_EVENTS.EVENTS_BATCH).map(item => item.data)).toEqual([
+			{ tabId: "b", payload: batch.slice(1, 4) },
+		]);
+		pool.setActiveTab(fw.win, "b");
+		fw.sent.length = 0;
+		sidecars[1]!.emit("events", batch);
+		expect(fw.sentTo(IPC_EVENTS.EVENTS_BATCH).map(item => item.data)).toEqual([{ tabId: "b", payload: batch }]);
+		pool.setActiveTab(fw.win, "a");
+		sidecars[1]!.emitStatus("restarting");
+		fw.sent.length = 0;
+		sidecars[1]!.emit("events", batch);
+		expect(fw.sentTo(IPC_EVENTS.EVENTS_BATCH)).toEqual([]);
+		sidecars[1]!.emitStatus("ready");
+		fw.sent.length = 0;
+		sidecars[1]!.emit("events", batch);
+		expect(fw.sentTo(IPC_EVENTS.EVENTS_BATCH).map(item => item.data)).toEqual([
+			{ tabId: "b", payload: batch.slice(1, 4) },
+		]);
+		pool.releaseTab("b");
+		fw.sent.length = 0;
+		sidecars[1]!.emit("events", batch);
+		expect(fw.sentTo(IPC_EVENTS.EVENTS_BATCH)).toEqual([]);
+		fw.close();
+	});
+});

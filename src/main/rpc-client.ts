@@ -1,6 +1,6 @@
 /**
  * Typed RPC client with id correlation and timeout.
- * Commands are serialized (queued) except bash which is fire-and-forget.
+ * Commands are sent immediately and responses correlated by id; bash may be fire-and-forget.
  */
 import type { RpcCommand, RpcResponse } from "../shared/rpc-types";
 

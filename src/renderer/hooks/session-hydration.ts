@@ -258,6 +258,33 @@ export async function syncVibeMode(tabId: string, command: TabCommand, isCurrent
 }
 
 const hydrationVersions = new WeakMap<SessionRuntime, number>();
+const pendingHydrations = new WeakMap<
+	SessionRuntime,
+	{ generation: number | undefined; eventVersion: number | undefined; promise: Promise<void> }
+>();
+const hydratedSessions = new WeakMap<SessionRuntime, { generation: number | undefined; sessionId: string }>();
+
+/** Leaving full-event coverage makes an earlier/in-flight snapshot insufficient for hot focus. */
+export function invalidateTabSessionHydration(tabId: string): void {
+	const runtime = sessionRuntime(tabId);
+	if (!runtime) return;
+	hydratedSessions.delete(runtime);
+	pendingHydrations.delete(runtime);
+	hydrationVersions.set(runtime, (hydrationVersions.get(runtime) ?? 0) + 1);
+}
+
+/** True only after this runtime's current session completed its core snapshot. */
+export function isTabSessionHydrated(tabId: string): boolean {
+	const runtime = sessionRuntime(tabId);
+	if (!runtime || runtime.recovering) return false;
+	const hydrated = hydratedSessions.get(runtime);
+	return (
+		hydrated !== undefined &&
+		hydrated.generation === runtime.sessionGeneration &&
+		hydrated.sessionId === sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionId
+	);
+}
+
 let legacyHydrationVersion = 0;
 
 export async function hydrateLegacySession(fallbackName?: string, initialState?: RpcResponse): Promise<void> {
@@ -366,12 +393,33 @@ export function repairStaleRunState(
 }
 
 /** Reload every renderer store belonging to one visible tab. */
-export async function hydrateTabSession(tabId: string, fallbackName?: string): Promise<void> {
-	if (isTabClosed(tabId)) return;
+export function hydrateTabSession(tabId: string, fallbackName?: string): Promise<void> {
+	if (isTabClosed(tabId)) return Promise.resolve();
 	const runtime = ensureTabRuntime(tabId);
+	const generation = runtime.sessionGeneration;
+	const eventVersion = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion;
+	const pending = pendingHydrations.get(runtime);
+	if (pending && pending.generation === generation && pending.eventVersion === eventVersion) return pending.promise;
+	const promise = performTabHydration(tabId, runtime, generation, fallbackName).finally(() => {
+		if (pendingHydrations.get(runtime)?.promise === promise) pendingHydrations.delete(runtime);
+	});
+	pendingHydrations.set(runtime, { generation, eventVersion, promise });
+	return promise;
+}
+
+async function performTabHydration(
+	tabId: string,
+	runtime: SessionRuntime,
+	generation: number | undefined,
+	fallbackName?: string,
+): Promise<void> {
+	hydratedSessions.delete(runtime);
 	const version = (hydrationVersions.get(runtime) ?? 0) + 1;
 	hydrationVersions.set(runtime, version);
-	const isCurrent = (): boolean => hydrationVersions.get(runtime) === version && sessionRuntime(tabId) === runtime;
+	const isCurrent = (): boolean =>
+		hydrationVersions.get(runtime) === version &&
+		sessionRuntime(tabId) === runtime &&
+		runtime.sessionGeneration === generation;
 	// Capture before the fetch: committed agent_end rows arriving while the
 	// transcript RPC is in flight must survive the merge below.
 	const initialMessagesStore = sessionRuntimeStore<MessagesStore>(tabId, "messages")?.getState();
@@ -496,6 +544,13 @@ export async function hydrateTabSession(tabId: string, fallbackName?: string): P
 			sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionFile ?? pendingSessionPath,
 			messages?.getState().messages ?? [],
 		);
+		const wire =
+			stateResult.status === "fulfilled" && stateResult.value.success
+				? (stateResult.value.data as RpcSessionState | undefined)
+				: undefined;
+		if (wire && sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionId === wire.sessionId) {
+			hydratedSessions.set(runtime, { generation, sessionId: wire.sessionId });
+		}
 	}
 
 	// Subagents and secondary chips do not hold the transcript hostage. Their

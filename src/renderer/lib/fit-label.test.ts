@@ -31,10 +31,10 @@ describe("fitLabel", () => {
 		expect(el.style.whiteSpace).toBe("nowrap");
 	});
 
-	it("never goes below the legible floor and wraps instead of clipping", () => {
+	it("keeps even an impossible fit on one line at the legible floor", () => {
 		const el = fakeLabel(60);
 		fitLabel(el, 14);
 		expect(el.style.fontSize).toBe(`${LABEL_MIN_FONT_PX}px`);
-		expect(el.style.whiteSpace).toBe("normal");
+		expect(el.style.whiteSpace).toBe("nowrap");
 	});
 });

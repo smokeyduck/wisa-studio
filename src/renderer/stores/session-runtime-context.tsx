@@ -71,6 +71,8 @@ export interface SessionRuntime {
 	tabId: string;
 	command: TabCommand;
 	stores: Map<RuntimeStoreKey, StoreApi<unknown>>;
+	/** Invalidates snapshots as soon as an in-place session-changing command starts. */
+	sessionGeneration?: number;
 	/** A process restart may allocate a new ID for an unpersisted session. */
 	recovering?: boolean;
 }

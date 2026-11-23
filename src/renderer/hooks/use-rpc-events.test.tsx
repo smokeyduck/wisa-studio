@@ -1510,6 +1510,81 @@ describe("TurnStatusRow", () => {
 });
 
 describe("hydrateSession streaming reconcile (F-HYDRATE)", () => {
+	it("shares an overlapping snapshot without losing delivered rows that race it", async () => {
+		const { commandForTab } = installTabRoutedMockOmp();
+		seedReadyTab("t-flight");
+		const transcript = Promise.withResolvers<RpcResponse>();
+		const original = commandForTab.getMockImplementation()!;
+		commandForTab.mockImplementation((tabId, command) =>
+			command.type === "get_transcript" ? transcript.promise : original(tabId, command),
+		);
+		const first = hydrateTabSession("t-flight");
+		const second = hydrateTabSession("t-flight");
+		const messages = sessionRuntimeStore<MessagesStore>("t-flight", "messages")!;
+		const delivered: AgentMessage = { role: "assistant", content: "racing commit", entryId: "new-row", timestamp: 2 };
+		messages.getState().appendMessage(delivered);
+		transcript.resolve(success({ messages: [] }));
+		await Promise.all([first, second]);
+		expect(messages.getState().messages).toEqual([delivered]);
+		expect(commandForTab.mock.calls.filter(([, command]) => command.type === "get_transcript")).toHaveLength(1);
+	});
+
+	it("does not join or apply a snapshot from before an in-place session change", async () => {
+		const { commandForTab } = installTabRoutedMockOmp();
+		seedReadyTab("t-generation");
+		const oldTranscript = Promise.withResolvers<RpcResponse>();
+		const oldGoal = Promise.withResolvers<RpcResponse>();
+		const original = commandForTab.getMockImplementation()!;
+		let changed = false;
+		commandForTab.mockImplementation(async (tabId, command) => {
+			if (command.type === "get_transcript")
+				return changed ? success({ messages: [{ role: "user", content: "new session" }] }) : oldTranscript.promise;
+			if (command.type === "get_goal" && !changed) return oldGoal.promise;
+			return original(tabId, command);
+		});
+		const oldHydration = hydrateTabSession("t-generation");
+		await ensureTabRuntime("t-generation").command({ type: "switch_session", sessionPath: "/synthetic/new.jsonl" });
+		changed = true;
+		await hydrateTabSession("t-generation");
+		oldTranscript.resolve(success({ messages: [{ role: "user", content: "old session" }] }));
+		oldGoal.resolve(success({ enabled: true, objective: "old goal" }));
+		await oldHydration;
+		expect(sessionRuntimeStore<MessagesStore>("t-generation", "messages")?.getState().messages).toMatchObject([
+			{ content: "new session" },
+		]);
+		expect(sessionRuntimeStore<SessionStore>("t-generation", "session")?.getState().goal).toBeNull();
+	});
+
+	it("rejects an in-flight transcript across a process restart even when the session id is unchanged", async () => {
+		const { commandForTab, emitTabStatus } = installTabRoutedMockOmp();
+		seedReadyTab("t-reconnect");
+		await mount(<RpcEventsProbe />);
+		const oldTranscript = Promise.withResolvers<RpcResponse>();
+		const original = commandForTab.getMockImplementation()!;
+		let restarted = false;
+		commandForTab.mockImplementation((tabId, command) => {
+			if (command.type === "get_transcript")
+				return restarted
+					? Promise.resolve(success({ messages: [{ role: "user", content: "fresh process" }] }))
+					: oldTranscript.promise;
+			return original(tabId, command);
+		});
+		useMessagesStore.setState({ streamingText: "dead process partial", streamingThinking: "old reasoning" });
+		const oldHydration = hydrateTabSession("t-reconnect");
+		await act(async () => {
+			emitTabStatus({ status: "starting", cwd: "/alpha" }, "t-reconnect");
+			restarted = true;
+			emitTabStatus({ status: "ready", cwd: "/alpha" }, "t-reconnect");
+		});
+		await flush();
+		oldTranscript.resolve(success({ messages: [{ role: "user", content: "dead process history" }] }));
+		await oldHydration;
+		expect(useSessionStore.getState().sessionId).toBe("s1");
+		expect(useMessagesStore.getState().messages).toMatchObject([{ content: "fresh process" }]);
+		expect(useMessagesStore.getState().streamingText).toBe("");
+		expect(useMessagesStore.getState().streamingThinking).toBe("");
+	});
+
 	it("retains completed subtask history when switching back to the same session", async () => {
 		installMockOmp();
 		await hydrateSession();
@@ -1745,6 +1820,36 @@ describe("useRpcEvents tab-scoped routing guards", () => {
 		ensureTabRuntime("t-dead");
 		setFocusedSessionRuntime("t-live");
 	}
+
+	it("routes a known unhydrated background stream only to its own runtime and drops unknown origins", async () => {
+		const { emitTabBatch } = installTabRoutedMockOmp();
+		seedTwoTabs();
+		await mount(<RpcEventsProbe />);
+		useTabsStore.setState(state => ({
+			tabs: [...state.tabs, { id: "t-cold", kind: "agent", cwd: "/cold", status: "running", unreadDone: false }],
+		}));
+		const shell: AgentMessage = { role: "assistant", content: [], timestamp: 10 };
+		const batch: AgentSessionEvent[] = [
+			{ type: "message_start", message: shell },
+			{
+				type: "message_update",
+				message: shell,
+				assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "parked" },
+			},
+		];
+		await act(async () => {
+			emitTabBatch(batch, "t-cold");
+			emitTabBatch(batch, "unknown-origin");
+		});
+		expect(sessionRuntimeStore<MessagesStore>("t-cold", "messages")?.getState().streamingText).toBe("parked");
+		expect(sessionRuntimeStore<MessagesStore>("t-live", "messages")?.getState().streamingText).toBe("");
+		expect(sessionRuntime("unknown-origin")).toBeNull();
+		await act(async () => {
+			emitTabBatch([{ type: "message_end", message: { ...shell, content: "parked" } }], "t-cold");
+		});
+		expect(sessionRuntimeStore<MessagesStore>("t-cold", "messages")?.getState().streamingText).toBe("");
+		expect(sessionRuntimeStore<MessagesStore>("t-cold", "messages")?.getState().liveMessages).toHaveLength(1);
+	});
 
 	it("paints retained A history and new A events after A to B to A while its transcript is unresolved", async () => {
 		const { commandForTab, emitTabBatch } = installTabRoutedMockOmp();

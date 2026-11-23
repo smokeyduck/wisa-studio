@@ -468,11 +468,11 @@ export class SidecarPool {
 			const wasAttention = entry.attention;
 			const wasRetry = entry.retry;
 			const wasManualCompaction = entry.manualCompaction;
-			// plan_proposal blocks the agent on a host decision — it must reach
-			// the renderer even while this tab's full stream is parked, or the
-			// dialog can never appear and the turn waits forever. Visible tabs
-			// already get it inside their normal events batch.
-			const parkedProposals: AgentSessionEvent[] = [];
+			// Parked tabs retain only message delivery/partial-stream continuity in
+			// their persistent runtime. No history rebuild or offscreen renderer is
+			// needed, and switch-back hydration cannot recover unfinished deltas.
+			// plan_proposal must also reach its host decision while parked.
+			const parkedEvents: AgentSessionEvent[] | null = !entry.detachFull && entry.status === "ready" ? [] : null;
 			for (const event of events) {
 				if (event.type === "agent_start") {
 					entry.running = true;
@@ -510,10 +510,18 @@ export class SidecarPool {
 					entry.manualCompaction = null;
 					entry.compacting ??= false;
 				}
-				if (event.type === "plan_proposal" && !entry.detachFull) parkedProposals.push(event);
+				if (
+					parkedEvents &&
+					(event.type === "message_start" ||
+						event.type === "message_update" ||
+						event.type === "message_end" ||
+						event.type === "plan_proposal")
+				) {
+					parkedEvents.push(event);
+				}
 			}
-			if (parkedProposals.length > 0) {
-				forwardToWindow(win, IPC_EVENTS.EVENTS_BATCH, { tabId: entry.tabId, payload: parkedProposals });
+			if (parkedEvents && parkedEvents.length > 0) {
+				forwardToWindow(win, IPC_EVENTS.EVENTS_BATCH, { tabId: entry.tabId, payload: parkedEvents });
 			}
 			const busy = entryHasWork(entry);
 			if (

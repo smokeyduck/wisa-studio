@@ -88,6 +88,15 @@ const REVEAL_MAX_FRAMES = 90;
 /** Consecutive frames without movement that count as settled. */
 const REVEAL_STILL_FRAMES = 3;
 
+function estimateRowSize(row: Row | undefined): number {
+	const kind = row?.kind;
+	if (kind === "streaming") return 80;
+	if (kind === "pending" || kind === "queued" || kind === "turnChanges") return 56;
+	if (kind === "process" || kind === "todoSnapshot") return 48;
+	if (kind === "message") return 72;
+	return 160;
+}
+
 /**
  * Virtual-scroll message list. Stays pinned to the bottom while streaming
  * unless the user scrolls up; a floating "jump to latest" button appears when
@@ -337,7 +346,11 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 
 	const virtualizer = useVirtualizer({
 		count: rows.length,
-		initialOffset: restoreView?.scrollOffset ?? 0,
+		// A new transcript follows the live edge. Starting at zero first mounts
+		// and parses the oldest rows, only to discard them when the follower runs.
+		// Seed the estimated end instead; measurements and the existing follower
+		// settle the actual tail. Restored reading positions still win.
+		initialOffset: () => restoreView?.scrollOffset ?? rows.reduce((size, row) => size + estimateRowSize(row), 0),
 		initialMeasurementsCache: restoreView?.measurements,
 		getItemKey: index => rowKeys[index] ?? index,
 		// The reader's gesture is the only thing that may move the viewport away from
@@ -356,14 +369,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 		// layers it produced on large transcripts.
 		useFlushSync: false,
 		getScrollElement: () => parentRef.current,
-		estimateSize: i => {
-			const kind = rows[i]?.kind;
-			if (kind === "streaming") return 80;
-			if (kind === "pending" || kind === "queued" || kind === "turnChanges") return 56;
-			if (kind === "process" || kind === "todoSnapshot") return 48;
-			if (kind === "message") return 72;
-			return 160;
-		},
+		estimateSize: i => estimateRowSize(rows[i]),
 		overscan: 8,
 		onChange: handleVirtualizerChange,
 	});
@@ -1039,7 +1045,7 @@ export function StreamingRows({
 	onExpandedChange: (expanded: boolean) => void;
 }) {
 	const streamingMessage = useMessagesStore(s => s.streamingMessage);
-	const streamingThinking = useMessagesStore(s => s.streamingThinking);
+	const hasThinking = useMessagesStore(s => isRenderableMessageText(s.streamingThinking));
 	const hasText = useMessagesStore(s => isRenderableMessageText(s.streamingText));
 	// Full-map subscription is intentional here: this ONE live row legitimately
 	// watches the whole active set (it renders every pending/running card).
@@ -1066,7 +1072,6 @@ export function StreamingRows({
 		liveTools.push({ id, entry });
 	}
 
-	const hasThinking = isRenderableMessageText(streamingThinking);
 	const hasProcess = hasThinking || toolCalls.length > 0 || liveTools.length > 0;
 	const compactChrome = transcriptDetail === "compact" ? !hasText : !hasText && !hasThinking;
 	const turnClass = compactChrome ? "omp-assistant-turn--compact" : "omp-assistant-turn";

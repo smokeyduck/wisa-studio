@@ -32,7 +32,7 @@ import { tabSignalPresentation } from "../lib/tab-signal";
 import { useComposerStore } from "./composer";
 import { useExtensionUiStore } from "./extension-ui";
 import { useForkHandoffStore } from "./fork-handoff";
-import { useMessagesStore } from "./messages";
+import { type MessagesStore, useMessagesStore } from "./messages";
 import { useModelStore } from "./model";
 import { usePlanApprovalStore } from "./plan-approval";
 import { useQueueStore } from "./queue";
@@ -772,6 +772,56 @@ describe("tabs store split pairs (gui#30)", () => {
 		expect(useTabsStore.getState().split).toEqual(pair("t0", "t1", 0.3));
 	});
 
+	it("keeps both hydrated split runtimes hot when only pane focus changes", async () => {
+		seedStrip(3, "t2", [pair("t0", "t1")]);
+		await useTabsStore.getState().switchTab("t0");
+		const t0 = sessionRuntime("t0");
+		const t1 = sessionRuntime("t1");
+		useMessagesStore.setState({ streamingText: "in-flight reply" });
+		omp.rpc.getTranscript.mockClear();
+		omp.rpc.getState.mockClear();
+		await useTabsStore.getState().switchTab("t1");
+		await useTabsStore.getState().switchTab("t0");
+		expect(sessionRuntime("t0")).toBe(t0);
+		expect(sessionRuntime("t1")).toBe(t1);
+		expect(useMessagesStore.getState().streamingText).toBe("in-flight reply");
+		expect(omp.rpc.getTranscript).not.toHaveBeenCalled();
+		expect(omp.rpc.getState).not.toHaveBeenCalled();
+		// Once parked, the tab still needs history/state recovery on return.
+		await useTabsStore.getState().switchTab("t2");
+		await useTabsStore.getState().switchTab("t0");
+		expect(omp.rpc.getTranscript).toHaveBeenCalled();
+	});
+
+	it("recovers a briefly parked split when rapid focus supersedes its returning route", async () => {
+		seedStrip(3, "t2", [pair("t0", "t1")]);
+		await useTabsStore.getState().switchTab("t0");
+		omp.rpc.getTranscript.mockClear();
+		const parkedRoute = Promise.withResolvers<boolean>();
+		omp.tabs.setActive.mockReturnValueOnce(parkedRoute.promise);
+		const park = useTabsStore.getState().switchTab("t2");
+		const restore = useTabsStore.getState().switchTab("t0");
+		const focusPartner = useTabsStore.getState().switchTab("t1");
+		parkedRoute.resolve(true);
+		await Promise.all([park, restore, focusPartner]);
+		expect(useTabsStore.getState().activeTabId).toBe("t1");
+		expect(omp.rpc.getTranscript).toHaveBeenCalledTimes(2);
+	});
+
+	it("hydrates visible pane focus if its earlier core snapshot failed", async () => {
+		seedStrip(2, "t0", [pair("t0", "t1")]);
+		omp.rpc.getTranscript.mockResolvedValueOnce({
+			type: "response",
+			command: "get_transcript",
+			success: false,
+			error: "offline",
+		});
+		await useTabsStore.getState().switchTab("t1");
+		omp.rpc.getTranscript.mockClear();
+		await useTabsStore.getState().switchTab("t0");
+		expect(omp.rpc.getTranscript).toHaveBeenCalled();
+	});
+
 	it("pairs a tab beside the focused one, breaking both old pairs, and keeps the new pair's chips together", async () => {
 		seedStrip(5, "t3", [pair("t0", "t1"), pair("t3", "t4")]);
 
@@ -1366,6 +1416,48 @@ describe("tabChipLabel (F-HYDRATE)", () => {
 });
 
 describe("tab runtime lifecycle guards", () => {
+	it.each(["ready", "error", "exited", "restarting"] as const)(
+		"clears a parked partial stream at %s without touching the focused pane",
+		status => {
+			seedTabs("t0");
+			useTabsStore.getState().applyTabStatus({ tabId: "t1", cwd: "/beta", kind: "agent", status: "running" });
+			const parked = sessionRuntimeStore<MessagesStore>("t1", "messages")!;
+			parked.setState({
+				streamingMessage: { role: "assistant", content: [] },
+				streamingText: "unfinished",
+				streamingThinking: "thinking",
+			});
+			useMessagesStore.setState({ streamingText: "focused reply" });
+			useTabsStore.getState().applyTabStatus({ tabId: "t1", cwd: "/beta", kind: "agent", status });
+			expect(parked.getState()).toMatchObject({ streamingMessage: null, streamingText: "", streamingThinking: "" });
+			expect(useMessagesStore.getState().streamingText).toBe("focused reply");
+		},
+	);
+
+	it.each(["active", "split", "parked"] as const)("preserves partial text through %s ready metadata", view => {
+		seedTabs("t0");
+		if (view === "split") {
+			const split: SplitLayout = { axis: "columns", firstTabId: "t0", secondTabId: "t1", ratio: 0.5 };
+			useTabsStore.setState({ groups: [split], split });
+		}
+		const tabId = view === "active" ? "t0" : "t1";
+		// Visible panes also tolerate ready status arriving before their full
+		// message_end; parked ready metadata is not a terminal transition.
+		if (view !== "parked") {
+			useTabsStore.getState().applyTabStatus({ tabId, cwd: "/beta", kind: "agent", status: "running" });
+		}
+		const messages = sessionRuntimeStore<MessagesStore>(tabId, "messages")!;
+		messages.setState({
+			streamingMessage: { role: "assistant", content: [] },
+			streamingText: "good partial",
+			streamingThinking: "good reasoning",
+		});
+		useTabsStore
+			.getState()
+			.applyTabStatus({ tabId, cwd: "/renamed", kind: "agent", status: "ready", title: "Renamed" });
+		expect(messages.getState()).toMatchObject({ streamingText: "good partial", streamingThinking: "good reasoning" });
+	});
+
 	it("keeps static store access on a focused tab whose runtime was rebuilt by a session change", () => {
 		seedTabs("t0");
 		const before = sessionRuntime("t0");

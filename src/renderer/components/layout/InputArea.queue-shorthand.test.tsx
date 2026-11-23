@@ -59,6 +59,7 @@ Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 })
 Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
 
 interface TestElement {
+	value: string;
 	textContent: string | null;
 	remove(): void;
 	dispatchEvent(event: object): boolean;
@@ -153,16 +154,38 @@ async function pressTab(element: TestElement, shiftKey: boolean): Promise<{ defa
 	return event;
 }
 
+/** linkedom has no caret: pin selectionStart/End, then fire keyup so the completion menu re-derives from it. */
+async function placeCaret(element: TestElement, position: number): Promise<void> {
+	Object.defineProperty(element, "selectionStart", { configurable: true, value: position });
+	Object.defineProperty(element, "selectionEnd", { configurable: true, value: position });
+	Object.assign(element, { setSelectionRange: () => {} });
+	await act(async () => {
+		element.dispatchEvent(new Event("keyup", { cancelable: true }));
+	});
+}
+
 describe("InputArea Tab contract", () => {
-	it("plain Tab cycles reasoning and never accepts a completion", async () => {
+	it("plain Tab accepts the open slash completion instead of cycling reasoning", async () => {
 		await mount();
 		cycleThinkingLevel.mockClear();
 		await typeInto(findTextarea(), "/");
+		await placeCaret(findTextarea(), 1);
+		await flush();
+		await pressTab(findTextarea(), false);
+		await flush();
+		expect(cycleThinkingLevel).not.toHaveBeenCalled();
+		expect(findTextarea().value).toMatch(/^\/[\w:-]+ $/);
+	});
+
+	it("plain Tab cycles reasoning when no completion is open", async () => {
+		await mount();
+		cycleThinkingLevel.mockClear();
+		await typeInto(findTextarea(), "hello");
 		await flush();
 		await pressTab(findTextarea(), false);
 		await flush();
 		expect(cycleThinkingLevel).toHaveBeenCalledOnce();
-		expect((findTextarea() as unknown as { value: string }).value).toBe("/");
+		expect(findTextarea().value).toBe("hello");
 	});
 
 	it("Shift+Tab toggles plan mode and opens the plan panel", async () => {

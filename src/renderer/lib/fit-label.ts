@@ -3,10 +3,10 @@ export const LABEL_MIN_FONT_PX = 11;
 
 /**
  * Fit a single-line label into its box in one measured step: the width ratio
- * gives the font size that just fills the box, clamped to [minPx, maxPx]. The
- * label is measured again once, and only if even the floor overflows does it
- * wrap. It never ellipsizes, since a clipped model name is unreadable. Call it
- * after layout (layout effect or ResizeObserver).
+ * gives the font size that just fills the box, clamped to [minPx, maxPx].
+ * At the legible floor, CSS ellipsis handles names that cannot fit. Never
+ * wrap: a long name must not change the surrounding toolbar's height.
+ * Call after layout (layout effect or ResizeObserver).
  */
 export function fitLabel(el: HTMLElement, maxPx: number, minPx = LABEL_MIN_FONT_PX): void {
 	el.style.whiteSpace = "nowrap";
@@ -17,5 +17,4 @@ export function fitLabel(el: HTMLElement, maxPx: number, minPx = LABEL_MIN_FONT_
 		const fitted = Math.min(maxPx, Math.max(minPx, Math.floor(((maxPx * width) / natural) * 10) / 10));
 		el.style.fontSize = `${fitted}px`;
 	}
-	el.style.whiteSpace = el.scrollWidth > el.clientWidth ? "normal" : "nowrap";
 }

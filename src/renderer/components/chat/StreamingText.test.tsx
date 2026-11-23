@@ -18,6 +18,7 @@ interface TestElement {
 	remove: () => void;
 	getAttribute: (name: string) => string | null;
 	setAttribute: (name: string, value: string) => void;
+	dispatchEvent: (event: Event) => boolean;
 	querySelector: (selector: string) => TestElement | null;
 	querySelectorAll: (selector: string) => TestElement[];
 }
@@ -77,6 +78,35 @@ describe("StreamingText presentation", () => {
 		expect(turn?.getAttribute("class")).toContain("omp-assistant-turn");
 		expect(turn?.querySelector(".omp-transcript-content")).not.toBeNull();
 		expect(turn?.querySelector(".omp-streaming-tail")?.textContent).toContain("Live answer");
+	});
+
+	it("keeps an opened reasoning trace current without replacing the live answer", async () => {
+		useMessagesStore.setState({
+			streamingMessage: { role: "assistant", content: [], timestamp: "2026-08-22T00:00:00Z" },
+		});
+		useUiStore.setState({ transcriptDetail: "full" });
+		await mount("Answer stays selected", <StreamingRows expanded={false} onExpandedChange={() => {}} />);
+		const answer = container.querySelector(".omp-streaming-tail");
+		expect(container.querySelector(".omp-thinking-header")).toBeNull();
+
+		await act(async () => {
+			useMessagesStore.setState({ streamingThinking: "First reasoning" });
+		});
+		const header = container.querySelector(".omp-thinking-header");
+		expect(header).not.toBeNull();
+		await act(async () => {
+			header?.dispatchEvent(new Event("click", { bubbles: true }) as unknown as globalThis.Event);
+		});
+		expect(header?.getAttribute("aria-expanded")).toBe("true");
+
+		await act(async () => {
+			useMessagesStore.setState({ streamingThinking: "First reasoning\n\nContinued **analysis**" });
+		});
+		await flushFrame();
+		expect(container.querySelector(".omp-thinking-body")?.textContent).toContain("Continued analysis");
+		expect(container.querySelector(".omp-thinking-body strong")?.textContent).toBe("analysis");
+		expect(container.querySelector(".omp-thinking-header")).toBe(header);
+		expect(container.querySelector(".omp-transcript-content > .omp-streaming .omp-streaming-tail")).toBe(answer);
 	});
 
 	it("coalesces multiple incoming prefixes into one visible animation frame", async () => {

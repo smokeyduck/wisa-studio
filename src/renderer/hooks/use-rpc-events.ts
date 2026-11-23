@@ -5,6 +5,7 @@ import {
 	hydrateLegacySession,
 	hydrateSession,
 	hydrateTabSession,
+	invalidateTabSessionHydration,
 	refreshAdvisorStatus,
 	refreshConfigWarnings,
 	refreshModelState,
@@ -57,6 +58,7 @@ import {
 } from "../stores/session-runtime-context";
 import { useSettingsStore } from "../stores/settings";
 import { SUBAGENT_SUBSCRIPTION_LEVEL, useSubagentsStore } from "../stores/subagents";
+import { ensureTabRuntime } from "../stores/tab-runtime";
 import { isTabClosed, useTabsStore, visibleTabIds } from "../stores/tabs";
 import { useToastStore } from "../stores/toast";
 import { todoPhasesFromToolResult, useTodoStore } from "../stores/todo";
@@ -320,6 +322,13 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 			// during an in-place session switch, but never suppress the other pane.
 			if (sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().switchPending) return;
 			if (closedTabFrame(tabId)) return;
+			// A known background tab may start streaming before its first hydrate.
+			// Never let its first partial frame fall through to the focused store,
+			// and never resurrect an unknown/removed tab from a late frame.
+			if (tabId && !sessionRuntime(tabId)) {
+				if (!useTabsStore.getState().tabs.some(tab => tab.id === tabId)) return;
+				ensureTabRuntime(tabId);
+			}
 			withSessionRuntime(tabId, () => {
 				useMessagesStore.getState().applyEvents(events);
 				useToolsStore.getState().applyEvents(events);
@@ -693,6 +702,9 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 			statusVersion++;
 			const isFocused = () => useTabsStore.getState().activeTabId === statusTabId;
 			if (payload.status === "starting") {
+				const runtime = sessionRuntime(statusTabId);
+				if (runtime) runtime.sessionGeneration = (runtime.sessionGeneration ?? 0) + 1;
+				invalidateTabSessionHydration(statusTabId);
 				if (isFocused()) stopHeartbeat();
 				retryPendingTabs.delete(statusTabId);
 				withSessionRuntime(statusTabId, () => {

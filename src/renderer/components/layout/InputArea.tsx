@@ -1,6 +1,5 @@
 import {
 	ArrowUp,
-	Box,
 	Check,
 	ChevronDown,
 	History,
@@ -106,7 +105,7 @@ export function InputArea() {
 	const model = useModelStore(s => s.model);
 	/** Display name for the model trigger: catalog name, else a prettified id. */
 	const modelName = modelLabel(model);
-	/** The model name shrinks to fit the trigger's width, then wraps: it never ellipsizes. Keyed on the text, so a new model remounts and re-fits. */
+	/** Shrink within one toolbar line; CSS ellipsizes only at the legible floor. */
 	const modelLabelRef = useCallback((label: HTMLSpanElement | null) => {
 		if (!label) return;
 		// Fitting needs a layout engine; a DOM without getComputedStyle (test
@@ -173,12 +172,11 @@ export function InputArea() {
 	useLayoutEffect(() => {
 		const toolbar = composerToolbarRef.current;
 		if (!toolbar) return;
-		// Below a 680px toolbar the control labels collapse to icons (components.css),
-		// so the full row fits in ~560px (420 for chat). Folding earlier hid the run
-		// state (model, thinking, approval) whenever the workspace panel was open.
+		// Pane-local width, not the window: split sessions must fold independently.
+		// Labels collapse first in CSS, then secondary controls move to overflow.
 		const inlineMinWidth = isChat ? 420 : 560;
 		const measure = () => {
-			const measured = toolbar.getBoundingClientRect().width;
+			const measured = toolbar.clientWidth;
 			const width = Number.isFinite(measured) && measured > 0 ? measured : window.innerWidth;
 			const compact = width < inlineMinWidth;
 			setCompactRunSettings(current => (current === compact ? current : compact));
@@ -217,7 +215,10 @@ export function InputArea() {
 			setRunSettingsOpen(false);
 		};
 		const onKey = (event: globalThis.KeyboardEvent) => {
-			onEscape(event, () => setRunSettingsOpen(false));
+			onEscape(event, () => {
+				setRunSettingsOpen(false);
+				runSettingsTriggerRef.current?.focus();
+			});
 		};
 		// Close on click rather than pointerdown. The controls inside this menu
 		// open their own body-level portals; closing on the nested option's
@@ -666,14 +667,20 @@ export function InputArea() {
 				if (item) insertCompletion(item);
 				return;
 			}
+			if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+				e.preventDefault();
+				const item = menu.items[menu.index];
+				if (item) insertCompletion(item);
+				return;
+			}
 			if (e.key === "Escape") {
 				e.preventDefault();
 				setMenu(null);
 				return;
 			}
 		}
-		// Tab is reasoning-only in the composer and never accepts a completion.
-		// Shift+Tab toggles plan mode via the registry's `plan` command.
+		// Plain Tab accepts the active completion when a menu is open (same as Enter);
+		// otherwise it cycles reasoning. Shift+Tab toggles plan mode via the registry's `plan` command.
 		if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.defaultPrevented) {
 			e.preventDefault();
 			if (e.shiftKey) {
@@ -1103,6 +1110,19 @@ export function InputArea() {
 										placement="above"
 										onClose={() => setAddMenu(null)}
 										items={[
+											...(compactRunSettings && sttEnabled && !dictating
+												? [
+														{
+															id: "composer-dictation",
+															label: t("voice.mic.start"),
+															icon: Mic,
+															onSelect: () => {
+																setAddMenu(null);
+																dictation.toggle();
+															},
+														},
+													]
+												: []),
 											{
 												id: "composer-attach",
 												label: t("input.attach"),
@@ -1145,7 +1165,7 @@ export function InputArea() {
 									/>
 								)}
 
-								{(sttEnabled || dictating) && (
+								{((sttEnabled && !compactRunSettings) || dictating) && (
 									<button
 										type="button"
 										onClick={dictation.toggle}
@@ -1182,7 +1202,7 @@ export function InputArea() {
 									</button>
 								)}
 
-								{!isChat && (
+								{!isChat && !compactRunSettings && (
 									<CurrentWorkspaceControl
 										tabId={runtimeTabId}
 										disabled={
@@ -1209,9 +1229,8 @@ export function InputArea() {
 											? `${t("input.model")}: ${modelName} (${model.id})`
 											: `${t("input.model")}: ${modelName ?? t("input.chooseModel")}`
 									}
-									className="omp-composer-model omp-pressable flex h-auto min-h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
+									className="omp-composer-model omp-pressable flex h-8 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
 								>
-									<Box aria-hidden="true" size={14} className="omp-composer-model-icon shrink-0" />
 									<span
 										className="omp-composer-model-label min-w-0 flex-1 leading-tight"
 										key={modelName ?? ""}
@@ -1221,7 +1240,7 @@ export function InputArea() {
 									</span>
 									<ChevronDown aria-hidden="true" size={13} className="shrink-0 text-[var(--omp-dim)]" />
 								</button>
-								{!isChat && <AdvisorBadge />}
+								{!isChat && !compactRunSettings && <AdvisorBadge />}
 
 								{compactRunSettings ? (
 									<div className="relative shrink-0">
@@ -1256,6 +1275,19 @@ export function InputArea() {
 														runSettingsClosing ? "omp-scale-out pointer-events-none" : "omp-pop-in"
 													}`}
 												>
+													{!isChat && (
+														<CurrentWorkspaceControl
+															tabId={runtimeTabId}
+															disabled={
+																collabReadOnly ||
+																!routeReady ||
+																status !== "ready" ||
+																isStreaming ||
+																isCompacting
+															}
+														/>
+													)}
+													{!isChat && <AdvisorBadge />}
 													<ThinkingControl />
 													<FastModeControl menuItem />
 													{!isChat && <ApprovalControl />}
@@ -1282,13 +1314,27 @@ export function InputArea() {
 							    width the primary action stays where the hand expects it. */}
 							<div className="omp-composer-send-cluster flex shrink-0 items-center gap-1.5">
 								{queueSplitCount > 1 && (
-									<span className="shrink-0 rounded-full border border-[var(--omp-warning)] px-2 py-0.5 text-omp-xs font-medium text-[var(--omp-warning)]">
-										{t("input.queue.split", { count: queueSplitCount })}
+									<span
+										aria-label={t("input.queue.split", { count: queueSplitCount })}
+										title={t("input.queue.split", { count: queueSplitCount })}
+										className="omp-composer-send-status flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[var(--omp-warning)] px-2 py-0.5 text-omp-xs font-medium text-[var(--omp-warning)]"
+									>
+										<ListEnd aria-hidden size={13} />
+										<span className="omp-composer-send-status-label">
+											{t("input.queue.split", { count: queueSplitCount })}
+										</span>
+										<span className="omp-composer-send-status-count" aria-hidden>
+											{queueSplitCount}
+										</span>
 									</span>
 								)}
 
 								{collabReadOnly && (
-									<span role="status" className="truncate text-omp-sm text-(--omp-warning)">
+									<span
+										role="status"
+										title={t("collab.readOnlyInput")}
+										className="max-w-24 truncate text-omp-sm text-(--omp-warning)"
+									>
 										{t("collab.readOnlyInput")}
 									</span>
 								)}
@@ -1296,10 +1342,12 @@ export function InputArea() {
 								{followUpHeld && (
 									<span
 										role="status"
-										className="omp-fade-in flex h-7 shrink-0 items-center gap-1 rounded-full border border-[var(--omp-accent)] px-2.5 text-omp-sm font-medium text-[var(--omp-accent)]"
+										aria-label={t("input.followUpHint")}
+										title={t("input.followUpHint")}
+										className="omp-composer-send-status omp-fade-in flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[var(--omp-accent)] px-2.5 text-omp-sm font-medium text-[var(--omp-accent)]"
 									>
 										<ListEnd aria-hidden size={13} />
-										{t("input.followUpHint")}
+										<span className="omp-composer-send-status-label">{t("input.followUpHint")}</span>
 									</span>
 								)}
 								{(!isStreaming || hasDraft) && (
