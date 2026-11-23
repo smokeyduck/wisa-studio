@@ -101,15 +101,17 @@ async function launchGui() {
 	);
 	const page = await gui.firstWindow({ timeout: 60_000 });
 	stage = "own sidecar READY";
-	await page.waitForFunction(
-		async () => {
+	const readyDeadline = Date.now() + 90_000;
+	while (
+		!(await page.evaluate(async () => {
 			if (!window.omp?.tabs) return false;
 			const tabs = await window.omp.tabs.list();
-			return tabs.some(tab => tab.active && tab.status === "ready");
-		},
-		undefined,
-		{ timeout: 60_000 },
-	);
+			return tabs.some(tab => tab.active === true && tab.status === "ready");
+		}))
+	) {
+		if (Date.now() > readyDeadline) throw new Error("own-sidecar-ready-timeout");
+		await delay(250);
+	}
 	return page;
 }
 
