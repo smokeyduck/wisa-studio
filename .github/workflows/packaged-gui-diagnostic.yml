@@ -1,0 +1,52 @@
+name: Packaged GUI diagnostic
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 87b5f459fff8ac3a56ce37da172a4a7a5fd7b68f
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          ref: b9416183558b6afe3cdcd677a330c1cdc5f0b2f6
+          path: diagnostic-proof
+          sparse-checkout: scripts/smoke-packaged-gui.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-runtime-failure
+          run-id: 45134433717
+          github-token: ${{ github.token }}
+          path: retained
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Install GUI dependencies without lifecycle scripts
+        run: bun install --ignore-scripts
+      - name: Reconstruct diagnostic payload without compiling Core
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sidecars = @(Get-ChildItem retained -Recurse -Filter omp.exe)
+          if ($sidecars.Count -ne 1) { throw 'Expected one retained sidecar' }
+          Copy-Item $sidecars[0].FullName resources/omp.exe
+          Copy-Item diagnostic-proof/scripts/smoke-packaged-gui.mjs scripts/smoke-packaged-gui.mjs
+          bun run build
+          if ($LASTEXITCODE -ne 0) { throw 'GUI build failed' }
+          bun node_modules/electron-builder/cli.js --config electron-builder.win.yml --win --x64 --dir --publish never
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic packaging failed' }
+      - name: Probe reconstructed diagnostic GUI
+        shell: pwsh
+        run: |
+          $executables = @(Get-ChildItem 'dist/win-unpacked/*.exe' | Where-Object { $_.Name -ne 'omp.exe' })
+          if ($executables.Count -ne 1) { throw 'Expected one GUI executable' }
+          node scripts/smoke-packaged-gui.mjs $executables[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic GUI proof failed' }
