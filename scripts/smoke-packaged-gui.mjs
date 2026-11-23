@@ -100,6 +100,18 @@ async function launchGui() {
 		true,
 	);
 	const page = await gui.firstWindow({ timeout: 60_000 });
+	await page.evaluate(() => {
+		const trace = [];
+		window.__sidecarTrace = trace;
+		window.omp.events.onSidecarStatus(payload => {
+			trace.push({
+				at: Date.now(),
+				status: payload.status,
+				msgLen: typeof payload.message === "string" ? payload.message.length : -1,
+				hasRestart: payload.restart !== undefined,
+			});
+		});
+	});
 	stage = "own sidecar READY";
 	await page.waitForFunction(
 		async () => {
@@ -164,6 +176,7 @@ async function readSetting(page) {
 				perTabCode: perTab ? codeOf(perTab) : "no-active-tab",
 				before,
 				after: await snapshot(),
+				trace: window.__sidecarTrace ?? [],
 			};
 		}),
 		15_000,
