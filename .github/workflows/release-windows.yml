@@ -257,7 +257,8 @@ jobs:
           foreach ($folder in @('Desktop', 'Programs')) {
             $shortcut = Join-Path ([Environment]::GetFolderPath($folder)) 'WISA STUDIO.lnk'
             if (-not (Test-Path $shortcut -PathType Leaf)) { throw 'NSIS shortcut is missing' }
-            if ($shell.CreateShortcut($shortcut).TargetPath -ne $installedExe) { throw 'NSIS shortcut targets the wrong executable' }
+            $target = $shell.CreateShortcut($shortcut).TargetPath
+            if ($target -ne $installedExe) { throw "NSIS shortcut targets the wrong executable: shortcut=[$target] expected=[$installedExe]" }
           }
           node scripts/smoke-packaged-gui.mjs $installedExe
           if ($LASTEXITCODE -ne 0) { throw 'Installed NSIS GUI settings proof failed' }
