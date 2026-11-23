@@ -66,8 +66,29 @@ function Get-Owned($mainId) {
   return @($all | Where-Object { $ids.Contains([int]$_.ProcessId) })
 }
 
-function Trace-Launch($exe, $label, $arguments = '') {
-  $profile = Join-Path $root "profile-$label"
+function Get-EffectivePaths {
+  $target = @(Invoke-RestMethod 'http://127.0.0.1:9231/json/list' -TimeoutSec 2)[0]
+  $socket = [Net.WebSockets.ClientWebSocket]::new()
+  $cancel = [Threading.CancellationTokenSource]::new(5000)
+  try {
+    $socket.ConnectAsync([Uri]$target.webSocketDebuggerUrl, $cancel.Token).GetAwaiter().GetResult()
+    $expression = "(() => { const app = process.getBuiltinModule('module').createRequire(process.cwd() + '/diagnostic.cjs')('electron').app; return { userData: app.getPath('userData'), sessionData: app.getPath('sessionData'), temp: app.getPath('temp'), logs: app.getPath('logs'), appData: app.getPath('appData'), homedir: process.getBuiltinModule('os').homedir() }; })()"
+    $request = @{ id = 1; method = 'Runtime.evaluate'; params = @{ expression = $expression; returnByValue = $true } } | ConvertTo-Json -Depth 5 -Compress
+    $bytes = [Text.Encoding]::UTF8.GetBytes($request)
+    $socket.SendAsync([ArraySegment[byte]]::new($bytes), [Net.WebSockets.WebSocketMessageType]::Text, $true, $cancel.Token).GetAwaiter().GetResult()
+    $buffer = [byte[]]::new(65536)
+    do {
+      $received = $socket.ReceiveAsync([ArraySegment[byte]]::new($buffer), $cancel.Token).GetAwaiter().GetResult()
+      $response = [Text.Encoding]::UTF8.GetString($buffer, 0, $received.Count) | ConvertFrom-Json
+    } while ($response.id -ne 1)
+    if ($response.result.exceptionDetails) { throw 'Read-only inspector path query failed' }
+    $paths = $response.result.result.value
+    return @{ userData = $paths.userData; sessionData = $paths.sessionData; temp = $paths.temp; logs = $paths.logs; appData = $paths.appData; homedir = $paths.homedir }
+  } finally { $socket.Dispose(); $cancel.Dispose() }
+}
+
+function Trace-Launch($exe, $label, $arguments = '', $normalPaths = $false) {
+  $profile = if ($normalPaths) { Join-Path $root 'normal user Người dùng có dấu' } else { Join-Path $root "profile-$label" }
   New-Item -ItemType Directory -Path $profile -Force | Out-Null
   $info = [Diagnostics.ProcessStartInfo]::new($exe)
   $info.UseShellExecute = $false
@@ -76,6 +97,14 @@ function Trace-Launch($exe, $label, $arguments = '') {
   $info.WorkingDirectory = $root
   $info.Arguments = $arguments
   Child-Environment $info $profile
+  if ($normalPaths) {
+    [void]$info.Environment.Remove('WISA_PROFILE_ROOT')
+    $info.Environment['HOME'] = $profile
+    $info.Environment['USERPROFILE'] = $profile
+    $info.Environment['APPDATA'] = Join-Path $profile 'AppData\Roaming'
+    $info.Environment['LOCALAPPDATA'] = Join-Path $profile 'AppData\Local'
+    New-Item -ItemType Directory -Path $info.Environment['APPDATA'], $info.Environment['LOCALAPPDATA'] -Force | Out-Null
+  }
   $process = [Diagnostics.Process]::Start($info)
   $stderr = $process.StandardError.ReadToEndAsync()
   $stdout = $process.StandardOutput.ReadToEndAsync()
@@ -85,6 +114,7 @@ function Trace-Launch($exe, $label, $arguments = '') {
   [void]$ownedIds.Add($process.Id)
   $timer = [Diagnostics.Stopwatch]::StartNew()
   $rendererSeen = $false
+  $pathsCaptured = $false
   try {
     while ($timer.Elapsed.TotalSeconds -lt 35) {
       $owned = @(Get-Owned $process.Id)
@@ -93,6 +123,9 @@ function Trace-Launch($exe, $label, $arguments = '') {
       $renderers = @($owned | Where-Object { $_.CommandLine -match '--type=renderer' })
       if ($renderers.Count -gt 0) { $rendererSeen = $true }
       $process.Refresh()
+      if ($arguments -match '--inspect=' -and -not $pathsCaptured -and $timer.Elapsed.TotalSeconds -gt 3) {
+        try { Save-Evidence "$label-effective-paths.json" (Get-EffectivePaths); $pathsCaptured = $true } catch { Save-Evidence "$label-path-query-error.json" @{ failure = $_.Exception.GetType().Name; message = 'Read-only effective-path inspector query did not complete' } }
+      }
       $history.Add(@{ elapsedMs = $timer.ElapsedMilliseconds; exited = $process.HasExited; ownedProcesses = @($owned | ForEach-Object { @{ pid = $_.ProcessId; parent = $_.ParentProcessId; executable = $_.ExecutablePath; role = if ($_.CommandLine -match '--type=([^ ]+)') { $Matches[1] } else { 'main-or-sidecar' } } }); rendererCount = $renderers.Count })
       if ($process.HasExited -and $owned.Count -eq 0) { break }
       Start-Sleep -Milliseconds 1000
@@ -103,6 +136,12 @@ function Trace-Launch($exe, $label, $arguments = '') {
     $runtime = Join-Path $profile 'appData\wisa-studio\logs\gui-runtime.jsonl'
     if (Test-Path $runtime) { Copy-Item $runtime (Join-Path $evidence "$label-runtime.jsonl") }
     Save-Evidence "$label-profile-files.json" @(Get-ChildItem $profile -Recurse -File | ForEach-Object { @{ path = $_.FullName.Substring($profile.Length); bytes = $_.Length } })
+    if ($normalPaths) {
+      $realUserData = Join-Path $env:APPDATA 'wisa-studio'
+      Save-Evidence "$label-knownfolder-files.json" @(Get-ChildItem $realUserData -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { @{ path = $_.FullName.Substring($realUserData.Length); bytes = $_.Length } })
+      $normalRuntime = Join-Path $realUserData 'logs\gui-runtime.jsonl'
+      if (Test-Path $normalRuntime) { Copy-Item $normalRuntime (Join-Path $evidence "$label-normal-runtime.jsonl") }
+    }
     return $result
   } finally {
     foreach ($id in @($ownedIds)) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
@@ -143,19 +182,18 @@ if (-not (Test-Path $exe)) { throw 'Installed GUI executable missing' }
 Save-Evidence 'installed-payload.json' @(Get-ChildItem $installed -Recurse -File | ForEach-Object { @{ path = $_.FullName.Substring($installed.Length); bytes = $_.Length; sha256 = if ($_.Extension -in @('.exe','.dll','.asar')) { (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() } else { $null } } })
 $shell = New-Object -ComObject WScript.Shell
 Save-Evidence 'shortcuts.json' @(foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('StartMenu'))) { Get-ChildItem $folder -Recurse -Filter '*WISA*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $shortcut = $shell.CreateShortcut($_.FullName); @{ path = $_.FullName; target = $shortcut.TargetPath; arguments = $shortcut.Arguments; workingDirectory = $shortcut.WorkingDirectory } } })
-$plain = Trace-Launch $exe 'installed-plain'
-# Plain launch is authoritative. Instrument only a failure, without modifying the payload.
+$plain = Trace-Launch $exe 'normal-plain' '' $true
+# The separate inspector launch reads only effective app paths, after plain startup evidence.
+$null = Trace-Launch $exe 'normal-path-inspector' '--inspect=127.0.0.1:9231' $true
 if (-not $plain.mainAlive -or -not $plain.rendererSeen -or ($plain.windows -join "`n") -match '#32770') {
-  $null = Trace-Launch $exe 'installed-logging' '--enable-logging=stderr --v=1'
-  $portable = Download-Pinned 'wisa-studio-0.9.52-portable.exe' '2a1c27332d3b5bbdf36f3cae3119737280bed42dd6ec6e1de369402aaea0153d'
-  $null = Trace-Launch $portable 'portable-plain'
+  $null = Trace-Launch $exe 'normal-logging' '--enable-logging=stderr --v=1' $true
 }
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
 if ($dumpbin) {
-  foreach ($binary in @($exe, (Join-Path $installed 'resources\omp.exe')) + @(Get-ChildItem (Join-Path $root 'profile-installed-plain') -Recurse -Filter '*.node' | Select-Object -ExpandProperty FullName)) {
+  foreach ($binary in @($exe, (Join-Path $installed 'resources\omp.exe')) + @(Get-ChildItem (Join-Path $root 'normal user Người dùng có dấu') -Recurse -Filter '*.node' | Select-Object -ExpandProperty FullName)) {
     & $dumpbin /nologo /dependents $binary | Out-File (Join-Path $evidence "$([IO.Path]::GetFileName($binary))-dependents.txt")
   }
 }
-Save-Evidence 'diagnostic-summary.json' @{ plainInstalledMainAlive = $plain.mainAlive; plainInstalledRendererSeen = $plain.rendererSeen; plainInstalledWindows = $plain.windows; release = 'v0.9.52'; scope = 'exact public NSIS, real installed path, isolated profile, no app arguments on first launch'; runner = $env:ImageOS }
+Save-Evidence 'diagnostic-summary.json' @{ plainInstalledMainAlive = $plain.mainAlive; plainInstalledRendererSeen = $plain.rendererSeen; plainInstalledWindows = $plain.windows; release = 'v0.9.52'; scope = 'exact public NSIS, real installed path, WISA_PROFILE_ROOT absent, process-only APPDATA/USERPROFILE/HOME fixture with spaces and Unicode, no app arguments on first launch'; runner = $env:ImageOS }
