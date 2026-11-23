@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: 87b5f459fff8ac3a56ce37da172a4a7a5fd7b68f
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/checkout@v6
         with:
