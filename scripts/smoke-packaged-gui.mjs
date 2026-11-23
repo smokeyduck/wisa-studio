@@ -118,6 +118,18 @@ async function readSetting(page) {
 		page.evaluate(async () => {
 			const response = await window.omp.rpc.getSettings(["colorBlindMode"]);
 			if (!response.success) {
+				const knownErrors = [
+					["Sidecar not ready", "settings-not-ready"],
+					["No window", "settings-no-window"],
+					["Unknown command:", "settings-unknown-command"],
+					["Unknown setting path:", "settings-unknown-path"],
+					["This collaboration session is read-only", "settings-read-only"],
+					["Cannot read properties of undefined", "settings-undefined-property"],
+					["is not iterable", "settings-not-iterable"],
+					["is not a function", "settings-not-function"],
+				];
+				const known = knownErrors.find(([prefix]) => response.error?.includes(prefix));
+				if (known) throw new Error(known[1]);
 				const code =
 					response.code === "rpc_delivery_unknown"
 						? "settings-delivery-unknown"
@@ -200,6 +212,8 @@ try {
 	const message = error instanceof Error ? error.message : "";
 	const code =
 		[
+			"settings-not-ready", "settings-no-window", "settings-unknown-command", "settings-unknown-path",
+			"settings-read-only", "settings-undefined-property", "settings-not-iterable", "settings-not-function",
 			"settings-delivery-unknown",
 			"settings-not-connected",
 			"settings-response-failed",

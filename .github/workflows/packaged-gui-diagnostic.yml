@@ -17,7 +17,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v6
         with:
-          ref: b9416183558b6afe3cdcd677a330c1cdc5f0b2f6
+          ref: ${{ github.sha }}
           path: diagnostic-proof
           sparse-checkout: scripts/smoke-packaged-gui.mjs
           sparse-checkout-cone-mode: false
