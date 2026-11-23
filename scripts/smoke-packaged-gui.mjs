@@ -1,11 +1,12 @@
 // CI-only proof of the packaged GUI's own sidecar, preload IPC, and settings persistence.
 // Usage: node scripts/smoke-packaged-gui.mjs <packaged executable or Windows portable wrapper>
 import assert from "node:assert/strict";
+import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { _electron as electron } from "playwright";
+import { chromium, _electron as electron } from "playwright";
 
 if (process.env.CI !== "true" || process.argv.length !== 3) {
 	console.error("FAIL packaged GUI proof requires CI and one packaged executable");
@@ -13,7 +14,9 @@ if (process.env.CI !== "true" || process.argv.length !== 3) {
 }
 
 const executablePath = path.resolve(process.argv[2]);
+const portable = process.platform === "win32" && /-portable\.exe$/i.test(executablePath);
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "wisa GUI proof Tiếng Việt-"));
+const userData = path.join(root, "appData", "wisa-studio");
 const project = path.join(root, "project");
 const temporary = path.join(root, "tmp");
 await fs.mkdir(project);
@@ -50,17 +53,46 @@ async function bounded(operation, milliseconds) {
 }
 
 let gui;
+let wrapper;
+let wrapperExit;
+let portableBrowser;
+let portablePage;
 let rendererFailed = false;
 let cleanupFailed = false;
 let stage = "launch";
 let passed = false;
-// Playwright owns the launched process tree and its exit cleanup; never discover or kill runner processes.
+// The portable wrapper owns its extracted app. Kill only that tree if the probe cannot quit it normally.
+function stopWrapper() {
+	if (wrapper?.pid && wrapper.exitCode === null) {
+		spawnSync("taskkill.exe", ["/pid", String(wrapper.pid), "/t", "/f"], { timeout: 5000, stdio: "ignore" });
+	}
+}
+
 const watchdog = setTimeout(() => {
 	console.error("FAIL packaged GUI proof exceeded its deadline");
+	stopWrapper();
 	process.exit(1);
 }, 240_000);
 
 async function closeGui() {
+	if (wrapper) {
+		try {
+			await bounded(
+				Promise.all([wrapperExit, portablePage?.evaluate(() => window.omp.app.quit()).catch(() => {})]),
+				15_000,
+			);
+		} catch {
+			cleanupFailed = true;
+			stopWrapper();
+			throw new Error("portable shutdown failed");
+		} finally {
+			await portableBrowser?.close();
+			wrapper = undefined;
+			portableBrowser = undefined;
+			portablePage = undefined;
+		}
+		return;
+	}
 	const owned = gui;
 	gui = undefined;
 	if (!owned) return;
@@ -83,23 +115,67 @@ async function closeGui() {
 	}
 }
 
+async function launchPortable(watchRenderer) {
+	// Playwright's Electron launcher waits for debugger endpoints on the launched
+	// process's stderr. NSIS launches a child GUI; use Chromium's port file instead.
+	const portFile = path.join(userData, "DevToolsActivePort");
+	await fs.rm(portFile, { force: true });
+	wrapper = spawn(executablePath, ["--remote-debugging-port=0"], { cwd: project, env, stdio: "ignore" });
+	wrapperExit = new Promise((resolve, reject) => {
+		wrapper.once("error", reject);
+		wrapper.once("exit", code => (code === 0 ? resolve() : reject(new Error("portable-exit-failed"))));
+	});
+	let exited = false;
+	const markExited = () => {
+		exited = true;
+	};
+	void wrapperExit.then(markExited, markExited);
+	const deadline = Date.now() + 60_000;
+	while (Date.now() < deadline) {
+		if (exited) {
+			await wrapperExit;
+			throw new Error("portable-early-exit");
+		}
+		const text = await fs.readFile(portFile, "utf8").catch(error => {
+			if (error.code !== "ENOENT") throw error;
+			return "";
+		});
+		const endpoint = /^(\d+)\r?\n(\/devtools\/browser\/[\w-]+)/.exec(text);
+		if (endpoint) {
+			portableBrowser = await chromium.connectOverCDP(`ws://127.0.0.1:${endpoint[1]}${endpoint[2]}`, {
+				timeout: Math.max(1, deadline - Date.now()),
+			});
+			const [context] = portableBrowser.contexts();
+			context.on("page", watchRenderer);
+			for (const page of context.pages()) watchRenderer(page);
+			portablePage = context.pages()[0] ?? (await context.waitForEvent("page", { timeout: 60_000 }));
+			await portablePage.waitForLoadState("domcontentloaded", { timeout: 60_000 });
+			return portablePage;
+		}
+		await delay(250);
+	}
+	throw new Error("portable-debug-port-timeout");
+}
+
 async function launchGui() {
 	rendererFailed = false;
-	gui = await electron.launch({ executablePath, cwd: project, env, timeout: 60_000 });
 	const watchRenderer = page =>
 		page.on("crash", () => {
 			rendererFailed = true;
 		});
-	gui.on("window", watchRenderer);
-	for (const page of gui.windows()) watchRenderer(page);
-	assert.equal(
-		await gui.evaluate(
-			({ app }, expected) => app.isPackaged && app.getPath("userData") === expected,
-			path.join(root, "appData", "wisa-studio"),
-		),
-		true,
-	);
-	const page = await gui.firstWindow({ timeout: 60_000 });
+	let page;
+	if (portable) {
+		page = await launchPortable(watchRenderer);
+	} else {
+		gui = await electron.launch({ executablePath, cwd: project, env, timeout: 60_000 });
+		gui.on("window", watchRenderer);
+		for (const page of gui.windows()) watchRenderer(page);
+		assert.equal(
+			await gui.evaluate(({ app }, expected) => app.isPackaged && app.getPath("userData") === expected, userData),
+			true,
+		);
+		page = await gui.firstWindow({ timeout: 60_000 });
+	}
 	stage = "own sidecar READY";
 	const readyDeadline = Date.now() + 90_000;
 	while (
@@ -142,25 +218,27 @@ async function verifyRenderer(page) {
 	await delay(10_000);
 	assert.equal(rendererFailed, false);
 	assert.equal(page.isClosed(), false);
-	assert.equal(
-		await bounded(
-			gui.evaluate(({ BrowserWindow }) => {
-				const windows = BrowserWindow.getAllWindows();
-				return (
-					windows.length > 0 &&
-					windows.every(
-						window =>
-							!window.isDestroyed() &&
-							!window.webContents.isDestroyed() &&
-							!window.webContents.isCrashed() &&
-							window.webContents.getOSProcessId() > 0,
-					)
-				);
-			}),
-			10_000,
-		),
-		true,
-	);
+	if (gui) {
+		assert.equal(
+			await bounded(
+				gui.evaluate(({ BrowserWindow }) => {
+					const windows = BrowserWindow.getAllWindows();
+					return (
+						windows.length > 0 &&
+						windows.every(
+							window =>
+								!window.isDestroyed() &&
+								!window.webContents.isDestroyed() &&
+								!window.webContents.isCrashed() &&
+								window.webContents.getOSProcessId() > 0,
+						)
+					);
+				}),
+				10_000,
+			),
+			true,
+		);
+	}
 	assert.equal(
 		await bounded(
 			page.evaluate(() => document.readyState === "complete"),
@@ -202,6 +280,9 @@ try {
 	const message = error instanceof Error ? error.message : "";
 	const code =
 		[
+			"portable-early-exit",
+			"portable-exit-failed",
+			"portable-debug-port-timeout",
 			"settings-delivery-unknown",
 			"settings-not-connected",
 			"settings-response-failed",
