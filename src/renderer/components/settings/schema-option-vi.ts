@@ -940,6 +940,16 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	Blocker: "Chặn",
 	Takeover: "Tiếp quản",
 	Refuse: "Từ chối",
+	Fallback: "Tiếp quản dự phòng",
+	Foreground: "Tiền cảnh",
+	"Background first; a call whose background route is unavailable briefly brings the target forward, then returns focus to your app (on macOS even if you kept typing). The agent may also ask for takeover on a call":
+		"Ưu tiên chạy trong nền; khi không có cách thao tác trong nền, lệnh gọi đưa cửa sổ đích lên trước trong chốc lát, rồi trả tiêu điểm về ứng dụng của bạn (trên macOS kể cả khi bạn vẫn đang gõ). Tác nhân cũng có thể yêu cầu tiếp quản cho từng lệnh gọi",
+	"omp, never the agent, decides: take over input to a window already in front of you, and a call whose background route is unavailable; stay in the background otherwise":
+		"omp quyết định, không phải tác nhân: tiếp quản thao tác nhập vào cửa sổ đang ở trước mặt bạn và lệnh gọi không có cách thao tác trong nền; các trường hợp khác vẫn chạy trong nền",
+	"omp, never the agent, decides: take over every window and element input call, bringing the target forward for that call and then returning focus to your app":
+		"omp quyết định, không phải tác nhân: tiếp quản mọi lệnh gọi nhập vào cửa sổ và phần tử, đưa đối tượng đích lên trước trong thời gian gọi rồi trả tiêu điểm về ứng dụng của bạn",
+	"Never take over: a call whose background route is unavailable fails, and the agent's own takeover, raise, activating open, desktop input and macOS menus (context menus, popup and menu buttons; they take your keyboard while open) are refused too":
+		"Không bao giờ tiếp quản: lệnh gọi không có cách thao tác trong nền sẽ thất bại; các yêu cầu của tác nhân để tiếp quản, đưa cửa sổ lên trước, mở kèm kích hoạt, nhập trên màn hình nền và mở menu macOS (menu ngữ cảnh, nút menu thả xuống và nút menu; menu chiếm bàn phím khi mở) cũng bị từ chối",
 	"Eval only": "Chỉ eval",
 	"Reject `model` on task items and eval agent()/workpool()":
 		"Từ chối `model` trong các mục tác vụ và trong eval agent()/workpool()",

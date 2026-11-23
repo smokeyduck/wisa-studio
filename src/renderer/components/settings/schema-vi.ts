@@ -1508,6 +1508,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	},
 	"todo.backend": {
 		label: "Nơi lưu danh sách tác vụ",
+		description: "Tiện ích mở rộng nhận bản sao danh sách tác vụ; Native chỉ lưu danh sách trong phiên",
 	},
 	"todo.enabled": {
 		label: "Danh sách tác vụ",
@@ -2421,10 +2422,10 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		description:
 			"Mức độ nghiêm trọng tối thiểu của ghi chú cố vấn để tác nhân thức dậy sau câu trả lời cuối. Các ghi chú dưới ngưỡng vẫn là thẻ ở cuối lịch sử và đến với tác nhân trong tin nhắn tiếp theo.",
 	},
-	"computer.backgroundFallback": {
-		label: "Chế độ dự phòng nhập nền",
+	"computer.takeover": {
+		label: "Tiếp quản điều khiển máy tính",
 		description:
-			"Việc cần làm khi đường nhập nền vào cửa sổ không khả dụng: thử lại qua cơ chế chặn bắt và trả tiêu điểm về ứng dụng của bạn (macOS; trên nền tảng khác là chặn bắt thông thường), hoặc từ chối - khi đó tác nhân cũng không thể tự đưa cửa sổ lên trước hay mở menu macOS",
+			"Khi thao tác nhập vào cửa sổ tiếp quản con trỏ và bàn phím thật (nhấn Escape để dừng) thay vì chạy trong nền",
 	},
 	"sharpshooter.minPromptLength": {
 		label: "Độ dài tối thiểu của tin nhắn Sharpshooter",

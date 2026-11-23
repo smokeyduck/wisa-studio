@@ -5,6 +5,20 @@ build is based on, so `0.9.46` here is the first WISA STUDIO release and also
 the point where the upstream GUI's history ends in this file. Release notes for
 earlier versions belong to that project; see [NOTICE](NOTICE).
 
+## [0.9.54] - 2026-11-23
+
+Core source: `smokeyduck/oh-my-pi@e256db57a616865c8768bdf83c649faa1c691de1` (Core 19.1.1), unchanged from the unpublished 0.9.53 candidate. This release includes its composer, hydration, scoped-store and startup-warning changes listed below.
+
+### Fixed
+
+- Russian and Vietnamese settings translations cover the bundled Core schema, including new enum choices, so the release locale gate checks the actual shipped settings.
+
+### Release verification
+
+- Packaged GUI gates require their own sidecar READY, settings IPC readback and persistence after restart, and a live renderer. Windows checks the installed NSIS payload and shortcuts plus the actual portable wrapper; macOS checks both native architectures in DMG and ZIP packages.
+- Windows requirements remain runtime-derived: Windows 10 x64 1809+ / Windows 11 and an x86-64-v2 CPU with SSE4.2. An actual Windows 10 host was unavailable; the reported Windows startup issue was not reproduced on Windows Server 2025 and is not claimed fixed.
+- The failed 0.9.53 candidate remains unpublished; its tag is preserved rather than retagged.
+
 ## [0.9.53] - 2026-11-23
 
 Core source: `smokeyduck/oh-my-pi@e256db57a616865c8768bdf83c649faa1c691de1`, including the mandatory upstream sync to Core 19.1.1 and the startup-warning fix. Wisa family routing, cached-roster restoration and explicit API overrides remain included.

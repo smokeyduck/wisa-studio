@@ -1197,12 +1197,22 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 		"Проверить доступность и запросить подтверждение перед первым использованием сохранённого сброса.",
 	"Classic sweep (default)": "Классический обход (по умолчанию)",
 	"Moon filling cycle": "Цикл заполнения луны",
-	// advisor.continueSeverity / computer.backgroundFallback
+	// advisor.continueSeverity / computer.takeover
 	Nit: "Мелочь",
 	Concern: "Замечание",
 	Blocker: "Блокер",
 	Takeover: "Перехват",
 	Refuse: "Отказать",
+	Fallback: "Резервный перехват",
+	Foreground: "Передний план",
+	"Background first; a call whose background route is unavailable briefly brings the target forward, then returns focus to your app (on macOS even if you kept typing). The agent may also ask for takeover on a call":
+		"Сначала в фоне; если фоновый способ недоступен, вызов ненадолго выводит целевое окно на передний план, затем возвращает фокус вашему приложению (на macOS даже если вы продолжали печатать). Агент также может запросить перехват для отдельного вызова",
+	"omp, never the agent, decides: take over input to a window already in front of you, and a call whose background route is unavailable; stay in the background otherwise":
+		"Решение принимает omp, а не агент: перехватывать ввод в окно, уже находящееся перед вами, и вызовы, для которых фоновый способ недоступен; в остальных случаях оставаться в фоне",
+	"omp, never the agent, decides: take over every window and element input call, bringing the target forward for that call and then returning focus to your app":
+		"Решение принимает omp, а не агент: перехватывать каждый вызов ввода в окно или элемент, выводя цель на передний план на время вызова, а затем возвращая фокус вашему приложению",
+	"Never take over: a call whose background route is unavailable fails, and the agent's own takeover, raise, activating open, desktop input and macOS menus (context menus, popup and menu buttons; they take your keyboard while open) are refused too":
+		"Никогда не перехватывать: вызов без доступного фонового способа завершается ошибкой; также запрещены запрошенные агентом перехват, вывод окна на передний план, открытие с активацией, ввод на рабочем столе и меню macOS (контекстные меню, кнопки раскрывающихся и обычных меню; пока меню открыто, оно забирает ввод с клавиатуры)",
 	"Eval only": "Только eval",
 	"Reject `model` on task items and eval agent()/workpool()":
 		"Отклонять `model` в задачах и в eval agent()/workpool()",

@@ -10,10 +10,10 @@ GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một
 
 | Nền tảng | Gói |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-0.9.53-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.53) |
-| macOS Intel | `wisa-studio-0.9.53-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.53) |
-| Windows x64 | [`wisa-studio-0.9.53-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.53/wisa-studio-0.9.53-setup.exe) |
-| Linux x64 | [`wisa-studio-0.9.53.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.53/wisa-studio-0.9.53.AppImage) |
+| macOS Apple Silicon | `wisa-studio-0.9.54-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.54) |
+| macOS Intel | `wisa-studio-0.9.54-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.54) |
+| Windows x64 | [`wisa-studio-0.9.54-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.54/wisa-studio-0.9.54-setup.exe) |
+| Linux x64 | [`wisa-studio-0.9.54.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.54/wisa-studio-0.9.54.AppImage) |
 
 [Tất cả bản phát hành](https://github.com/smokeyduck/wisa-studio/releases) · [Hướng dẫn cài đặt](docs/vi/cai-dat.md)
 
@@ -21,9 +21,11 @@ Bản macOS được ký ad-hoc (chưa notarize) và bản Windows chưa ký, n�
 
 **Yêu cầu Windows:** Windows 10 x64 phiên bản 1809 (build 17763) trở lên, bao gồm Windows 11, và CPU x86-64-v2 có SSE4.2. Mức tối thiểu này dựa trên yêu cầu của Electron, Bun và native addon; không có nghĩa bản phát hành đã được kiểm thử trên máy Windows 10 thực tế.
 
-### Hotfix 0.9.53
+### Hotfix 0.9.54
 
 Bản cập nhật điều chỉnh thanh nhập trong khung hẹp và phím Tab hoàn thành gợi ý, tránh tải lại phiên lặp lại, đồng thời xoá cảnh báo chưa có mô hình sau khi chọn thành công. Engine đi kèm theo Core 19.1.1, vẫn giữ định tuyến theo họ mô hình Wisa, danh sách mô hình đã lưu đệm và các API được chỉ định rõ. Số đo bằng dữ liệu kiểm thử không chứng minh đã sửa độ trễ chuyển phiên thực tế được báo cáo. Xem chi tiết trong [CHANGELOG.md](CHANGELOG.md).
+
+Bảng cài đặt tiếng Nga và tiếng Việt đã phủ đủ schema của Core đi kèm. Các bước kiểm tra phát hành chạy GUI đóng gói thật, đọc/ghi cài đặt qua IPC và kiểm tra lưu sau khi khởi động lại, gồm bản Windows đã cài bằng setup và tệp portable thực tế. Bản thử 0.9.53 trước đó chưa được công bố. Lỗi khởi động Windows được báo cáo chưa tái hiện được nên không tuyên bố đã sửa.
 
 ## Lấy API key
 
