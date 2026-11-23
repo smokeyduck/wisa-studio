@@ -940,6 +940,8 @@ export class SidecarPool {
 	tabsForWindow(win: BrowserWindow): IpcTabInfo[] {
 		const tabs: IpcTabInfo[] = [];
 		const activeTabId = this.#activeByWindow.get(win.webContents.id);
+		const diagActive = activeTabId ? this.#byTabId.get(activeTabId) : undefined;
+		diagLog("tabs-list", { tab: activeTabId ? diagTab(activeTabId) : 0, entryStatus: diagActive?.status ?? "none", mgr: diagActive ? diagManager(diagActive.sidecar) : 0, mgrStatus: diagActive?.sidecar.status ?? "none", entries: this.#entries.size });
 		const visibleTabIds = this.#visibleByWindow.get(win.webContents.id);
 		const groups = this.#groupsByWindow.get(win.webContents.id) ?? [];
 		for (const entry of this.#entries) {

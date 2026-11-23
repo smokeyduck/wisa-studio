@@ -188,8 +188,12 @@ async function readSetting(page) {
 	);
 	if ("value" in result) return result.value;
 	console.log(`SETTINGS-DIAG ${JSON.stringify(result)}`);
-	const timeline = await fs.readFile(path.join(root, "appData", "wisa-studio", "sidecar-diag.jsonl"), "utf8").catch(() => "");
-	for (const line of timeline.split("\n").filter(Boolean).slice(0, 400)) console.log(`SIDECAR-TIMELINE ${line}`);
+	const windows = await gui
+		.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map(w => ({ webContentsId: w.webContents.id, loading: w.webContents.isLoading(), visible: w.isVisible() })))
+		.catch(error => [{ error: error?.name ?? "unknown" }]);
+	console.log(`SIDECAR-WINDOWS ${JSON.stringify(windows)}`);
+	const mainTrace = await gui.evaluate(() => globalThis.__wisaDiagTimeline ?? [{ event: "no-buffer" }]).catch(error => [{ event: "evaluate-failed", name: error?.name ?? "unknown" }]);
+	for (const entry of mainTrace.slice(0, 400)) console.log(`SIDECAR-TIMELINE ${JSON.stringify(entry)}`);
 	throw new Error(result.code);
 }
 
