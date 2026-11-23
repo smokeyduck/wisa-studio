@@ -76,6 +76,7 @@ import type { DroppedProxy } from "../shared/proxy";
 import type { RpcCommand, RpcSessionState } from "../shared/rpc-types";
 import { isSessionOutputPath } from "../shared/session-output";
 import { requestQuit } from "./app-quit";
+import { diagLog, diagManager, diagTab } from "./sidecar-diag-trace";
 import { BenchmarkRunner } from "./benchmark-runner";
 import type { BrowserHost } from "./browser-host";
 import type { CollabPhoneHost } from "./collab-phone";
@@ -617,6 +618,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		if (!client || !sidecar) {
 			return { id: payload.command.id, type: "response", success: false, error: "Sidecar not connected" };
 		}
+		diagLog("dispatch", { mgr: sidecar ? diagManager(sidecar) : 0, mgrStatus: sidecar?.status ?? "none", tab: issuerTabId ? diagTab(issuerTabId) : 0, type: payload.command.type });
 		if (sidecar.status !== "ready") {
 			return {
 				id: payload.command.id,

@@ -28,6 +28,7 @@
  * it to the newly active sidecar, which never saw the request).
  */
 import type { BrowserWindow } from "electron";
+import { diagLog, diagManager, diagTab } from "./sidecar-diag-trace";
 import {
 	IPC_EVENTS,
 	type IpcSessionOwner,
@@ -264,6 +265,7 @@ export class SidecarPool {
 				detachFull: null,
 			};
 			if (title) entry.title = title;
+			diagLog("create", { tab: diagTab(tabId), mgr: diagManager(sidecar), status: sidecar.status });
 			this.#wireLight(entry);
 			this.#entries.add(entry);
 			this.#byTabId.set(tabId, entry);
@@ -308,13 +310,17 @@ export class SidecarPool {
 		const spare = this.#takeSpare(entry);
 		if (spare) {
 			const asleep = entry.sidecar;
+			diagLog("spare-swap-begin", { tab: diagTab(entry.tabId), from: diagManager(asleep), fromStatus: asleep.status, entryStatus: entry.status, to: diagManager(spare), toStatus: spare.status });
 			asleep.removeAllListeners();
 			asleep.dispose();
 			entry.sidecar = spare;
+			diagLog("spare-swap-end", { tab: diagTab(entry.tabId), mgr: diagManager(spare), mgrStatus: spare.status, entryStatus: entry.status });
 			this.#wireLight(entry);
+			diagLog("adopt-call", { tab: diagTab(entry.tabId), mgr: diagManager(spare), mgrStatus: spare.status });
 			spare.adopt(entry.sessionFile);
 			return;
 		}
+		diagLog("cold-start", { tab: diagTab(entry.tabId), mgr: diagManager(entry.sidecar), mgrStatus: entry.sidecar.status });
 		const sessionPath = entry.sessionFile;
 		if (sessionPath) entry.sidecar.restart(undefined, sessionPath);
 		else entry.sidecar.start();
@@ -393,9 +399,11 @@ export class SidecarPool {
 	/** Per-tab light wiring, attached for the entry's whole life: TAB_STATUS pushes. */
 	#wireLight(entry: PoolEntry): void {
 		const { sidecar, win } = entry;
+		diagLog("light-bind", { tab: diagTab(entry.tabId), mgr: diagManager(sidecar), mgrStatus: sidecar.status, entryStatus: entry.status });
 		sidecar.on("status", (payload: SidecarStatusPayload) => {
 			const wasReady = entry.status === "ready";
 			entry.status = payload.status;
+			diagLog("light-status", { tab: diagTab(entry.tabId), mgr: diagManager(sidecar), status: payload.status, entryStatus: entry.status, mgrStatus: sidecar.status });
 			if (payload.status === "ready") {
 				this.sidecarLifecycle?.ready({ tabId: entry.tabId, kind: entry.kind, sidecar, win });
 				if (entry.kind === "agent" && !entry.worktree) this.#scheduleSpare(sidecar.cwd);
@@ -571,6 +579,7 @@ export class SidecarPool {
 		if (entry.detachFull) return;
 		this.#ensureStarted(entry);
 		const { sidecar, win } = entry;
+		diagLog("full-bind", { tab: diagTab(entry.tabId), mgr: diagManager(sidecar), mgrStatus: sidecar.status, entryStatus: entry.status });
 		const removers: (() => void)[] = [];
 		const forwardActive = <T>(channel: string, payload: T): void => {
 			forwardToWindow(win, channel, { tabId: entry.tabId, payload });
@@ -585,6 +594,7 @@ export class SidecarPool {
 			forwardActive(IPC_EVENTS.EVENTS_BATCH, events);
 		});
 		wire("status", (payload: SidecarStatusPayload) => {
+			diagLog("full-status", { tab: diagTab(entry.tabId), mgr: diagManager(sidecar), status: payload.status, entryStatus: entry.status });
 			forwardActive(IPC_EVENTS.SIDECAR_STATUS, { ...payload, cwd: sidecar.cwd });
 		});
 		wire("subagentFrame", (frame: SubagentFrame) => {

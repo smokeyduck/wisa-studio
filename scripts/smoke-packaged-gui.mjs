@@ -188,6 +188,8 @@ async function readSetting(page) {
 	);
 	if ("value" in result) return result.value;
 	console.log(`SETTINGS-DIAG ${JSON.stringify(result)}`);
+	const timeline = await fs.readFile(path.join(root, "appData", "wisa-studio", "sidecar-diag.jsonl"), "utf8").catch(() => "");
+	for (const line of timeline.split("\n").filter(Boolean).slice(0, 400)) console.log(`SIDECAR-TIMELINE ${line}`);
 	throw new Error(result.code);
 }
 
