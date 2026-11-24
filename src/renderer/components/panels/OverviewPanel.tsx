@@ -212,7 +212,7 @@ function ChangesCard() {
 									>
 										{code}
 									</span>
-									<span className="shrink-0 text-(--omp-text)">{basename(file.path)}</span>
+									<span className="min-w-0 truncate text-(--omp-text)">{basename(file.path)}</span>
 									{/* Name, then its folder — the shape tool rows use; a root file has no folder to show. */}
 									{dirname(file.path) && (
 										<span className="min-w-0 truncate text-omp-sm text-(--omp-dim)">

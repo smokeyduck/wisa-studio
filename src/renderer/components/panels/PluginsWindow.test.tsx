@@ -450,6 +450,67 @@ describe("default catalogs", () => {
 });
 
 describe("browsing", () => {
+	const largeCatalog = Array.from({ length: 120 }, (_, index) => ({
+		...SENTRY,
+		name: `plugin-${String(index).padStart(3, "0")}`,
+	}));
+
+	it("bounds the unmeasured first paint but searches the whole catalog", async () => {
+		installAgent({ plugins: largeCatalog });
+		await openPage();
+		expect(document.body.querySelectorAll("article")).toHaveLength(40);
+		expect(pageText()).not.toContain("Plugin 119");
+
+		await search("plugin-119");
+		expect(document.body.querySelectorAll("article")).toHaveLength(1);
+		expect(pageText()).toContain("Plugin 119");
+	});
+
+	it("mounts only nearby responsive rows and preserves scroll when returning from detail", async () => {
+		const geometry = {
+			clientWidth: 900,
+			clientHeight: 450,
+			offsetHeight: 140,
+			offsetTop: 12,
+			scrollHeight: 6080,
+			scrollTop: 0,
+		};
+		const prototype = HTMLElement.prototype;
+		const previousDescriptors = Object.getOwnPropertyDescriptors(prototype);
+		for (const [key, value] of Object.entries(geometry)) {
+			Object.defineProperty(prototype, key, { configurable: true, writable: true, value });
+		}
+		try {
+			installAgent({ plugins: largeCatalog });
+			await openPage();
+			const firstRow = document.body.querySelector('[data-index="0"]');
+			const scroll = firstRow?.closest(".overflow-y-auto");
+			if (!scroll) throw new Error("no virtual catalog scroller");
+			expect(firstRow?.querySelectorAll("article")).toHaveLength(3);
+			expect(document.body.querySelectorAll("article").length).toBeLessThan(40);
+
+			await act(async () => {
+				scroll.scrollTop = 3052;
+				scroll.dispatchEvent(new Event("scroll"));
+			});
+			expect(pageText()).not.toContain("Plugin 000");
+			await clickButton("Open Plugin 060");
+			await clickButton("All plugins");
+			expect(scroll.scrollTop).toBe(3052);
+			expect(pageText()).toContain("Plugin 060");
+
+			await search("plugin-119");
+			expect(scroll.scrollTop).toBe(0);
+			expect(pageText()).toContain("Plugin 119");
+		} finally {
+			for (const key of Object.keys(geometry)) {
+				const descriptor = previousDescriptors[key];
+				if (descriptor) Object.defineProperty(prototype, key, descriptor);
+				else Reflect.deleteProperty(prototype, key);
+			}
+		}
+	});
+
 	it("narrows to one catalog, and the categories and counts follow it", async () => {
 		const fake = installAgent({
 			marketplaces: [
@@ -652,12 +713,51 @@ describe("a plugin's page", () => {
 		await clickButton("Install");
 		expect(installs(fake)).toHaveLength(1);
 		// Now installed, on the same page: it can be taken off again.
+		expect(buttons().some(button => button.textContent?.trim() === "Upgrade")).toBe(false);
 		await clickButton("Uninstall");
 		expect(fake.marketplaceAction).toHaveBeenCalledWith({
 			action: "uninstall",
 			marketplace: "official",
 			plugin: "slack",
 		});
+	});
+
+	it("does not offer an upgrade when the installed plugin is up to date", async () => {
+		installAgent({ plugins: [{ ...SLACK, installed: true, updateAvailable: false }] });
+		await openPage();
+		await clickButton("Open Slack");
+
+		expect(buttons().some(button => button.textContent?.trim() === "Upgrade")).toBe(false);
+		expect(buttons().some(button => button.textContent?.trim() === "Uninstall")).toBe(true);
+	});
+
+	it("offers a reported upgrade, shows it in progress, and clears it after refresh", async () => {
+		const fake = installAgent({ plugins: [{ ...SLACK, installed: true, updateAvailable: true }] });
+		const upgrading = Promise.withResolvers<void>();
+		const answer = fake.marketplaceAction.getMockImplementation();
+		fake.marketplaceAction.mockImplementation(async (payload: { action: string }) => {
+			if (payload.action !== "upgrade") return answer?.(payload);
+			await upgrading.promise;
+			fake.plugins = [{ ...SLACK, installed: true, updateAvailable: false }];
+			return ok({ ok: true });
+		});
+		await openPage();
+		await clickButton("Open Slack");
+		await clickButton("Upgrade");
+
+		expect(fake.marketplaceAction).toHaveBeenCalledWith({
+			action: "upgrade",
+			marketplace: "official",
+			plugin: "slack",
+		});
+		const upgrade = buttons().find(button => button.textContent?.trim() === "Upgrade");
+		expect(upgrade?.hasAttribute("disabled")).toBe(true);
+		expect(upgrade?.querySelector('[role="status"]')).toBeTruthy();
+
+		await act(async () => upgrading.resolve());
+		await flush();
+		expect(buttons().some(button => button.textContent?.trim() === "Upgrade")).toBe(false);
+		expect(buttons().some(button => button.textContent?.trim() === "Uninstall")).toBe(true);
 	});
 
 	it("uses the catalog's own list for a plugin that isn't on GitHub, with no network request", async () => {

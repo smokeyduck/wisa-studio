@@ -580,6 +580,13 @@ function McpTab({
 	// Mirrors `reauths` so the async reauth body can tell an intentional cancel
 	// (suppress its failure toast) from a genuine one after the await.
 	const reauthPhaseRef = useRef<Record<string, McpReauthPhase>>({});
+	const waitingForMcp = rpc.data?.some(server => server.status === "connecting") ?? false;
+	const { error: listError, loading, ready, refresh } = rpc;
+	useEffect(() => {
+		if (!waitingForMcp || !ready || loading || listError) return;
+		const timer = window.setTimeout(() => void refresh(), 1000);
+		return () => window.clearTimeout(timer);
+	}, [waitingForMcp, ready, loading, listError, refresh]);
 	// Prune stale per-server test/reauth entries whenever the server set
 	// changes: a removed server's result must not leak onto a same-name
 	// re-add after the next refetch (state is keyed by name, not identity).

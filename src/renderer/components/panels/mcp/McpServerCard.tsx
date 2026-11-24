@@ -253,6 +253,19 @@ export function McpServerCard({
 					{target}
 				</span>
 			)}
+			{enabled && reauth === null && (server.authState === "required" || server.authState === "expired") && (
+				<div className="mt-1.5">
+					<Button
+						disabled={disabled || busy}
+						icon={<KeyRound size={12} />}
+						onClick={() => onMenuAction("reauth")}
+						size="sm"
+						variant="secondary"
+					>
+						{t("mcp.action.reauth")}
+					</Button>
+				</div>
+			)}
 			{(testing || testView) && (
 				<McpTestResultView className="mt-1.5" onDismiss={onDismissTest} testing={testing} view={testView} />
 			)}

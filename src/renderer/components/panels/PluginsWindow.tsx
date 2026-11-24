@@ -7,8 +7,9 @@
  * rest of the install path is the same marketplace_action the Settings list uses.
  */
 
+import { observeElementRect, useVirtualizer } from "@tanstack/react-virtual";
 import { Puzzle, RefreshCw, Search, Settings2, ShieldAlert, X } from "lucide-react";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import {
@@ -38,6 +39,10 @@ import { PanelEmpty } from "./workspace-ui";
 
 /** Catalogs bring dozens of categories, most with a plugin or two; the rest sit behind "More". */
 const TOP_CATEGORIES = 12;
+const CARD_MIN_WIDTH = 280;
+const CARD_GAP = 12;
+const ESTIMATED_ROW_HEIGHT = 140;
+const UNMEASURED_CARDS = 40;
 
 type PluginCatalogSurfaceProps =
 	| { query: string; onOpenSection: (tab: "marketplaces" | "plugins") => void }
@@ -62,6 +67,10 @@ export function PluginCatalogSurface(props: PluginCatalogSurfaceProps) {
 		origin: PluginActivationOrigin;
 		cwd: string;
 	} | null>(null);
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const warningsRef = useRef<HTMLDivElement>(null);
+	const gridRef = useRef<HTMLDivElement>(null);
+	const [{ columns, scrollMargin }, setGridLayout] = useState({ columns: 1, scrollMargin: 0 });
 
 	// Opening the page starts at the list. Search and filters stay, as they're easy to clear and slow to redo.
 	useLayoutEffect(() => {
@@ -81,10 +90,20 @@ export function PluginCatalogSurface(props: PluginCatalogSurfaceProps) {
 	);
 	const categories = useMemo(() => catalogCategories(inCatalog), [inCatalog]);
 	const shownCategories = allCategories ? categories : categories.slice(0, TOP_CATEGORIES);
-	const visible = useMemo(
-		() => filterCatalog(plugins, { query, view, category, catalog: activeCatalog }),
-		[activeCatalog, plugins, query, view, category],
-	);
+	const visible = useMemo(() => {
+		const trimmedQuery = query.trim();
+		if (!trimmedQuery && view === "all" && category === null) {
+			return inCatalog.toSorted((a, b) => a.title.localeCompare(b.title));
+		}
+		// Under All Catalogs, match before deduplicating: search can match a
+		// catalog name or metadata that's present only on a non-preferred copy.
+		return filterCatalog(activeCatalog === null ? plugins : inCatalog, {
+			query: trimmedQuery,
+			view,
+			category,
+			catalog: activeCatalog,
+		});
+	}, [activeCatalog, inCatalog, plugins, query, view, category]);
 	const installedCount = useMemo(() => inCatalog.filter(plugin => plugin.info.installed).length, [inCatalog]);
 	const catalogCounts = useMemo(() => {
 		const counts = new Map<string, number>();
@@ -92,6 +111,55 @@ export function PluginCatalogSurface(props: PluginCatalogSurfaceProps) {
 		return counts;
 	}, [plugins]);
 	const selected = selectedId ? plugins.find(plugin => plugin.id === selectedId) : undefined;
+
+	// Virtualize rows rather than cards so an install error can enlarge its whole row.
+	const rowKey = useCallback(
+		(index: number) => `${columns}:${visible[index * columns]?.id ?? index}`,
+		[columns, visible],
+	);
+	const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+		count: Math.ceil(visible.length / columns),
+		getScrollElement: () => scrollRef.current,
+		getItemKey: rowKey,
+		estimateSize: () => ESTIMATED_ROW_HEIGHT,
+		gap: CARD_GAP,
+		overscan: 4,
+		scrollMargin,
+		useFlushSync: false,
+		observeElementRect: (instance, onRect) => {
+			const updateLayout = () => {
+				const grid = gridRef.current;
+				const width = grid?.clientWidth;
+				if (!grid || !width) return;
+				const nextColumns = Math.max(1, Math.floor((width + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP)));
+				const nextMargin = grid.offsetTop;
+				setGridLayout(current =>
+					current.columns === nextColumns && current.scrollMargin === nextMargin
+						? current
+						: { columns: nextColumns, scrollMargin: nextMargin },
+				);
+			};
+			const stop = observeElementRect(instance, rect => {
+				if (!(rect.width > 0 && rect.height > 0)) return;
+				updateLayout();
+				onRect(rect);
+			});
+			// Errors are above the grid and scroll with it; wrapping or dismissing
+			// one changes the origin without necessarily resizing the viewport.
+			const warnings = warningsRef.current;
+			const observer = warnings && typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateLayout) : null;
+			if (warnings) observer?.observe(warnings);
+			return () => {
+				stop?.();
+				observer?.disconnect();
+			};
+		},
+	});
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the view's filter controls change.
+	useLayoutEffect(() => {
+		if (scrollRef.current) scrollRef.current.scrollTop = 0;
+	}, [activeCatalog, category, query, view]);
 
 	const requestAction = useCallback(
 		(plugin: CatalogPlugin, action: PluginAction): void => {
@@ -148,6 +216,20 @@ export function PluginCatalogSurface(props: PluginCatalogSurfaceProps) {
 				? t("plugins.seedingWait")
 				: undefined;
 
+	const renderCard = (plugin: CatalogPlugin) => (
+		<PluginCard
+			disabled={actionDisabled}
+			disabledReason={disabledReason}
+			error={actionErrors[plugin.id]}
+			installing={busy?.id === plugin.id}
+			key={plugin.id}
+			onInstall={() => requestAction(plugin, "install")}
+			onOpen={() => setSelectedId(plugin.id)}
+			plugin={plugin}
+			showCatalog={marketplaces.length > 1}
+		/>
+	);
+
 	const body = (() => {
 		if (catalog.status === "connecting") {
 			return (
@@ -202,24 +284,35 @@ export function PluginCatalogSurface(props: PluginCatalogSurfaceProps) {
 				</div>
 			);
 		}
+		const virtualRows = virtualizer.getVirtualItems();
+		// Settings normally sizes its pages to their content. Bound its inner
+		// scroller so that the estimated full catalog does not become the viewport.
 		return (
-			<div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-				{catalog.seedError && (
-					<div className="mb-2">
-						<CopyableError
-							copyLabel={t("marketplace.copyError")}
-							message={t("plugins.seedFailed", { message: catalog.seedError.message })}
-						/>
-					</div>
+			<div
+				className={cx(
+					"relative min-h-0 overflow-y-auto px-4 py-3 [overflow-anchor:none] [scrollbar-gutter:stable]",
+					embedded ? "max-h-[65dvh]" : "flex-1",
 				)}
-				{catalog.listFailures.map(failure => (
-					<div className="mb-2" key={failure.marketplace}>
-						<CopyableError
-							copyLabel={t("marketplace.copyError")}
-							message={t("plugins.catalogFailed", { catalog: failure.marketplace, message: failure.error })}
-						/>
-					</div>
-				))}
+				ref={scrollRef}
+			>
+				<div className="flow-root" ref={warningsRef}>
+					{catalog.seedError && (
+						<div className="mb-2">
+							<CopyableError
+								copyLabel={t("marketplace.copyError")}
+								message={t("plugins.seedFailed", { message: catalog.seedError.message })}
+							/>
+						</div>
+					)}
+					{catalog.listFailures.map(failure => (
+						<div className="mb-2" key={failure.marketplace}>
+							<CopyableError
+								copyLabel={t("marketplace.copyError")}
+								message={t("plugins.catalogFailed", { catalog: failure.marketplace, message: failure.error })}
+							/>
+						</div>
+					))}
+				</div>
 				{visible.length === 0 ? (
 					inCatalog.length > 0 && view === "installed" && !query && category === null ? (
 						<PanelEmpty hint={t("plugins.noneInstalledHint")} icon={Puzzle} title={t("plugins.noneInstalled")} />
@@ -236,23 +329,34 @@ export function PluginCatalogSurface(props: PluginCatalogSurfaceProps) {
 							title={t("plugins.noMatches")}
 						/>
 					)
-				) : (
-					<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
-						{visible.map(plugin => (
-							<PluginCard
-								disabled={actionDisabled}
-								disabledReason={disabledReason}
-								error={actionErrors[plugin.id]}
-								installing={busy?.id === plugin.id}
-								key={plugin.id}
-								onInstall={() => requestAction(plugin, "install")}
-								onOpen={() => setSelectedId(plugin.id)}
-								plugin={plugin}
-								showCatalog={marketplaces.length > 1}
-							/>
+				) : null}
+				<div ref={gridRef}>
+					{visible.length > 0 &&
+						(virtualRows.length > 0 ? (
+							<div className="relative" style={{ height: virtualizer.getTotalSize() }}>
+								{virtualRows.map(row => (
+									<div
+										className="absolute inset-x-0 top-0 grid"
+										data-index={row.index}
+										key={row.key}
+										ref={virtualizer.measureElement}
+										style={{
+											columnGap: CARD_GAP,
+											gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+											transform: `translateY(${row.start - scrollMargin}px)`,
+										}}
+									>
+										{visible.slice(row.index * columns, (row.index + 1) * columns).map(renderCard)}
+									</div>
+								))}
+							</div>
+						) : (
+							// Before layout (or in a DOM without measurements), show a bounded first batch.
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-3">
+								{visible.slice(0, UNMEASURED_CARDS).map(renderCard)}
+							</div>
 						))}
-					</div>
-				)}
+				</div>
 			</div>
 		);
 	})();
@@ -261,9 +365,12 @@ export function PluginCatalogSurface(props: PluginCatalogSurfaceProps) {
 
 	const contents = (
 		<>
-			<div className={cx("flex min-h-0 flex-col", !embedded && "h-full")}>
-				{/* The list stays mounted behind a plugin's page, so Back returns to the same scroll and filters. */}
-				<div className={cx("flex min-h-0 flex-1 flex-col", selected && "hidden")}>
+			<div className={cx("grid min-h-0", !embedded && "h-full grid-rows-[minmax(0,1fr)]")}>
+				{/* Keep the list's layout and measurements behind detail so Back preserves scroll. */}
+				<div
+					className={cx("col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col", selected && "invisible")}
+					inert={selected !== undefined}
+				>
 					<div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-(--omp-border-muted) px-4 py-2.5">
 						{!embedded && (
 							<div className="relative min-w-[12rem] flex-1">
@@ -394,17 +501,19 @@ export function PluginCatalogSurface(props: PluginCatalogSurfaceProps) {
 					</div>
 				</div>
 				{selected && (
-					<PluginDetail
-						busyAction={busy?.id === selected.id ? busy.action : null}
-						disabled={actionDisabled}
-						disabledReason={disabledReason}
-						error={actionErrors[selected.id]}
-						key={selected.id}
-						onAction={action => requestAction(selected, action)}
-						onBack={() => setSelectedId(null)}
-						onOpenSettings={() => openSection("plugins")}
-						plugin={selected}
-					/>
+					<div className="col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col">
+						<PluginDetail
+							busyAction={busy?.id === selected.id ? busy.action : null}
+							disabled={actionDisabled}
+							disabledReason={disabledReason}
+							error={actionErrors[selected.id]}
+							key={selected.id}
+							onAction={action => requestAction(selected, action)}
+							onBack={() => setSelectedId(null)}
+							onOpenSettings={() => openSection("plugins")}
+							plugin={selected}
+						/>
+					</div>
 				)}
 			</div>
 			<ConfirmDialog

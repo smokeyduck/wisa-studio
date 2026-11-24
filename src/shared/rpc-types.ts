@@ -1089,6 +1089,8 @@ export interface RpcMarketplacePluginInfo {
 	description?: string;
 	version?: string;
 	installed: boolean;
+	/** The cached catalog advertises a newer release for this installation. */
+	updateAvailable?: boolean;
 	/** Catalog metadata; each field is absent when the catalog entry omits it. */
 	displayName?: string;
 	author?: string;

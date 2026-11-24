@@ -253,16 +253,18 @@ export function PluginDetail({
 						<div className="flex shrink-0 items-center gap-1.5">
 							{info.installed ? (
 								<>
-									<Button
-										disabled={disabled}
-										loading={busyAction === "upgrade"}
-										onClick={() => onAction("upgrade")}
-										size="sm"
-										title={disabled ? disabledReason : undefined}
-										variant="secondary"
-									>
-										{t("marketplace.upgrade")}
-									</Button>
+									{info.updateAvailable === true && (
+										<Button
+											disabled={disabled}
+											loading={busyAction === "upgrade"}
+											onClick={() => onAction("upgrade")}
+											size="sm"
+											title={disabled ? disabledReason : undefined}
+											variant="secondary"
+										>
+											{t("marketplace.upgrade")}
+										</Button>
+									)}
 									<Button
 										className="text-(--omp-error)"
 										disabled={disabled}

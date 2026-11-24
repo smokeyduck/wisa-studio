@@ -285,6 +285,13 @@ describe("McpServerCard SSR", () => {
 		expect(html).toContain("https://x.test/mcp");
 	});
 
+	it("offers OAuth directly on a disconnected plugin server that requests authorization", () => {
+		const pluginServer = server({ transport: "http", status: "disconnected", authState: "required" });
+		expect(renderCard(pluginServer)).toContain("Re-authorize");
+		expect(renderCard({ ...pluginServer, enabled: false })).not.toContain("Re-authorize");
+		expect(renderCard(pluginServer, "running")).not.toContain("Re-authorize");
+	});
+
 	it("shows the reauth-in-flight strip with a cancel action", () => {
 		const html = renderCard(server({}), "running");
 		expect(html).toContain("Authorization in progress");
