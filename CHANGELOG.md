@@ -17,6 +17,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - The subagent dialog renders sent messages and replies as Markdown and lets you expand each long message independently.
 - Subagent cards stay at their place in the conversation after finishing and fit their content within the transcript gutters. Matching background-task results appear inside the card's dialog instead of as duplicate transcript rows.
 - The task list opens from a compact progress card at the top of its own session, including in split view.
+- The Review panel has a larger toolbar control, a shortcut in each split session, and its own close button.
 
 ## [0.9.55] - 2026-11-24
 

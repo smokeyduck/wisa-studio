@@ -328,6 +328,22 @@ export function TitleBar() {
 			>
 				<PanelLeft size={18} className={cx(sidebarVisible && "text-[var(--omp-text)]")} />
 			</button>
+			<button
+				type="button"
+				aria-label={reviewLabel}
+				aria-pressed={panelVisible}
+				onClick={togglePanel}
+				title={reviewLabel}
+				className="omp-review-toggle no-drag omp-pressable flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-(--omp-border-muted) px-2 text-omp-sm font-medium text-(--omp-text) hover:bg-(--omp-selected-bg) aria-pressed:border-(--omp-border-accent) aria-pressed:bg-(--omp-accent-dim)"
+			>
+				<PanelRight aria-hidden="true" size={17} />
+				<span className="omp-review-label whitespace-nowrap">{t("panel.title")}</span>
+				{changeCount != null && changeCount > 0 && (
+					<span className="omp-review-label font-mono text-omp-xs tabular-nums text-(--omp-muted)" aria-hidden="true">
+						{changeCount > 99 ? "99+" : changeCount}
+					</span>
+				)}
+			</button>
 			{/* The sidebar carries the labelled Command Center entry; this shortcut
 			    only stands in for it while the sidebar is hidden. */}
 			{!sidebarVisible && (
@@ -417,26 +433,6 @@ export function TitleBar() {
 					items={actionMenuItems}
 				/>
 			)}
-			{/* The review drawer's entry says why it is worth opening: how many
-			    files the checkout has changed. */}
-			<button
-				type="button"
-				aria-label={reviewLabel}
-				aria-pressed={panelVisible}
-				onClick={togglePanel}
-				title={reviewLabel}
-				className={cx(
-					"omp-review-toggle no-drag omp-pressable flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]",
-					panelVisible && "bg-[var(--omp-selected-bg)] text-[var(--omp-text)]",
-				)}
-			>
-				<PanelRight size={17} />
-				{changeCount != null && changeCount > 0 && (
-					<span className="omp-review-count font-mono text-omp-sm tabular-nums" aria-hidden="true">
-						{changeCount > 99 ? "99+" : changeCount}
-					</span>
-				)}
-			</button>
 			<WorkspaceDialog open={workspaceOpen} onClose={() => setWorkspaceOpen(false)} />
 		</header>
 	);

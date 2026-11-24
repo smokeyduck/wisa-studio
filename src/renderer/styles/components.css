@@ -1694,6 +1694,10 @@
 }
 
 @container omp-workspace (max-width: 520px) {
+	.omp-review-label {
+		display: none;
+	}
+
 	.omp-titlebar-status {
 		margin-inline: 0;
 		padding-inline: 0.5rem;

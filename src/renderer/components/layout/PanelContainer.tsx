@@ -1,4 +1,13 @@
-import { Bot, ClipboardList, Diff, FolderTree, LayoutDashboard, MessageCircleQuestion, SquareTerminal } from "lucide-react";
+import {
+	Bot,
+	ClipboardList,
+	Diff,
+	FolderTree,
+	LayoutDashboard,
+	MessageCircleQuestion,
+	SquareTerminal,
+	X,
+} from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
@@ -82,6 +91,7 @@ export function PanelContainer() {
 	const t = useT();
 	const panelTab = useUiStore(s => s.panelTab);
 	const setPanelTab = useUiStore(s => s.setPanelTab);
+	const togglePanel = useUiStore(s => s.togglePanel);
 	const activeTabId = useTabsStore(s => s.activeTabId);
 	const split = useTabsStore(s => s.split);
 	const routeReady = useActiveTabRouteReady();
@@ -154,16 +164,19 @@ export function PanelContainer() {
 			className={cx(
 				"omp-inspector flex flex-col border-l border-[var(--omp-border-muted)]",
 				overlay ? "absolute top-12 right-0 bottom-0 z-30 shadow-[var(--omp-shadow-lg)]" : "relative h-full shrink-0",
-				!routeReady && "pointer-events-none",
 			)}
 			style={{ width: panelWidth }}
 		>
-			{/* The title-bar toggle stays visible above an overlay, including at full width. */}
+			{/* Close stays available even while the focused session is switching. */}
 			<div className="omp-inspector-header drag-region flex h-12 shrink-0 items-center gap-2 border-b border-[var(--omp-border-muted)] pl-3">
 				<h2 className="sr-only">
 					{t("panel.title")} - {t("panel.subtitle")}
 				</h2>
-				<div className="omp-segmented omp-tab-scroller no-drag" onWheel={scrollStripOnWheel}>
+				<div
+					className="omp-segmented omp-tab-scroller no-drag min-w-0 flex-1"
+					inert={!routeReady}
+					onWheel={scrollStripOnWheel}
+				>
 					<Glide activeKey={visiblePanelTab} selector='[aria-pressed="true"]' variant="thumb" />
 					{visibleTabs.map(({ id, labelKey, icon }) => {
 						const active = visiblePanelTab === id;
@@ -190,8 +203,17 @@ export function PanelContainer() {
 						);
 					})}
 				</div>
+				<button
+					aria-label={t("common.close")}
+					className="no-drag omp-pressable mr-1 flex size-9 shrink-0 items-center justify-center rounded-lg text-(--omp-muted) hover:bg-(--omp-selected-bg) hover:text-(--omp-text)"
+					onClick={togglePanel}
+					title={t("common.close")}
+					type="button"
+				>
+					<X aria-hidden="true" size={17} />
+				</button>
 			</div>
-			<div className="min-h-0 flex-1 overflow-hidden">
+			<div className="min-h-0 flex-1 overflow-hidden" inert={!routeReady}>
 				<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>
 					{visiblePanelTab === "overview" && <OverviewPanel />}
 					{visiblePanelTab === "agents" && <AgentRoster />}

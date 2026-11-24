@@ -1,4 +1,4 @@
-import { Columns2, Rows2, X } from "lucide-react";
+import { Columns2, PanelRight, Rows2, X } from "lucide-react";
 import {
 	type CSSProperties,
 	type DragEvent,
@@ -18,6 +18,7 @@ import { useSessionStore } from "../../stores/session";
 import { SessionRuntimeProvider } from "../../stores/session-runtime-context";
 import { ensureTabRuntime } from "../../stores/tab-runtime";
 import { type SplitAxis, type SplitPlacement, tabDisplayTitle, useTabsStore } from "../../stores/tabs";
+import { useUiStore } from "../../stores/ui";
 import { AgentBeside } from "../agents/AgentBeside";
 import { AgentPage } from "../agents/AgentPage";
 import { ChatStream } from "../chat/ChatStream";
@@ -100,6 +101,13 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 	const active = useTabsStore(state => state.activeTabId === tabId);
 	const switchTab = useTabsStore(state => state.switchTab);
 	const unsplit = useTabsStore(state => state.unsplit);
+	const panelVisible = useUiStore(state => state.panelVisible);
+	const openReview = async () => {
+		if (!active) await switchTab(tabId);
+		if (useTabsStore.getState().activeTabId !== tabId) return;
+		const ui = useUiStore.getState();
+		if (active || !ui.panelVisible) ui.togglePanel();
+	};
 	// The pane's ✕ takes this session out of the split: the other pane stays.
 	const otherPane = useTabsStore(state =>
 		state.split ? (state.split.firstTabId === tabId ? state.split.secondTabId : state.split.firstTabId) : null,
@@ -123,8 +131,10 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 				aria-label={t("split.paneLabel", { title: label })}
 				data-active={active ? "true" : "false"}
 				onPointerDownCapture={event => {
-					// Pressing the pane's ✕ removes it; focusing it first would only flash.
-					if (!active && !(event.target as Element).closest("[data-pane-remove]")) void switchTab(tabId);
+					// Header actions handle their own routing (or intentionally leave focus alone).
+					if (!active && !(event.target as Element).closest("[data-pane-remove], [data-pane-review]")) {
+						void switchTab(tabId);
+					}
 				}}
 				className={cx(
 					"omp-session-pane relative flex min-h-0 min-w-0 flex-col overflow-hidden",
@@ -132,7 +142,7 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 				)}
 			>
 				{split && (
-					<header className="relative flex h-8 shrink-0 items-center gap-2 border-b border-[var(--omp-border-muted)] pr-3 pl-5 text-omp-sm">
+					<header className="relative flex h-9 shrink-0 items-center gap-2 border-b border-[var(--omp-border-muted)] pr-2 pl-5 text-omp-sm">
 						<span
 							aria-hidden
 							className={cx("omp-signal-light omp-tab-signal", signalActive && "omp-signal-light--active")}
@@ -140,6 +150,18 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 						/>
 						<span className="min-w-0 flex-1 truncate font-medium text-[var(--omp-text)]">{label}</span>
 						<span className="omp-session-pane-cwd max-w-[45%] truncate text-[var(--omp-dim)]">{tab.cwd}</span>
+						<button
+							aria-label={t("titlebar.togglePanel")}
+							aria-pressed={active && panelVisible}
+							className="omp-pressable flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-1.5 font-medium text-(--omp-text) hover:bg-(--omp-selected-bg) aria-pressed:bg-(--omp-accent-dim)"
+							data-pane-review
+							onClick={() => void openReview()}
+							title={t("titlebar.togglePanel")}
+							type="button"
+						>
+							<PanelRight aria-hidden="true" size={15} />
+							<span className="omp-review-label whitespace-nowrap">{t("panel.title")}</span>
+						</button>
 						<button
 							type="button"
 							data-pane-remove
