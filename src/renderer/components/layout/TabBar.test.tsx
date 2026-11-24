@@ -629,7 +629,7 @@ describe("TabBar", () => {
 		await rightClick(chips()[2]!);
 
 		const action = () => menuItem("Close all inactive tabs")!;
-		expect(action().hasAttribute("disabled")).toBe(true);
+		expect(action().getAttribute("disabled")).not.toBeNull();
 		await act(async () => {
 			useTabsStore.setState(state => ({
 				tabs: state.tabs.map(tab => (tab.id === "t3" ? { ...tab, status: "ready" } : tab)),
@@ -640,7 +640,7 @@ describe("TabBar", () => {
 		expect(useTabsStore.getState().tabs.map(tab => tab.id)).toEqual(["t0", "t1"]);
 		expect(useTabsStore.getState()).toMatchObject({ activeTabId: "t0", split: pair });
 		await rightClick(chips()[0]!);
-		expect(action().hasAttribute("disabled")).toBe(true);
+		expect(action().getAttribute("disabled")).not.toBeNull();
 	});
 
 	it("clicking a chip switches tabs; the + button spawns a new tab in the current cwd", async () => {
