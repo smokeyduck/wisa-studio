@@ -414,7 +414,7 @@
 }
 
 .omp-session-pane {
-	container: omp-workspace / inline-size;
+	container: omp-workspace / size;
 }
 
 .omp-session-pane--active {

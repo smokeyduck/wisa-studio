@@ -1,4 +1,4 @@
-/** The live session todo list, opened from its compact ribbon below the tabs. */
+/** The live todo list at the top of its owning session pane. */
 
 import {
 	closestCenter,
@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { TodoPhase, TodoTask } from "../../../../shared/rpc-types";
+import { cx } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
 import { isImeKeyEvent } from "../../../lib/ime";
 import { onEscape } from "../../../lib/keymap";
@@ -308,13 +309,13 @@ function PhaseSection({
 	);
 }
 
-export function TodoRibbon() {
+export function TodoRibbon({ active = true }: { active?: boolean }) {
 	const tabId = useRuntimeTabId();
 	const sessionId = useSessionStore(state => state.sessionId);
-	return <SessionTodoRibbon key={`${tabId ?? ""}:${sessionId ?? ""}`} />;
+	return <SessionTodoRibbon active={active} key={`${tabId ?? ""}:${sessionId ?? ""}`} />;
 }
 
-function SessionTodoRibbon() {
+function SessionTodoRibbon({ active }: { active: boolean }) {
 	const rpc = useTabRpc();
 	const tabId = useRuntimeTabId();
 	const todoStore = sessionRuntimeStore<TodoStore>(tabId, "todo") ?? useTodoStore;
@@ -336,9 +337,10 @@ function SessionTodoRibbon() {
 	useEffect(() => {
 		if (seenRequest.current === ribbonRequest) return;
 		seenRequest.current = ribbonRequest;
+		if (!active) return;
 		trigger.current?.focus();
 		setOpen(true);
-	}, [ribbonRequest]);
+	}, [active, ribbonRequest]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -500,7 +502,7 @@ function SessionTodoRibbon() {
 	return (
 		<section
 			aria-label={t("dock.todo")}
-			className="relative z-30 flex h-6 shrink-0 items-center justify-center border-b border-(--omp-border-muted) bg-(--omp-bg-secondary)"
+			className="relative z-30 mx-auto w-[calc(100%-1.5rem)] max-w-xl shrink-0 pt-2 pb-1.5"
 			data-todo-ribbon
 			data-state={ribbonState}
 			onBlur={event => {
@@ -524,38 +526,57 @@ function SessionTodoRibbon() {
 			<button
 				aria-controls={open ? listId : undefined}
 				aria-expanded={open}
-				className="omp-pressable flex h-full w-full min-w-0 items-center justify-center gap-2 px-2 text-omp-xs text-(--omp-muted) hover:text-(--omp-text) focus-visible:text-(--omp-text)"
+				className="omp-pressable flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg border border-(--omp-border-muted) bg-(--omp-bg-secondary) px-2 py-1 text-left text-omp-xs text-(--omp-muted) transition-colors hover:border-(--omp-border) hover:bg-(--omp-bg-elevated) aria-expanded:border-(--omp-border) aria-expanded:bg-(--omp-bg-elevated)"
 				onClick={() => setOpen(true)}
 				onFocus={() => setOpen(true)}
 				ref={trigger}
 				type="button"
 			>
-				{ribbonState === "running" ? (
-					<span aria-hidden="true" className="omp-working-dot omp-working-dot--sm shrink-0" />
-				) : ribbonState === "failed" ? (
-					<AlertCircle aria-hidden="true" className="shrink-0 text-(--omp-error)" size={12} />
-				) : ribbonState === "complete" ? (
-					<CheckCircle2 aria-hidden="true" className="shrink-0 text-(--omp-success)" size={12} />
-				) : (
-					<ListTodo aria-hidden="true" className="shrink-0 text-(--omp-muted)" size={12} />
-				)}
-				<span className="shrink-0 font-medium text-(--omp-text)">{t("dock.todo")}</span>
-				{taskCounts.current && (
-					<span className="min-w-0 max-w-md truncate text-(--omp-text)" title={taskCounts.current}>
-						{taskCounts.current}
+				<span
+					className={cx(
+						"grid size-5 shrink-0 place-items-center rounded-md bg-current/10",
+						ribbonState === "running"
+							? "text-(--omp-link)"
+							: ribbonState === "failed"
+								? "text-(--omp-error)"
+								: ribbonState === "complete"
+									? "text-(--omp-success)"
+									: "text-(--omp-muted)",
+					)}
+				>
+					{ribbonState === "running" ? (
+						<span aria-hidden="true" className="omp-working-dot omp-working-dot--sm" />
+					) : ribbonState === "failed" ? (
+						<AlertCircle aria-hidden="true" size={12} />
+					) : ribbonState === "complete" ? (
+						<CheckCircle2 aria-hidden="true" size={12} />
+					) : (
+						<ListTodo aria-hidden="true" size={12} />
+					)}
+				</span>
+				<span className="shrink-0 font-semibold text-(--omp-text)">{t("dock.todo")}</span>
+				<span aria-hidden="true" className="h-3 w-px shrink-0 bg-(--omp-border)" />
+				<span aria-live="polite" className="min-w-0 flex-1 truncate" title={taskCounts.current || summary}>
+					{taskCounts.current || summary}
+				</span>
+				{taskCounts.current && <span className="sr-only">{summary}</span>}
+				{taskCounts.total > 0 && (
+					<span className="shrink-0 rounded-md bg-(--omp-bg-tertiary) px-1.5 py-0.5 tabular-nums text-(--omp-muted)">
+						{taskCounts.completed}/{taskCounts.total}
 					</span>
 				)}
-				<span aria-live="polite" className="min-w-0 truncate" title={summary}>
-					{summary}
-				</span>
 				{reminderVisible && (
 					<AlertTriangle aria-hidden="true" className="shrink-0 text-(--omp-warning)" size={12} />
 				)}
-				<ChevronRight aria-hidden="true" className="shrink-0 rotate-90" size={12} />
+				<ChevronRight
+					aria-hidden="true"
+					className={cx("omp-disclosure-chevron shrink-0", open && "rotate-90")}
+					size={12}
+				/>
 			</button>
 			{open && (
 				<div
-					className="absolute inset-x-2 top-full mx-auto max-h-[min(24rem,50dvh)] max-w-xl space-y-2 overflow-y-auto overscroll-contain rounded-b-xl border border-(--omp-border) bg-(--omp-bg-elevated) px-2.5 py-2 shadow-lg"
+					className="absolute inset-x-0 top-full max-h-[min(24rem,max(2rem,calc(100cqh-5rem)))] space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-(--omp-border) bg-(--omp-bg-elevated) p-3 shadow-lg"
 					id={listId}
 				>
 					{taskCounts.total > 0 && (

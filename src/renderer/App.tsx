@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useMemo } from "react";
 import type { DeepLinkPayload, MenuAction, MenuActionPayload, RunProgressState } from "../shared/ipc-types";
 import { nextLanguage } from "../shared/languages";
 import { AgentHoverCardLayer } from "./components/agents/AgentHoverCard";
-import { TodoRibbon } from "./components/chat/dock/TodoDockCard";
 import { PanelErrorBoundary, Spinner, ToastStack } from "./components/common";
 import { LinkMenuHost } from "./components/common/LinkMenu";
 import { WorkspacePageContext } from "./components/common/Modal";
@@ -919,7 +918,6 @@ export function App() {
 				<div className={workspace ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
 					<TitleBar />
 					<TabBar />
-					{focusedRuntime && <TodoRibbon key={focusedRuntime.tabId} />}
 					<div className="shrink-0" data-toast-clearance>
 						<SidecarBanner />
 						<ConfigWarningsBanner />

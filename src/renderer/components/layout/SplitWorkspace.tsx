@@ -21,6 +21,7 @@ import { type SplitAxis, type SplitPlacement, tabDisplayTitle, useTabsStore } fr
 import { AgentBeside } from "../agents/AgentBeside";
 import { AgentPage } from "../agents/AgentPage";
 import { ChatStream } from "../chat/ChatStream";
+import { TodoRibbon } from "../chat/dock/TodoDockCard";
 import { WorkspaceDock } from "../chat/dock/WorkspaceDock";
 import { ComposerQuestions } from "../dialogs/ExtensionDialog";
 import { InputArea } from "./InputArea";
@@ -151,6 +152,7 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 						</button>
 					</header>
 				)}
+				<TodoRibbon active={active} />
 				<SessionPaneBody label={label} tabId={tabId} />
 			</section>
 		</SessionRuntimeProvider>

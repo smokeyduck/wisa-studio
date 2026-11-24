@@ -16,6 +16,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - Installed plugins offer Upgrade only when the cached catalog advertises a newer release. Declarative plugins such as Cloudflare can open their settings without an npm manifest, and MCP servers that challenge for OAuth expose an authorization action directly on their card.
 - The subagent dialog renders sent messages and replies as Markdown and lets you expand each long message independently.
 - Subagent cards stay at their place in the conversation after finishing and fit their content within the transcript gutters. Matching background-task results appear inside the card's dialog instead of as duplicate transcript rows.
+- The task list opens from a compact progress card at the top of its own session, including in split view.
 
 ## [0.9.55] - 2026-11-24
 

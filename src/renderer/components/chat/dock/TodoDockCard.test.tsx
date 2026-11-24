@@ -160,6 +160,32 @@ describe("TodoRibbon", () => {
 		expect(container.querySelector('[title="Restored task 12"]')).not.toBeNull();
 	});
 
+	it("opens the task list only in the active pane when invoked by the todo edit command", async () => {
+		const left = createTabRuntime("ribbon-tab");
+		const right = createTabRuntime("other-tab");
+		for (const [runtime, content] of [
+			[left, "Left pane task"],
+			[right, "Right pane task"],
+		] as const) {
+			sessionRuntimeStore<TodoStore>(runtime.tabId, "todo")
+				?.getState()
+				.setPhases([{ name: "Live", tasks: [{ content, status: "pending" }] }]);
+		}
+		await mount(
+			<>
+				<SessionRuntimeProvider runtime={left}>
+					<TodoRibbon active={false} />
+				</SessionRuntimeProvider>
+				<SessionRuntimeProvider runtime={right}>
+					<TodoRibbon active />
+				</SessionRuntimeProvider>
+			</>,
+		);
+		await act(async () => useUiStore.getState().focusTodoRibbon());
+		expect(container.querySelector('[title="Left pane task"]')).toBeNull();
+		expect(container.querySelector('[title="Right pane task"]')).not.toBeNull();
+	});
+
 	it("removes a deleted task from the list and persists the remaining phases", async () => {
 		useTodoStore.getState().setPhases([
 			{ name: "Live", tasks: [{ content: "Delete me", status: "pending" }, { content: "Keep me", status: "pending" }] },
