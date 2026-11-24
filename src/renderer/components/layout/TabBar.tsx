@@ -764,6 +764,8 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 					if (!target || unitIndex < 0) return null;
 					const left = units.slice(0, unitIndex).flatMap(unit => unit.tabs);
 					const right = units.slice(unitIndex + 1).flatMap(unit => unit.tabs);
+					const inactive = activeTabId ? stripTabs.filter(tab => !visible.includes(tab.id)) : [];
+					const inactiveBlocked = inactive.some(protectedFromBatchClose);
 					const targetPair = groupOf(groups, target.id);
 					const closeItems = (ids: readonly string[]) => {
 						setTabMenu(null);
@@ -831,6 +833,13 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 							disabled: right.length === 0 || right.some(protectedFromBatchClose),
 							disabledReason: right.some(protectedFromBatchClose) ? blockedReason : undefined,
 							onSelect: () => closeItems(right.map(tab => tab.id)),
+						},
+						{
+							id: "close-inactive",
+							label: t("tabs.menu.closeInactive"),
+							disabled: inactive.length === 0 || inactiveBlocked,
+							disabledReason: inactiveBlocked ? blockedReason : undefined,
+							onSelect: () => closeItems(inactive.map(tab => tab.id)),
 						},
 						{
 							id: "close-all",

@@ -611,6 +611,38 @@ describe("TabBar", () => {
 		expect(omp.tabs.close.mock.calls.map(([id]) => id)).toEqual(["t0", "t1", "t3", "t2"]);
 	});
 
+	it("closes background tabs from their context menu without closing either visible split pane", async () => {
+		const pair = { axis: "columns", firstTabId: "t0", secondTabId: "t1", ratio: 0.5 } as const;
+		useTabsStore.setState({
+			tabs: [
+				{ kind: "agent", id: "t0", cwd: "/alpha", status: "ready", unreadDone: false },
+				{ kind: "agent", id: "t1", cwd: "/beta", status: "ready", unreadDone: false },
+				{ kind: "agent", id: "t2", cwd: "/gamma", status: "ready", unreadDone: false },
+				{ kind: "agent", id: "t3", cwd: "/delta", status: "running", unreadDone: false },
+			],
+			activeTabId: "t0",
+			split: pair,
+			groups: [pair],
+			bundles: new Map(),
+		});
+		await mount(<TabBar />);
+		await rightClick(chips()[2]!);
+
+		const action = () => menuItem("Close all inactive tabs")!;
+		expect(action().hasAttribute("disabled")).toBe(true);
+		await act(async () => {
+			useTabsStore.setState(state => ({
+				tabs: state.tabs.map(tab => (tab.id === "t3" ? { ...tab, status: "ready" } : tab)),
+			}));
+		});
+		await click(action());
+
+		expect(useTabsStore.getState().tabs.map(tab => tab.id)).toEqual(["t0", "t1"]);
+		expect(useTabsStore.getState()).toMatchObject({ activeTabId: "t0", split: pair });
+		await rightClick(chips()[0]!);
+		expect(action().hasAttribute("disabled")).toBe(true);
+	});
+
 	it("clicking a chip switches tabs; the + button spawns a new tab in the current cwd", async () => {
 		useTabsStore.setState({
 			tabs: [

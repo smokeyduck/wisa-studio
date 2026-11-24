@@ -25,6 +25,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - Composer questions fit a compact, adaptive card. Long questions scroll inside the card without hiding the reply buttons.
 - Expanded execution groups keep the close control in view while scrolling. The long-paste preview is compact, matches the composer width, and wraps its actions on narrow panes.
 - Review slides in from the right inside the current conversation, without covering the session headers or neighboring split pane. Its footer evenly spaces the view icons and close button in one control.
+- The tab context menu can close all inactive tabs while keeping the current conversation and both visible split panes.
 
 ## [0.9.55] - 2026-11-24
 

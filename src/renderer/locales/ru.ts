@@ -208,6 +208,7 @@ export const ru: Record<string, string> = {
 	"tabs.close": "Закрыть вкладку",
 	"tabs.menu.closeLeft": "Закрыть вкладки слева",
 	"tabs.menu.closeRight": "Закрыть вкладки справа",
+	"tabs.menu.closeInactive": "Закрыть все неактивные вкладки",
 	"tabs.menu.closeAll": "Закрыть все вкладки",
 	"tabs.menu.closeProtected": "Сначала закрой запущенные задачи и вкладки worktree по отдельности",
 	"tabs.menu.splitLeft": "Разделить слева",

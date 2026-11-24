@@ -209,6 +209,7 @@ export const vi: Record<string, string> = {
 	"tabs.close": "Đóng thẻ",
 	"tabs.menu.closeLeft": "Đóng các thẻ bên trái",
 	"tabs.menu.closeRight": "Đóng các thẻ bên phải",
+	"tabs.menu.closeInactive": "Đóng tất cả thẻ không hoạt động",
 	"tabs.menu.closeAll": "Đóng tất cả thẻ",
 	"tabs.menu.closeProtected": "Hãy đóng riêng từng tác vụ đang chạy và thẻ Worktree trước",
 	"tabs.menu.splitLeft": "Tách sang trái",

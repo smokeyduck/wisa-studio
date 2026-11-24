@@ -216,6 +216,7 @@ export const en: Record<string, string> = {
 	"tabs.close": "Close tab",
 	"tabs.menu.closeLeft": "Close tabs to the left",
 	"tabs.menu.closeRight": "Close tabs to the right",
+	"tabs.menu.closeInactive": "Close all inactive tabs",
 	"tabs.menu.closeAll": "Close all tabs",
 	"tabs.menu.closeProtected": "Close running tasks and worktree tabs individually first",
 	"tabs.menu.splitLeft": "Split left",

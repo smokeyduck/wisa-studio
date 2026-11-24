@@ -204,6 +204,7 @@ export const th: Record<string, string> = {
 	"tabs.close": "ปิดแท็บ",
 	"tabs.menu.closeLeft": "ปิดแท็บด้านซ้าย",
 	"tabs.menu.closeRight": "ปิดแท็บด้านขวา",
+	"tabs.menu.closeInactive": "ปิดแท็บที่ไม่ได้ใช้งานทั้งหมด",
 	"tabs.menu.closeAll": "ปิดทุกแท็บ",
 	"tabs.menu.closeProtected": "ปิดงานที่กำลังทำงานและแท็บ worktree ทีละรายการก่อน",
 	"tabs.menu.splitLeft": "แบ่งด้านซ้าย",

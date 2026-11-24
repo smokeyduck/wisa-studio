@@ -203,6 +203,7 @@ export const zh: Record<string, string> = {
 	"tabs.close": "关闭标签页",
 	"tabs.menu.closeLeft": "关闭左侧标签页",
 	"tabs.menu.closeRight": "关闭右侧标签页",
+	"tabs.menu.closeInactive": "关闭所有非活动标签页",
 	"tabs.menu.closeAll": "关闭全部标签页",
 	"tabs.menu.closeProtected": "请先单独关闭运行中的任务或 Worktree 标签页",
 	"tabs.menu.splitLeft": "向左分屏",
