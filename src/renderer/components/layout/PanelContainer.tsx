@@ -58,7 +58,7 @@ interface InspectorTabProps {
 	onSelect: () => void;
 }
 
-/** One view in the header's switcher; beside window buttons the row can run out of room, so the selected tab scrolls into view. */
+/** One view in the footer switcher; keep the selected tab in view when the strip scrolls. */
 function InspectorTab({ label, description, icon: Icon, active, signal, onSelect }: InspectorTabProps) {
 	const ref = useActiveChipInView<HTMLButtonElement>(active);
 	return (
@@ -167,8 +167,19 @@ export function PanelContainer() {
 			)}
 			style={{ width: panelWidth }}
 		>
+			<div className="min-h-0 flex-1 overflow-hidden" inert={!routeReady}>
+				<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>
+					{visiblePanelTab === "overview" && <OverviewPanel />}
+					{visiblePanelTab === "agents" && <AgentRoster />}
+					{visiblePanelTab === "btw" && <BtwPanel />}
+					{visiblePanelTab === "diff" && <DiffPanel />}
+					{visiblePanelTab === "files" && <FilesPanel />}
+					{visiblePanelTab === "terminal" && <TerminalPanel />}
+					{visiblePanelTab === "plan" && <div key={`${activeTabId}:${sessionKey}`} className="h-full">{proposal ? <PlanApprovalPanel /> : <PlanPanel />}</div>}
+				</PanelErrorBoundary>
+			</div>
 			{/* Close stays available even while the focused session is switching. */}
-			<div className="omp-inspector-header drag-region flex h-12 shrink-0 items-center gap-2 border-b border-[var(--omp-border-muted)] pl-3">
+			<footer className="omp-inspector-footer flex h-12 shrink-0 items-center gap-2 border-t border-[var(--omp-border-muted)] pl-3">
 				<h2 className="sr-only">
 					{t("panel.title")} - {t("panel.subtitle")}
 				</h2>
@@ -212,18 +223,7 @@ export function PanelContainer() {
 				>
 					<X aria-hidden="true" size={17} />
 				</button>
-			</div>
-			<div className="min-h-0 flex-1 overflow-hidden" inert={!routeReady}>
-				<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>
-					{visiblePanelTab === "overview" && <OverviewPanel />}
-					{visiblePanelTab === "agents" && <AgentRoster />}
-					{visiblePanelTab === "btw" && <BtwPanel />}
-					{visiblePanelTab === "diff" && <DiffPanel />}
-					{visiblePanelTab === "files" && <FilesPanel />}
-					{visiblePanelTab === "terminal" && <TerminalPanel />}
-					{visiblePanelTab === "plan" && <div key={`${activeTabId}:${sessionKey}`} className="h-full">{proposal ? <PlanApprovalPanel /> : <PlanPanel />}</div>}
-				</PanelErrorBoundary>
-			</div>
+			</footer>
 			<div
 				role="separator"
 				aria-label={t("panel.resize")}

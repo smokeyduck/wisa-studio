@@ -246,12 +246,12 @@ kbd,
 	padding-right: calc(var(--omp-caption-right) + 0.625rem);
 }
 
-.omp-inspector-header {
-	padding-right: calc(var(--omp-caption-right) + 0.5rem);
-}
-
-.omp-inspector[data-inspector-overlay] .omp-inspector-header {
-	padding-inline: 0.75rem;
+/* Keep docked panel content out from under the native window buttons. */
+:root:is([data-platform="win32"], [data-platform="linux"]):not([data-fullscreen])
+	.omp-inspector:not([data-inspector-overlay])::before {
+	content: "";
+	flex: 0 0 3rem;
+	-webkit-app-region: drag;
 }
 
 .omp-docked-page-content > :first-child {
@@ -882,14 +882,12 @@ kbd,
 .omp-inspector {
 	container: omp-inspector / inline-size;
 	box-shadow: none;
-	/* As an overlay it covers the title bar: opaque, and its controls clickable
-	   instead of dragging the window. */
+	/* The overlay does not participate in window dragging. */
 	background: var(--omp-bg-primary);
 	-webkit-app-region: no-drag;
 }
 
-/* Seven views share the header: only the selected one prints its name, and
-   a narrow drawer keeps icons only. */
+/* Seven views share the footer: only the selected one prints its name. */
 .omp-inspector-tab-label {
 	display: none;
 }
@@ -902,42 +900,15 @@ kbd,
 	[aria-pressed="true"] > .omp-inspector-tab-label {
 		display: none;
 	}
-}
 
-/* Windows and Linux: the window buttons take most of a narrow header. The tabs
-   scroll inside their own track, because the header's padding can't hold back
-   anything scrolled within the header itself. */
-:root:is([data-platform="win32"], [data-platform="linux"]):not([data-fullscreen])
-	.omp-inspector-header
-	> .omp-segmented {
-	flex-shrink: 1;
-	min-width: 0;
-	overflow-x: auto;
-}
-
-/* Before that track has to scroll, the tabs give up their label and padding,
-   so every one of them still fits at the panel's narrowest. */
-@container omp-inspector (max-width: 520px) {
-	:root:is([data-platform="win32"], [data-platform="linux"]):not([data-fullscreen])
-		.omp-inspector-header
-		> .omp-segmented {
+	.omp-inspector-footer > .omp-segmented {
 		gap: 0;
 	}
 
-	:root:is([data-platform="win32"], [data-platform="linux"]):not([data-fullscreen])
-		.omp-inspector-header
-		> .omp-segmented
-		> button {
+	.omp-inspector-footer > .omp-segmented > button {
 		flex: 0 1 34px;
 		min-width: 22px;
 		padding-inline: 0;
-	}
-
-	:root:is([data-platform="win32"], [data-platform="linux"]):not([data-fullscreen])
-		.omp-inspector-header
-		[aria-pressed="true"]
-		> .omp-inspector-tab-label {
-		display: none;
 	}
 }
 

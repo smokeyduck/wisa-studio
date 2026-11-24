@@ -24,6 +24,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - The orchestrator carries the conversation language into new subagent assignments, task card titles, and reports. Technical identifiers and quoted evidence stay unchanged.
 - Composer questions fit a compact, adaptive card. Long questions scroll inside the card without hiding the reply buttons.
 - Expanded execution groups keep the close control in view while scrolling. The long-paste preview is compact, matches the composer width, and wraps its actions on narrow panes.
+- Review tabs and the close button sit at the bottom of the inspector, with the Changes controls directly above them.
 
 ## [0.9.55] - 2026-11-24
 
