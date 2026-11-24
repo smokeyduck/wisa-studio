@@ -217,6 +217,7 @@ export class BrowserWorkspace {
 				contextIsolation: true,
 				nodeIntegration: false,
 				navigateOnDragDrop: false,
+				enableBlinkFeatures: "WebMCP",
 			},
 		});
 		const page: Page = { id: ++this.#next, view, driven: false, restoreUrl: restoredAddress(url) };

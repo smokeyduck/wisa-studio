@@ -80,6 +80,8 @@ The toolbar globe opens **WISA Browser**, a Chromium window inside Studio with a
 
 WISA Browser appears only after connecting to the agent tab that opened it; there is no sharing control or confirmation step. In Code mode with `eval` and Browser enabled, the agent can open new tabs and work with any WISA Browser tab, including signed-in pages. Close the window to disconnect. Your personal Chrome profile is not included.
 
+On secure pages that publish WebMCP tools, the agent can use `webmcpList()` to discover them and `webmcpInvoke()` to call a selected tool. Tool descriptions and results come from the page and are untrusted. Pages without WebMCP can still be used through normal browser controls.
+
 ### Use your own Chrome session (optional)
 
 To let an agent use a signed-in tab, opt in to the [omp browser relay](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). If you don't already have it, run `omp browser-relay install --no-chrome` from a compatible omp CLI, then in the Chrome profile you want to use go to `chrome://extensions`, turn on **Developer mode**, and choose the printed folder with **Load unpacked**. The relay can act as you in that profile; use a separate work profile and approve only tasks you intend to run there. Do not expose the relay beyond your machine.

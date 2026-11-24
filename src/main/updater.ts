@@ -40,9 +40,9 @@ const PROGRESS_INTERVAL_MS = 100;
 
 /**
  * App version for the updates row. `app.getVersion()` reads the HOST
- * package.json — the Electron binary's own when unpacked (dev shows
- * "36.9.5"), so dev resolves the project's package.json from the bundle
- * location instead. Packaged builds keep app.getVersion().
+ * package.json — the Electron binary's own in dev — so dev resolves the
+ * project's package.json from the bundle location. Packaged builds keep
+ * app.getVersion().
  */
 export function appVersion(): string {
 	if (app.isPackaged) return app.getVersion();

@@ -94,7 +94,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "agentation": "^3.1.2",
-    "electron": "36.9.5",
+    "electron": "43.8.12",
     "electron-builder": "^26.0.0",
     "electron-vite": "^3.0.0",
     "linkedom": "^0.18.13",

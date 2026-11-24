@@ -21,6 +21,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - The task list opens from a compact progress card at the top of its own session, including in split view.
 - The Review panel has a larger toolbar control, a shortcut in each split session, and its own close button.
 - WISA Browser waits for the originating agent connection before showing its window, with no sharing controls or confirmation. Its separate Chromium profile keeps cookies, site storage, and tab locations; query strings and fragments are not saved for tab restore.
+- WISA Browser uses Electron 43 (Chromium 150) so agents can discover and call native WebMCP tools registered by secure pages, without affecting the user's Chrome profile.
 - Keep Copy, Edit, and Fork in place below a user message when an execution group appears.
 - The composer’s `/` menu localizes built-in command and subcommand descriptions. Hover a row marked `?` to read its full description without truncation.
 - The orchestrator carries the conversation language into new subagent assignments, task card titles, and reports. Technical identifiers and quoted evidence stay unchanged.

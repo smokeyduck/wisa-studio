@@ -80,6 +80,8 @@ Nút hình quả địa cầu trên thanh công cụ mở **Trình duyệt WISA*
 
 Trình duyệt WISA chỉ hiện khi đã kết nối với tab agent mở nó; không có nút chia sẻ hay bước xác nhận. Trong chế độ Code có bật `eval` và Browser, agent có thể mở tab mới và thao tác với mọi tab WISA Browser, kể cả trang đã đăng nhập. Đóng cửa sổ để ngắt kết nối. Phạm vi này không bao gồm hồ sơ Chrome cá nhân.
 
+Trên trang có ngữ cảnh bảo mật và đăng ký công cụ WebMCP, agent có thể dùng `webmcpList()` để tìm công cụ và `webmcpInvoke()` để gọi công cụ đã chọn. Mô tả và kết quả đến từ trang, không phải dữ liệu đáng tin cậy. Với trang không có WebMCP, agent vẫn có thể thao tác bằng các công cụ trình duyệt thông thường.
+
 ### Dùng phiên Chrome của bạn (không bắt buộc)
 
 Để cho agent dùng một thẻ đã đăng nhập, bạn có thể chủ động bật [relay trình duyệt omp](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). Nếu chưa có relay, chạy `omp browser-relay install --no-chrome` bằng omp CLI tương thích. Trong hồ sơ Chrome muốn dùng, mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển** rồi chọn thư mục đã in ra bằng **Tải tiện ích đã giải nén**. Relay có thể thao tác với quyền của bạn trong hồ sơ đó; nên dùng hồ sơ công việc riêng và chỉ phê duyệt những tác vụ bạn muốn chạy tại đó. Không mở relay ra ngoài máy của bạn.
