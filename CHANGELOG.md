@@ -22,6 +22,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - Keep Copy, Edit, and Fork in place below a user message when an execution group appears.
 - The composer’s `/` menu localizes built-in command and subcommand descriptions. Hover a row marked `?` to read its full description without truncation.
 - The orchestrator carries the conversation language into new subagent assignments, task card titles, and reports. Technical identifiers and quoted evidence stay unchanged.
+- Composer questions fit a compact, adaptive card. Long questions scroll inside the card without hiding the reply buttons.
 
 ## [0.9.55] - 2026-11-24
 

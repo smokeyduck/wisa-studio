@@ -131,27 +131,29 @@ function SelectDialog({
 	const t = useT();
 	return (
 		<QuestionSurface inline={inline} onClose={onCancel} title={request.title}>
-			<div className="space-y-1">
-				{request.options.map((option, index) => (
-					<button
-						autoFocus={!inline && index === 0}
-						className="flex w-full items-center gap-2 rounded-md border border-(--omp-border-muted) px-3 py-2 text-left text-omp-xs text-(--omp-text) transition-colors hover:border-(--omp-border-accent) hover:bg-(--omp-selected-bg) focus-visible:outline-2 focus-visible:outline-(--omp-border-accent)"
-						key={option}
-						onClick={() => onValue(option)}
-						type="button"
-					>
-						<span className="w-4 shrink-0 text-omp-xs text-(--omp-dim)">{index + 1}</span>
-						<span className="min-w-0 break-words">
-							<span className="block">{option}</span>
-							{request.optionDetails?.[index]?.description && (
-								<span className="mt-1 block text-omp-xs whitespace-pre-wrap text-(--omp-muted)">
-									{request.optionDetails[index].description}
-								</span>
-							)}
-						</span>
-					</button>
-				))}
-				<div className="flex items-center justify-between pt-2">
+			<div className="omp-question-layout space-y-1">
+				<div className="omp-question-body space-y-1">
+					{request.options.map((option, index) => (
+						<button
+							autoFocus={!inline && index === 0}
+							className="flex w-full items-center gap-2 rounded-md border border-(--omp-border-muted) px-3 py-2 text-left text-omp-xs text-(--omp-text) transition-colors hover:border-(--omp-border-accent) hover:bg-(--omp-selected-bg) focus-visible:outline-2 focus-visible:outline-(--omp-border-accent)"
+							key={option}
+							onClick={() => onValue(option)}
+							type="button"
+						>
+							<span className="w-4 shrink-0 text-omp-xs text-(--omp-dim)">{index + 1}</span>
+							<span className="min-w-0 break-words">
+								<span className="block">{option}</span>
+								{request.optionDetails?.[index]?.description && (
+									<span className="mt-1 block text-omp-xs whitespace-pre-wrap text-(--omp-muted)">
+										{request.optionDetails[index].description}
+									</span>
+								)}
+							</span>
+						</button>
+					))}
+				</div>
+				<div className="omp-question-actions flex items-center justify-between pt-2">
 					<TimeoutFooter remaining={remaining} />
 					<Button onClick={onCancel} size="sm" variant="ghost">
 						{t("common.cancel")}
@@ -212,20 +214,22 @@ function InputDialog({
 	return (
 		<QuestionSurface inline={inline} onClose={onCancel} title={request.title}>
 			<form
-				className="space-y-3"
+				className="omp-question-layout space-y-3"
 				onSubmit={event => {
 					event.preventDefault();
 					onValue(value);
 				}}
 			>
-				<Input
-					autoFocus={!inline}
-					aria-label={request.title}
-					onChange={event => setValue(event.target.value)}
-					placeholder={request.placeholder}
-					value={value}
-				/>
-				<div className="flex items-center justify-between gap-2">
+				<div className="omp-question-body">
+					<Input
+						autoFocus={!inline}
+						aria-label={request.title}
+						onChange={event => setValue(event.target.value)}
+						placeholder={request.placeholder}
+						value={value}
+					/>
+				</div>
+				<div className="omp-question-actions flex items-center justify-between gap-2">
 					<TimeoutFooter remaining={remaining} />
 					<div className="flex gap-2">
 						<Button onClick={onCancel} size="sm" type="button" variant="ghost">
@@ -334,76 +338,82 @@ function AskDialog({
 	return (
 		<QuestionSurface inline={inline} onClose={onCancel} title={t("extDialog.ask.title")}>
 			<form
-				className="space-y-5"
+				className="omp-question-layout space-y-5"
 				onSubmit={event => {
 					event.preventDefault();
 					submit();
 				}}
 			>
-				{request.questions.map((question, questionIndex) => {
-					const answer = answers[questionIndex];
-					return (
-						<div className="space-y-2" key={question.id}>
-							{question.header && (
-								<div className="text-omp-xxs font-medium text-(--omp-dim)">{question.header}</div>
-							)}
-							<p className="text-omp-xs leading-relaxed font-medium break-words whitespace-pre-wrap text-(--omp-text)">
-								{request.questions.length > 1 ? `${questionIndex + 1}. ` : ""}
-								{question.question}
-							</p>
-							<div className="space-y-1">
-								{question.options.map((option, optionIndex) => {
-									const checked = answer?.selected.has(option.label) ?? false;
-									return (
-										<ChoiceRow
-											checked={checked}
-											key={option.label}
-											multi={question.multi ?? false}
-											onClick={() => toggleOption(questionIndex, option.label)}
-										>
-											<span className="flex items-center gap-1.5 text-omp-xs text-(--omp-text)">
-												<span className="min-w-0 break-words">{option.label}</span>
-												{question.recommended === optionIndex && (
-													<span className="shrink-0 rounded border border-(--omp-border-accent) px-1 py-px text-omp-xxs font-medium text-(--omp-accent)">
-														{t("extDialog.ask.recommended")}
+				<div className="omp-question-body space-y-3">
+					{request.questions.map((question, questionIndex) => {
+						const answer = answers[questionIndex];
+						return (
+							<div className={inline ? "space-y-1" : "space-y-2"} key={question.id}>
+								{question.header && (
+									<div className="text-omp-xxs font-medium text-(--omp-dim)">{question.header}</div>
+								)}
+								<p className="text-omp-xs leading-relaxed font-medium break-words whitespace-pre-wrap text-(--omp-text)">
+									{request.questions.length > 1 ? `${questionIndex + 1}. ` : ""}
+									{question.question}
+								</p>
+								<div className="omp-ask-options space-y-1">
+									{question.options.map((option, optionIndex) => {
+										const checked = answer?.selected.has(option.label) ?? false;
+										return (
+											<ChoiceRow
+												checked={checked}
+												key={option.label}
+												multi={question.multi ?? false}
+												onClick={() => toggleOption(questionIndex, option.label)}
+											>
+												<span className="flex items-center gap-1.5 text-omp-xs text-(--omp-text)">
+													<span className="min-w-0 break-words">{option.label}</span>
+													{question.recommended === optionIndex && (
+														<span className="shrink-0 rounded border border-(--omp-border-accent) px-1 py-px text-omp-xxs font-medium text-(--omp-accent)">
+															{t("extDialog.ask.recommended")}
+														</span>
+													)}
+												</span>
+												{option.description && (
+													<span className="mt-0.5 block text-omp-xs leading-snug break-words text-(--omp-dim)">
+														{option.description}
 													</span>
 												)}
-											</span>
-											{option.description && (
-												<span className="mt-0.5 block text-omp-xs leading-snug break-words text-(--omp-dim)">
-													{option.description}
-												</span>
-											)}
-										</ChoiceRow>
-									);
-								})}
+											</ChoiceRow>
+										);
+									})}
+								</div>
+								{question.options
+									.filter(option => answer?.selected.has(option.label) && option.preview)
+									.map(option => (
+										<div
+											className="rounded-md border border-(--omp-border-muted) bg-(--omp-code-bg) px-2.5 py-2 text-omp-sm"
+											key={`preview:${option.label}`}
+										>
+											<MarkdownRenderer content={option.preview!} />
+										</div>
+									))}
+								<div className="omp-ask-fields space-y-2">
+									<Input
+										aria-label={`${question.question}: ${t("extDialog.ask.customPlaceholder")}`}
+										compact={inline}
+										onChange={event => setCustom(questionIndex, event.target.value)}
+										placeholder={t("extDialog.ask.customPlaceholder")}
+										value={answer?.custom ?? ""}
+									/>
+									<Input
+										aria-label={`${question.question}: ${t("extDialog.ask.notePlaceholder")}`}
+										compact={inline}
+										onChange={event => setNote(questionIndex, event.target.value)}
+										placeholder={t("extDialog.ask.notePlaceholder")}
+										value={answer?.note ?? ""}
+									/>
+								</div>
 							</div>
-							{question.options
-								.filter(option => answer?.selected.has(option.label) && option.preview)
-								.map(option => (
-									<div
-										className="rounded-md border border-(--omp-border-muted) bg-(--omp-code-bg) px-2.5 py-2 text-omp-sm"
-										key={`preview:${option.label}`}
-									>
-										<MarkdownRenderer content={option.preview!} />
-									</div>
-								))}
-							<Input
-								aria-label={`${question.question}: ${t("extDialog.ask.customPlaceholder")}`}
-								onChange={event => setCustom(questionIndex, event.target.value)}
-								placeholder={t("extDialog.ask.customPlaceholder")}
-								value={answer?.custom ?? ""}
-							/>
-							<Input
-								aria-label={`${question.question}: ${t("extDialog.ask.notePlaceholder")}`}
-								onChange={event => setNote(questionIndex, event.target.value)}
-								placeholder={t("extDialog.ask.notePlaceholder")}
-								value={answer?.note ?? ""}
-							/>
-						</div>
-					);
-				})}
-				<div className="flex items-center justify-between gap-2 border-t border-(--omp-border-muted) pt-3">
+						);
+					})}
+				</div>
+				<div className="omp-question-actions flex flex-wrap items-center justify-between gap-2 border-t border-(--omp-border-muted) pt-3">
 					<div className="flex items-center gap-2">
 						<TimeoutFooter remaining={remaining} />
 						{unansweredCount > 0 && (
@@ -412,7 +422,7 @@ function AskDialog({
 							</span>
 						)}
 					</div>
-					<div className="flex gap-2">
+					<div className="flex flex-wrap gap-2">
 						<Button onClick={onCancel} size="sm" type="button" variant="ghost">
 							{t("common.cancel")}
 						</Button>
@@ -805,10 +815,8 @@ export function ComposerQuestions({ children }: { children: ReactNode }) {
 				{children}
 			</div>
 			{request && (
-				<div className="omp-composer-shell min-h-0 w-full shrink-0">
-					<div className="max-h-[40dvh] overflow-y-auto overscroll-contain px-2 py-2">
-						<ActiveDialog inline key={request.id} remaining={remaining} request={request} />
-					</div>
+				<div className="omp-composer-shell min-h-0 w-full shrink-0 px-2 pb-1">
+					<ActiveDialog inline key={request.id} remaining={remaining} request={request} />
 				</div>
 			)}
 		</>

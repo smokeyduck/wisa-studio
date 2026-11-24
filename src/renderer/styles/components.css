@@ -1475,6 +1475,70 @@
 	padding-inline: 0;
 }
 
+.omp-session-conversation {
+	container: session-conversation / size;
+}
+
+/* Only question content scrolls; the card border and actions stay in view. */
+.omp-inline-question {
+	display: flex;
+	flex-direction: column;
+	max-block-size: 12rem;
+	margin-block-start: 0.25rem;
+}
+
+@container session-conversation (height >= 0px) {
+	.omp-inline-question {
+		max-block-size: min(12rem, 55cqh);
+	}
+}
+
+.omp-inline-question-title {
+	flex: none;
+	margin: 0;
+	min-block-size: 0;
+	max-block-size: 2.75rem;
+	overflow: auto;
+	overflow-wrap: anywhere;
+	padding: 0.375rem 0.75rem 0;
+}
+
+.omp-inline-question .omp-question-layout {
+	display: flex;
+	min-block-size: 0;
+	flex-direction: column;
+}
+
+.omp-inline-question .omp-question-layout > * {
+	margin-block: 0;
+}
+
+.omp-inline-question .omp-question-body {
+	min-block-size: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 0.25rem 0.75rem;
+}
+
+.omp-inline-question .omp-question-actions {
+	flex: none;
+	padding: 0.25rem 0.75rem;
+}
+
+.omp-inline-question .omp-ask-options > button {
+	padding-block: 0.1875rem;
+}
+
+.omp-inline-question .omp-ask-fields {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+	gap: 0.25rem;
+}
+
+.omp-inline-question .omp-ask-fields > * {
+	margin-block: 0;
+}
+
 /* The composer: one soft rounded surface, no inner dividers. Focus deepens
    the hairline here; the Hierarchy pass below adds the soft accent ring. */
 .omp-composer-box {

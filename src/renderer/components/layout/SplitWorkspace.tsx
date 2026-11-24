@@ -221,7 +221,7 @@ function SessionConversation() {
 	return (
 		<div
 			className={cx(
-				"relative flex min-h-0 min-w-0 flex-1 flex-col",
+				"omp-session-conversation relative flex min-h-0 min-w-0 flex-1 flex-col",
 				draggingFiles &&
 					!readOnly &&
 					"after:pointer-events-none after:absolute after:inset-0 after:z-10 after:rounded-lg after:border-2 after:border-(--omp-accent)",

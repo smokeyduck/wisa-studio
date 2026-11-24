@@ -291,11 +291,15 @@ export function useQuestionDraft<T>(key: object, initial: () => T): [T, Dispatch
 		return value;
 	})];
 }
-/** Questions remain in the transcript; permission and sign-in surfaces stay modal. */
+/** Questions dock in the composer; permission and sign-in surfaces stay modal. */
 export function QuestionSurface({ inline, title, onClose, children }: { inline?: boolean; title: string; onClose: () => void; children: ReactNode }) {
 	return inline ? (
-		<section aria-label={title} className="my-3 rounded-xl border border-(--omp-border-accent) bg-(--omp-bg-secondary) p-4" data-inline-question>
-			<h2 className="mb-3 text-omp-sm font-semibold text-(--omp-text)">{title}</h2>
+		<section
+			aria-label={title}
+			className="omp-inline-question rounded-xl border border-(--omp-border-accent) bg-(--omp-bg-secondary)"
+			data-inline-question
+		>
+			<h2 className="omp-inline-question-title text-omp-sm font-semibold text-(--omp-text)">{title}</h2>
 			{children}
 		</section>
 	) : <Modal onClose={onClose} open size="lg" title={title}>{children}</Modal>;
@@ -375,27 +379,29 @@ export function FormDialog({
 	return (
 		<QuestionSurface inline={inline} onClose={onCancel} title={t("extDialog.ask.title")}>
 			<form
-				className="space-y-5"
+				className="omp-question-layout space-y-5"
 				onSubmit={event => {
 					event.preventDefault();
 					submit();
 				}}
 			>
-				{sections.map((section, sectionIndex) => (
-					<div className="space-y-3" key={sectionIndex}>
-						{section.title.length > 0 && (
-							<h3 className="text-omp-xs font-semibold break-words whitespace-pre-wrap text-(--omp-text)">
-								<Spans spans={section.title} />
-							</h3>
-						)}
-						{section.blocks.map((block, blockIndex) => (
-							<div key={blockIndex}>
-								{block.kind === "field" ? renderField(block.field) : <ContextBlock block={block} />}
-							</div>
-						))}
-					</div>
-				))}
-				<div className="flex items-center justify-between gap-2 border-t border-(--omp-border-muted) pt-3">
+				<div className="omp-question-body space-y-3">
+					{sections.map((section, sectionIndex) => (
+						<div className="space-y-3" key={sectionIndex}>
+							{section.title.length > 0 && (
+								<h3 className="text-omp-xs font-semibold break-words whitespace-pre-wrap text-(--omp-text)">
+									<Spans spans={section.title} />
+								</h3>
+							)}
+							{section.blocks.map((block, blockIndex) => (
+								<div key={blockIndex}>
+									{block.kind === "field" ? renderField(block.field) : <ContextBlock block={block} />}
+								</div>
+							))}
+						</div>
+					))}
+				</div>
+				<div className="omp-question-actions flex items-center justify-between gap-2 border-t border-(--omp-border-muted) pt-3">
 					<div className="flex items-center gap-2">{footer}</div>
 					<div className="flex gap-2">
 						<Button onClick={onCancel} size="sm" type="button" variant="ghost">
