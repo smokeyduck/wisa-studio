@@ -19,6 +19,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - The task list opens from a compact progress card at the top of its own session, including in split view.
 - The Review panel has a larger toolbar control, a shortcut in each split session, and its own close button.
 - Open WISA Browser from the Studio toolbar. It runs in a separate Chromium process with temporary browsing storage. Assistants can request permission to open an HTTP(S) page or read a bounded accessibility snapshot in their own session window; they cannot read the manually opened window or personal browser tabs.
+- Keep Copy, Edit, and Fork in place below a user message when an execution group appears.
 
 ## [0.9.55] - 2026-11-24
 

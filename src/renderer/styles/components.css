@@ -758,14 +758,13 @@
 	margin-top: 0;
 }
 
-/* Hover controls share the preceding row's trailing edge rather than leave
-   a blank line before the execution disclosure. */
+/* Incoming execution must not move the user controls out from under the
+   pointer. Only the assistant footer shares the disclosure's gutter. */
 .omp-transcript-editorial
 	[data-before-process]
-	:is(
-		.omp-user-turn > .omp-user-bubble-actions,
-		.omp-assistant-turn:not(.omp-assistant-turn--reasoning) > .omp-transcript-content > .omp-message-actions
-	) {
+	.omp-assistant-turn:not(.omp-assistant-turn--reasoning)
+	> .omp-transcript-content
+	> .omp-message-actions {
 	position: absolute;
 	inset-block-end: 2px;
 	inset-inline-end: var(--omp-editorial-edge);
@@ -778,8 +777,8 @@
 
 .omp-transcript-editorial
 	[data-before-process]
-	:is(.omp-user-turn, .omp-assistant-turn):is(:hover, :focus-within)
-	:is(.omp-user-bubble-actions, .omp-message-actions) {
+	.omp-assistant-turn:is(:hover, :focus-within)
+	.omp-message-actions {
 	pointer-events: auto;
 }
 
