@@ -10,10 +10,10 @@ Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding age
 
 | Platform | Package |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-0.9.54-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.54) |
-| macOS Intel | `wisa-studio-0.9.54-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.54) |
-| Windows x64 | [`wisa-studio-0.9.54-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.54/wisa-studio-0.9.54-setup.exe) |
-| Linux x64 | [`wisa-studio-0.9.54.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.54/wisa-studio-0.9.54.AppImage) |
+| macOS Apple Silicon | `wisa-studio-0.9.55-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.55) |
+| macOS Intel | `wisa-studio-0.9.55-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.55) |
+| Windows x64 | [`wisa-studio-0.9.55-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.55/wisa-studio-0.9.55-setup.exe) |
+| Linux x64 | [`wisa-studio-0.9.55.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.55/wisa-studio-0.9.55.AppImage) |
 
 [All releases](https://github.com/smokeyduck/wisa-studio/releases) · [Install guide (vi)](docs/vi/cai-dat.md)
 
@@ -21,11 +21,11 @@ macOS builds are ad-hoc signed (not notarized) and Windows builds are unsigned, 
 
 **Windows requirements:** Windows 10 x64 version 1809 (build 17763) or later, including Windows 11, and an x86-64-v2 CPU with SSE4.2. This minimum comes from the Electron, Bun and native-addon runtime requirements; it is not a claim that this release was tested on a Windows 10 machine.
 
-### 0.9.54 hotfix
+### What's new in 0.9.55
 
-This update refines narrow-pane composer controls and Tab completion, avoids repeated session hydration, and clears the startup no-model warning after a successful selection. The bundled engine follows Core 19.1.1 while retaining Wisa family routing, cached model rosters and explicit API overrides. Fixture timings do not establish a fix for the reported live session-switch delay. See [CHANGELOG.md](CHANGELOG.md) for details.
+This release adds SEO / GEO / AEO Audit for web projects, loads history before `/handoff` or `/compact` on demand, and keeps compaction settings per conversation. See the [changelog](CHANGELOG.md#0955---2026-11-24) and [license scope](LICENSE-SCOPE.md).
 
-The Russian and Vietnamese settings tables now cover the bundled Core schema. Release gates exercise the real packaged GUI's settings IPC and persistence, including the installed Windows setup and actual portable wrapper. The earlier 0.9.53 candidate was not published. The reported Windows startup issue has not been reproduced and is not claimed fixed.
+The embedded browser from 0.9.54 is gone. Web links open in the system browser; to use a signed-in Chrome session, [configure a separate relay](#use-your-own-chrome-session-optional).
 
 ## Get an API key
 

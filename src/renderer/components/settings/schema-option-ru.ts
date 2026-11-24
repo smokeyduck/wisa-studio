@@ -115,7 +115,13 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	Icon: "Значок",
 	"Single compact glyph per mode": "Один компактный глиф для каждого режима",
 	Hidden: "Скрытый",
-	"Do not show the mode in the status line": "Не показывать режим в строке состояния",
+	"Do not show the mode; a command being typed still shows with Vim Show Command":
+		"Скрывать режим; вводимая команда видна, если включён её показ",
+	Insert: "Вставка",
+	"Type right away; Escape for Normal mode": "Можно сразу печатать; Esc переключает в обычный режим",
+	Normal: "Обычный режим",
+	"Start on Vim commands; i, a, o and the like to type":
+		"Начать в режиме команд Vim; для ввода нажмите i, a, o и т. п.",
 	Prompt: "Промпт",
 	"Re-submit the prompt as a follow-up message (current behavior)":
 		"Повторно отправлять промпт как последующее сообщение (текущее поведение)",

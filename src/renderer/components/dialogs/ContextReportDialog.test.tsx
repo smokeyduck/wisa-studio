@@ -35,9 +35,12 @@ const breakdown = {
 };
 
 const getContextReport = vi.fn<() => Promise<RpcResponse>>();
-(window as unknown as { omp: { rpc: { getContextReport: typeof getContextReport } } }).omp = {
-	rpc: { getContextReport },
-};
+Object.assign(window, {
+	omp: {
+		rpc: { getContextReport },
+		events: { onConfigUpdate: vi.fn(() => vi.fn()) },
+	},
+});
 
 const { createRoot } = await import("react-dom/client");
 const { ContextReportDialog } = await import("./ContextReportDialog");

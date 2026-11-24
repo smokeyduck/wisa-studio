@@ -90,7 +90,13 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	Icon: "Biểu tượng",
 	"Single compact glyph per mode": "Một ký hiệu gọn cho mỗi chế độ",
 	Hidden: "Ẩn",
-	"Do not show the mode in the status line": "Không hiện chế độ trên dòng trạng thái",
+	"Do not show the mode; a command being typed still shows with Vim Show Command":
+		"Ẩn chế độ; lệnh đang nhập vẫn hiện nếu bật hiển thị lệnh Vim",
+	Insert: "Chèn",
+	"Type right away; Escape for Normal mode": "Nhập ngay; nhấn Esc để về chế độ Thường",
+	Normal: "Thường",
+	"Start on Vim commands; i, a, o and the like to type":
+		"Bắt đầu ở chế độ lệnh Vim; nhấn i, a, o hoặc phím tương tự để nhập",
 	Prompt: "Câu lệnh",
 	"Re-submit the prompt as a follow-up message (current behavior)":
 		"Gửi lại câu lệnh như một tin nhắn tiếp theo (hành vi hiện tại)",

@@ -337,6 +337,19 @@ export const RU_SETTINGS: Record<string, { label?: string; description?: string 
 		label: "Индикатор режима Vim",
 		description: "Как текущий режим Vim отображается в строке состояния",
 	},
+	"tui.vimShowCommand": {
+		label: "Показывать вводимую команду Vim",
+		description: "Показывать вводимую команду в строке состояния, даже если индикатор режима скрыт",
+	},
+	"tui.vimYankToClipboard": {
+		label: "Копировать из Vim в системный буфер обмена",
+		description:
+			'Копировать текст в системный буфер при каждой операции yank. Если выключено, это делают только "+y и "*y',
+	},
+	"tui.vimStartMode": {
+		label: "Начальный режим Vim",
+		description: "Режим ввода при запуске, после отправки сообщения и в текстовых полях диалогов",
+	},
 	"loop.mode": {
 		label: "Режим цикла",
 		description: "Что происходит между итерациями /loop перед повторной отправкой промпта",

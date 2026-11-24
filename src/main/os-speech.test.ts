@@ -63,12 +63,18 @@ describe("speakWithOsVoice", () => {
 	});
 
 	it("falls back to espeak-ng on Linux when Piper has no voice", async () => {
-		synthesizeWithPiper.mockResolvedValueOnce(null);
-		succeed();
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+		try {
+			synthesizeWithPiper.mockResolvedValueOnce(null);
+			succeed();
 
-		await speakWithOsVoice("Xin chào", "vi");
+			await speakWithOsVoice("Xin chào", "vi");
 
-		expect(execFile.mock.calls.map(call => call[0])).toContain("espeak-ng");
+			expect(execFile.mock.calls.map(call => call[0])).toContain("espeak-ng");
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+		}
 	});
 
 	it("falls back to say on macOS, with the language's own voice", async () => {

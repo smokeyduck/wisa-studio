@@ -338,6 +338,18 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		label: "Chỉ báo chế độ Vim",
 		description: "Cách chế độ Vim hiện tại hiển thị trên thanh trạng thái",
 	},
+	"tui.vimShowCommand": {
+		label: "Hiện lệnh Vim đang nhập",
+		description: "Hiện lệnh đang nhập trên thanh trạng thái, kể cả khi chỉ báo chế độ bị ẩn",
+	},
+	"tui.vimYankToClipboard": {
+		label: "Sao chép từ Vim vào bộ nhớ tạm hệ thống",
+		description: 'Mỗi thao tác yank đều sao chép vào bộ nhớ tạm hệ thống. Khi tắt, chỉ "+y và "*y làm vậy',
+	},
+	"tui.vimStartMode": {
+		label: "Chế độ Vim ban đầu",
+		description: "Chế độ nhập khi khởi động, sau khi gửi tin nhắn và trong ô văn bản của hộp thoại",
+	},
 	"loop.mode": {
 		label: "Chế độ vòng lặp",
 		description: "Điều gì xảy ra giữa các lần lặp /loop trước khi gửi lại câu lệnh",

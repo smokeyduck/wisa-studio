@@ -5,7 +5,9 @@ build is based on, so `0.9.46` here is the first WISA STUDIO release and also
 the point where the upstream GUI's history ends in this file. Release notes for
 earlier versions belong to that project; see [NOTICE](NOTICE).
 
-## [Unreleased]
+## [0.9.55] - 2026-11-24
+
+Core source: `smokeyduck/oh-my-pi@4bf416b5dedfc7dde2730b51435d149fb4de1910` (Core 19.1.1).
 
 ### Added
 
@@ -23,7 +25,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - Skills opens on Community. Plugin catalogs preload, support long paths on Windows and share the resource library with MCP, templates and project memory.
 - Windows development launches respect explicit sidecars, show the window while loading, and restart cleanly after resetting settings. The native menu and renderer use the same startup language.
 - The embedded browser was removed. Web links open in the system browser; an authenticated Chrome session requires an explicitly configured [external relay](README.en.md#use-your-own-chrome-session-optional).
-- WinSell's contributions in two SEO Audit files use PolyForm Strict 1.0.0. [License scope](LICENSE-SCOPE.md) preserves upstream and previously granted MIT rights.
+- Công ty TNHH WinSell's contributions in two SEO Audit files use PolyForm Strict 1.0.0. The [license scope](https://github.com/smokeyduck/wisa-studio/blob/v0.9.55/LICENSE-SCOPE.md) preserves upstream and previously granted MIT rights.
 
 ## [0.9.54] - 2026-11-23
 

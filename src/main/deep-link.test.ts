@@ -6,7 +6,7 @@
  * `omp://wisa-auth` is the browser sign-in handoff; its code is single-use, so a
  * link without one must decode to nothing instead of reaching the exchange.
  */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The module registers `app.on("open-url")` at import time; only the pure
 // decoder is under test here, so a stub is enough.
@@ -145,6 +145,14 @@ describe("linuxDesktopEntry", () => {
  * link started the app and dropped the code.
  */
 describe("cold-start deep link", () => {
+	const platform = Object.getOwnPropertyDescriptor(process, "platform");
+	beforeEach(() => {
+		Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+	});
+	afterEach(() => {
+		if (platform) Object.defineProperty(process, "platform", platform);
+	});
+
 	function fakeWindow() {
 		const send = vi.fn();
 		const win = {
