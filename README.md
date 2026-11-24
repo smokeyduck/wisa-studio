@@ -78,7 +78,7 @@ Giới hạn cần biết: các tab không phải ranh giới bảo mật của 
 
 Nút hình quả địa cầu trên thanh công cụ mở **Trình duyệt WISA**, một cửa sổ Chromium trong Studio với hồ sơ tách biệt khỏi Chrome hoặc trình duyệt mặc định. Trình duyệt khôi phục tab và giữ cookie lâu dài cùng dữ liệu trang qua các lần khởi động. Địa chỉ khôi phục không có chuỗi truy vấn hoặc phần neo; công việc đang chạy và dữ liệu biểu mẫu chưa lưu không được giữ khi đóng cửa sổ.
 
-Để làm việc trên cùng một trang đang mở, mở Trình duyệt WISA từ tab agent cần dùng, chọn **Chia sẻ với agent** rồi xác nhận. Trong chế độ Code có bật `eval` và Browser, agent có thể liệt kê các tab, dùng đúng trang bạn chỉ định hoặc mở tab mới trong Studio. Thao tác chia sẻ cấp quyền truy cập mọi tab của Trình duyệt WISA, kể cả các trang đã đăng nhập. Chọn **Dừng chia sẻ** hoặc đóng cửa sổ để thu hồi quyền; trình duyệt không tự chia sẻ lại.
+Khi mở Trình duyệt WISA từ tab agent đã sẵn sàng, Studio tự kết nối mà không hỏi xác nhận. Trong chế độ Code có bật `eval` và Browser, agent có thể mở tab mới và thao tác với mọi tab trong Trình duyệt WISA, kể cả trang đã đăng nhập. Chọn **Dừng chia sẻ** hoặc đóng cửa sổ để ngắt kết nối. Phạm vi này không bao gồm hồ sơ Chrome cá nhân.
 
 ### Dùng phiên Chrome của bạn (không bắt buộc)
 

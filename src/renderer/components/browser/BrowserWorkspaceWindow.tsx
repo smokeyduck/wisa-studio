@@ -36,7 +36,6 @@ export function BrowserWorkspaceWindow() {
 	}, []);
 
 	async function run(action: BrowserWorkspaceAction) {
-		if (action.type === "connect" && !window.confirm(t("browserWorkspace.shareHint"))) return;
 		setError(null);
 		if (action.type === "connect") setConnecting(true);
 		try {

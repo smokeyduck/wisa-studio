@@ -479,8 +479,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	ipcMain.handle(IPC_COMMANDS.BROWSER_OPEN, (event, tabId: string | null) => {
 		const win = BrowserWindow.fromWebContents(event.sender);
 		if (!win || !windowManager.recordFor(win) || event.senderFrame !== event.sender.mainFrame) return;
+		const targetTabId = tabId ?? sidecarPool.activeTabForWindow(win);
 		return browser.show(() => {
-			const tab = tabId ? sidecarPool.sidecarForTab(win, tabId) : null;
+			const tab = targetTabId ? sidecarPool.sidecarForTab(win, targetTabId) : null;
 			return tab && tab.status === "ready" && sidecarPool.tabForSidecar(tab)?.kind === "agent"
 				? tab.rpcClient
 				: null;

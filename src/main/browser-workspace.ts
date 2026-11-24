@@ -5,6 +5,7 @@ import type { BrowserWorkspaceAction, BrowserWorkspaceState } from "../shared/br
 import { IPC_EVENTS } from "../shared/ipc-types";
 import { getMainLanguage } from "./i18n";
 import type { RpcClient } from "./rpc-client";
+import { writeRuntimeLog } from "./runtime-log";
 
 const BLANK = "about:blank";
 const CHROME_HEIGHT = 88;
@@ -58,14 +59,17 @@ export class BrowserWorkspace {
 	#next = 0;
 	#target: (() => RpcClient | null) | null = null;
 	#connection: BrowserConnection | null = null;
+	#connectTimer: ReturnType<typeof setTimeout> | undefined;
 
 	async show(target: () => RpcClient | null): Promise<void> {
 		this.#target = target;
+		this.#cancelAutoConnect();
 		if (this.#connection && this.#connection.client !== target()) this.disconnect();
 		if (this.#win) {
 			this.#win.show();
 			this.#win.focus();
 			this.#publish();
+			this.#connectOnOpen();
 			return;
 		}
 		const win = new BrowserWindow({
@@ -110,6 +114,7 @@ export class BrowserWorkspace {
 		win.webContents.on("will-frame-navigate", event => event.preventDefault());
 		try {
 			await loaded;
+			if (this.#win === win) this.#connectOnOpen();
 		} catch (error) {
 			if (!win.isDestroyed()) win.destroy();
 			throw error;
@@ -165,6 +170,7 @@ export class BrowserWorkspace {
 	}
 
 	disconnect(client?: RpcClient): void {
+		if (!client) this.#cancelAutoConnect();
 		const connection = this.#connection;
 		if (!connection || (client && connection.client !== client)) return;
 		this.#connection = null;
@@ -322,6 +328,29 @@ export class BrowserWorkspace {
 	#send(message: object): void {
 		const socket = this.#connection?.socket;
 		if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+	}
+
+	#cancelAutoConnect(): void {
+		clearTimeout(this.#connectTimer);
+		this.#connectTimer = undefined;
+	}
+
+	#connectOnOpen(): void {
+		this.#cancelAutoConnect();
+		const deadline = Date.now() + 15_000;
+		const connectWhenReady = () => {
+			this.#connectTimer = undefined;
+			if (!this.#win || this.#connection) return;
+			if (!this.#target?.()) {
+				// The originating sidecar can still be starting when the browser opens.
+				if (Date.now() < deadline) this.#connectTimer = setTimeout(connectWhenReady, 250);
+				return;
+			}
+			void this.#connect().catch(error => {
+				writeRuntimeLog({ source: "browser-workspace", message: error instanceof Error ? error.message : String(error) });
+			});
+		};
+		connectWhenReady();
 	}
 
 	async #connect(): Promise<void> {
