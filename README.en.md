@@ -76,7 +76,7 @@ Known limits: separate tabs are not an OS security boundary; a split holds two p
 
 ### Use your own Chrome session (optional)
 
-Web links and template demos open in your system browser. The separate WISA Browser uses temporary storage: the assistant can navigate, read page content, and interact with forms in its own session window without per-action approval. Page content it observes can be sent to the model. It cannot access the manually opened WISA Browser window or your Chrome profile.
+Web links and template demos open in your system browser. **WISA Browser** opens at `https://askwisa.com/` from the toolbar. It stores cookies and site data locally so sites can keep you signed in across restarts. To stay signed in for agent tasks, sign in once in an agent-opened WISA Browser window: those windows share a profile separate from the toolbar window and Chrome. The assistant can navigate, read, and use forms in its own windows without per-action approval; page content it observes can be sent to the model.
 
 To let an agent use a signed-in tab, opt in to the [omp browser relay](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). If you don't already have it, run `omp browser-relay install --no-chrome` from a compatible omp CLI, then in the Chrome profile you want to use go to `chrome://extensions`, turn on **Developer mode**, and choose the printed folder with **Load unpacked**. The relay can act as you in that profile; use a separate work profile and approve only tasks you intend to run there. Do not expose the relay beyond your machine.
 

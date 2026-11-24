@@ -18,7 +18,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - Subagent cards stay at their place in the conversation after finishing and fit their content within the transcript gutters. Matching background-task results appear inside the card's dialog instead of as duplicate transcript rows.
 - The task list opens from a compact progress card at the top of its own session, including in split view.
 - The Review panel has a larger toolbar control, a shortcut in each split session, and its own close button.
-- WISA Browser runs in a separate Chromium process with temporary browsing storage. In its own session window, the assistant can navigate, inspect, click, type, press keys, and scroll without approval prompts. It cannot operate the manually opened window or personal browser tabs.
+- WISA Browser opens new toolbar windows at `https://askwisa.com/` and retains website logins across restarts when the site allows it. The assistant uses separate windows with a shared, persistent agent profile, isolated from the toolbar window’s profile and personal Chrome tabs.
 - Keep Copy, Edit, and Fork in place below a user message when an execution group appears.
 - The composer’s `/` menu localizes built-in command and subcommand descriptions. Hover a row marked `?` to read its full description without truncation.
 - The orchestrator carries the conversation language into new subagent assignments, task card titles, and reports. Technical identifiers and quoted evidence stay unchanged.

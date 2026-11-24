@@ -11,8 +11,10 @@ if (!profile || !endpoint || !token) throw new Error("Browser companion requires
 app.setName("WISA Browser");
 app.setAppUserModelId("org.wisa.browser");
 app.setPath("userData", profile);
+app.setPath("sessionData", profile);
 app.enableSandbox();
-app.on("window-all-closed", () => app.quit());
+// Studio owns the companion lifecycle; closing its last window does not stop the cookie store.
+app.on("window-all-closed", () => {});
 
 const language = process.env.WISA_BROWSER_LANGUAGE;
 const labels =
@@ -25,8 +27,8 @@ const labels =
 				go: "Mở",
 				invalid: "Chỉ mở địa chỉ HTTP hoặc HTTPS.",
 				failed: "Không tải được trang.",
-				private: "Phiên riêng tư",
-				agent: "Phiên riêng của trợ lý",
+				manual: "Hồ sơ cá nhân",
+				agent: "Hồ sơ trợ lý",
 			}
 		: language === "zh"
 			? {
@@ -37,8 +39,8 @@ const labels =
 					go: "打开",
 					invalid: "请输入 HTTP 或 HTTPS 网址。",
 					failed: "无法加载页面。",
-					private: "隐私会话",
-					agent: "助手的独立会话",
+					manual: "个人浏览器资料",
+					agent: "助手浏览器资料",
 				}
 			: {
 					address: "Web address",
@@ -48,17 +50,31 @@ const labels =
 					go: "Go",
 					invalid: "Enter an HTTP or HTTPS address.",
 					failed: "Could not load the page.",
-					private: "Private session",
-					agent: "Agent’s private session",
+					manual: "Personal browser profile",
+					agent: "Agent browser profile",
 				};
 const BAR_HEIGHT = 58;
-let nextPartition = 0;
+const HOME_URL = new URL("https://askwisa.com/");
 let nextElementRef = 0;
 const windows = new Map<string, BrowserSurface>();
 
 type PageInput = Extract<BrowserAction, { action: "click" | "type" | "press" | "scroll" }>;
 const KEY_CODES = { Enter: 13, Escape: 27, Tab: 9, ArrowUp: 38, ArrowDown: 40, Backspace: 8 };
 const EDITABLE_ROLES = new Set(["textbox", "searchbox", "combobox", "spinbutton"]);
+
+function createPageSession(profile: "manual" | "agent"): Electron.Session {
+	const isolated = session.fromPartition(`persist:${profile}`, { cache: false });
+	isolated.setPermissionCheckHandler(() => false);
+	isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+	isolated.setDevicePermissionHandler(() => false);
+	isolated.setDisplayMediaRequestHandler((_request, callback) => callback({}));
+	isolated.on("will-download", event => event.preventDefault());
+	return isolated;
+}
+
+// One partition per profile, not per window. Register each session's policies only once.
+let manualSession: Electron.Session | undefined;
+let agentSession: Electron.Session | undefined;
 
 function chromePage(privateLabel: string): string {
 	const lang = language === "vi" || language === "zh" ? language : "en";
@@ -78,7 +94,8 @@ class BrowserSurface {
 	#navigation = 0;
 
 	constructor(owner: string) {
-		const privateLabel = owner === "manual" ? labels.private : labels.agent;
+		const manual = owner === "manual";
+		const privateLabel = manual ? labels.manual : labels.agent;
 		this.window = new BrowserWindow({
 			width: 1100,
 			height: 780,
@@ -89,12 +106,9 @@ class BrowserSurface {
 			webPreferences: { preload: fileURLToPath(new URL("../preload/browser.cjs", import.meta.url)), sandbox: true },
 		});
 		const chrome = this.window.webContents;
-		const isolated = session.fromPartition(`private-${++nextPartition}`, { cache: false });
-		isolated.setPermissionCheckHandler(() => false);
-		isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-		isolated.setDevicePermissionHandler(() => false);
-		isolated.setDisplayMediaRequestHandler((_request, callback) => callback({}));
-		isolated.on("will-download", event => event.preventDefault());
+		const isolated = manual
+			? (manualSession ??= createPageSession("manual"))
+			: (agentSession ??= createPageSession("agent"));
 		this.page = new WebContentsView({
 			webPreferences: { session: isolated, sandbox: true, navigateOnDragDrop: false },
 		});
@@ -111,7 +125,7 @@ class BrowserSurface {
 		this.window.on("closed", () => {
 			windows.delete(owner);
 			contents.close();
-			void isolated.clearStorageData().catch(() => {});
+			void isolated.cookies.flushStore().catch(() => {});
 		});
 		chrome.on("will-navigate", event => event.preventDefault());
 		chrome.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -345,6 +359,7 @@ async function execute(command: BrowserRequest["command"]): Promise<string> {
 	if (!surface) {
 		surface = new BrowserSurface(command.owner);
 		windows.set(command.owner, surface);
+		if (command.action === "show") void surface.navigate(HOME_URL).catch(() => {});
 	}
 	if (url) {
 		await surface.navigate(url);

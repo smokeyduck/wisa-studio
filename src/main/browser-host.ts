@@ -1,11 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rm } from "node:fs";
+import { mkdirSync, mkdtempSync, rm } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { app } from "electron";
 import {
 	BROWSER_KEYS,
 	type BrowserAction,
@@ -87,6 +88,8 @@ class BrowserHost {
 	#owners = new Map<string, { id: string; file: string | null; pending?: AbortController }>();
 
 	#start(): Promise<void> {
+		const profile = join(app.getPath("userData"), "browser");
+		mkdirSync(profile, { recursive: true, mode: 0o700 });
 		const directory = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "wisa-browser-"));
 		const endpoint =
 			process.platform === "win32" ? `\\\\.\\pipe\\wisa-browser-${randomUUID()}` : join(directory, "studio.sock");
@@ -162,7 +165,7 @@ class BrowserHost {
 				cwd: directory,
 				env: {
 					...env,
-					WISA_BROWSER_PROFILE: directory,
+					WISA_BROWSER_PROFILE: profile,
 					WISA_BROWSER_PIPE: endpoint,
 					WISA_BROWSER_TOKEN: token,
 					WISA_BROWSER_LANGUAGE: getMainLanguage(),
