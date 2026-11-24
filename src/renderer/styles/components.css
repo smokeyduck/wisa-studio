@@ -846,6 +846,13 @@
 	transition: color var(--omp-motion-fast) var(--omp-ease), background-color var(--omp-motion-fast) var(--omp-ease);
 }
 
+.omp-execution-group-header[aria-expanded="true"] {
+	position: sticky;
+	inset-block-start: 0;
+	z-index: 2;
+	background: var(--omp-bg-primary);
+}
+
 .omp-execution-group-header:hover {
 	color: var(--omp-text);
 }

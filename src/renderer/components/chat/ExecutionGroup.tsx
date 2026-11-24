@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
@@ -69,6 +69,7 @@ export function ExecutionGroup({
 				onClick={() => onExpandedChange(!expanded)}
 				type="button"
 				aria-label={`${t("chat.process.title")}: ${summary}`}
+				title={expanded ? t("common.close") : undefined}
 			>
 				{active && (
 					<span aria-hidden="true" className="omp-execution-group-live-dot omp-working-dot omp-working-dot--sm" />
@@ -89,11 +90,15 @@ export function ExecutionGroup({
 				>
 					{summary}
 				</span>
-				<ChevronRight
-					aria-hidden="true"
-					className={cx("omp-disclosure-chevron shrink-0 text-[var(--omp-dim)]", expanded && "rotate-90")}
-					size={12}
-				/>
+				{expanded ? (
+					<X aria-hidden="true" className="shrink-0 text-[var(--omp-dim)]" size={12} />
+				) : (
+					<ChevronRight
+						aria-hidden="true"
+						className="omp-disclosure-chevron shrink-0 text-[var(--omp-dim)]"
+						size={12}
+					/>
+				)}
 			</button>
 			<Collapse open={expanded}>
 				<div className="omp-execution-group-body">{children}</div>

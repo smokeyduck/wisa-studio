@@ -784,49 +784,59 @@ export function InputArea() {
 						ref={pasteMenuRef}
 						role="dialog"
 						aria-label={t("input.paste.title", { lines: pasteMenu.lineCount, chars: pasteMenu.content.length })}
-						className="omp-pop-in absolute bottom-full left-0 right-0 z-20 mb-2 rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] p-3 shadow-[var(--omp-shadow-lg)]"
+						onKeyDown={event => {
+							if (event.key !== "Escape") return;
+							event.preventDefault();
+							setPasteMenu(null);
+							textareaRef.current?.focus();
+						}}
+						className="omp-paste-preview omp-pop-in mb-1.5 rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] px-2 py-1.5 shadow-[var(--omp-shadow-sm)]"
 					>
-						<div className="flex items-baseline justify-between gap-3">
-							<span className="text-omp-md font-medium text-[var(--omp-text)]">
+						<div className="flex flex-wrap items-baseline justify-between gap-x-2">
+							<span className="text-omp-xs font-medium text-[var(--omp-text)]">
 								{t("input.paste.title", { lines: pasteMenu.lineCount, chars: pasteMenu.content.length })}
 							</span>
-							<span className="shrink-0 text-omp-sm text-[var(--omp-dim)]">{t("input.paste.hint")}</span>
+							<span className="text-omp-xxs text-[var(--omp-dim)]">{t("input.paste.hint")}</span>
 						</div>
-						<pre className="mt-2 max-h-32 overflow-hidden rounded-lg border border-[var(--omp-border-muted)] bg-[var(--omp-code-bg)] px-2.5 py-2 font-mono text-omp-sm leading-[1.5] whitespace-pre-wrap break-all text-[var(--omp-muted)]">
-							{(() => {
-								const lines = pasteMenu.content.split("\n");
-								if (lines.length <= 6) return pasteMenu.content;
-								const head = lines.slice(0, 3).join("\n");
-								const tail = lines.slice(-2).join("\n");
-								return `${head}\n${t("input.paste.moreLines", { count: lines.length - 5 })}\n${tail}`;
-							})()}
-						</pre>
-						<div className="mt-2.5 flex gap-2">
+						<div className="my-1 min-w-0 rounded-md bg-[var(--omp-code-bg)] px-1.5 py-0.5 font-mono text-omp-xxs leading-snug text-[var(--omp-muted)]">
+							<div className="truncate">{pasteMenu.content.split("\n", 1)[0]}</div>
+							{pasteMenu.lineCount > 1 && (
+								<div className="flex min-w-0 gap-1.5">
+									{pasteMenu.lineCount > 2 && (
+										<span className="shrink-0">
+											{t("input.paste.moreLines", { count: pasteMenu.lineCount - 2 })}
+										</span>
+									)}
+									<span className="truncate">{pasteMenu.content.slice(pasteMenu.content.lastIndexOf("\n") + 1)}</span>
+								</div>
+							)}
+						</div>
+						<div className="flex flex-wrap gap-1">
 							<button
 								type="button"
 								onClick={choosePasteInline}
-								className="omp-pressable rounded-lg bg-[var(--omp-btn-primary-bg)] px-3 py-1.5 text-omp-md font-medium text-[var(--omp-btn-primary-text)] hover:brightness-110"
+								className="omp-pressable rounded-md bg-[var(--omp-btn-primary-bg)] px-2 py-1 text-omp-xs font-medium text-[var(--omp-btn-primary-text)] hover:brightness-110"
 							>
 								{t("input.paste.inline")}
 							</button>
 							<button
 								type="button"
 								onClick={choosePasteWrapped}
-								className="omp-pressable rounded-lg border border-[var(--omp-border)] px-3 py-1.5 text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
+								className="omp-pressable rounded-md border border-[var(--omp-border)] px-2 py-1 text-omp-xs font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
 							>
 								{t("input.paste.wrap")}
 							</button>
 							<button
 								type="button"
 								onClick={choosePasteSaveFile}
-								className="omp-pressable rounded-lg border border-[var(--omp-border)] px-3 py-1.5 text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
+								className="omp-pressable rounded-md border border-[var(--omp-border)] px-2 py-1 text-omp-xs font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
 							>
 								{t("input.paste.saveFile")}
 							</button>
 							<button
 								type="button"
 								onClick={() => setPasteMenu(null)}
-								className="omp-pressable rounded-lg border border-[var(--omp-border)] px-3 py-1.5 text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
+								className="omp-pressable rounded-md border border-[var(--omp-border)] px-2 py-1 text-omp-xs font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
 							>
 								{t("input.paste.cancel")}
 							</button>
@@ -834,22 +844,21 @@ export function InputArea() {
 					</div>
 				)}
 
-				{composerMode && modeColor && (
-					<div
-						className="absolute -top-2 left-5 z-10 flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-omp-xs font-semibold"
-						style={{ borderColor: modeColor, color: modeColor, backgroundColor: "var(--omp-bg-primary)" }}
-						title={composerMode.mode === "btw" ? t("cmd.btw.desc") : t(`input.mode.${composerMode.mode}.title`)}
-					>
-						<span className="font-mono text-omp-sm leading-none">
-							{{ bash: "!", python: "$", btw: "?" }[composerMode.mode]}
-						</span>
-						{composerMode.mode === "btw" ? t("btw.title") : composerMode.mode}
-					</div>
-				)}
-
 				{/* Anchoring context for completion/history overlays: they sit directly
 				    above the input box instead of the surrounding composer region. */}
 				<div className="relative">
+					{composerMode && modeColor && (
+						<div
+							className="absolute -top-2 left-5 z-10 flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-omp-xs font-semibold"
+							style={{ borderColor: modeColor, color: modeColor, backgroundColor: "var(--omp-bg-primary)" }}
+							title={composerMode.mode === "btw" ? t("cmd.btw.desc") : t(`input.mode.${composerMode.mode}.title`)}
+						>
+							<span className="font-mono text-omp-sm leading-none">
+								{{ bash: "!", python: "$", btw: "?" }[composerMode.mode]}
+							</span>
+							{composerMode.mode === "btw" ? t("btw.title") : composerMode.mode}
+						</div>
+					)}
 					{menu && <CompletionMenuList menu={menu} onSelect={insertCompletion} />}
 
 					{historySearchOpen && (

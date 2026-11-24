@@ -23,6 +23,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - The composer’s `/` menu localizes built-in command and subcommand descriptions. Hover a row marked `?` to read its full description without truncation.
 - The orchestrator carries the conversation language into new subagent assignments, task card titles, and reports. Technical identifiers and quoted evidence stay unchanged.
 - Composer questions fit a compact, adaptive card. Long questions scroll inside the card without hiding the reply buttons.
+- Expanded execution groups keep the close control in view while scrolling. The long-paste preview is compact, matches the composer width, and wraps its actions on narrow panes.
 
 ## [0.9.55] - 2026-11-24
 
