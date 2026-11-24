@@ -494,7 +494,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	// renderer-forwarded calls get request-id → origin tracking (F-UI-ORIGIN).
 	sidecarPool.hostToolExecutor = (sidecar, request, win) => {
 		if (deps.schedulerHost?.handleToolCall(sidecar, request, sidecarPool.tabForSidecar(sidecar))) return true;
-		if (browserHost.handle(sidecarPool, sidecar, request, win)) return true;
+		if (browserHost.handle(sidecarPool, sidecar, request)) return true;
 		const result = executeGuiHostTool(request.toolName, request.arguments);
 		if (result !== undefined) {
 			// The agent reads `result` as an AgentToolResult and drops a frame without a content array.

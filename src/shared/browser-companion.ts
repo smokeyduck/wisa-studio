@@ -1,8 +1,14 @@
-export type BrowserAction =
-	| { action: "show"; owner: string }
-	| { action: "navigate"; owner: string; url: string }
-	| { action: "observe"; owner: string }
-	| { action: "close"; owner: string };
+export type BrowserAction = { owner: string } & (
+	| { action: "show" | "observe" | "close" }
+	| { action: "navigate"; url: string }
+	| { action: "click"; ref: number }
+	| { action: "type"; ref: number; text: string }
+	| { action: "press"; key: BrowserKey }
+	| { action: "scroll"; deltaY: number }
+);
+
+export const BROWSER_KEYS = ["Enter", "Escape", "Tab", "ArrowUp", "ArrowDown", "Backspace"] as const;
+type BrowserKey = (typeof BROWSER_KEYS)[number];
 
 export interface BrowserRequest {
 	id: number;

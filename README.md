@@ -76,7 +76,7 @@ Giới hạn cần biết: các tab không phải ranh giới bảo mật của 
 
 ### Dùng phiên Chrome của bạn (không bắt buộc)
 
-Liên kết web và bản xem thử mẫu mở trong trình duyệt mặc định của hệ thống. WISA STUDIO không chạy trình duyệt nhúng, bật gỡ lỗi từ xa của Chrome, cài máy chủ MCP hoặc sao chép hồ sơ trình duyệt.
+Liên kết web và bản xem thử mẫu mở trong trình duyệt mặc định của hệ thống. WISA Browser chạy riêng và dùng dữ liệu tạm thời: trợ lý có thể mở, đọc và thao tác với biểu mẫu trong cửa sổ của phiên mà không cần duyệt từng bước. Nội dung trang mà trợ lý đọc có thể được gửi cho mô hình. Trợ lý không truy cập được cửa sổ WISA Browser mở thủ công hoặc hồ sơ Chrome của bạn.
 
 Để cho agent dùng một thẻ đã đăng nhập, bạn có thể chủ động bật [relay trình duyệt omp](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). Nếu chưa có relay, chạy `omp browser-relay install --no-chrome` bằng omp CLI tương thích. Trong hồ sơ Chrome muốn dùng, mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển** rồi chọn thư mục đã in ra bằng **Tải tiện ích đã giải nén**. Relay có thể thao tác với quyền của bạn trong hồ sơ đó; nên dùng hồ sơ công việc riêng và chỉ phê duyệt những tác vụ bạn muốn chạy tại đó. Không mở relay ra ngoài máy của bạn.
 
