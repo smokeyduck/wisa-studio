@@ -20,6 +20,8 @@ import {
 	summarizeTurnChanges,
 	tabAwaitsTranscript,
 } from "./ChatStream";
+import { mergeSubagentRows } from "./chat-stream-utils";
+import { foldSubagentCompletions } from "./completion-events";
 
 const at = "2026-08-05T04:00:00.000Z";
 
@@ -37,6 +39,40 @@ function toolResult(toolCallId: string, isError = false): AgentMessage {
 		timestamp: at,
 	};
 }
+
+it("keeps a subagent at its spawn when later replies and mixed job results arrive", () => {
+	const prompt: AgentMessage = { role: "user", content: "Delegate the review", timestamp: 10 };
+	const reply: AgentMessage = { role: "assistant", content: "Continuing the main turn", timestamp: 30 };
+	const delivery: AgentMessage = {
+		role: "custom",
+		customType: "async-result",
+		timestamp: 40,
+		content: "── Job review-2 ──\nReview report\n── Job shell ──\nShell output",
+		details: {
+			jobs: [
+				{ type: "task", jobId: "review-2", agentId: "review" },
+				{ type: "bash", jobId: "shell" },
+				{ type: "task", jobId: "elsewhere", agentId: "not-in-this-transcript" },
+			],
+		},
+	};
+	const agents = new Map([["review", 20]]);
+	const completions = new Map<string, AgentMessage[]>();
+	const before = mergeSubagentRows(buildHistoryRows([prompt], "full"), agents);
+	const messages = foldSubagentCompletions([prompt, reply, delivery], agents, completions);
+	const after = mergeSubagentRows(buildHistoryRows(messages, "full"), agents);
+	expect(buildHistoryRowKeys(after).slice(0, 2)).toEqual(buildHistoryRowKeys(before));
+	expect(after.map(row => row.kind)).toEqual(["message", "subagent", "message", "message"]);
+	expect(messages[2]?.details).toEqual({
+		jobs: [
+			{ type: "bash", jobId: "shell" },
+			{ type: "task", jobId: "elsewhere", agentId: "not-in-this-transcript" },
+		],
+	});
+	expect(completions.get("review")?.[0]?.details).toEqual({
+		jobs: [{ type: "task", jobId: "review-2", agentId: "review" }],
+	});
+});
 
 const toolRun: AgentMessage[] = [
 	assistant([

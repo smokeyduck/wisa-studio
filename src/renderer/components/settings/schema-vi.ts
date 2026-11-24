@@ -273,9 +273,9 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		description: "Kiểu hoạt ảnh cho thông báo làm việc và đang tải",
 	},
 	"display.pinnedAgents": {
-		label: "Tác nhân được ghim",
+		label: "Thẻ tác nhân con",
 		description:
-			"Thẻ riêng cho từng tác nhân đang hoạt động phía trên trình soạn thảo (off: ẩn; collapsed: thông tin ngắn; full: thêm tiến độ hiện tại). Tác nhân đã kết thúc vẫn có trong thanh bên.",
+			"Hiện thẻ tại vị trí tác nhân con bắt đầu trong cuộc trò chuyện, kể cả sau khi kết thúc. Tắt: ẩn thẻ; Thu gọn: hiện thông tin ngắn; Đầy đủ: hiện thêm tiến độ.",
 	},
 	"display.subagentLivePreview": {
 		label: "Xem trước tác nhân con",

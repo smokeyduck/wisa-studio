@@ -1594,8 +1594,8 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 		description: "在标题栏用量区显示平滑的每秒 token 生成速率，并在回合之间保持可见。",
 	},
 	"display.pinnedAgents": {
-		label: "固定代理列表",
-		description: "在编辑器上方显示各个活跃代理的独立卡片（off 隐藏；collapsed 简略；full 显示当前进度）。已结束的代理仍在侧栏中。",
+		label: "子代理卡片",
+		description: "子代理卡片保留在对话中启动的位置，结束后仍可查看。关闭：隐藏；折叠：显示简要信息；完整：显示进度。",
 	},
 	"display.showTurnTime": {
 		label: "显示回合耗时",

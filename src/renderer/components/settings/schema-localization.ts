@@ -12,9 +12,9 @@ export function settingTranslation(language: Language, path: string) {
 	if (language === "zh") return ZH_SETTINGS[path];
 	if (path === "display.pinnedAgents") {
 		return {
-			label: "Pinned agents",
+			label: "Subagent cards",
 			description:
-				"Separate cards for active agents above the composer (Off: hide; Collapsed: brief; Full: show current progress). Finished agents stay in the sidebar.",
+				"Show subagents where they started in the conversation, even after they finish. Off hides the cards; Collapsed shows brief details; Full adds progress.",
 		};
 	}
 }

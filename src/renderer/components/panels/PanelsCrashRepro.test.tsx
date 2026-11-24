@@ -3,7 +3,7 @@
  * (partial tool executions, live subagents) must not crash the renderer.
  */
 import { parseHTML } from "linkedom";
-import { act, type ReactElement } from "react";
+import { act, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentMessage, SubagentSnapshot } from "../../../shared/rpc-types";
@@ -11,7 +11,7 @@ import { I18nProvider } from "../../lib/i18n";
 import { useMessagesStore } from "../../stores/messages";
 import { useSubagentsStore } from "../../stores/subagents";
 import { useToolsStore } from "../../stores/tools";
-import { SubagentTranscriptBlock } from "../chat/dock/AgentsDockCard";
+import { SubagentHistoryCard, SubagentHistoryDialog } from "../chat/dock/AgentsDockCard";
 import { DiffPanel } from "./DiffPanel";
 
 const { document, window, Event, HTMLElement, Node } = parseHTML("<html><body></body></html>");
@@ -190,7 +190,21 @@ describe("panels under running state", () => {
 		const host = document.createElement("div") as unknown as HTMLDivElement;
 		document.body.appendChild(host as never);
 		try {
-			await mount(<SubagentTranscriptBlock dialogHost={host} />);
+			function Card() {
+				const [agentId, setAgentId] = useState<string | null>(null);
+				return (
+					<>
+						<SubagentHistoryCard agentId={snapshot.id} full={false} onOpen={setAgentId} />
+						<SubagentHistoryDialog
+							agentId={agentId}
+							completions={undefined}
+							dialogHost={host}
+							onClose={() => setAgentId(null)}
+						/>
+					</>
+				);
+			}
+			await mount(<Card />);
 			expect(document.body.textContent).toContain("Read-only research");
 			expect(document.body.textContent).not.toContain("# Target");
 			const row = document.querySelector('button[aria-haspopup="dialog"]');

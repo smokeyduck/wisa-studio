@@ -21,7 +21,6 @@ import { type SplitAxis, type SplitPlacement, tabDisplayTitle, useTabsStore } fr
 import { AgentBeside } from "../agents/AgentBeside";
 import { AgentPage } from "../agents/AgentPage";
 import { ChatStream } from "../chat/ChatStream";
-import { SubagentTranscriptBlock } from "../chat/dock/AgentsDockCard";
 import { WorkspaceDock } from "../chat/dock/WorkspaceDock";
 import { ComposerQuestions } from "../dialogs/ExtensionDialog";
 import { InputArea } from "./InputArea";
@@ -227,14 +226,7 @@ function SessionConversation() {
 			}}
 		>
 			<div ref={setChatHost} className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col">
-				<ChatStream
-					footer={
-						<>
-							<SubagentTranscriptBlock dialogHost={chatHost} />
-							<WorkspaceDock />
-						</>
-					}
-				/>
+				<ChatStream footer={<WorkspaceDock />} subagentDialogHost={chatHost} />
 			</div>
 			<ComposerQuestions>
 				<InputArea />

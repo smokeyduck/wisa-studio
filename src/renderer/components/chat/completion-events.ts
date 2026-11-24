@@ -1,4 +1,5 @@
 import type { AgentMessage } from "../../../shared/rpc-types";
+import { resultDetails } from "../../lib/format";
 
 export interface LaunchCompletionDaemon {
 	name: string;
@@ -37,4 +38,43 @@ export function launchCompletionFailureCount(message: AgentMessage): number {
 	return launchCompletionDaemons(message).filter(
 		daemon => daemon.state === "failed" || (daemon.exitCode !== undefined && daemon.exitCode !== 0),
 	).length;
+}
+
+/** Move only task results whose exact agent ID has a visible history card. */
+export function foldSubagentCompletions(
+	messages: AgentMessage[],
+	agents: ReadonlyMap<string, number>,
+	completions: Map<string, AgentMessage[]>,
+): AgentMessage[] {
+	if (agents.size === 0) return messages;
+	return messages.flatMap(message => {
+		if (message.role !== "custom" || message.customType !== "async-result" || message.display === false)
+			return [message];
+		const details = resultDetails(message);
+		const jobs: unknown = details?.jobs;
+		if (!Array.isArray(jobs)) return [message];
+		const remaining: unknown[] = [];
+		const matched = new Map<string, unknown[]>();
+		for (const value of jobs as unknown[]) {
+			const job = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+			if (
+				job?.type === "task" &&
+				typeof job.jobId === "string" &&
+				typeof job.agentId === "string" &&
+				agents.has(job.agentId)
+			) {
+				const group = matched.get(job.agentId);
+				if (group) group.push(job);
+				else matched.set(job.agentId, [job]);
+			} else remaining.push(value);
+		}
+		if (matched.size === 0) return [message];
+		for (const [id, results] of matched) {
+			const delivery = { ...message, details: { ...details, jobs: results } };
+			const group = completions.get(id);
+			if (group) group.push(delivery);
+			else completions.set(id, [delivery]);
+		}
+		return remaining.length ? [{ ...message, details: { ...details, jobs: remaining } }] : [];
+	});
 }

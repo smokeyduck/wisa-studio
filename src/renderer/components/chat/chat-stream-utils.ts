@@ -163,7 +163,8 @@ export type HistoryRow =
 	| { kind: "message"; message: AgentMessage; reaction?: string; repeats?: number; todoReminders?: AgentMessage[] }
 	| { kind: "readGroup"; entries: ReadGroupEntry[]; usage?: ReadGroupUsage[] }
 	| ({ kind: "process"; messages: AgentMessage[] } & ProcessMeta)
-	| { kind: "todoSnapshot"; entry: TodoSnapshot };
+	| { kind: "todoSnapshot"; entry: TodoSnapshot }
+	| { kind: "subagent"; id: string };
 
 /** What one run changed on disk: distinct files and their line totals. */
 export interface TurnChangeSummary {
@@ -231,6 +232,8 @@ function transcriptRowBaseKey(row: Row): string {
 			return `read-${row.entries.map(entry => entry.toolKey).join("-")}`;
 		case "todoSnapshot":
 			return `todo-snapshot-${row.entry.id}`;
+		case "subagent":
+			return `subagent-${row.id}`;
 		case "streaming":
 			// message_start and message_end carry the same assistant identity.
 			// Reusing it prevents the virtualizer from replacing one huge measured
@@ -594,6 +597,28 @@ export function mergeTodoSnapshots(rows: readonly HistoryRow[], snapshots: reado
 		out.push({ kind: "todoSnapshot", entry: snapshots[next]! });
 		next++;
 	}
+	return out;
+}
+
+/** A permanent transcript row at the agent's first observed spawn, never at its completion. */
+export function mergeSubagentRows(rows: HistoryRow[], agents: ReadonlyMap<string, number>): HistoryRow[] {
+	if (agents.size === 0) return rows;
+	const ordered = [...agents].sort((a, b) => a[1] - b[1]);
+	const out: HistoryRow[] = [];
+	let next = 0;
+	for (const row of rows) {
+		let ts: number | undefined;
+		if (row.kind === "todoSnapshot") ts = row.entry.ts;
+		else if (row.kind === "message") ts = messageTimestampMs(row.message);
+		else if (row.kind === "process" && row.messages[0]) ts = messageTimestampMs(row.messages[0]);
+		else if (row.kind === "readGroup" && row.usage?.[0]?.timestamp !== undefined)
+			ts = messageTimestampMs({ role: "assistant", timestamp: row.usage[0].timestamp });
+		for (let entry = ordered[next]; ts !== undefined && entry && entry[1] < ts; entry = ordered[++next]) {
+			out.push({ kind: "subagent", id: entry[0] });
+		}
+		out.push(row);
+	}
+	while (next < ordered.length) out.push({ kind: "subagent", id: ordered[next++]![0] });
 	return out;
 }
 

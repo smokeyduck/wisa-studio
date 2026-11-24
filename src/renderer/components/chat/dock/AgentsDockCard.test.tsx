@@ -1,6 +1,6 @@
-/** Transcript subagent block, scoped dialog, and stream-time polling. */
+/** Transcript subagent cards, scoped dialog, and stream-time polling. */
 import { parseHTML } from "linkedom";
-import { act, type ReactElement } from "react";
+import { act, type ReactElement, useState } from "react";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { AgentProgress, RpcCommand, RpcResponse, SubagentSnapshot } from "../../../../shared/rpc-types";
@@ -15,8 +15,8 @@ import {
 } from "../../../stores/session-runtime-context";
 import { useSettingsStore } from "../../../stores/settings";
 import { type SubagentsStore, useSubagentsStore } from "../../../stores/subagents";
-import { useTabsStore } from "../../../stores/tabs";
 import { createTabRuntime } from "../../../stores/tab-runtime";
+import { useTabsStore } from "../../../stores/tabs";
 
 const { document, window, Event, HTMLElement, Node } = parseHTML("<html><body></body></html>");
 const globals = globalThis as Record<string, unknown>;
@@ -31,7 +31,7 @@ globals.requestAnimationFrame = (callback: () => void) => setTimeout(callback, 0
 // Deferred until after the globals above: react-dom computes DOM support
 // flags at evaluation time.
 const { createRoot } = await import("react-dom/client");
-const { SubagentTranscriptBlock } = await import("./AgentsDockCard");
+const { SubagentHistoryCard, SubagentHistoryDialog } = await import("./AgentsDockCard");
 const { WorkspaceDock } = await import("./WorkspaceDock");
 
 const getSubagents: Mock = vi.fn(async () => ({
@@ -40,12 +40,14 @@ const getSubagents: Mock = vi.fn(async () => ({
 	success: true,
 	data: { subagents: [] },
 }));
-const commandForTab = vi.fn(async (tabId: string, command: RpcCommand): Promise<RpcResponse> => ({
-	type: "response",
-	command: command.type,
-	success: true,
-	data: { messages: [{ role: "assistant", content: `Transcript from ${tabId}` }] },
-}));
+const commandForTab = vi.fn(
+	async (tabId: string, command: RpcCommand): Promise<RpcResponse> => ({
+		type: "response",
+		command: command.type,
+		success: true,
+		data: { messages: [{ role: "assistant", content: `Transcript from ${tabId}` }] },
+	}),
+);
 const ompWindow = window as unknown as { omp: { rpc: { getSubagents: Mock; commandForTab?: typeof commandForTab } } };
 ompWindow.omp = { rpc: { getSubagents } };
 
@@ -128,54 +130,73 @@ function containerText(): string {
 	return container.textContent ?? "";
 }
 
-describe("SubagentTranscriptBlock", () => {
-	it("renders nothing when the session has no agents or display.pinnedAgents is off", async () => {
-		await mount(<SubagentTranscriptBlock dialogHost={null} />);
-		expect(containerText()).toBe("");
-		await act(async () => {
-			useSettingsStore.setState({ pinnedAgents: "off" });
-			useSubagentsStore.getState().setSnapshots([snap({ agent: "Hidden worker" })]);
-		});
-		expect(containerText()).toBe("");
-	});
+function HistoryCardWithDialog({ dialogHost }: { dialogHost: HTMLElement }) {
+	const sessionId = useSessionStore(state => state.sessionId);
+	return <SelectedCard dialogHost={dialogHost} key={sessionId} />;
+}
 
-	it("leaves only active cards in the transcript without deleting sidebar history", async () => {
+function SelectedCard({ dialogHost }: { dialogHost: HTMLElement }) {
+	const [selectedId, setSelectedId] = useState<string | null>(null);
+	return (
+		<>
+			<SubagentHistoryCard agentId="a1" full={false} onOpen={setSelectedId} />
+			<SubagentHistoryDialog
+				agentId={selectedId}
+				completions={undefined}
+				dialogHost={dialogHost}
+				onClose={() => setSelectedId(null)}
+			/>
+		</>
+	);
+}
+
+describe("subagent history card", () => {
+	it("keeps the card mounted and updates its status when the agent completes", async () => {
 		const running = snap({ agent: "scout", progress: progress({ resolvedModel: "openai-codex/gpt-5.6-sol:max" }) });
-		const done = snap({ id: "a2", index: 2, agent: "reviewer", status: "completed" });
-		const failed = snap({ id: "a3", index: 3, agent: "builder", status: "failed" });
-		const stale = snap({ id: "a4", index: 4, agent: "stale worker", live: false });
-		useSubagentsStore.getState().setSnapshots([running, done, failed, stale]);
-		await mount(<SubagentTranscriptBlock dialogHost={null} />);
-		expect(container.querySelectorAll('[aria-haspopup="dialog"]')).toHaveLength(1);
+		useSubagentsStore.getState().setSnapshots([running]);
+		await mount(<SubagentHistoryCard agentId="a1" full={false} onOpen={vi.fn()} />);
+		const card = container.querySelector('[aria-haspopup="dialog"]');
+		expect(card?.textContent).toContain("running");
 		expect(containerText()).toContain("openai-codex/gpt-5.6-sol:max");
 		expect(containerText()).toContain("12.3k tokens");
 		expect(containerText()).toContain("$0.4321");
 		await act(async () => {
-			useSubagentsStore.getState().setSnapshots([{ ...running, status: "completed" }, done, failed, stale]);
+			useSubagentsStore.getState().setSnapshots([{ ...running, status: "completed", live: false }]);
 		});
-		expect(containerText()).toBe("");
-		expect(useSubagentsStore.getState().subagents.get(running.id)?.status).toBe("completed");
-		expect(useSubagentsStore.getState().subagents.get(failed.id)?.status).toBe("failed");
+		expect(container.querySelector('[aria-haspopup="dialog"]')).toBe(card);
+		expect(card?.textContent).toContain("completed");
 	});
 
 	it("loads the clicked row’s transcript from its owning tab and centers it in that chat host", async () => {
 		const active = createTabRuntime("tab-foreground");
 		const background = createTabRuntime("tab-background");
 		setFocusedSessionRuntime(active.tabId);
-		sessionRuntimeStore<SubagentsStore>(active.tabId, "subagents")?.getState().setSnapshots([snap({ agent: "Foreground" })]);
-		sessionRuntimeStore<SubagentsStore>(background.tabId, "subagents")?.getState().setSnapshots([snap({ agent: "Background" })]);
+		sessionRuntimeStore<SubagentsStore>(active.tabId, "subagents")
+			?.getState()
+			.setSnapshots([snap({ agent: "Foreground" })]);
+		sessionRuntimeStore<SubagentsStore>(background.tabId, "subagents")
+			?.getState()
+			.setSnapshots([snap({ agent: "Background" })]);
 		ompWindow.omp.rpc.commandForTab = commandForTab;
 		const host = document.createElement("div") as unknown as HTMLDivElement;
 		document.body.appendChild(host as never);
 		try {
-			await mount(<SessionRuntimeProvider runtime={background}><SubagentTranscriptBlock dialogHost={host} /></SessionRuntimeProvider>);
+			await mount(
+				<SessionRuntimeProvider runtime={background}>
+					<HistoryCardWithDialog dialogHost={host} />
+				</SessionRuntimeProvider>,
+			);
 			expect(containerText()).toContain("Background");
 			expect(containerText()).not.toContain("Foreground");
 			const row = container.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]');
 			if (!row) throw new Error("missing agent row");
 			await act(async () => row.click());
 			expect(host.querySelector('[role="dialog"]')?.textContent).toContain("Transcript from tab-background");
-			expect(commandForTab).toHaveBeenCalledWith("tab-background", expect.objectContaining({ type: "get_subagent_messages" }), undefined);
+			expect(commandForTab).toHaveBeenCalledWith(
+				"tab-background",
+				expect.objectContaining({ type: "get_subagent_messages" }),
+				undefined,
+			);
 			const close = host.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
 			if (!close) throw new Error("missing transcript dialog close button");
 			await act(async () => close.click());
@@ -189,16 +210,6 @@ describe("SubagentTranscriptBlock", () => {
 		} finally {
 			host.remove();
 		}
-	});
-
-	it("renders each active subagent as a separate card, including beyond five agents", async () => {
-		useSubagentsStore
-			.getState()
-			.setSnapshots(Array.from({ length: 8 }, (_, index) => snap({ id: `row-${index}`, index: index + 1 })));
-		await mount(<SubagentTranscriptBlock dialogHost={null} />);
-		const buttons = [...container.querySelectorAll('[aria-haspopup="dialog"]')];
-		expect(buttons).toHaveLength(8);
-		expect(buttons.every(button => button.parentElement?.parentElement === container)).toBe(true);
 	});
 
 	it("polls get_subagents while streaming independently of the transcript block and stops when the turn ends", async () => {

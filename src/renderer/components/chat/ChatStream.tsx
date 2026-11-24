@@ -18,6 +18,7 @@ import {
 	X,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { AgentMessage, RpcQueuedMessage } from "../../../shared/rpc-types";
 import { hydrateTabSession, readOlderTranscript } from "../../hooks/session-hydration";
 import { useDisplayPreference } from "../../lib/display-preferences";
@@ -32,6 +33,8 @@ import { useMessagesStore } from "../../stores/messages";
 import { type QueueLane, useQueuedMessages, useQueueStore } from "../../stores/queue";
 import { useSessionStore } from "../../stores/session";
 import { useRuntimeTabId } from "../../stores/session-runtime-context";
+import { useSettingsStore } from "../../stores/settings";
+import { useSubagentsStore } from "../../stores/subagents";
 import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
 import { type TodoSnapshot, useTodoStore } from "../../stores/todo";
@@ -59,6 +62,7 @@ import {
 	isVisibleTranscriptMessage,
 	locateEntryRow,
 	type MountedTranscriptRow,
+	mergeSubagentRows,
 	mergeTodoSnapshots,
 	type Row,
 	shouldRePinTranscript,
@@ -66,6 +70,8 @@ import {
 	type TurnChangeSummary,
 	tabAwaitsTranscript,
 } from "./chat-stream-utils";
+import { foldSubagentCompletions } from "./completion-events";
+import { SubagentHistoryCard, SubagentHistoryDialog } from "./dock/AgentsDockCard";
 import { ExecutionGroup } from "./ExecutionGroup";
 import { MessageBubble } from "./MessageBubble";
 import { StreamingText } from "./StreamingText";
@@ -102,7 +108,7 @@ function estimateRowSize(row: Row | undefined): number {
 	const kind = row?.kind;
 	if (kind === "streaming") return 80;
 	if (kind === "pending" || kind === "queued" || kind === "turnChanges") return 56;
-	if (kind === "process" || kind === "todoSnapshot") return 48;
+	if (kind === "process" || kind === "todoSnapshot" || kind === "subagent") return 48;
 	if (kind === "message") return 72;
 	return 160;
 }
@@ -113,17 +119,36 @@ function estimateRowSize(row: Row | undefined): number {
  * unpinned. The in-flight assistant turn renders as live rows (thinking,
  * tool cards, streaming text) that unmount once message_end finalizes.
  */
-export function ChatStream({ footer }: { footer?: ReactNode }) {
-	const tabId = useRuntimeTabId();
-	const sessionId = useSessionStore(s => s.sessionId);
-	return <SessionTranscript key={`${tabId ?? ""}:${sessionId}`} footer={footer} />;
+interface ChatStreamProps {
+	footer?: ReactNode;
+	subagentDialogHost?: HTMLElement | null;
 }
 
-function SessionTranscript({ footer }: { footer?: ReactNode }) {
+export function ChatStream(props: ChatStreamProps) {
+	const tabId = useRuntimeTabId();
+	const sessionId = useSessionStore(s => s.sessionId);
+	return <SessionTranscript key={`${tabId ?? ""}:${sessionId}`} {...props} />;
+}
+
+function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	const t = useT();
 	const tabId = useRuntimeTabId();
 	// A subagent page: someone else's history, with nothing to start or review.
 	const readOnly = useReadOnlyTranscript();
+	const subagentMode = useSettingsStore(state => state.pinnedAgents);
+	const showSubagents = subagentDialogHost !== undefined && readOnly === null && subagentMode !== "off";
+	const subagentAnchors = useSubagentsStore(
+		useShallow(state => {
+			const anchors = new Map<string, number>();
+			if (showSubagents) {
+				for (const agent of state.subagents.values()) {
+					anchors.set(agent.id, agent.spawnedAt ?? agent.lastUpdate);
+				}
+			}
+			return anchors;
+		}),
+	);
+	const [selectedSubagent, setSelectedSubagent] = useState<string | null>(null);
 	const status = useSessionStore(s => s.status);
 	const messages = useMessagesStore(s => s.messages);
 	const liveMessages = useMessagesStore(s => s.liveMessages);
@@ -235,17 +260,42 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 			return;
 		void hydrateTabSession(tabId);
 	}, [collapseCompacted, readOnly, status, switchPending, tabId, transcriptFolded]);
-	const olderRows = useMemo(() => {
+	const visibleMessages = useMemo(
+		() => (hiddenCount > 0 ? displayMessages.slice(hiddenCount) : displayMessages),
+		[displayMessages, hiddenCount],
+	);
+	const historicalMessages = useMemo(() => {
 		if (!archive.messages.length && !archive.searchMessages.length) return [];
 		const ids = new Set(archive.messages.map(message => message.entryId));
-		const liveIds = new Set(displayMessages.slice(hiddenCount).map(message => message.entryId));
-		const historical = [
-			...archive.searchMessages.filter(message => !ids.has(message.entryId)),
-			...archive.messages,
-		].filter(message => !liveIds.has(message.entryId));
-		const built = buildHistoryRows(historical, transcriptDetail, expandedProcessKeys);
-		return transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
-	}, [archive.messages, archive.searchMessages, displayMessages, hiddenCount, transcriptDetail, expandedProcessKeys]);
+		const liveIds = new Set(visibleMessages.map(message => message.entryId));
+		return [...archive.searchMessages.filter(message => !ids.has(message.entryId)), ...archive.messages].filter(
+			message => !liveIds.has(message.entryId),
+		);
+	}, [archive.messages, archive.searchMessages, visibleMessages]);
+	const firstVisibleMessage = visibleMessages[0];
+	const foldTime =
+		firstVisibleMessage && (hiddenCount > 0 || (transcriptFolded && lastCompactionIndex === 0))
+			? messageTimestampMs(firstVisibleMessage)
+			: 0;
+	const { currentAgents, olderAgents, currentMessages, olderMessages, completions } = useMemo(() => {
+		const currentAgents = new Map<string, number>();
+		const olderAgents = new Map<string, number>();
+		const olderStart = historicalMessages[0] ? messageTimestampMs(historicalMessages[0]) : undefined;
+		for (const [id, timestamp] of subagentAnchors) {
+			if (timestamp >= foldTime) currentAgents.set(id, timestamp);
+			else if (olderStart !== undefined && timestamp >= olderStart) olderAgents.set(id, timestamp);
+		}
+		const visibleAgents = new Map([...currentAgents, ...olderAgents]);
+		const completions = new Map<string, AgentMessage[]>();
+		const olderMessages = foldSubagentCompletions(historicalMessages, visibleAgents, completions);
+		const currentMessages = foldSubagentCompletions(visibleMessages, visibleAgents, completions);
+		return { currentAgents, olderAgents, currentMessages, olderMessages, completions };
+	}, [foldTime, historicalMessages, subagentAnchors, visibleMessages]);
+	const olderRows = useMemo(() => {
+		const built = buildHistoryRows(olderMessages, transcriptDetail, expandedProcessKeys);
+		const grouped = transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
+		return mergeSubagentRows(grouped, olderAgents);
+	}, [olderMessages, olderAgents, transcriptDetail, expandedProcessKeys]);
 	const todoHistory = useTodoStore(s => s.history);
 	// Folded history hides the todo snapshots archived before the compaction
 	// point too: they belong to the turns the divider replaced, and interleaving
@@ -256,18 +306,14 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 		return todoHistory.filter(snapshot => snapshot.ts >= boundary);
 	}, [todoHistory, hiddenCount, displayMessages]);
 	const historyRows = useMemo<HistoryRow[]>(() => {
-		const built = buildHistoryRows(
-			hiddenCount > 0 ? displayMessages.slice(hiddenCount) : displayMessages,
-			transcriptDetail,
-			expandedProcessKeys,
-		);
+		const built = buildHistoryRows(currentMessages, transcriptDetail, expandedProcessKeys);
 		// Read-tool grouping (TUI parity) folds consecutive collapsible reads into
 		// one card — only in full mode; compact mode's ProcessGroup already folds
 		// ALL consecutive tool work, so a second fold would nest redundantly.
 		const grouped = transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
 		// Archived todo changes interleave by timestamp (transcript archive rows).
-		return mergeTodoSnapshots(grouped, visibleTodoHistory);
-	}, [displayMessages, hiddenCount, transcriptDetail, visibleTodoHistory, expandedProcessKeys]);
+		return mergeSubagentRows(mergeTodoSnapshots(grouped, visibleTodoHistory), currentAgents);
+	}, [currentMessages, currentAgents, transcriptDetail, visibleTodoHistory, expandedProcessKeys]);
 
 	// What the latest run changed on disk, once it has settled: closes the turn
 	// with one line leading to the review drawer. Tool events stream in at a high
@@ -1118,6 +1164,12 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 													onExpandedChange={expanded => updateProcessExpanded(rowKey, expanded)}
 													row={row}
 												/>
+											) : row.kind === "subagent" ? (
+												<SubagentHistoryCard
+													agentId={row.id}
+													full={subagentMode === "full"}
+													onOpen={setSelectedSubagent}
+												/>
 											) : row.kind === "streaming" ? (
 												<StreamingRows
 													expanded={expandedProcessKeys.has(rowKey)}
@@ -1157,6 +1209,14 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 					{t("chat.jumpToLatest")}
 				</button>
 			</div>
+			{subagentDialogHost && showSubagents && (
+				<SubagentHistoryDialog
+					agentId={selectedSubagent}
+					completions={selectedSubagent ? completions.get(selectedSubagent) : undefined}
+					dialogHost={subagentDialogHost}
+					onClose={() => setSelectedSubagent(null)}
+				/>
+			)}
 			<ConversationNavigator
 				activeIndex={activeConversationIndex}
 				anchors={conversationAnchors}

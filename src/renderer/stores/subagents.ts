@@ -52,9 +52,14 @@ const LIVE_STATUSES: Record<string, true> = {
 };
 
 function normalizeSnapshot(snapshot: SubagentNode): SubagentNode {
-	return snapshot.live === false && ["started", "running", "pending", "waiting"].includes(snapshot.status)
-		? { ...snapshot, status: "stale" }
-		: snapshot;
+	return {
+		...snapshot,
+		spawnedAt: snapshot.spawnedAt ?? snapshot.lastUpdate,
+		status:
+			snapshot.live === false && ["started", "running", "pending", "waiting"].includes(snapshot.status)
+				? "stale"
+				: snapshot.status,
+	};
 }
 
 /**
@@ -72,7 +77,7 @@ function mergeFetchedSnapshot(fresh: SubagentNode, prev: SubagentNode): Subagent
 		description: fresh.description ?? prev.description,
 		progress: fresh.progress ?? prev.progress,
 		sessionFile: fresh.sessionFile ?? prev.sessionFile,
-		spawnedAt: fresh.spawnedAt ?? prev.spawnedAt,
+		spawnedAt: prev.spawnedAt ?? fresh.spawnedAt,
 	};
 }
 
@@ -104,7 +109,7 @@ export const createSubagentsStore = (command: TabCommand = activeTabCommand) => 
 						sessionFile: p.sessionFile ?? existing?.sessionFile,
 						lastUpdate: Date.now(),
 						// The sidecar stamps rows it lists; a start seen live is stamped here.
-						spawnedAt: existing?.spawnedAt ?? (p.status === "started" ? Date.now() : undefined),
+						spawnedAt: existing?.spawnedAt ?? Date.now(),
 						parentToolCallId: p.parentToolCallId ?? existing?.parentToolCallId,
 						parentSubagentId: p.parentSubagentId ?? existing?.parentSubagentId,
 						progress: existing?.progress,
@@ -132,7 +137,7 @@ export const createSubagentsStore = (command: TabCommand = activeTabCommand) => 
 						assignment: frame.payload.assignment ?? existing?.assignment,
 						sessionFile: frame.payload.sessionFile ?? existing?.sessionFile,
 						lastUpdate: Date.now(),
-						spawnedAt: existing?.spawnedAt,
+						spawnedAt: existing?.spawnedAt ?? Date.now(),
 						parentToolCallId: frame.payload.parentToolCallId ?? existing?.parentToolCallId,
 						parentSubagentId: frame.payload.parentSubagentId ?? existing?.parentSubagentId,
 						kind: existing?.kind ?? "sub",

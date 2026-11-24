@@ -1,13 +1,10 @@
-/** Individual cards for active subagents at the end of the transcript. */
+/** Individual subagent cards in transcript history and their chat-scoped dialog. */
 import { Bot, ChevronRight } from "lucide-react";
-import { memo, useMemo, useState } from "react";
-import type { SubagentSnapshot } from "../../../../shared/rpc-types";
+import { memo } from "react";
+import type { AgentMessage } from "../../../../shared/rpc-types";
 import { cx } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
 import { useNowTick } from "../../../lib/now-tick";
-import { useSessionStore } from "../../../stores/session";
-import { useRuntimeTabId } from "../../../stores/session-runtime-context";
-import { useSettingsStore } from "../../../stores/settings";
 import { useSubagentsStore } from "../../../stores/subagents";
 import { Badge, Modal } from "../../common";
 import { SubagentTranscript } from "../../panels/SubagentTranscript";
@@ -19,19 +16,21 @@ import {
 	subagentFacts,
 	subagentPrimaryLabel,
 } from "../../panels/subagent-graph";
+import { CustomMessageCard } from "../CustomMessageCard";
 
-const SubagentRow = memo(function SubagentRow({
-	agent,
+export const SubagentHistoryCard = memo(function SubagentHistoryCard({
+	agentId,
 	full,
 	onOpen,
-	now,
 }: {
-	agent: SubagentSnapshot;
+	agentId: string;
 	full: boolean;
 	onOpen: (id: string) => void;
-	now: number;
 }) {
+	const agent = useSubagentsStore(state => state.subagents.get(agentId));
+	const now = useNowTick(!!agent && agent.live !== false && isLiveSubagentStatus(agent.status));
 	const t = useT();
+	if (!agent) return null;
 	const meta = statusMeta(agent.status);
 	const elapsed = subagentElapsedMs(agent, now);
 	const title = subagentPrimaryLabel(agent);
@@ -84,49 +83,31 @@ const SubagentRow = memo(function SubagentRow({
 	);
 });
 
-/** `dialogHost` is the positioned chat viewport, outside its scroll container. */
-export function SubagentTranscriptBlock({ dialogHost }: { dialogHost: HTMLElement | null }) {
-	const mode = useSettingsStore(state => state.pinnedAgents);
-	const hasAgents = useSubagentsStore(state => state.subagents.size > 0);
-	const tabId = useRuntimeTabId();
-	const sessionId = useSessionStore(state => state.sessionId);
-	if (!hasAgents || mode === "off") return null;
+/** Mounted outside the virtual rows so scrolling never owns the dialog's lifetime. */
+export function SubagentHistoryDialog({
+	agentId,
+	dialogHost,
+	completions,
+	onClose,
+}: {
+	agentId: string | null;
+	dialogHost: HTMLElement;
+	completions: readonly AgentMessage[] | undefined;
+	onClose: () => void;
+}) {
+	const agent = useSubagentsStore(state => (agentId ? state.subagents.get(agentId) : undefined));
 	return (
-		<SessionSubagentBlock dialogHost={dialogHost} full={mode === "full"} key={`${tabId ?? ""}:${sessionId ?? ""}`} />
-	);
-}
-
-function SessionSubagentBlock({ dialogHost, full }: { dialogHost: HTMLElement | null; full: boolean }) {
-	const subagents = useSubagentsStore(state => state.subagents);
-	const [selectedId, setSelectedId] = useState<string | null>(null);
-	const selected = selectedId ? subagents.get(selectedId) : undefined;
-
-	const active = useMemo(() => {
-		const agents: SubagentSnapshot[] = [];
-		for (const agent of subagents.values()) {
-			if (agent.live !== false && isLiveSubagentStatus(agent.status)) agents.push(agent);
-		}
-		return agents;
-	}, [subagents]);
-	const now = useNowTick(active.length > 0);
-	if (active.length === 0 && !selected) return null;
-
-	return (
-		<>
-			{active.map(agent => (
-				<SubagentRow agent={agent} full={full} key={agent.id} now={now} onOpen={setSelectedId} />
+		<Modal
+			host={dialogHost}
+			onClose={onClose}
+			open={agent !== undefined}
+			size="md"
+			title={agent ? subagentPrimaryLabel(agent) : undefined}
+		>
+			{agent && <SubagentTranscript agent={agent} conversationOnly key={agent.id} />}
+			{completions?.map((message, index) => (
+				<CustomMessageCard inProcess key={message.entryId ?? index} message={message} />
 			))}
-			{dialogHost && (
-				<Modal
-					host={dialogHost}
-					onClose={() => setSelectedId(null)}
-					open={selected !== undefined}
-					size="md"
-					title={selected ? subagentPrimaryLabel(selected) : undefined}
-				>
-					{selected && <SubagentTranscript agent={selected} conversationOnly key={selected.id} />}
-				</Modal>
-			)}
-		</>
+		</Modal>
 	);
 }

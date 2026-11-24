@@ -7,15 +7,15 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
-- Spaced out reasoning and execution disclosures in the conversation. Active subagents have separate transcript cards; finished and failed agents remain available in the right-hand Agents panel.
+- Spaced out reasoning and execution disclosures in the conversation.
 - The model picker shows the session model and cached choices without waiting for provider catalog discovery or forcing a refresh on every open.
 - On Windows, switching between Work and Coding no longer reuses the wrong tool profile when a saved workspace path differs only in case or slash style. Coding tool profile settings identify the subagent tool as `task`.
 - The sidebar keeps visited workspaces expanded when switching sessions, unless explicitly collapsed. Memory, Skills, Plugins, and Templates are pinned by default when no pin list exists; saved choices are preserved.
 - Moved Wisa Capabilities, Providers & login, and Feedback from the sidebar to Settings → App & help, next to Keyboard shortcuts.
 - Long filenames stay inside the Overview changes card. The Plugins catalog renders only rows near the viewport and preserves its scroll position when returning from a detail page.
 - Installed plugins offer Upgrade only when the cached catalog advertises a newer release. Declarative plugins such as Cloudflare can open their settings without an npm manifest, and MCP servers that challenge for OAuth expose an authorization action directly on their card.
-- The subagent dialog shows only sent messages and replies, renders them as Markdown, and lets you expand each long message independently.
-- Active subagent cards fit their content without stretching across the conversation, and respect the transcript gutters in narrow panes.
+- The subagent dialog renders sent messages and replies as Markdown and lets you expand each long message independently.
+- Subagent cards stay at their place in the conversation after finishing and fit their content within the transcript gutters. Matching background-task results appear inside the card's dialog instead of as duplicate transcript rows.
 
 ## [0.9.55] - 2026-11-24
 
