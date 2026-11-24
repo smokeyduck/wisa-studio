@@ -34,6 +34,7 @@ export type RpcCommand =
 	| { id?: string; type: "get_available_commands" }
 	| { id?: string; type: "set_todos"; phases: TodoPhase[] }
 	| { id?: string; type: "set_host_tools"; tools: HostToolDefinition[] }
+	| { id?: string; type: "browser_host_start" | "browser_host_stop" }
 	| { id?: string; type: "set_host_uri_schemes"; schemes: HostUriSchemeDefinition[] }
 	| { id?: string; type: "set_subagent_subscription"; level: SubagentSubscriptionLevel }
 	/**

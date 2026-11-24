@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, net, shell } from "electron";
 import Store from "electron-store";
+import type { BrowserWorkspaceAction } from "../shared/browser-workspace";
 import { CONFIG_EDITOR_PREF, readConfigEditor } from "../shared/config-editor";
 import { KEYMAP_DISABLED_PREF, KEYMAP_OVERRIDES_PREF } from "../shared/hotkeys";
 import type {
@@ -77,6 +78,7 @@ import { isSessionOutputPath } from "../shared/session-output";
 import { CODING_TOOL_PROFILE_PREF, WORK_TOOL_PROFILE_PREF } from "../shared/tool-profiles";
 import { quitRisk, requestQuit, requestRestart } from "./app-quit";
 import { BenchmarkRunner } from "./benchmark-runner";
+import { BrowserWorkspace } from "./browser-workspace";
 import type { CollabPhoneHost } from "./collab-phone";
 import type { ConversationIndex } from "./conversation-index";
 import { type CustomThemesWatcher, deleteCustomTheme, readCustomThemes, saveCustomTheme } from "./custom-themes";
@@ -473,6 +475,21 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	const { sidecarPool, sessionIndex, statsClient, logWatcher, memoryWatcher, customThemesWatcher, windowManager } =
 		deps;
 	const prefsStore = new Store<PrefsSchema>({ name: "prefs" });
+	const browser = new BrowserWorkspace();
+	ipcMain.handle(IPC_COMMANDS.BROWSER_OPEN, (event, tabId: string | null) => {
+		const win = BrowserWindow.fromWebContents(event.sender);
+		if (!win || !windowManager.recordFor(win) || event.senderFrame !== event.sender.mainFrame) return;
+		return browser.show(() => {
+			const tab = tabId ? sidecarPool.sidecarForTab(win, tabId) : null;
+			return tab && tab.status === "ready" && sidecarPool.tabForSidecar(tab)?.kind === "agent"
+				? tab.rpcClient
+				: null;
+		});
+	});
+	ipcMain.handle(IPC_COMMANDS.BROWSER_ACTION, (event, action: BrowserWorkspaceAction) => {
+		if (!browser.owns(event.sender.id) || event.senderFrame !== event.sender.mainFrame) return;
+		return browser.action(action);
+	});
 
 	// Drop a closed window's tray/progress snapshot so the aggregate reflects
 	// only live windows (and re-render the tray with the new aggregate).
@@ -670,6 +687,14 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 					data: { ownerTabId: blocker.tabId, ownerWinId: blocker.winId },
 				};
 			}
+		}
+		if (
+			cmd.type === "switch_session" ||
+			cmd.type === "new_session" ||
+			cmd.type === "drop_session" ||
+			cmd.type === "fresh"
+		) {
+			browser.disconnect(client);
 		}
 		try {
 			const response = await client.command({ ...cmd, id: _id } as RpcCommand, payload.timeoutMs);

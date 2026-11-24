@@ -3,6 +3,7 @@
  * Type-safe contract for the contextBridge API.
  */
 
+import type { BrowserWorkspaceAction, BrowserWorkspaceState } from "./browser-workspace";
 import type { CollabAutoStartMode, CollabPhoneEntry, CollabPhoneSnapshot } from "./collab-phone";
 import type { DocumentPreviewResult } from "./document-preview";
 import type { Language } from "./languages";
@@ -97,6 +98,7 @@ import type {
 // ============================================================================
 
 export const IPC_EVENTS = {
+	BROWSER_STATE: "browser-workspace:state",
 	/** Global interface language changed in any app window. */
 	LANGUAGE_CHANGED: "prefs:language-changed",
 	/** The user's saved shortcuts changed in some app window. */
@@ -180,6 +182,8 @@ export const IPC_EVENTS = {
 // ============================================================================
 
 export const IPC_COMMANDS = {
+	BROWSER_OPEN: "browser-workspace:open",
+	BROWSER_ACTION: "browser-workspace:action",
 	WINDOW_IS_FULLSCREEN: "window:is-fullscreen",
 	/** Persist a renderer runtime failure in the main-process crash log */
 	RUNTIME_ERROR_REPORT: "runtime:error-report",
@@ -1338,6 +1342,11 @@ export interface OmpApi {
 	platform: string;
 	/** Native startup language, resolved before the first renderer paint. */
 	initialLanguage?: Language;
+	browser: {
+		open(tabId: string | null): Promise<void>;
+		action(action: BrowserWorkspaceAction): Promise<BrowserWorkspaceState>;
+		onState(callback: (state: BrowserWorkspaceState) => void): () => void;
+	};
 	windowChrome: {
 		isFullScreen(): Promise<boolean>;
 		onFullScreenChange(callback: (fullScreen: boolean) => void): () => void;

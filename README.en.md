@@ -74,9 +74,13 @@ WISA STUDIO keeps its own agent data under `~/.wisa-studio/agent` (not `~/.omp`)
 
 Known limits: separate tabs are not an OS security boundary; a split holds two panes, not an unlimited grid; approvals and security scans are not a sandbox. Model requests still go to the provider you configure.
 
-### Use your own Chrome session (optional)
+### Browse inside WISA STUDIO
 
-The toolbar globe opens `https://askwisa.com/` in your default browser, using that browser’s profile and sign-in state. For agent tasks, use Core’s built-in browser automation in Code mode with `eval` and Browser enabled. Opening the site from the toolbar does not give the agent access to your personal tabs.
+The toolbar globe opens **WISA Browser**, a Chromium window inside Studio with a profile separate from Chrome or your default browser. It restores tabs and keeps persistent cookies and site storage across restarts. Restored addresses omit query strings and fragments; in-flight work and unsaved form input do not survive closing the browser.
+
+To work on the same live page, open WISA Browser from the intended agent tab, choose **Share with agent**, and confirm. In Code mode with `eval` and Browser enabled, the agent can list open targets and adopt the page you name, or open a new tab inside Studio. Sharing grants access to all WISA Browser tabs and their signed-in pages. Choose **Stop sharing** or close the window to revoke it; sharing does not resume automatically.
+
+### Use your own Chrome session (optional)
 
 To let an agent use a signed-in tab, opt in to the [omp browser relay](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). If you don't already have it, run `omp browser-relay install --no-chrome` from a compatible omp CLI, then in the Chrome profile you want to use go to `chrome://extensions`, turn on **Developer mode**, and choose the printed folder with **Load unpacked**. The relay can act as you in that profile; use a separate work profile and approve only tasks you intend to run there. Do not expose the relay beyond your machine.
 

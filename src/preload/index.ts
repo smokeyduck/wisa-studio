@@ -5,6 +5,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import type { BrowserWorkspaceState } from "../shared/browser-workspace";
 import type { DocumentPreviewResult } from "../shared/document-preview";
 import type {
 	ConversationSearchResponse,
@@ -471,6 +472,11 @@ const api: OmpApi = {
 	},
 
 	platform: process.platform,
+	browser: {
+		open: tabId => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_OPEN, tabId),
+		action: action => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_ACTION, action),
+		onState: callback => subscribe<BrowserWorkspaceState>(IPC_EVENTS.BROWSER_STATE, callback),
+	},
 	windowChrome: {
 		isFullScreen: () => ipcRenderer.invoke(IPC_COMMANDS.WINDOW_IS_FULLSCREEN) as Promise<boolean>,
 		onFullScreenChange: (callback: (fullScreen: boolean) => void) =>
