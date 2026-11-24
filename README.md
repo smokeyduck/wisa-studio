@@ -76,7 +76,7 @@ Giới hạn cần biết: các tab không phải ranh giới bảo mật của 
 
 ### Dùng phiên Chrome của bạn (không bắt buộc)
 
-Liên kết web và bản xem thử mẫu mở trong trình duyệt mặc định của hệ thống. **WISA Browser** mở `https://askwisa.com/` từ thanh công cụ và lưu cookie, dữ liệu trang trên máy để các trang web có thể giữ đăng nhập qua lần khởi động lại. Muốn giữ đăng nhập cho các tác vụ của trợ lý, hãy đăng nhập một lần trong cửa sổ do trợ lý mở: các cửa sổ đó dùng chung một hồ sơ, tách khỏi cửa sổ thanh công cụ và Chrome. Trợ lý có thể mở, đọc và thao tác với biểu mẫu trong cửa sổ của mình mà không cần duyệt từng bước; nội dung đọc được có thể gửi cho mô hình.
+Nút hình quả địa cầu trên thanh công cụ mở `https://askwisa.com/` trong trình duyệt mặc định của hệ thống, dùng hồ sơ và dữ liệu đăng nhập của trình duyệt đó. Với tác vụ của trợ lý, dùng công cụ browser có sẵn của Core trong chế độ Code khi `eval` và Browser được bật. Việc mở trang từ thanh công cụ không cấp cho trợ lý quyền truy cập vào các thẻ cá nhân.
 
 Để cho agent dùng một thẻ đã đăng nhập, bạn có thể chủ động bật [relay trình duyệt omp](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). Nếu chưa có relay, chạy `omp browser-relay install --no-chrome` bằng omp CLI tương thích. Trong hồ sơ Chrome muốn dùng, mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển** rồi chọn thư mục đã in ra bằng **Tải tiện ích đã giải nén**. Relay có thể thao tác với quyền của bạn trong hồ sơ đó; nên dùng hồ sơ công việc riêng và chỉ phê duyệt những tác vụ bạn muốn chạy tại đó. Không mở relay ra ngoài máy của bạn.
 

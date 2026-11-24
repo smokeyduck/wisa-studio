@@ -180,7 +180,6 @@ export const IPC_EVENTS = {
 // ============================================================================
 
 export const IPC_COMMANDS = {
-	BROWSER_SHOW: "browser:show",
 	WINDOW_IS_FULLSCREEN: "window:is-fullscreen",
 	/** Persist a renderer runtime failure in the main-process crash log */
 	RUNTIME_ERROR_REPORT: "runtime:error-report",
@@ -1339,7 +1338,6 @@ export interface OmpApi {
 	platform: string;
 	/** Native startup language, resolved before the first renderer paint. */
 	initialLanguage?: Language;
-	browser: { show(): Promise<void> };
 	windowChrome: {
 		isFullScreen(): Promise<boolean>;
 		onFullScreenChange(callback: (fullScreen: boolean) => void): () => void;

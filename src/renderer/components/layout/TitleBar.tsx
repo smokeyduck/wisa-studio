@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { SessionStats } from "../../../shared/rpc-types";
+import { WISA_WEB_ORIGIN } from "../../../shared/wisa";
 import { useWorkingTreeChangeCount } from "../../hooks/use-working-tree-changes";
 import { cx, formatCost, formatDuration, formatPercent, formatTokens } from "../../lib/format";
 import { useT } from "../../lib/i18n";
@@ -352,8 +353,8 @@ export function TitleBar() {
 				aria-label={t("titlebar.openBrowser")}
 				title={t("titlebar.openBrowser")}
 				onClick={() => {
-					void window.omp.browser
-						.show()
+					void window.omp.system
+						.openExternal(`${WISA_WEB_ORIGIN}/`)
 						.catch(() => toast({ variant: "error", message: t("titlebar.browserFailed") }));
 				}}
 				className={iconButton}

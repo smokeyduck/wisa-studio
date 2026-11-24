@@ -4232,8 +4232,8 @@ export const en: Record<string, string> = {
 	"input.deliveryUnknown":
 		"Delivery was not confirmed. The task may already be running. Check its transcript and queue before sending this draft again.",
 	"input.allowResend": "I checked; allow sending",
-	"titlebar.openBrowser": "Open WISA Browser",
-	"titlebar.browserFailed": "Could not open WISA Browser",
+	"titlebar.openBrowser": "Open askwisa.com in your browser",
+	"titlebar.browserFailed": "Could not open askwisa.com",
 	"titlebar.togglePanel": "Review changes and files",
 	"titlebar.review.changes": "{count} uncommitted file{plural} - review",
 	"diffPanel.scope.aria": "Choose which changes to show",

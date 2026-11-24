@@ -11,7 +11,6 @@ import { app, BrowserWindow, desktopCapturer, nativeImage, session, webContents 
 import Store from "electron-store";
 import type { SessionKind } from "../shared/ipc-types";
 import { installQuitGuard, requestQuit } from "./app-quit";
-import { BROWSER_TOOL, browserHost } from "./browser-host";
 import { resolveBundledOmp } from "./bundled-omp-path";
 import { CollabPhoneHost } from "./collab-phone";
 import { type ConversationIndex, openConversationIndex } from "./conversation-index";
@@ -358,10 +357,8 @@ app.whenReady().then(() => {
 	});
 	sidecarPool.sidecarLifecycle = {
 		ready: tab => {
-			if (tab.kind === "agent") {
-				const tools = schedulerHost
-					? [BROWSER_TOOL, SCHEDULE_TASK_TOOL_DEFINITION, MANAGE_TASKS_TOOL_DEFINITION]
-					: [BROWSER_TOOL];
+			if (tab.kind === "agent" && schedulerHost) {
+				const tools = [SCHEDULE_TASK_TOOL_DEFINITION, MANAGE_TASKS_TOOL_DEFINITION];
 				void tab.sidecar.rpcClient
 					?.command({ type: "set_host_tools", tools: tools.map(stripEmptyEnumValues) })
 					.catch(error =>
@@ -371,10 +368,8 @@ app.whenReady().then(() => {
 			void collabPhone?.ready(tab.tabId, tab.sidecar);
 		},
 		down: tabId => {
-			browserHost.release(tabId);
 			collabPhone?.down(tabId);
 		},
-		sessionChanged: tabId => browserHost.release(tabId),
 	};
 	// A closed window's tabs have to leave the saved session with it, or the next
 	// launch resurrects a window the user deliberately shut.
@@ -539,7 +534,6 @@ app.on("window-all-closed", () => {
 installQuitGuard(
 	() => (sidecarPool ? sidecarPool.tabInventory() : []),
 	() => {
-		browserHost.dispose();
 		schedulerHost?.dispose();
 		statsServer?.kill();
 		sidecarPool?.disposeAll();

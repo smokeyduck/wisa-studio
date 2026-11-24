@@ -471,7 +471,6 @@ const api: OmpApi = {
 	},
 
 	platform: process.platform,
-	browser: { show: () => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_SHOW) as Promise<void> },
 	windowChrome: {
 		isFullScreen: () => ipcRenderer.invoke(IPC_COMMANDS.WINDOW_IS_FULLSCREEN) as Promise<boolean>,
 		onFullScreenChange: (callback: (fullScreen: boolean) => void) =>
