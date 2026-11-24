@@ -7,10 +7,12 @@ import { useRuntimeTabId, withSessionRuntime } from "../../stores/session-runtim
  */
 
 import { RefreshCw } from "lucide-react";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { AgentMessage, SubagentSnapshot } from "../../../shared/rpc-types";
 import { describeError } from "../../lib/errors";
+import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
+import { MarkdownRenderer } from "../../lib/markdown";
 import { toast } from "../../stores/toast";
 import { Button, Spinner } from "../common";
 import { registerTranscriptToolCalls } from "./subagent-graph";
@@ -25,6 +27,77 @@ function messageText(message: AgentMessage): string {
 		.trim();
 }
 
+const MESSAGE_PREVIEW_LINES = 3;
+
+const ConversationMessage = memo(function ConversationMessage({
+	role,
+	text,
+}: {
+	role: "user" | "assistant";
+	text: string;
+}) {
+	const t = useT();
+	const id = useId();
+	const viewport = useRef<HTMLDivElement>(null);
+	const body = useRef<HTMLDivElement>(null);
+	const [expanded, setExpanded] = useState(false);
+	const [overflows, setOverflows] = useState(false);
+
+	useLayoutEffect(() => {
+		const clip = viewport.current;
+		const content = body.current;
+		if (!clip || !content || typeof window.getComputedStyle !== "function") return;
+		const measure = () => {
+			const limit = Number.parseFloat(window.getComputedStyle(clip).lineHeight) * MESSAGE_PREVIEW_LINES;
+			setOverflows(content.offsetHeight > limit + 1);
+		};
+		measure();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(measure);
+		observer.observe(content);
+		return () => observer.disconnect();
+	}, []);
+
+	return (
+		<div className="min-w-0 rounded-sm border-l-2 border-(--omp-border-muted) px-2 py-1">
+			<div className="mb-1 text-omp-xs font-semibold text-(--omp-dim)">
+				{t(role === "user" ? "subagent.messageSent" : "subagent.messageReceived")}
+			</div>
+			<div
+				className={cx(
+					"text-omp-sm leading-[1.5] wrap-anywhere text-(--omp-text)",
+					!expanded && "overflow-clip",
+					!expanded && overflows && "omp-user-text-cut",
+				)}
+				id={id}
+				onFocusCapture={event => {
+					if (expanded || !overflows) return;
+					if (event.target.getBoundingClientRect().bottom > event.currentTarget.getBoundingClientRect().bottom) {
+						setExpanded(true);
+					}
+				}}
+				ref={viewport}
+				style={expanded ? undefined : { maxHeight: `${MESSAGE_PREVIEW_LINES}lh` }}
+			>
+				<div className="flow-root" ref={body}>
+					<MarkdownRenderer content={text} />
+				</div>
+			</div>
+			{overflows && (
+				<button
+					aria-controls={id}
+					aria-expanded={expanded}
+					className="omp-pressable mt-1 text-omp-sm font-medium text-(--omp-link) hover:underline"
+					onClick={() => setExpanded(!expanded)}
+					type="button"
+				>
+					{t(expanded ? "chat.userMessage.collapse" : "chat.userMessage.expand")}
+				</button>
+			)}
+		</div>
+	);
+});
+
 interface TranscriptState {
 	loading: boolean;
 	messages: AgentMessage[];
@@ -32,7 +105,13 @@ interface TranscriptState {
 	hasMore: boolean;
 }
 
-export const SubagentTranscript = memo(function SubagentTranscript({ agent }: { agent: SubagentSnapshot }) {
+export const SubagentTranscript = memo(function SubagentTranscript({
+	agent,
+	conversationOnly = false,
+}: {
+	agent: SubagentSnapshot;
+	conversationOnly?: boolean;
+}) {
 	const t = useT();
 	const rpc = useTabRpc();
 	const tabId = useRuntimeTabId();
@@ -107,6 +186,23 @@ export const SubagentTranscript = memo(function SubagentTranscript({ agent }: { 
 		};
 	}, [load]);
 
+	const rows = state.messages.map((message, index) => {
+		const { role } = message;
+		const conversation = role === "user" || role === "assistant";
+		if (conversationOnly && !conversation) return null;
+		const text = messageText(message);
+		if (!text) return null;
+		if (conversationOnly && conversation) return <ConversationMessage key={index} role={role} text={text} />;
+		return (
+			<div className="rounded-sm border-l-2 border-(--omp-border-muted) px-2 py-1" key={index}>
+				<div className="mb-0.5 text-omp-xxs font-semibold text-(--omp-dim)">{role}</div>
+				<div className="text-omp-sm leading-snug break-words whitespace-pre-wrap text-(--omp-muted)">
+					{text.length > 1200 ? `${text.slice(0, 1200)}…` : text}
+				</div>
+			</div>
+		);
+	});
+
 	if (state.loading && state.messages.length === 0) {
 		return (
 			<div className="flex items-center gap-2 px-2 py-3">
@@ -134,21 +230,10 @@ export const SubagentTranscript = memo(function SubagentTranscript({ agent }: { 
 						{error}
 					</p>
 				))}
-			{!error && state.messages.length === 0 && (
+			{!error && !rows.some(Boolean) && (
 				<div className="text-omp-sm text-(--omp-dim) italic">{t("subagent.noEntries")}</div>
 			)}
-			{state.messages.map((message, index) => {
-				const text = messageText(message);
-				if (!text) return null;
-				return (
-					<div className="rounded-sm border-l-2 border-(--omp-border-muted) px-2 py-1" key={index}>
-						<div className="mb-0.5 text-omp-xxs font-semibold text-(--omp-dim)">{message.role}</div>
-						<div className="text-omp-sm leading-snug break-words whitespace-pre-wrap text-(--omp-muted)">
-							{text.length > 1200 ? `${text.slice(0, 1200)}…` : text}
-						</div>
-					</div>
-				);
-			})}
+			{rows}
 			{state.hasMore && (
 				<button
 					className="flex items-center gap-1.5 text-omp-sm text-(--omp-link) transition-colors hover:brightness-125 disabled:opacity-50"

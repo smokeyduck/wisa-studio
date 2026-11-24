@@ -3434,6 +3434,8 @@ export const en: Record<string, string> = {
 	"subagent.transcriptFailed": "Transcript failed",
 	"subagent.loadingTranscript": "Loading transcript…",
 	"subagent.noEntries": "No transcript entries yet.",
+	"subagent.messageSent": "Sent to subagent",
+	"subagent.messageReceived": "Subagent reply",
 	"subagent.loadMore": "Load more",
 
 	// Subagent panel

@@ -3284,6 +3284,8 @@ export const ru: Record<string, string> = {
 	"subagent.transcriptFailed": "Не удалось загрузить расшифровку",
 	"subagent.loadingTranscript": "Загрузка расшифровки…",
 	"subagent.noEntries": "В расшифровке пока нет записей.",
+	"subagent.messageSent": "Отправлено субагенту",
+	"subagent.messageReceived": "Ответ субагента",
 	"subagent.loadMore": "Загрузить ещё",
 	"subagentPanel.viewAria": "Представление субагентов",
 	"subagentPanel.list": "Список",

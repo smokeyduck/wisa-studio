@@ -3263,6 +3263,8 @@ export const vi: Record<string, string> = {
 	"subagent.transcriptFailed": "Tải bản ghi thất bại",
 	"subagent.loadingTranscript": "Đang tải bản ghi…",
 	"subagent.noEntries": "Chưa có mục nào trong bản ghi.",
+	"subagent.messageSent": "Gửi cho tác nhân con",
+	"subagent.messageReceived": "Tác nhân con trả lời",
 	"subagent.loadMore": "Tải thêm",
 	"subagentPanel.viewAria": "Chế độ xem tác nhân con",
 	"subagentPanel.list": "Danh sách",

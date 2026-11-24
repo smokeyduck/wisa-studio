@@ -3355,6 +3355,8 @@ export const zh: Record<string, string> = {
 	"subagent.transcriptFailed": "加载记录失败",
 	"subagent.loadingTranscript": "正在加载记录…",
 	"subagent.noEntries": "还没有记录条目。",
+	"subagent.messageSent": "发给子代理",
+	"subagent.messageReceived": "子代理回复",
 	"subagent.loadMore": "加载更多",
 
 	// Subagent panel

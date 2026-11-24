@@ -3340,6 +3340,8 @@ export const th: Record<string, string> = {
 	"subagent.transcriptFailed": "โหลดบทสนทนาไม่สำเร็จ",
 	"subagent.loadingTranscript": "กำลังโหลดบทสนทนา…",
 	"subagent.noEntries": "ยังไม่มีรายการในบทสนทนา",
+	"subagent.messageSent": "ส่งถึงซับเอเจนต์",
+	"subagent.messageReceived": "คำตอบจากซับเอเจนต์",
 	"subagent.loadMore": "โหลดเพิ่มเติม",
 
 	// Subagent panel

@@ -124,7 +124,7 @@ function SessionSubagentBlock({ dialogHost, full }: { dialogHost: HTMLElement | 
 					size="md"
 					title={selected ? subagentPrimaryLabel(selected) : undefined}
 				>
-					{selected && <SubagentTranscript agent={selected} key={selected.id} />}
+					{selected && <SubagentTranscript agent={selected} conversationOnly key={selected.id} />}
 				</Modal>
 			)}
 		</>
