@@ -81,7 +81,7 @@ function seedActiveTab(kind: "agent" | "chat"): void {
 }
 
 function drawerTabLabels(): string[] {
-	return [...document.querySelectorAll("aside footer button[aria-pressed]")].map(
+	return [...document.querySelectorAll("aside > header button[aria-pressed]")].map(
 		button => button.getAttribute("title") ?? "",
 	);
 }
@@ -140,8 +140,8 @@ describe("PanelContainer chat tab filter", () => {
 		await act(async () => useUiStore.getState().setPanelTab("files"));
 		await mount(<PanelContainer />);
 
-		const files = document.querySelector('footer button[aria-label="Files"]');
-		const close = document.querySelector('footer button[aria-label="Close"]');
+		const files = document.querySelector('aside > header button[aria-label="Files"]');
+		const close = document.querySelector('aside > header button[aria-label="Close"]');
 		expect(files?.getAttribute("aria-pressed")).toBe("true");
 		expect(close?.parentElement).toBe(files?.parentElement);
 		await act(async () => close?.dispatchEvent(new Event("click", { bubbles: true })));

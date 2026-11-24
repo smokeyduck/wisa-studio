@@ -185,23 +185,6 @@ export function RepositoryChanges({ split = false }: { split?: boolean }) {
 		<div className="flex min-h-0 flex-1 flex-col">
 			{/* The scope note is reference, not chrome: assistive tech reads it, sighted users get it on hover. */}
 			<p className="sr-only">{t("diffPanel.repositoryScope")}</p>
-			<div className="flex h-9 shrink-0 items-center gap-2 pr-2 pl-3" title={t("diffPanel.repositoryScope")}>
-				<span className="min-w-0 flex-1 truncate text-omp-sm text-(--omp-muted)">
-					{changes?.isRepo && fileCount > 0
-						? t("diffPanel.filesChanged", { count: fileCount, plural: fileCount === 1 ? "" : "s" })
-						: t("diffPanel.mode.repository")}
-				</span>
-				{totals && <DiffStat adds={totals.adds} removes={totals.removes} />}
-				{fileCount > 1 && (
-					<ToolbarIconButton
-						label={t(allExpanded ? "diffPanel.collapseAll" : "diffPanel.expandAll")}
-						onClick={() => setExpanded(allExpanded ? new Set() : new Set(files.map(file => file.path)))}
-					>
-						{allExpanded ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
-					</ToolbarIconButton>
-				)}
-				{refreshButton}
-			</div>
 			{error && (
 				<p
 					role="alert"
@@ -279,6 +262,26 @@ export function RepositoryChanges({ split = false }: { split?: boolean }) {
 						);
 					})
 				)}
+			</div>
+			<div
+				className="flex h-9 shrink-0 items-center gap-2 border-t border-(--omp-border-muted) pr-2 pl-3"
+				title={t("diffPanel.repositoryScope")}
+			>
+				<span className="min-w-0 flex-1 truncate text-omp-sm text-(--omp-muted)">
+					{changes?.isRepo && fileCount > 0
+						? t("diffPanel.filesChanged", { count: fileCount, plural: fileCount === 1 ? "" : "s" })
+						: t("diffPanel.mode.repository")}
+				</span>
+				{totals && <DiffStat adds={totals.adds} removes={totals.removes} />}
+				{fileCount > 1 && (
+					<ToolbarIconButton
+						label={t(allExpanded ? "diffPanel.collapseAll" : "diffPanel.expandAll")}
+						onClick={() => setExpanded(allExpanded ? new Set() : new Set(files.map(file => file.path)))}
+					>
+						{allExpanded ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
+					</ToolbarIconButton>
+				)}
+				{refreshButton}
 			</div>
 		</div>
 	);

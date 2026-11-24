@@ -24,7 +24,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - The orchestrator carries the conversation language into new subagent assignments, task card titles, and reports. Technical identifiers and quoted evidence stay unchanged.
 - Composer questions fit a compact, adaptive card. Long questions scroll inside the card without hiding the reply buttons.
 - Expanded execution groups keep the close control in view while scrolling. The long-paste preview is compact, matches the composer width, and wraps its actions on narrow panes.
-- Review slides in from the right inside the current conversation, without covering the session headers or neighboring split pane. Its footer evenly spaces the view icons and close button in one control.
+- Review slides in from the right inside the current conversation, without covering the session headers or neighboring split pane. Its view switcher, close button, and Changes scope controls sit at the top; the repository summary and refresh sit below the file list.
 - The tab context menu can close all inactive tabs while keeping the current conversation and both visible split panes.
 - The new-agent tab button and shortcut follow the selected Code or Work mode. In Code mode, a Work tab opens the project picker instead of creating another Work session.
 

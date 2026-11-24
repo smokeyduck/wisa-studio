@@ -520,23 +520,7 @@ export function DiffPanel() {
 	return (
 		<div className="flex h-full flex-col">
 			<span className="sr-only">{t("diffPanel.title")}</span>
-
-			{mode === "repository" ? (
-				<RepositoryChanges key={sessionId} split={split} />
-			) : candidates.length === 0 ? (
-				<div className="min-h-0 flex-1 overflow-y-auto">
-					<PanelEmpty
-						icon={mode === "artifacts" ? Package : FilePen}
-						title={t(mode === "artifacts" ? "diffPanel.emptyArtifacts" : "diffPanel.empty")}
-						hint={t(mode === "artifacts" ? "diffPanel.emptyArtifactsHint" : "diffPanel.emptyHint")}
-					/>
-				</div>
-			) : mode === "timeline" || mode === "artifacts" ? (
-				<DiffTimeline candidates={candidates} />
-			) : (
-				<SessionEdits candidates={candidates} split={split} />
-			)}
-			<PanelToolbar className="border-t border-(--omp-border-muted)">
+			<PanelToolbar className="border-b border-(--omp-border-muted)">
 				<button
 					type="button"
 					aria-label={t("diffPanel.scope.aria")}
@@ -546,7 +530,7 @@ export function DiffPanel() {
 						const rect = event.currentTarget.getBoundingClientRect();
 						setScopeMenu({
 							x: Number.isFinite(rect.left) ? rect.left : 8,
-							y: (Number.isFinite(rect.top) ? rect.top : window.innerHeight) - 4,
+							y: (Number.isFinite(rect.bottom) ? rect.bottom : 0) + 4,
 						});
 					}}
 					className="omp-pressable -ml-1.5 flex h-7 min-w-0 items-center gap-1.5 rounded-md px-1.5 text-omp-md font-medium text-(--omp-text) hover:bg-(--omp-selected-bg)"
@@ -583,11 +567,26 @@ export function DiffPanel() {
 				)}
 			</PanelToolbar>
 
+			{mode === "repository" ? (
+				<RepositoryChanges key={sessionId} split={split} />
+			) : candidates.length === 0 ? (
+				<div className="min-h-0 flex-1 overflow-y-auto">
+					<PanelEmpty
+						icon={mode === "artifacts" ? Package : FilePen}
+						title={t(mode === "artifacts" ? "diffPanel.emptyArtifacts" : "diffPanel.empty")}
+						hint={t(mode === "artifacts" ? "diffPanel.emptyArtifactsHint" : "diffPanel.emptyHint")}
+					/>
+				</div>
+			) : mode === "timeline" || mode === "artifacts" ? (
+				<DiffTimeline candidates={candidates} />
+			) : (
+				<SessionEdits candidates={candidates} split={split} />
+			)}
+
 			{scopeMenu && (
 				<ContextMenu
 					x={scopeMenu.x}
 					y={scopeMenu.y}
-					placement="above"
 					onClose={() => setScopeMenu(null)}
 					items={MODES.map(entry => ({
 						id: `diff-mode-${entry.id}`,

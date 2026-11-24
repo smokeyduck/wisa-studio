@@ -165,22 +165,7 @@ export function PanelContainer() {
 			className="omp-inspector absolute inset-y-0 right-0 z-30 flex max-w-full flex-col border-l border-[var(--omp-border-muted)] shadow-[var(--omp-shadow-lg)]"
 			style={{ width: paneWidth > 0 ? panelWidth : "100%" }}
 		>
-			<div className="min-h-0 flex-1 overflow-hidden" inert={!routeReady}>
-				<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>
-					{visiblePanelTab === "overview" && <OverviewPanel />}
-					{visiblePanelTab === "agents" && <AgentRoster />}
-					{visiblePanelTab === "btw" && <BtwPanel />}
-					{visiblePanelTab === "diff" && <DiffPanel />}
-					{visiblePanelTab === "files" && <FilesPanel />}
-					{visiblePanelTab === "terminal" && <TerminalPanel />}
-					{visiblePanelTab === "plan" && (
-						<div key={`${activeTabId}:${sessionKey}`} className="h-full">
-							{proposal ? <PlanApprovalPanel /> : <PlanPanel />}
-						</div>
-					)}
-				</PanelErrorBoundary>
-			</div>
-			<footer className="omp-inspector-footer flex h-12 shrink-0 items-center border-t border-[var(--omp-border-muted)] px-3">
+			<header className="flex h-12 shrink-0 items-center border-b border-[var(--omp-border-muted)] px-3">
 				<h2 className="sr-only">
 					{t("panel.title")} - {t("panel.subtitle")}
 				</h2>
@@ -221,7 +206,22 @@ export function PanelContainer() {
 						<X aria-hidden size={16} />
 					</button>
 				</div>
-			</footer>
+			</header>
+			<div className="min-h-0 flex-1 overflow-hidden" inert={!routeReady}>
+				<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>
+					{visiblePanelTab === "overview" && <OverviewPanel />}
+					{visiblePanelTab === "agents" && <AgentRoster />}
+					{visiblePanelTab === "btw" && <BtwPanel />}
+					{visiblePanelTab === "diff" && <DiffPanel />}
+					{visiblePanelTab === "files" && <FilesPanel />}
+					{visiblePanelTab === "terminal" && <TerminalPanel />}
+					{visiblePanelTab === "plan" && (
+						<div key={`${activeTabId}:${sessionKey}`} className="h-full">
+							{proposal ? <PlanApprovalPanel /> : <PlanPanel />}
+						</div>
+					)}
+				</PanelErrorBoundary>
+			</div>
 			<div
 				role="separator"
 				aria-label={t("panel.resize")}
