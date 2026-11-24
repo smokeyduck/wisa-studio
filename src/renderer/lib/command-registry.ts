@@ -533,7 +533,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		description: t("cmd.newTab.desc"),
 		category: "session",
 		shortcut: "⌘T",
-		affordance: { kind: "action", run: () => useTabsStore.getState().openTab() },
+		affordance: { kind: "action", run: () => useUiStore.getState().openNewAgentTab() },
 	});
 	add({
 		name: "new-chat-tab",

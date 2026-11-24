@@ -26,6 +26,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - Expanded execution groups keep the close control in view while scrolling. The long-paste preview is compact, matches the composer width, and wraps its actions on narrow panes.
 - Review slides in from the right inside the current conversation, without covering the session headers or neighboring split pane. Its footer evenly spaces the view icons and close button in one control.
 - The tab context menu can close all inactive tabs while keeping the current conversation and both visible split panes.
+- The new-agent tab button and shortcut follow the selected Code or Work mode. In Code mode, a Work tab opens the project picker instead of creating another Work session.
 
 ## [0.9.55] - 2026-11-24
 

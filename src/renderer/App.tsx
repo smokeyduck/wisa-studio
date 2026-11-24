@@ -35,6 +35,7 @@ import { SessionTreeDialog } from "./components/dialogs/SessionTreeDialog";
 import { ShareSessionDialog } from "./components/dialogs/ShareSessionDialog";
 import { ThemeEditorDialog } from "./components/dialogs/ThemeEditorDialog";
 import { ThemePickerDialog } from "./components/dialogs/ThemePickerDialog";
+import { NewCodeSessionDialog } from "./components/dialogs/WorkspaceDialog";
 import { WorkspaceDirsDialog } from "./components/dialogs/WorkspaceDirsDialog";
 import { WorktreeCloseDialog } from "./components/dialogs/WorktreeCloseDialog";
 import { WorktreeDialog } from "./components/dialogs/WorktreeDialog";
@@ -564,7 +565,7 @@ export function App() {
 				}
 				case "tab.new":
 					// ⌘T (⌃T off macOS) — new agent tab (type chosen at creation, immutable).
-					void useTabsStore.getState().openTab();
+					void ui.openNewAgentTab();
 					return;
 				case "tab.newChat":
 					void useTabsStore.getState().openTab({ kind: "chat" });
@@ -627,6 +628,7 @@ export function App() {
 				ui.commandPaletteOpen ||
 				ui.modelPickerOpen ||
 				ui.settingsOpen ||
+				ui.newCodeSessionOpen ||
 				ui.statsDashboardOpen ||
 				ui.benchmarkOpen ||
 				ui.sessionPickerOpen ||
@@ -694,7 +696,7 @@ export function App() {
 			// New tab actions never touch the live run — they must stay OUT of the
 			// streaming busy-guard below (unlike new-session/open-project).
 			if (action === "new-tab") {
-				void useTabsStore.getState().openTab();
+				void ui.openNewAgentTab();
 				return;
 			}
 			if (action === "new-chat-tab") {
@@ -946,6 +948,7 @@ export function App() {
 			<FirstRunOnboardingDialog />
 			<ModelPicker />
 			<RenameSessionDialog />
+			<NewCodeSessionDialog />
 			<WorktreeDialog />
 			<WorktreeCloseDialog />
 			<SessionPickerDialog />

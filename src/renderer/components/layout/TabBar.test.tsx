@@ -70,6 +70,7 @@ function listedSession(id: string, overrides: Partial<SessionInfo> = {}): Sessio
 }
 
 interface MockOmp {
+	sidecar: { defaultWorkspace: Mock<() => Promise<string>> };
 	sessions: {
 		list: Mock<() => Promise<SessionInfo[]>>;
 	};
@@ -100,6 +101,7 @@ interface MockOmp {
 
 function installMockOmp(): MockOmp {
 	const omp: MockOmp = {
+		sidecar: { defaultWorkspace: vi.fn(async () => "/default/work") },
 		sessions: { list: vi.fn(async () => []) },
 		tabs: {
 			list: vi.fn(async () => []),

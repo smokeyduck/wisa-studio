@@ -882,7 +882,7 @@ function NewTabMenu({ buttonClass }: { buttonClass: string }) {
 				type="button"
 				aria-label={t("tabs.new.agent")}
 				title={t("tabs.new.agentHint", { chord: agentChord })}
-				onClick={() => void openTab()}
+				onClick={() => void useUiStore.getState().openNewAgentTab()}
 				className={buttonClass}
 			>
 				<Plus size={14} />

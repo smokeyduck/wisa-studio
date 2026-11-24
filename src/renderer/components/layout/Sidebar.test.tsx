@@ -23,7 +23,10 @@ import { createTabRuntime } from "../../stores/tab-runtime";
 import { useTabsStore } from "../../stores/tabs";
 import { useToastStore } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
+import { useWorkspaceMode } from "../../stores/workspace-mode";
+import { NewCodeSessionDialog } from "../dialogs/WorkspaceDialog";
 import { Sidebar } from "./Sidebar";
+import { TabBar } from "./TabBar";
 
 const { document, window, Event, HTMLElement, Node } = parseHTML("<html><body></body></html>");
 
@@ -216,9 +219,11 @@ afterEach(async () => {
 	useSessionStore.getState().reset();
 	useTabsStore.getState().reset();
 	useSidebarPrefs.getState().reset();
+	useWorkspaceMode.setState({ defaultWorkspace: null });
 	useAgentPagesStore.getState().reset();
 	useUiStore.setState({
 		panelVisible: false,
+		newCodeSessionOpen: false,
 		sessionPickerOpen: false,
 		hotkeysOpen: false,
 		usageOpen: false,
@@ -569,13 +574,47 @@ describe("Sidebar menus and pinned ordering", () => {
 	it("opens the workspace picker from New session in the Code lane", async () => {
 		installMockOmp(LIST);
 		seedStores();
-		await mount(<Sidebar />);
+		await mount(
+			<>
+				<Sidebar />
+				<NewCodeSessionDialog />
+			</>,
+		);
 
 		expect(document.querySelector('[role="dialog"]')).toBeNull();
 		await fire(container.querySelector("[data-sidebar-new-agent]"), "onClick");
 		await flush();
 		// The dialog is the fix for the dead chevron: one visible action, one modal.
 		expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+	});
+
+	it("chooses a project from the plus button after switching from Work to Code", async () => {
+		const omp = installMockOmp(LIST);
+		useSessionStore.setState({ cwd: "/default/work" });
+		useTabsStore.setState({
+			tabs: [{ id: "t-work", cwd: "/default/work", status: "ready", kind: "agent", unreadDone: false }],
+			activeTabId: "t-work",
+		});
+		useSidebarPrefs.setState({ lane: "work", hydrated: true });
+		await mount(
+			<>
+				<Sidebar />
+				<TabBar />
+				<NewCodeSessionDialog />
+			</>,
+		);
+		const code = [...document.querySelectorAll("button")].find(button => button.textContent === "Code");
+		await fire(code ?? null, "onClick");
+		await fire(container.querySelector('[aria-label="New Agent Tab"]'), "onClick");
+		const dialog = document.querySelector('[role="dialog"]');
+		expect(omp.tabs.spawn).not.toHaveBeenCalled();
+		expect(dialog?.textContent).not.toContain("/default/work");
+		const alpha = [...(dialog?.querySelectorAll("button") ?? [])].find(button =>
+			button.textContent?.includes("/work/alpha"),
+		);
+		await fire(alpha ?? null, "onClick");
+		expect(omp.tabs.spawn).toHaveBeenCalledExactlyOnceWith({ cwd: "/work/alpha", kind: "agent" });
+		expect(useSidebarPrefs.getState().lane).toBe("code");
 	});
 
 	it("creates a project agent tab without re-rooting the current chat", async () => {

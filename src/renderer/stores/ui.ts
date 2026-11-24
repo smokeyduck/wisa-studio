@@ -6,7 +6,9 @@ import type { SidecarRestartProgress } from "../../shared/rpc-types";
 import { effectiveOverrides, type KeymapOverrides, sanitizeDisabled, sanitizeOverrides } from "../lib/keymap";
 import { readPrepaintThemeMode, type ThemeMode } from "../lib/theme";
 import type { CustomThemeSelection } from "../lib/themes";
+import { useSidebarPrefs } from "./sidebar-prefs";
 import { useTabsStore } from "./tabs";
+import { isWorkCwd, useWorkspaceMode } from "./workspace-mode";
 
 export type { ThemeMode };
 
@@ -146,6 +148,7 @@ interface UiStore {
 	shareSessionOpen: boolean;
 	jobsOpen: boolean;
 	workspaceDirsOpen: boolean;
+	newCodeSessionOpen: boolean;
 	forceToolOpen: boolean;
 	btwRequest: string | null;
 	collabOpen: boolean;
@@ -301,6 +304,9 @@ interface UiStore {
 	closeJobs: () => void;
 	openWorkspaceDirs: () => void;
 	closeWorkspaceDirs: () => void;
+	openNewAgentTab: () => Promise<void>;
+	openNewCodeSession: () => void;
+	closeNewCodeSession: () => void;
 	openForceTool: () => void;
 	closeForceTool: () => void;
 	openBtw: (question: string) => void;
@@ -596,6 +602,24 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	workspaceDirsOpen: false,
 	openWorkspaceDirs: () => set(workspacePagePatch("workspaceDirsOpen")),
 	closeWorkspaceDirs: () => set({ workspaceDirsOpen: false }),
+	newCodeSessionOpen: false,
+	openNewAgentTab: async () => {
+		const { activeTabId, tabs, openTab } = useTabsStore.getState();
+		if (useSidebarPrefs.getState().lane === "work") {
+			await openTab({ work: true });
+			return;
+		}
+		const cwd = tabs.find(tab => tab.id === activeTabId)?.cwd;
+		await useWorkspaceMode.getState().load();
+		const { defaultWorkspace } = useWorkspaceMode.getState();
+		if (!cwd || !defaultWorkspace || isWorkCwd(cwd, defaultWorkspace)) {
+			get().openNewCodeSession();
+			return;
+		}
+		await openTab({ cwd });
+	},
+	openNewCodeSession: () => set({ newCodeSessionOpen: true }),
+	closeNewCodeSession: () => set({ newCodeSessionOpen: false }),
 	forceToolOpen: false,
 	openForceTool: () => set({ forceToolOpen: true }),
 	closeForceTool: () => set({ forceToolOpen: false }),
@@ -689,6 +713,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 			shareSessionOpen: false,
 			jobsOpen: false,
 			workspaceDirsOpen: false,
+			newCodeSessionOpen: false,
 			forceToolOpen: false,
 			btwRequest: null,
 			collabOpen: false,

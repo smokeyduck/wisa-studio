@@ -16,6 +16,8 @@ import { useSessionStore } from "../../stores/session";
 import { useSidebarPrefs } from "../../stores/sidebar-prefs";
 import { useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
+import { useUiStore } from "../../stores/ui";
+import { isWorkCwd, useDefaultWorkspace } from "../../stores/workspace-mode";
 import { Modal } from "../common";
 
 interface WorkspaceRow {
@@ -23,6 +25,12 @@ interface WorkspaceRow {
 	name: string;
 	lastModified: number;
 	sessionCount: number;
+}
+
+export function NewCodeSessionDialog() {
+	const open = useUiStore(s => s.newCodeSessionOpen);
+	const close = useUiStore(s => s.closeNewCodeSession);
+	return open ? <WorkspaceDialog open onClose={close} intent="new-session" /> : null;
 }
 
 export function WorkspaceDialog({
@@ -43,6 +51,7 @@ export function WorkspaceDialog({
 	const groupAliases = useSidebarPrefs(s => s.groupAliases);
 	const registeredWorkspaces = useSidebarPrefs(s => s.registeredWorkspaces);
 	const openTab = useTabsStore(s => s.openTab);
+	const defaultWorkspace = useDefaultWorkspace();
 
 	const workspaces = useMemo<WorkspaceRow[]>(() => {
 		const byCwd = new Map<string, WorkspaceRow>();
@@ -71,8 +80,10 @@ export function WorkspaceDialog({
 			workspace.name = groupAliases[workspace.cwd] ?? workspace.name;
 			workspace.lastModified = Math.max(workspace.lastModified, workspaceLastUsed[workspace.cwd] ?? 0);
 		}
-		return [...byCwd.values()].sort((a, b) => b.lastModified - a.lastModified);
-	}, [sessions, cwd, groupAliases, registeredWorkspaces, workspaceLastUsed]);
+		return [...byCwd.values()]
+			.filter(workspace => intent !== "new-session" || !isWorkCwd(workspace.cwd, defaultWorkspace))
+			.sort((a, b) => b.lastModified - a.lastModified);
+	}, [sessions, cwd, groupAliases, registeredWorkspaces, workspaceLastUsed, intent, defaultWorkspace]);
 
 	/** In-place workspace switches abort the active sidecar run. New-session
 	 * intent opens an independent agent tab and does not need this guard. */
@@ -84,6 +95,10 @@ export function WorkspaceDialog({
 	};
 
 	const newSessionHere = async (target: string) => {
+		if (isWorkCwd(target, defaultWorkspace)) {
+			toast({ variant: "error", title: t("titlebar.openProjectFailed"), message: target });
+			return;
+		}
 		const tabId = await openTab({ cwd: target, kind: "agent" });
 		if (tabId) onClose();
 	};

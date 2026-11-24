@@ -100,7 +100,6 @@ import { anchorFromEvent, ContextMenu, type ContextMenuAnchor } from "../common/
 import { Glide } from "../common/Glide";
 import { LangSwitcher } from "../common/LangSwitcher";
 import { ProjectSettingsDialog } from "../dialogs/ProjectSettingsDialog";
-import { WorkspaceDialog } from "../dialogs/WorkspaceDialog";
 import { useUnreadNoticeCount } from "./NotificationBell";
 import { SidebarQuotas } from "./SidebarQuotas";
 
@@ -272,7 +271,6 @@ export function Sidebar() {
 	const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null);
 	const [renameDraft, setRenameDraft] = useState("");
 	// App, project and session menus.
-	const [newSessionOpen, setNewSessionOpen] = useState(false);
 	const [groupMenu, setGroupMenu] = useState<{ anchor: ContextMenuAnchor; group: WorkspaceGroup } | null>(null);
 	const [sessionMenu, setSessionMenu] = useState<{ anchor: ContextMenuAnchor; session: SessionInfo } | null>(null);
 	// Workspace display alias rename (group header inline input).
@@ -714,7 +712,7 @@ export function Sidebar() {
 	// once. (The "+" on a project frame always starts there, whatever the lane.)
 	const startNew = () => {
 		if (lane === "code") {
-			setNewSessionOpen(true);
+			useUiStore.getState().openNewCodeSession();
 			return;
 		}
 		useUiStore.getState().returnToConversation();
@@ -2240,7 +2238,6 @@ export function Sidebar() {
 				}}
 				onCancel={() => setPendingDelete(null)}
 			/>
-			<WorkspaceDialog open={newSessionOpen} onClose={() => setNewSessionOpen(false)} intent="new-session" />
 		</>
 	);
 }
