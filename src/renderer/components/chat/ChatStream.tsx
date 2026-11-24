@@ -560,14 +560,21 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		const el = parentRef.current;
 		const canvas = canvasRef.current;
 		if (!el || !canvas || typeof ResizeObserver === "undefined") return;
+		let frame: number | null = null;
 		const observer = new ResizeObserver(() => {
-			if (userScrollIntentRef.current) return;
-			if (followsTail(el)) scrollToTail();
+			if (frame !== null) return;
+			frame = requestAnimationFrame(() => {
+				frame = null;
+				if (!userScrollIntentRef.current && followsTail(el)) scrollToTail();
+			});
 		});
 		observer.observe(canvas);
 		observer.observe(el);
 		if (footerRef.current) observer.observe(footerRef.current);
-		return () => observer.disconnect();
+		return () => {
+			observer.disconnect();
+			if (frame !== null) cancelAnimationFrame(frame);
+		};
 	}, [scrollToTail, followsTail]);
 
 	// Entrance motion for content that genuinely arrives. Marking is imperative and
@@ -575,7 +582,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	// back into the viewport, and never resets a fade that is still running.
 	const lastAppended = useMessagesStore(s => s.lastAppended);
 	const liveAppendRef = useRef(lastAppended);
-	const entranceRef = useRef(createRowEntranceState(sessionId, rowKeys));
+	const entranceRef = useRef<ReturnType<typeof createRowEntranceState> | null>(null);
 	useLayoutEffect(() => {
 		const canvas = canvasRef.current;
 		if (!canvas) return;
@@ -588,6 +595,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 			slots.set(key, slot);
 			mounted.push({ index, key });
 		}
+		entranceRef.current ??= createRowEntranceState(sessionId, rowKeys);
 		const claims = claimRowEntrances(entranceRef.current, {
 			sessionId,
 			// `lastAppended` is untouched by hydration and pagination, so a change

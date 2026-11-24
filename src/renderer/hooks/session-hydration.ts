@@ -398,7 +398,7 @@ export function repairStaleRunState(
 }
 
 /** Reload every renderer store belonging to one visible tab. */
-export function hydrateTabSession(tabId: string, fallbackName?: string): Promise<void> {
+export function hydrateTabSession(tabId: string, fallbackName?: string, initialState?: RpcResponse): Promise<void> {
 	if (isTabClosed(tabId)) return Promise.resolve();
 	const runtime = ensureTabRuntime(tabId);
 	const generation = runtime.sessionGeneration;
@@ -412,7 +412,7 @@ export function hydrateTabSession(tabId: string, fallbackName?: string): Promise
 		pending.folded === folded
 	)
 		return pending.promise;
-	const promise = performTabHydration(tabId, runtime, generation, folded, fallbackName).finally(() => {
+	const promise = performTabHydration(tabId, runtime, generation, folded, fallbackName, initialState).finally(() => {
 		if (pendingHydrations.get(runtime)?.promise === promise) pendingHydrations.delete(runtime);
 	});
 	pendingHydrations.set(runtime, { generation, eventVersion, folded, promise });
@@ -425,6 +425,7 @@ async function performTabHydration(
 	generation: number | undefined,
 	folded: boolean,
 	fallbackName?: string,
+	initialState?: RpcResponse,
 ): Promise<void> {
 	hydratedSessions.delete(runtime);
 	const version = (hydrationVersions.get(runtime) ?? 0) + 1;
@@ -444,7 +445,7 @@ async function performTabHydration(
 	// reports ready, and this is the key the transcript cache files it under.
 	const pendingSessionPath = useTabsStore.getState().tabs.find(tab => tab.id === tabId)?.pendingSessionPath;
 
-	const stateResultPromise = runtime.command({ type: "get_state" });
+	const stateResultPromise = initialState ?? runtime.command({ type: "get_state" });
 	const messagesResultPromise = Promise.allSettled([
 		fetchTranscript(createSessionRpcClient(runtime.command).command, folded),
 	]);

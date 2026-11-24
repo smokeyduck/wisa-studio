@@ -769,11 +769,6 @@ export class SidecarManager extends EventEmitter {
 		}
 	}
 
-	/** Mark the sidecar as unhealthy (e.g. health check failed after ready). */
-	markUnhealthy(reason: string): void {
-		this.#setStatus("error", reason);
-	}
-
 	/**
 	 * Adopt a new logical cwd WITHOUT a respawn. `switch_session` onto a file
 	 * rooted in another workspace re-roots the agent with no main-observable

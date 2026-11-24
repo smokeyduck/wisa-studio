@@ -7,6 +7,8 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+- A slow startup RPC no longer permanently marks a live agent as failed. Studio recovers the session when Core answers again and uses lightweight idle health checks.
+- Windows no longer boots a duplicate idle agent. Conversation indexing starts on search rather than launch, and long transcripts avoid rebuilding entrance state and coalesce resize-driven scrolling.
 - Spaced out reasoning and execution disclosures in the conversation.
 - The model picker shows the session model and cached choices without waiting for provider catalog discovery or forcing a refresh on every open.
 - On Windows, switching between Work and Coding no longer reuses the wrong tool profile when a saved workspace path differs only in case or slash style. Coding tool profile settings identify the subagent tool as `task`.

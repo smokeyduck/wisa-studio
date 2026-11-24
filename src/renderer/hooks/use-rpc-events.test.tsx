@@ -278,7 +278,8 @@ function installTabRoutedMockOmp(): {
 		},
 		rpc: {
 			commandForTab,
-			getState: vi.fn(async () => success({})),
+			getState: vi.fn(async () => settledState({})),
+			getQueue: vi.fn(async () => success({ steering: [], followUp: [] })),
 		},
 		events: {
 			onTabBatch: vi.fn((callback: TabBatchHandler) => {
@@ -577,6 +578,28 @@ describe("useRpcEvents sidebar browsing (gui#29)", () => {
 	});
 });
 
+it("loads the restored conversation when Core answers after its startup state read timed out", async () => {
+	const { commandForTab } = installTabRoutedMockOmp();
+	const session = seedReadyTab("slow-boot");
+	const original = commandForTab.getMockImplementation()!;
+	commandForTab.mockImplementation((id, command) => {
+		if (command.type === "get_state") {
+			return Promise.resolve({ type: "response", command: "get_state", success: false, error: "timed out" });
+		}
+		if (command.type === "get_transcript") {
+			return Promise.resolve(success({ messages: [{ role: "user", content: "Restored history", timestamp: 1 }] }));
+		}
+		return original(id, command);
+	});
+	vi.spyOn(window.omp.rpc, "getState").mockResolvedValue(settledState({ sessionName: "Recovered session" }));
+	await mount(<RpcEventsProbe heartbeatMs={25} />);
+	const messages = sessionRuntimeStore<MessagesStore>("slow-boot", "messages")!;
+	await vi.waitFor(() => {
+		expect(session.getState()).toMatchObject({ status: "ready", sessionName: "Recovered session" });
+		expect(messages.getState().messages).toMatchObject([{ content: "Restored history" }]);
+	});
+});
+
 describe("useRpcEvents context usage sync", () => {
 	it("lands the turn's usage reading from a get_state that raced a trailing event", async () => {
 		const { emitTabBatch, commandForTab } = installTabRoutedMockOmp();
@@ -631,9 +654,7 @@ describe("useRpcEvents context usage sync", () => {
 			await promise;
 		});
 
-		// The probe is already paid for (it tokenises the context to answer at
-		// all); a session that only idles between turns had no other way to land
-		// a snapshot, so its ring stayed on the number from the last turn.
+		// Periodic full snapshots still refresh usage when no turn events arrive.
 		expect(getState).toHaveBeenCalled();
 		expect(session.getState().contextUsage).toMatchObject({ tokens: 900 });
 		expect(session.getState().statsPulse).toBeGreaterThan(0);
@@ -642,25 +663,12 @@ describe("useRpcEvents context usage sync", () => {
 
 describe("useRpcEvents stale run repair", () => {
 	it("settles a tab whose run ended unseen once the liveness probe reports it idle", async () => {
-		const { emitTabStatus, commandForTab } = installTabRoutedMockOmp();
+		installTabRoutedMockOmp();
 		const session = seedReadyTab("t-stuck");
-		// The switch-back hydrate times out (sidecars busy elsewhere), so the
-		// tab keeps what it showed when it was parked mid-run.
-		const original = commandForTab.getMockImplementation()!;
-		let hydrateFails = true;
-		commandForTab.mockImplementation((id, command) =>
-			command.type === "get_state" && hydrateFails
-				? Promise.resolve({ type: "response", command: "get_state", success: false, error: "timed out" })
-				: original(id, command),
-		);
 		await mount(<RpcEventsProbe heartbeatMs={25} />);
-		emitTabStatus({ status: "ready", cwd: "/alpha" }, "t-stuck");
-		await flush();
 		session.setState({ isStreaming: true, awaitingModelSince: 1 });
 
 		// The run finished while the tab was parked; no event will ever say so.
-		hydrateFails = false;
-		vi.spyOn(window.omp.rpc, "getState").mockResolvedValue(settledState({}));
 		await act(async () => {
 			const { promise, resolve } = Promise.withResolvers<void>();
 			setTimeout(resolve, 80);

@@ -31,6 +31,7 @@ import {
 	isThinkingLevel,
 	type ModelCatalogUpdateFrame,
 	type PromptResultFrame,
+	type RpcResponse,
 	type RpcSessionState,
 	type SessionInfoUpdateFrame,
 	type SubagentFrame,
@@ -659,51 +660,99 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 			});
 		}
 
-		// Heartbeat: a wedged command queue (e.g. a stalled discovery await on
-		// the serial server queue) leaves status "ready" but blocks every
-		// command, including a lightweight get_state. A periodic probe detects
-		// that post-boot brick and surfaces the SidecarBanner (with Restart),
-		// which the one-shot boot health check cannot catch.
+		// Keep the serial command queue observable without serializing the full state
+		// (context tokens, prompt, tool schemas) at every idle heartbeat.
+		const booting = new Map<string, { running: boolean }>();
 		let heartbeat: ReturnType<typeof setInterval> | null = null;
 		let probing = false;
+		let lastState: { tabId: string; eventVersion?: number; at: number } | undefined;
+		let missedTab: string | undefined;
+		const clearProbeError = (tabId: string) => {
+			if (missedTab !== tabId) return;
+			missedTab = undefined;
+			const ui = useUiStore.getState();
+			if (ui.sidecarError === translate("events.sidecarNoResponse")) ui.clearSidecarError();
+		};
 		const startHeartbeat = () => {
 			if (heartbeat) return;
-			heartbeat = setInterval(() => {
-				if (probing) return;
-				if (!acceptsActiveTabEvents()) return;
-				if (useSessionStore.getState().status !== "ready") return;
+			heartbeat = setInterval(async () => {
+				if (disposed || probing || !acceptsActiveTabEvents() || document.hidden) return;
+				const tabId = focusedTabId();
+				const boot = booting.get(tabId);
+				const runtime = sessionRuntime(tabId);
+				const generation = runtime?.sessionGeneration;
+				const active = useSessionStore.getState();
+				if (boot?.running || active.status !== "ready" || active.switchPending) return;
+				const isCurrent = () =>
+					!disposed &&
+					acceptsActiveTabEvents() &&
+					focusedTabId() === tabId &&
+					sessionRuntime(tabId) === runtime &&
+					runtime?.sessionGeneration === generation &&
+					useSessionStore.getState().status === "ready" &&
+					!useSessionStore.getState().switchPending;
+				const eventVersion = active.eventVersion;
+				const fullState =
+					boot !== undefined ||
+					active.isStreaming ||
+					active.isCompacting ||
+					active.isBackgroundCompacting ||
+					lastState?.tabId !== tabId ||
+					lastState.eventVersion !== eventVersion ||
+					Date.now() - lastState.at >= heartbeatMs * 4;
 				probing = true;
-				const probeTabId = useTabsStore.getState().activeTabId;
-				const probeEventVersion = probeTabId
-					? sessionRuntimeStore<SessionStore>(probeTabId, "session")?.getState().eventVersion
-					: undefined;
-				void window.omp.rpc
-					.getState()
-					.then(res => {
-						probing = false;
-						if (!acceptsActiveTabEvents() || useTabsStore.getState().activeTabId !== probeTabId) return;
-						if (!res.success) {
-							useUiStore.getState().setSidecarError(translate("events.sidecarNoResponse"));
-							return;
-						}
-						useUiStore.getState().clearSidecarError();
-						// The probe already paid for the tokenised context reading, so let it
-						// keep the usage ring honest: a session that idles between turns never
-						// lands a get_state snapshot any other way.
-						if (res.data != null && probeTabId) {
-							applyUsageSnapshot(res.data as RpcSessionState, probeTabId);
-							// A parked tab's missed agent_start/agent_end is otherwise
-							// only repaired by a later event — never, once it idles.
-							repairStaleRunState(probeTabId, res.data as RpcSessionState, probeEventVersion);
-						}
-					})
-					.catch(() => {
-						probing = false;
-						if (!acceptsActiveTabEvents() || useTabsStore.getState().activeTabId !== probeTabId) return;
-						useUiStore.getState().setSidecarError(translate("events.sidecarNoResponse"));
-					});
+				try {
+					const res = await (fullState ? window.omp.rpc.getState() : activeTabCommand({ type: "get_queue" }));
+					if (!isCurrent()) return;
+					if (!res.success) throw new Error(res.error);
+					clearProbeError(tabId);
+					if (!fullState || res.data == null) return;
+					lastState = { tabId, eventVersion, at: Date.now() };
+					if (boot && booting.get(tabId) === boot) {
+						booting.delete(tabId);
+						finishBoot(tabId, res, eventVersion);
+					} else if (tabId) {
+						applyUsageSnapshot(res.data as RpcSessionState, tabId);
+						repairStaleRunState(tabId, res.data as RpcSessionState, eventVersion);
+					}
+				} catch {
+					if (!isCurrent()) return;
+					if (missedTab === tabId) {
+						const message = translate("events.sidecarNoResponse");
+						const ui = useUiStore.getState();
+						if (ui.sidecarError !== message) ui.setSidecarError(message);
+					}
+					missedTab = tabId;
+				} finally {
+					probing = false;
+				}
 			}, heartbeatMs);
 		};
+		function finishBoot(tabId: string, res: RpcResponse, eventVersion: number | undefined): void {
+			const runtime = sessionRuntime(tabId);
+			const wire = res.data as RpcSessionState;
+			if (runtime) {
+				const unchanged =
+					sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion === eventVersion;
+				void hydrateTabSession(tabId, undefined, unchanged ? res : undefined);
+				void applyPreferredModel(tabId, wire);
+				return;
+			}
+			applySessionState(wire);
+			if (wire.isStreaming && useSessionStore.getState().awaitingModelSince === null) {
+				useSessionStore.setState({ awaitingModelSince: Date.now() });
+			}
+			if (!wire.isStreaming) useMessagesStore.getState().clearStreaming();
+			void Promise.allSettled([
+				syncGoal("", activeTabCommand, () => true),
+				syncLoopMode("", activeTabCommand, () => true),
+				syncVibeMode("", activeTabCommand, () => true),
+				useQueueStore.getState().refresh(),
+				useSettingsStore.getState().syncDisplaySettings(),
+				useSettingsStore.getState().syncApproval(),
+				activeTabCommand({ type: "set_subagent_subscription", level: SUBAGENT_SUBSCRIPTION_LEVEL }),
+			]);
+		}
 		const stopHeartbeat = () => {
 			if (heartbeat) {
 				clearInterval(heartbeat);
@@ -715,11 +764,15 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 			if (disposed || closedTabFrame(statusTabId)) return;
 			statusVersion++;
 			const isFocused = () => useTabsStore.getState().activeTabId === statusTabId;
+			if (payload.status !== "ready") {
+				booting.delete(statusTabId);
+				if (lastState?.tabId === statusTabId) lastState = undefined;
+				if (missedTab === statusTabId) missedTab = undefined;
+			}
 			if (payload.status === "starting") {
 				const runtime = sessionRuntime(statusTabId);
 				if (runtime) runtime.sessionGeneration = (runtime.sessionGeneration ?? 0) + 1;
 				invalidateTabSessionHydration(statusTabId);
-				if (isFocused()) stopHeartbeat();
 				retryPendingTabs.delete(statusTabId);
 				withSessionRuntime(statusTabId, () => {
 					useBtwStore.getState().reset();
@@ -741,7 +794,7 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 			withSessionRuntime(statusTabId, () => useSessionStore.getState().setStatus(payload.status, payload.cwd));
 
 			if (payload.status === "ready") {
-				if (isFocused()) startHeartbeat();
+				startHeartbeat();
 				// A restart can interrupt a side answer; load the sidecar's saved history.
 				withSessionRuntime(statusTabId, () => {
 					void useBtwStore.getState().refresh();
@@ -752,15 +805,16 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 						message: translate("modelRestore.bootFallback", { model: payload.modelFallback }),
 					});
 				}
-				// One-shot boot health check: verify the command loop is live.
+				if (booting.has(statusTabId)) return;
+				const boot = { running: true };
+				booting.set(statusTabId, boot);
 				void (async () => {
 					try {
 						const runtime = sessionRuntime(statusTabId);
 						const command = runtime?.command ?? activeTabCommand;
-						// A window opened "in new window" for a specific session
-						// switches to it BEFORE hydrating, so the first transcript
-						// it pulls is the target session, not the fresh empty one.
+						// Open an explicitly requested session before reading its first snapshot.
 						const pending = isFocused() ? await window.omp.sessions.consumePendingOpen() : null;
+						if (disposed || booting.get(statusTabId) !== boot) return;
 						if (pending) {
 							const sw = await command({ type: "switch_session", sessionPath: pending });
 							if (!sw.success) {
@@ -770,44 +824,29 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 								});
 							}
 						}
+						const eventVersion = sessionRuntimeStore<SessionStore>(statusTabId, "session")?.getState()
+							.eventVersion;
+						const generation = runtime?.sessionGeneration;
 						const res = await command({ type: "get_state" });
-						if (runtime && sessionRuntime(statusTabId) !== runtime) return;
-						if (!res.success) {
-							if (isFocused()) useUiStore.getState().setSidecarError(translate("events.sidecarNoResponse"));
-						} else {
-							if (isFocused()) useUiStore.getState().clearSidecarError();
-							if (runtime) {
-								void hydrateTabSession(statusTabId);
-								// A brand-new session opens on the model this user actually
-								// reaches for, not on whichever row the catalog lists first.
-								void applyPreferredModel(statusTabId, res.data as RpcSessionState);
-							} else {
-								const wire = res.data as RpcSessionState;
-								applySessionState(wire);
-								if (wire.isStreaming && useSessionStore.getState().awaitingModelSince === null) {
-									useSessionStore.setState({ awaitingModelSince: Date.now() });
-								}
-								if (!wire.isStreaming) useMessagesStore.getState().clearStreaming();
-								await Promise.allSettled([
-									syncGoal("", activeTabCommand, () => true),
-									syncLoopMode("", activeTabCommand, () => true),
-									syncVibeMode("", activeTabCommand, () => true),
-									useQueueStore.getState().refresh(),
-									useSettingsStore.getState().syncDisplaySettings(),
-									useSettingsStore.getState().syncApproval(),
-								]);
-							}
-							void command({ type: "set_subagent_subscription", level: SUBAGENT_SUBSCRIPTION_LEVEL });
-						}
+						if (
+							disposed ||
+							booting.get(statusTabId) !== boot ||
+							sessionRuntime(statusTabId) !== runtime ||
+							runtime?.sessionGeneration !== generation
+						)
+							return;
+						if (!res.success || res.data == null) return;
+						booting.delete(statusTabId);
+						if (isFocused()) clearProbeError(statusTabId);
+						finishBoot(statusTabId, res, eventVersion);
 					} catch {
-						if (isFocused()) useUiStore.getState().setSidecarError(translate("events.sidecarHealthFailed"));
+						// A timeout is not a process exit. The next heartbeat can complete boot hydration.
+					} finally {
+						boot.running = false;
 					}
 				})();
 			} else if (payload.status === "error" || payload.status === "exited" || payload.status === "restarting") {
 				if (isFocused()) {
-					// The command queue died with the process, so a probe would fail and
-					// overwrite the crash reason with a generic "not responding".
-					stopHeartbeat();
 					useUiStore
 						.getState()
 						.setSidecarError(

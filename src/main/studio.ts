@@ -294,7 +294,7 @@ app.whenReady().then(() => {
 		writeRuntimeLog({ source: "wisa-provider", ...errorMessage(error) });
 	}
 	sidecarPool = new SidecarPool((cwd, kind, fresh) => {
-		const sc = new SidecarManager({
+		return new SidecarManager({
 			binaryPath: bundledOmp ?? "",
 			packaged: app.isPackaged,
 			sourceCli: sourceCli ?? undefined,
@@ -305,26 +305,10 @@ app.whenReady().then(() => {
 			shellEnv: shellSpawnEnv,
 			reportFailure: reportSidecarFailure,
 		});
-		// Ready-health-check applies to every pooled sidecar, not just the first.
-		sc.on("status", ({ status }) => {
-			if (status !== "ready") return;
-			const client = sc.rpcClient;
-			if (!client) return;
-			client
-				.command({ type: "get_state" })
-				.then(res => {
-					if (!res.success) sc.markUnhealthy(`Health check failed: ${res.error ?? "unknown"}`);
-				})
-				.catch(err => {
-					sc.markUnhealthy(`Health check timed out: ${err instanceof Error ? err.message : String(err)}`);
-				});
-		});
-		return sc;
 	});
 	sidecarPool.onWindowTabsChanged = () => persistTabLayouts();
-	// Keep one idle agent warm in the workspace being used, so the next tab
-	// opened there switches onto its session instead of cold-starting (gui#29).
-	sidecarPool.warmSpareDelayMs = WARM_SPARE_DELAY_MS;
+	// On Windows a spare duplicates a full Core process during cold I/O and memory pressure.
+	if (process.platform !== "win32") sidecarPool.warmSpareDelayMs = WARM_SPARE_DELAY_MS;
 	sidecarPool.uiResponder = (sidecar, request) => schedulerHost?.answerToolPrompt(sidecar, request) ?? false;
 	// Phone access: honor `collab.autoStart` for GUI tabs (the agent only applies
 	// it in TUI mode) and answer the phone dialog's per-tab snapshot.
@@ -490,10 +474,6 @@ app.whenReady().then(() => {
 			() => callback({}),
 		);
 	});
-	// Read sessions into the search index in the background; searches top it up.
-	conversationIndex
-		?.refresh()
-		.catch(error => writeRuntimeLog({ source: "conversation-index", ...errorMessage(error) }));
 	// Read before the first window restores: every tab change rewrites the store,
 	// so a later read would only see the just-restored primary window.
 	const savedLayouts = readSavedTabLayouts();
