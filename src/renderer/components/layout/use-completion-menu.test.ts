@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { AvailableCommand } from "../../../shared/rpc-types";
+import { vi } from "../../locales/vi";
 import { SLASH_ARG_RE, SLASH_NAME_RE } from "./input-area-utils";
 import { applyCompletion, type CompletionItem, type CompletionMenu, slashCommandItems } from "./use-completion-menu";
 
@@ -54,6 +55,7 @@ describe("slash regexes", () => {
 });
 
 describe("slashCommandItems", () => {
+	const t = (key: string) => vi[key] ?? key;
 	const commands: AvailableCommand[] = [
 		{ name: "review-pr", description: "", source: "skill" },
 		{ name: "model", description: "Switch model", source: "builtin" },
@@ -64,8 +66,8 @@ describe("slashCommandItems", () => {
 
 	it("lists every command grouped by source when nothing is typed, not just the first eight", () => {
 		const many = Array.from({ length: 30 }, (_, i) => ({ name: `cmd${i}`, description: "", source: "builtin" }));
-		expect(slashCommandItems(many, "", "agent")).toHaveLength(30);
-		expect(slashCommandItems(commands, "", "agent").map(item => item.group)).toEqual([
+		expect(slashCommandItems(many, "", "agent", t)).toHaveLength(30);
+		expect(slashCommandItems(commands, "", "agent", t).map(item => item.group)).toEqual([
 			"builtin",
 			"builtin",
 			"builtin",
@@ -75,10 +77,28 @@ describe("slashCommandItems", () => {
 	});
 
 	it("ranks name-prefix matches ahead of substring matches", () => {
-		expect(slashCommandItems(commands, "mod", "agent").map(item => item.label)).toEqual(["/model", "/remodel"]);
+		expect(slashCommandItems(commands, "mod", "agent", t).map(item => item.label)).toEqual(["/model", "/remodel"]);
 	});
 
 	it("leaves out commands that do nothing on a chat tab", () => {
-		expect(slashCommandItems(commands, "plan", "chat")).toEqual([]);
+		expect(slashCommandItems(commands, "plan", "chat", t)).toEqual([]);
+	});
+
+	it("translates builtins without translating command names or third-party descriptions", () => {
+		const items = slashCommandItems(
+			[
+				{ name: "forget-approvals", description: "Forget cached approvals", source: "builtin" },
+				{ name: "commit", description: "A user-authored description", source: "skill" },
+				{ name: "future-command", description: "Description from a newer sidecar", source: "builtin" },
+			],
+			"",
+			"agent",
+			t,
+		);
+		expect(items.map(({ label, description }) => [label, description])).toEqual([
+			["/forget-approvals", vi["cmd.forgetApprovals.desc"]],
+			["/future-command", "Description from a newer sidecar"],
+			["/commit", "A user-authored description"],
+		]);
 	});
 });

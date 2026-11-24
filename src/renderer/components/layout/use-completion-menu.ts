@@ -35,12 +35,34 @@ export interface CompletionItem {
 /** Order the `/` menu sections appear in; sources not listed sort last. */
 export const COMMAND_GROUP_ORDER = ["builtin", "skill", "extension", "custom", "mcp_prompt", "file"] as const;
 
+function commandDescription(
+	command: AvailableCommand,
+	t: ReturnType<typeof useT>,
+	subcommand?: NonNullable<AvailableCommand["subcommands"]>[number],
+): string | undefined {
+	const fallback = subcommand ? subcommand.description : command.description;
+	if (command.source !== "builtin") return fallback;
+	const name = command.name.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+	const key = !subcommand
+		? `cmd.${name}.desc`
+		: name === "effort"
+			? `input.thinking.level.${subcommand.name}`
+			: `cmd.${name}.sub.${subcommand.name.replaceAll(" ", "-")}.desc`;
+	const localized = t(key);
+	return localized === key ? fallback : localized;
+}
+
 /**
  * Slash-command menu rows: every available command (no cap, the menu scrolls),
  * name-prefix matches before substring matches, then grouped by source so the
  * built-ins, skills and extension commands read as separate sections.
  */
-export function slashCommandItems(commands: AvailableCommand[], query: string, tabKind: SessionKind): CompletionItem[] {
+export function slashCommandItems(
+	commands: AvailableCommand[],
+	query: string,
+	tabKind: SessionKind,
+	t: ReturnType<typeof useT>,
+): CompletionItem[] {
 	const lower = query.toLowerCase();
 	const rank = (command: AvailableCommand): number | null => {
 		if (!lower) return 2;
@@ -68,7 +90,7 @@ export function slashCommandItems(commands: AvailableCommand[], query: string, t
 	return ranked.map(({ command }) => ({
 		value: `/${command.name} `,
 		label: `/${command.name}`,
-		description: command.description,
+		description: commandDescription(command, t),
 		hint: command.input?.hint,
 		group: command.source ?? "builtin",
 	}));
@@ -177,7 +199,7 @@ export function useCompletionMenu({
 							.map(sub => ({
 								value: `${sub.name} `,
 								label: sub.name,
-								description: sub.description,
+								description: commandDescription(command, t, sub),
 								hint: sub.usage,
 							}));
 						if (items.length > 0) {
@@ -244,7 +266,7 @@ export function useCompletionMenu({
 		const cmdMatch = SLASH_NAME_RE.exec(before);
 		if (cmdMatch) {
 			const query = (cmdMatch[2] ?? "").toLowerCase();
-			const items = slashCommandItems(commands, query, tabKind);
+			const items = slashCommandItems(commands, query, tabKind, t);
 			apply({ source: "command", rangeStart: cursor - query.length - 1, items });
 			return () => {
 				cancelled = true;
