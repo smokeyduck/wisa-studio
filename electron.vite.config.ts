@@ -61,6 +61,8 @@ export default defineConfig({
 			rollupOptions: {
 				input: { index: resolve(__dirname, "src/main/index.ts") },
 				external: ["electron"],
+				// Main chunks resolve preload and renderer assets relative to this directory.
+				output: { chunkFileNames: "[name]-[hash].js" },
 			},
 		},
 	},
@@ -68,7 +70,10 @@ export default defineConfig({
 		plugins: [externalizeDepsPlugin()],
 		build: {
 			rollupOptions: {
-				input: { index: resolve(__dirname, "src/preload/index.ts") },
+				input: {
+					index: resolve(__dirname, "src/preload/index.ts"),
+					browser: resolve(__dirname, "src/preload/browser.ts"),
+				},
 				external: ["electron"],
 				output: { format: "cjs" },
 			},

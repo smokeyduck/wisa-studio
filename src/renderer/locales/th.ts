@@ -3976,6 +3976,8 @@ export const th: Record<string, string> = {
 	"input.deliveryUnknownTitle": "ยืนยันการส่งไม่ได้",
 	"input.deliveryUnknown": "ยังยืนยันการส่งไม่ได้ งานอาจกำลังทำงานอยู่แล้ว ตรวจสอบบันทึกและคิวของงานก่อนส่งฉบับร่างนี้ซ้ำ",
 	"input.allowResend": "ฉันตรวจสอบแล้ว อนุญาตให้ส่ง",
+	"titlebar.openBrowser": "เปิดเบราว์เซอร์ WISA",
+	"titlebar.browserFailed": "เปิดเบราว์เซอร์ WISA ไม่ได้",
 	"titlebar.togglePanel": "ดูรายการเปลี่ยนแปลงและไฟล์",
 	"titlebar.review.changes": "{count} ไฟล์ที่ยังไม่ได้ commit - ทบทวน",
 	"diffPanel.scope.aria": "เลือกว่าจะแสดงการเปลี่ยนแปลงชุดใด",

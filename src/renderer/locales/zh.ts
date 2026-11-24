@@ -3997,6 +3997,8 @@ export const zh: Record<string, string> = {
 	"input.deliveryUnknownTitle": "发送结果未确认",
 	"input.deliveryUnknown": "未收到发送确认，任务可能已经执行。请先检查对话和队列，再决定是否重发草稿。",
 	"input.allowResend": "已检查，允许发送",
+	"titlebar.openBrowser": "打开 WISA 浏览器",
+	"titlebar.browserFailed": "无法打开 WISA 浏览器",
 	"titlebar.togglePanel": "查看改动与文件",
 	"titlebar.review.changes": "{count} 个未提交的文件，查看",
 	"diffPanel.scope.aria": "选择要查看的变更",

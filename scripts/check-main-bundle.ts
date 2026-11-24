@@ -11,7 +11,7 @@ import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 
 // `URL.pathname` keeps a leading slash on Windows (`/E:/…`), which no API opens.
-const BUNDLE = fileURLToPath(new URL("../out/main/index.js", import.meta.url));
+const BUNDLE_DIR = new URL("../out/main/", import.meta.url);
 const IMPORT_SPECIFIER = /^\s*(?:import|export)[^\n]*?\sfrom\s+["']([^"']+)["']/gm;
 
 // `original-fs` is not in `builtinModules` but Electron always resolves it: it is
@@ -26,20 +26,21 @@ const allowed = new Set<string>([
 	...builtinModules.map(m => `node:${m}`),
 ]);
 
-const external = new Set<string>();
-const source = await fs.readFile(BUNDLE, "utf8");
-for (const match of source.matchAll(IMPORT_SPECIFIER)) {
-	const specifier = match[1];
-	if (!specifier || allowed.has(specifier) || specifier.startsWith("./") || specifier.startsWith("../")) continue;
-	external.add(specifier);
-}
-
-if (external.size > 0) {
-	console.error(
-		`out/main/index.js still imports ${[...external].join(", ")} at runtime. ` +
-			"Add each to MAIN_BUNDLED_DEPS in electron.vite.config.ts so the packaged app needs no node_modules.",
-	);
-	process.exit(1);
+for (const entry of await fs.readdir(BUNDLE_DIR)) {
+	if (!entry.endsWith(".js")) continue;
+	const source = await fs.readFile(fileURLToPath(new URL(entry, BUNDLE_DIR)), "utf8");
+	const external = new Set<string>();
+	for (const match of source.matchAll(IMPORT_SPECIFIER)) {
+		const specifier = match[1];
+		if (!specifier || allowed.has(specifier) || specifier.startsWith("./") || specifier.startsWith("../")) continue;
+		external.add(specifier);
+	}
+	if (external.size > 0) {
+		throw new Error(
+			`out/main/${entry} still imports ${[...external].join(", ")} at runtime. ` +
+				"Add each to MAIN_BUNDLED_DEPS in electron.vite.config.ts so the packaged app needs no node_modules.",
+		);
+	}
 }
 
 console.log("main bundle is self-contained: no un-bundled runtime imports");

@@ -208,6 +208,7 @@ export class SidecarPool {
 	sidecarLifecycle: {
 		ready(tab: { tabId: string; kind: "agent" | "chat"; sidecar: SidecarManager }): void;
 		down(tabId: string): void;
+		sessionChanged?(tabId: string): void;
 	} | null = null;
 
 	constructor(factory: SidecarFactory) {
@@ -890,6 +891,7 @@ export class SidecarPool {
 		if (sessionFile) this.#registerSessionFile(entry, sessionFile);
 		else this.#unregisterSessionFile(entry);
 		if (entry.sessionFile !== previous) {
+			this.sidecarLifecycle?.sessionChanged?.(tabId);
 			forwardToWindow(entry.win, IPC_EVENTS.TAB_STATUS, tabStatusPayload(entry));
 			this.#notifyWindowTabsChanged(entry.win);
 		}

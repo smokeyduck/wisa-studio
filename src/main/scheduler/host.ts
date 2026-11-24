@@ -22,7 +22,7 @@ import type { SchedulerLimits, SchedulerOpenTarget, TaskNotice, TaskRun } from "
 import { type MainTextKey, mainT } from "../i18n";
 import type { SpawnWindow, WindowManager } from "../window";
 import { asTaskConfig, asTaskDraft } from "./guards";
-import { MANAGE_TASKS_TOOL, MANAGE_TASKS_TOOL_DEFINITION, runManageTasksTool } from "./manage-tasks-tool";
+import { MANAGE_TASKS_TOOL, runManageTasksTool } from "./manage-tasks-tool";
 import { addNotice, markNoticesRead, parseNotices } from "./notices";
 import {
 	executeRun,
@@ -32,10 +32,9 @@ import {
 	runMaintenanceScript,
 	worktreeRemovalScript,
 } from "./runner";
-import { runScheduleTool, SCHEDULE_TASK_TOOL, SCHEDULE_TASK_TOOL_DEFINITION } from "./schedule-tool";
+import { runScheduleTool, SCHEDULE_TASK_TOOL } from "./schedule-tool";
 import { Scheduler, type SchedulerNotice } from "./scheduler";
 import { SchedulerStore } from "./store";
-import { stripEmptyEnumValues } from "./tool-schema";
 
 const SNAPSHOT_DEBOUNCE_MS = 100;
 /** scheduler.db meta key of the notification list. */
@@ -135,19 +134,6 @@ export class SchedulerHost {
 	/** Run sessions stay out of the sidebar; they open from the Tasks window. */
 	runSessionPaths(): Set<string> {
 		return this.scheduler.runSessionPaths();
-	}
-
-	// ------------------------------------------- scheduler tools (agent tabs)
-
-	/** A tab's sidecar came up: give agent tabs the tools. */
-	tabReady(tab: { tabId: string; kind: "agent" | "chat"; sidecar: TabSidecar }): void {
-		if (tab.kind !== "agent") return;
-		tab.sidecar.rpcClient
-			?.command({
-				type: "set_host_tools",
-				tools: [SCHEDULE_TASK_TOOL_DEFINITION, MANAGE_TASKS_TOOL_DEFINITION].map(stripEmptyEnumValues),
-			})
-			.catch(error => this.#deps.log("set_host_tools failed", { tabId: tab.tabId, error: String(error) }));
 	}
 
 	/**

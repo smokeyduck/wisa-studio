@@ -3881,6 +3881,8 @@ export const vi: Record<string, string> = {
 	"input.deliveryUnknown":
 		"Việc gửi chưa được xác nhận. Tác vụ có thể đang chạy. Hãy kiểm tra bản ghi và hàng đợi của tác vụ trước khi gửi lại bản nháp này.",
 	"input.allowResend": "Tôi đã kiểm tra; cho phép gửi",
+	"titlebar.openBrowser": "Mở WISA Browser",
+	"titlebar.browserFailed": "Không mở được WISA Browser",
 	"titlebar.togglePanel": "Xem lại thay đổi và tệp",
 	"titlebar.review.changes": "{count} tệp chưa commit- xem lại",
 	"diffPanel.scope.aria": "Chọn thay đổi cần hiển thị",

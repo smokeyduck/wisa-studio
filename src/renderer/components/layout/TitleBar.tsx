@@ -4,6 +4,7 @@ import {
 	FolderOpen,
 	Gauge,
 	GitBranch,
+	Globe,
 	Info,
 	Menu,
 	MoreHorizontal,
@@ -25,6 +26,7 @@ import { useMessagesStore } from "../../stores/messages";
 import { type SessionStore, useSessionStore } from "../../stores/session";
 import { sessionRuntimeStore, useRuntimeTabId } from "../../stores/session-runtime-context";
 import { useActiveTabKind } from "../../stores/tabs";
+import { toast } from "../../stores/toast";
 import { useToolsStore } from "../../stores/tools";
 import { useUiStore } from "../../stores/ui";
 import { ContextMenu, type ContextMenuAnchor, type ContextMenuItem } from "../common/ContextMenu";
@@ -343,6 +345,19 @@ export function TitleBar() {
 						{changeCount > 99 ? "99+" : changeCount}
 					</span>
 				)}
+			</button>
+			<button
+				type="button"
+				aria-label={t("titlebar.openBrowser")}
+				title={t("titlebar.openBrowser")}
+				onClick={() => {
+					void window.omp.browser
+						.show()
+						.catch(() => toast({ variant: "error", message: t("titlebar.browserFailed") }));
+				}}
+				className={iconButton}
+			>
+				<Globe aria-hidden="true" size={18} />
 			</button>
 			{/* The sidebar carries the labelled Command Center entry; this shortcut
 			    only stands in for it while the sidebar is hidden. */}

@@ -77,6 +77,7 @@ import { isSessionOutputPath } from "../shared/session-output";
 import { CODING_TOOL_PROFILE_PREF, WORK_TOOL_PROFILE_PREF } from "../shared/tool-profiles";
 import { quitRisk, requestQuit, requestRestart } from "./app-quit";
 import { BenchmarkRunner } from "./benchmark-runner";
+import { browserHost } from "./browser-host";
 import type { CollabPhoneHost } from "./collab-phone";
 import type { ConversationIndex } from "./conversation-index";
 import { type CustomThemesWatcher, deleteCustomTheme, readCustomThemes, saveCustomTheme } from "./custom-themes";
@@ -493,6 +494,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	// renderer-forwarded calls get request-id → origin tracking (F-UI-ORIGIN).
 	sidecarPool.hostToolExecutor = (sidecar, request, win) => {
 		if (deps.schedulerHost?.handleToolCall(sidecar, request, sidecarPool.tabForSidecar(sidecar))) return true;
+		if (browserHost.handle(sidecarPool, sidecar, request, win)) return true;
 		const result = executeGuiHostTool(request.toolName, request.arguments);
 		if (result !== undefined) {
 			// The agent reads `result` as an AgentToolResult and drops a frame without a content array.
@@ -622,6 +624,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		IPC_COMMANDS.WINDOW_IS_FULLSCREEN,
 		event => BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false,
 	);
+	ipcMain.handle(IPC_COMMANDS.BROWSER_SHOW, event => {
+		if (!BrowserWindow.fromWebContents(event.sender) || event.senderFrame !== event.sender.mainFrame) return;
+		return browserHost.show();
+	});
 	ipcMain.on(IPC_EVENTS.WINDOW_CAPTION_COLORS, (event, colors: CaptionColors) => {
 		const win = BrowserWindow.fromWebContents(event.sender);
 		const hex = /^#[0-9a-f]{6}$/i;

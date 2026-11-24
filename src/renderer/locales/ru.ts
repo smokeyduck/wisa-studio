@@ -3912,6 +3912,8 @@ export const ru: Record<string, string> = {
 	"input.deliveryUnknown":
 		"Отправка не подтверждена. Возможно, задача уже выполняется. Проверьте её стенограмму и очередь, прежде чем отправлять этот черновик повторно.",
 	"input.allowResend": "Я проверил(а), разрешить отправку",
+	"titlebar.openBrowser": "Открыть браузер WISA",
+	"titlebar.browserFailed": "Не удалось открыть браузер WISA",
 	"titlebar.togglePanel": "Проверить изменения и файлы",
 	"titlebar.review.changes": "Незакоммиченных файлов: {count} - проверка",
 	"diffPanel.scope.aria": "Выберите, какие изменения показывать",
