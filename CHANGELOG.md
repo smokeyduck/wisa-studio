@@ -21,6 +21,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - Open WISA Browser from the Studio toolbar. It runs in a separate Chromium process with temporary browsing storage. Assistants can request permission to open an HTTP(S) page or read a bounded accessibility snapshot in their own session window; they cannot read the manually opened window or personal browser tabs.
 - Keep Copy, Edit, and Fork in place below a user message when an execution group appears.
 - The composer’s `/` menu localizes built-in command and subcommand descriptions. Hover a row marked `?` to read its full description without truncation.
+- The orchestrator carries the conversation language into new subagent assignments, task card titles, and reports. Technical identifiers and quoted evidence stay unchanged.
 
 ## [0.9.55] - 2026-11-24
 
