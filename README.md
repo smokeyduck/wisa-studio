@@ -70,6 +70,7 @@ Dữ liệu của WISA STUDIO nằm riêng ở `~/.wisa-studio/agent` (không ph
 - **Tổng quan phiên:** ngữ cảnh theo nhóm, chi phí, cache, tốc độ, subagent và MCP server đang chạy.
 - **MCP, Skills, plugin, hook:** quản lý trong Cài đặt, không cần sửa JSON bằng tay.
 - **SSH host, theme tuỳ chỉnh, command palette, chế độ giọng nói, cộng tác qua relay.**
+- **Chế độ Làm việc:** mặc định cho phép đọc, tìm kiếm, theo dõi tác vụ và điều khiển màn hình nền mà không bật shell hay trình chạy mã đa dụng. Công cụ `computer` vẫn có trong hồ sơ Làm việc đã tùy chỉnh. Cài đặt **Máy tính** dùng chung và yêu cầu phê duyệt thao tác vẫn áp dụng.
 
 Giới hạn cần biết: các tab không phải ranh giới bảo mật của hệ điều hành; chia đôi là hai khung, không phải lưới vô hạn; phê duyệt và quét bảo mật không thay cho sandbox. Request mô hình vẫn đi tới nhà cung cấp bạn cấu hình.
 

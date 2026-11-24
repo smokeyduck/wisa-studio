@@ -70,6 +70,7 @@ WISA STUDIO keeps its own agent data under `~/.wisa-studio/agent` (not `~/.omp`)
 - **Session overview:** context by category, cost, cache, speed, running subagents and MCP servers.
 - **MCP, Skills, plugins, hooks:** managed from Settings instead of hand-edited JSON.
 - **SSH hosts, custom themes, command palette, voice mode, relay collaboration.**
+- **Work mode:** read, search, track tasks and control the desktop by default, without shell or general-purpose eval. The `computer` tool remains part of customized Work profiles. The global **Computer** setting and input approval still apply.
 
 Known limits: separate tabs are not an OS security boundary; a split holds two panes, not an unlimited grid; approvals and security scans are not a sandbox. Model requests still go to the provider you configure.
 
