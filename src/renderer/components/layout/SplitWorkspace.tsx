@@ -26,6 +26,7 @@ import { TodoRibbon } from "../chat/dock/TodoDockCard";
 import { WorkspaceDock } from "../chat/dock/WorkspaceDock";
 import { ComposerQuestions } from "../dialogs/ExtensionDialog";
 import { InputArea } from "./InputArea";
+import { PanelContainer } from "./PanelContainer";
 import { useComposerFiles } from "./use-composer-files";
 
 const DIVIDER_SIZE = 5;
@@ -101,12 +102,12 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 	const active = useTabsStore(state => state.activeTabId === tabId);
 	const switchTab = useTabsStore(state => state.switchTab);
 	const unsplit = useTabsStore(state => state.unsplit);
-	const panelVisible = useUiStore(state => state.panelVisible);
+	const panelVisible = useUiStore(state => state.panelVisible && state.panelOwnerTabId === tabId);
 	const openReview = async () => {
 		if (!active) await switchTab(tabId);
 		if (useTabsStore.getState().activeTabId !== tabId) return;
 		const ui = useUiStore.getState();
-		if (active || !ui.panelVisible) ui.togglePanel();
+		if (active || !ui.panelVisible || ui.panelOwnerTabId !== tabId) ui.togglePanel();
 	};
 	// The pane's ✕ takes this session out of the split: the other pane stays.
 	const otherPane = useTabsStore(state =>
@@ -175,7 +176,10 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 					</header>
 				)}
 				<TodoRibbon active={active} />
-				<SessionPaneBody label={label} tabId={tabId} />
+				<div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+					<SessionPaneBody label={label} tabId={tabId} />
+					{active && panelVisible && <PanelContainer />}
+				</div>
 			</section>
 		</SessionRuntimeProvider>
 	);
@@ -296,6 +300,7 @@ export function SplitWorkspace() {
 			(tab.sessionId ? sessionsById.get(tab.sessionId) : undefined);
 		return (
 			<SessionPane
+				key={tabId}
 				tabId={tabId}
 				split={isSplit}
 				label={tabDisplayTitle(tab, tabs, indexedSession, t("sidebar.untitled"))}

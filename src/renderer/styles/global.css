@@ -241,17 +241,8 @@ kbd,
 	padding-left: calc(var(--omp-caption-left) + 0.625rem);
 }
 
-[data-inspector="closed"] .omp-titlebar,
-[data-inspector="open"]:has([data-inspector-overlay]) .omp-titlebar {
+.omp-titlebar {
 	padding-right: calc(var(--omp-caption-right) + 0.625rem);
-}
-
-/* Keep docked panel content out from under the native window buttons. */
-:root:is([data-platform="win32"], [data-platform="linux"]):not([data-fullscreen])
-	.omp-inspector:not([data-inspector-overlay])::before {
-	content: "";
-	flex: 0 0 3rem;
-	-webkit-app-region: drag;
 }
 
 .omp-docked-page-content > :first-child {
@@ -877,49 +868,19 @@ kbd,
 	}
 }
 
-/* Compact windows: keep the conversation wide and present the inspector as
-   an explicit overlay when the user opens it. */
+/* Session panes clip the inspector's entrance at their right edge. */
 .omp-inspector {
-	container: omp-inspector / inline-size;
-	box-shadow: none;
-	/* The overlay does not participate in window dragging. */
 	background: var(--omp-bg-primary);
 	-webkit-app-region: no-drag;
+	animation: omp-inspector-enter var(--omp-motion-med) var(--omp-ease) both;
 }
 
-/* Seven views share the footer: only the selected one prints its name. */
-.omp-inspector-tab-label {
-	display: none;
-}
-
-[aria-pressed="true"] > .omp-inspector-tab-label {
-	display: inline;
-}
-
-@container omp-inspector (max-width: 400px) {
-	[aria-pressed="true"] > .omp-inspector-tab-label {
-		display: none;
+@keyframes omp-inspector-enter {
+	from {
+		transform: translateX(100%);
 	}
-
-	.omp-inspector-footer > .omp-segmented {
-		gap: 0;
-	}
-
-	.omp-inspector-footer > .omp-segmented > button {
-		flex: 0 1 34px;
-		min-width: 22px;
-		padding-inline: 0;
-	}
-}
-
-@media (max-width: 1000px) {
-	.omp-inspector {
-		position: absolute;
-		inset-block: 0;
-		right: 0;
-		z-index: 30;
-		box-shadow: var(--omp-shadow-lg);
-		animation: omp-slide-in-right var(--omp-motion-spring) var(--omp-ease-spring) both;
+	to {
+		transform: none;
 	}
 }
 

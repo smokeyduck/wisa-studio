@@ -94,6 +94,7 @@ interface UiStore {
 	displayPreferences: GuiDisplayPreferences;
 	sidebarVisible: boolean;
 	panelVisible: boolean;
+	panelOwnerTabId: string | null;
 	panelTab: PanelTab;
 	workspacePage: WorkspacePageId | null;
 	openCapabilitiesPage: () => void;
@@ -398,6 +399,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	displayPreferences: {},
 	sidebarVisible: true,
 	panelVisible: false,
+	panelOwnerTabId: null,
 	panelTab: "overview",
 	workspacePage: null,
 	openCapabilitiesPage: () => set(workspacePagePatch("capabilities")),
@@ -440,11 +442,12 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	// open the drawer for a reason (Review, a file, /btw) go through setPanelTab.
 	togglePanel: () => {
 		const state = get();
+		const owner = useTabsStore.getState().activeTabId;
 		set({
 			...workspacePagePatch(null),
-			...(state.panelVisible || activeWorkspacePage(state)
-				? { panelVisible: false }
-				: { panelVisible: true, panelTab: clampPanelTab(state.defaultPanelTab) }),
+			...((state.panelVisible && state.panelOwnerTabId === owner) || activeWorkspacePage(state)
+				? { panelVisible: false, panelOwnerTabId: null }
+				: { panelVisible: true, panelOwnerTabId: owner, panelTab: clampPanelTab(state.defaultPanelTab) }),
 		});
 	},
 	toolsExpandAll: { expanded: false, seq: 0 },
@@ -459,7 +462,12 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 				.tabs.find(t2 => t2.id === useTabsStore.getState().activeTabId)?.kind;
 			if (activeKind === "chat") return;
 		}
-		set({ ...workspacePagePatch(null), panelTab: tab, panelVisible: true });
+		set({
+			...workspacePagePatch(null),
+			panelTab: tab,
+			panelVisible: true,
+			panelOwnerTabId: useTabsStore.getState().activeTabId,
+		});
 	},
 	setDiffScope: scope => set({ diffScope: scope }),
 	openChanges: scope => {
@@ -477,6 +485,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 			filePreviewImage: null,
 			panelTab: "files",
 			panelVisible: true,
+			panelOwnerTabId: useTabsStore.getState().activeTabId,
 		}),
 	openImagePreview: (src, label) =>
 		set({
@@ -486,6 +495,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 			filePreviewImage: { src, label },
 			panelTab: "files",
 			panelVisible: true,
+			panelOwnerTabId: useTabsStore.getState().activeTabId,
 		}),
 	closeFilePreview: () => set({ filePreviewPath: null, filePreviewLine: null, filePreviewImage: null }),
 	todoRibbonRequest: 0,

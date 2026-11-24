@@ -9,12 +9,10 @@ import {
 	X,
 } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
-import { useViewportWidth } from "../../hooks/use-viewport-width";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
-import { scrollStripOnWheel, useActiveChipInView } from "../../lib/strip-scroll";
 import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
 import { useSessionStore } from "../../stores/session";
 import { usePlanApprovalStore } from "../../stores/plan-approval";
@@ -32,11 +30,6 @@ import { TerminalPanel } from "../panels/TerminalPanel";
 
 const MIN_WIDTH = 360;
 const PANEL_WIDTH_PREF = "gui.panelWidth";
-const COMPACT_WIDTH = 1000;
-
-function defaultPanelWidth(viewportWidth: number): number {
-	return Math.max(MIN_WIDTH, Math.round(viewportWidth * 0.28));
-}
 
 const TABS: { id: PanelTab; labelKey: string; icon: typeof Diff }[] = [
 	{ id: "overview", labelKey: "panel.tabs.overview", icon: LayoutDashboard },
@@ -56,23 +49,21 @@ interface InspectorTabProps {
 	active: boolean;
 	signal: "error" | "working" | null;
 	onSelect: () => void;
+	ready: boolean;
 }
 
-/** One view in the footer switcher; keep the selected tab in view when the strip scrolls. */
-function InspectorTab({ label, description, icon: Icon, active, signal, onSelect }: InspectorTabProps) {
-	const ref = useActiveChipInView<HTMLButtonElement>(active);
+function InspectorTab({ label, description, icon: Icon, active, signal, onSelect, ready }: InspectorTabProps) {
 	return (
 		<button
-			ref={ref}
+			disabled={!ready}
 			aria-label={description}
 			title={label}
 			aria-pressed={active}
 			type="button"
 			onClick={onSelect}
-			className="relative flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-2.5 text-omp-md font-medium"
+			className="relative flex h-8 min-w-0 flex-1 items-center justify-center"
 		>
-			<Icon size={14} />
-			<span className="omp-inspector-tab-label">{label}</span>
+			<Icon aria-hidden size={14} />
 			{signal && (
 				<span
 					aria-hidden
@@ -93,7 +84,6 @@ export function PanelContainer() {
 	const setPanelTab = useUiStore(s => s.setPanelTab);
 	const togglePanel = useUiStore(s => s.togglePanel);
 	const activeTabId = useTabsStore(s => s.activeTabId);
-	const split = useTabsStore(s => s.split);
 	const routeReady = useActiveTabRouteReady();
 	const sessionKey = useSessionStore(state => `${state.cwd}:${state.sessionId ?? state.sessionFile ?? "new"}`);
 	const proposal = usePlanApprovalStore(state => state.pending);
@@ -103,15 +93,25 @@ export function PanelContainer() {
 	const visiblePanelTab = isChat && !CHAT_PANEL_TABS.has(panelTab) ? "files" : panelTab;
 	const agentsSignal = useAgentsTabSignal();
 
-	const viewportWidth = useViewportWidth();
+	const panelRef = useRef<HTMLElement>(null);
+	const [paneWidth, setPaneWidth] = useState(0);
 	const [width, setWidth] = useState<number | "full" | null>(null);
 	const dragging = useRef(false);
-	const minWidth = Math.min(MIN_WIDTH, viewportWidth);
-	const panelWidth =
-		width === "full" ? viewportWidth : Math.min(width ?? defaultPanelWidth(viewportWidth), viewportWidth);
-	const atLeftEdge = panelWidth === viewportWidth;
-	// Switch to an overlay once a docked pane would crowd the conversation.
-	const overlay = viewportWidth <= COMPACT_WIDTH || split || panelWidth > viewportWidth * 0.55;
+	const minWidth = Math.min(MIN_WIDTH, paneWidth);
+	const requestedWidth = width === "full" ? paneWidth : (width ?? Math.max(MIN_WIDTH, Math.round(paneWidth * 0.28)));
+	const panelWidth = Math.min(requestedWidth, paneWidth);
+	const atLeftEdge = panelWidth === paneWidth;
+
+	useLayoutEffect(() => {
+		const pane = panelRef.current?.parentElement;
+		if (!pane) return;
+		const measure = () => setPaneWidth(pane.clientWidth);
+		measure();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(measure);
+		observer.observe(pane);
+		return () => observer.disconnect();
+	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -147,10 +147,11 @@ export function PanelContainer() {
 
 	const onDrag = useCallback(
 		(e: ReactPointerEvent<HTMLDivElement>) => {
-			if (!dragging.current) return;
-			setWidth(e.clientX <= 0 ? "full" : Math.max(minWidth, viewportWidth - e.clientX));
+			const bounds = panelRef.current?.parentElement?.getBoundingClientRect();
+			if (!dragging.current || !bounds) return;
+			setWidth(e.clientX <= bounds.left ? "full" : Math.max(minWidth, Math.round(bounds.right - e.clientX)));
 		},
-		[minWidth, viewportWidth],
+		[minWidth],
 	);
 
 	const endDrag = useCallback(() => {
@@ -160,12 +161,9 @@ export function PanelContainer() {
 	return (
 		<aside
 			aria-busy={!routeReady}
-			data-inspector-overlay={overlay || undefined}
-			className={cx(
-				"omp-inspector flex flex-col border-l border-[var(--omp-border-muted)]",
-				overlay ? "absolute top-12 right-0 bottom-0 z-30 shadow-[var(--omp-shadow-lg)]" : "relative h-full shrink-0",
-			)}
-			style={{ width: panelWidth }}
+			ref={panelRef}
+			className="omp-inspector absolute inset-y-0 right-0 z-30 flex max-w-full flex-col border-l border-[var(--omp-border-muted)] shadow-[var(--omp-shadow-lg)]"
+			style={{ width: paneWidth > 0 ? panelWidth : "100%" }}
 		>
 			<div className="min-h-0 flex-1 overflow-hidden" inert={!routeReady}>
 				<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>
@@ -175,19 +173,18 @@ export function PanelContainer() {
 					{visiblePanelTab === "diff" && <DiffPanel />}
 					{visiblePanelTab === "files" && <FilesPanel />}
 					{visiblePanelTab === "terminal" && <TerminalPanel />}
-					{visiblePanelTab === "plan" && <div key={`${activeTabId}:${sessionKey}`} className="h-full">{proposal ? <PlanApprovalPanel /> : <PlanPanel />}</div>}
+					{visiblePanelTab === "plan" && (
+						<div key={`${activeTabId}:${sessionKey}`} className="h-full">
+							{proposal ? <PlanApprovalPanel /> : <PlanPanel />}
+						</div>
+					)}
 				</PanelErrorBoundary>
 			</div>
-			{/* Close stays available even while the focused session is switching. */}
-			<footer className="omp-inspector-footer flex h-12 shrink-0 items-center gap-2 border-t border-[var(--omp-border-muted)] pl-3">
+			<footer className="omp-inspector-footer flex h-12 shrink-0 items-center border-t border-[var(--omp-border-muted)] px-3">
 				<h2 className="sr-only">
 					{t("panel.title")} - {t("panel.subtitle")}
 				</h2>
-				<div
-					className="omp-segmented omp-tab-scroller no-drag min-w-0 flex-1"
-					inert={!routeReady}
-					onWheel={scrollStripOnWheel}
-				>
+				<div className="omp-segmented w-full">
 					<Glide activeKey={visiblePanelTab} selector='[aria-pressed="true"]' variant="thumb" />
 					{visibleTabs.map(({ id, labelKey, icon }) => {
 						const active = visiblePanelTab === id;
@@ -210,26 +207,27 @@ export function PanelContainer() {
 								active={active}
 								signal={id === "agents" && !active ? agentsSignal.tone : null}
 								onSelect={() => setPanelTab(id)}
+								ready={routeReady}
 							/>
 						);
 					})}
+					<button
+						aria-label={t("common.close")}
+						className="omp-pressable flex h-8 min-w-0 flex-1 items-center justify-center hover:bg-(--omp-selected-bg)"
+						onClick={togglePanel}
+						title={t("common.close")}
+						type="button"
+					>
+						<X aria-hidden size={16} />
+					</button>
 				</div>
-				<button
-					aria-label={t("common.close")}
-					className="no-drag omp-pressable mr-1 flex size-9 shrink-0 items-center justify-center rounded-lg text-(--omp-muted) hover:bg-(--omp-selected-bg) hover:text-(--omp-text)"
-					onClick={togglePanel}
-					title={t("common.close")}
-					type="button"
-				>
-					<X aria-hidden="true" size={17} />
-				</button>
 			</footer>
 			<div
 				role="separator"
 				aria-label={t("panel.resize")}
 				aria-orientation="vertical"
 				aria-valuemin={minWidth}
-				aria-valuemax={viewportWidth}
+				aria-valuemax={paneWidth}
 				aria-valuenow={Math.round(panelWidth)}
 				tabIndex={0}
 				onPointerDown={startDrag}
@@ -244,10 +242,7 @@ export function PanelContainer() {
 							? minWidth
 							: event.key === "End"
 								? "full"
-								: Math.min(
-										viewportWidth,
-										Math.max(minWidth, panelWidth + (event.key === "ArrowLeft" ? 24 : -24)),
-									),
+								: Math.min(paneWidth, Math.max(minWidth, panelWidth + (event.key === "ArrowLeft" ? 24 : -24))),
 					);
 				}}
 				className={cx(

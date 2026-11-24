@@ -39,7 +39,6 @@ import { WorkspaceDirsDialog } from "./components/dialogs/WorkspaceDirsDialog";
 import { WorktreeCloseDialog } from "./components/dialogs/WorktreeCloseDialog";
 import { WorktreeDialog } from "./components/dialogs/WorktreeDialog";
 import { ConfigWarningsBanner } from "./components/layout/ConfigWarningsBanner";
-import { PanelContainer } from "./components/layout/PanelContainer";
 import { Sidebar } from "./components/layout/Sidebar";
 import { SidecarBanner } from "./components/layout/SidecarBanner";
 import { SplitWorkspace } from "./components/layout/SplitWorkspace";
@@ -211,7 +210,7 @@ function FocusedSessionEffects() {
 }
 
 /**
- * Shell: Sidebar | (TitleBar / ChatStream / InputArea) | PanelContainer,
+ * Shell: Sidebar | (TitleBar / session panes with in-conversation Review),
  * with command palette, extension dialogs, and the model picker overlaid.
  * useRpcEvents() wires the IPC event stream into the stores exactly once.
  */
@@ -227,7 +226,6 @@ export function App() {
 	// Scheduled tasks: the main-process snapshot, live run progress, agent drafts.
 	useEffect(() => useSchedulerStore.getState().connect(), []);
 	const sidebarVisible = useUiStore(s => s.sidebarVisible);
-	const panelVisible = useUiStore(s => s.panelVisible);
 	const workspacePage = useUiStore(activeWorkspacePage);
 	const theme = useUiStore(s => s.theme);
 	const fontSize = useUiStore(s => s.fontSize);
@@ -908,7 +906,6 @@ export function App() {
 	const surface = (
 		<div
 			className="flex h-screen w-screen overflow-hidden text-[var(--omp-text)]"
-			data-inspector={panelVisible && !workspace ? "open" : "closed"}
 			data-sidebar={sidebarVisible ? "open" : "closed"}
 		>
 			{focusedRuntime && <FocusedSessionEffects />}
@@ -943,9 +940,6 @@ export function App() {
 					</div>
 				)}
 			</main>
-
-			{panelVisible && !workspace && <PanelContainer />}
-
 			<CommandPalette />
 			<ExtensionDialog />
 			<LinkMenuHost />

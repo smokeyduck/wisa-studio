@@ -81,16 +81,9 @@ function seedActiveTab(kind: "agent" | "chat"): void {
 }
 
 function drawerTabLabels(): string[] {
-	return [...document.querySelectorAll("aside button")].map(button => (button.textContent ?? "").trim());
-}
-
-function dispatchPointer(element: Element, type: string, clientX: number): void {
-	const event = new Event(type, { bubbles: true, cancelable: true });
-	Object.defineProperties(event, {
-		clientX: { value: clientX },
-		pointerId: { value: 1 },
-	});
-	element.dispatchEvent(event);
+	return [...document.querySelectorAll("aside footer button[aria-pressed]")].map(
+		button => button.getAttribute("title") ?? "",
+	);
 }
 
 function FileLinkHarness({ content = "[report](docs/report.md)" }: { content?: string }) {
@@ -142,67 +135,17 @@ describe("PanelContainer chat tab filter", () => {
 		}
 	});
 
-	it("brings a tab opened from elsewhere into view in a strip too narrow to show them all", async () => {
+	it("keeps the chosen view selected and lets the user close it from the same control", async () => {
 		seedActiveTab("agent");
-		useUiStore.setState({ panelTab: "overview", panelVisible: true });
-		const scrolledTo: string[] = [];
-		const proto = HTMLElement.prototype as unknown as { scrollIntoView?: (this: HTMLElement) => void };
-		const original = proto.scrollIntoView;
-		proto.scrollIntoView = function () {
-			scrolledTo.push(this.getAttribute("title") ?? "");
-		};
-		try {
-			await mount(<PanelContainer />);
-			scrolledTo.length = 0;
-			await act(async () => {
-				useUiStore.getState().setPanelTab("terminal");
-			});
-			await flush();
-			expect(scrolledTo).toEqual(["Terminal"]);
-		} finally {
-			if (original) proto.scrollIntoView = original;
-			else delete proto.scrollIntoView;
-		}
-	});
-
-	it("uses the available window width instead of a fixed narrow drawer", async () => {
-		Object.defineProperty(window, "innerWidth", { configurable: true, value: 2400 });
-		seedActiveTab("agent");
+		await act(async () => useUiStore.getState().setPanelTab("files"));
 		await mount(<PanelContainer />);
 
-		expect((document.querySelector("aside") as HTMLElement | null)?.style.width).toBe("672px");
-
-		await act(async () => {
-			Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });
-			window.dispatchEvent(new Event("resize"));
-		});
-		expect((document.querySelector("aside") as HTMLElement).style.width).toBe("360px");
-		expect(document.querySelector("aside")?.classList.contains("absolute")).toBe(true);
-	});
-
-	it("resizes from the window edge in both directions without snapping closed", async () => {
-		Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
-		seedActiveTab("agent");
-		await mount(<PanelContainer />);
-
-		const aside = document.querySelector("aside") as HTMLElement;
-		const separator = document.querySelector('[role="separator"]') as HTMLElement & {
-			setPointerCapture: (pointerId: number) => void;
-		};
-		separator.setPointerCapture = vi.fn();
-
-		await act(async () => {
-			dispatchPointer(separator, "pointerdown", 1037);
-			dispatchPointer(separator, "pointermove", 900);
-		});
-		expect(aside.style.width).toBe("540px");
-
-		await act(async () => {
-			dispatchPointer(separator, "pointermove", 1000);
-			dispatchPointer(separator, "pointerup", 1000);
-		});
-		expect(aside.style.width).toBe("440px");
-		expect(useUiStore.getState().panelVisible).toBe(true);
+		const files = document.querySelector('footer button[aria-label="Files"]');
+		const close = document.querySelector('footer button[aria-label="Close"]');
+		expect(files?.getAttribute("aria-pressed")).toBe("true");
+		expect(close?.parentElement).toBe(files?.parentElement);
+		await act(async () => close?.dispatchEvent(new Event("click", { bubbles: true })));
+		expect(useUiStore.getState().panelVisible).toBe(false);
 	});
 
 	it("opens a local markdown link inside the Files drawer", async () => {
