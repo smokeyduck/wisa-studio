@@ -78,7 +78,7 @@ Known limits: separate tabs are not an OS security boundary; a split holds two p
 
 The toolbar globe opens **WISA Browser**, a Chromium window inside Studio with a profile separate from Chrome or your default browser. It restores tabs and keeps persistent cookies and site storage across restarts. Restored addresses omit query strings and fragments; in-flight work and unsaved form input do not survive closing the browser.
 
-When you open WISA Browser from a ready agent tab, Studio connects it automatically without confirmation. In Code mode with `eval` and Browser enabled, the agent can open new tabs and work with any WISA Browser tab, including signed-in pages. Choose **Stop sharing** or close the window to disconnect. Your personal Chrome profile is not included.
+WISA Browser appears only after connecting to the agent tab that opened it; there is no sharing control or confirmation step. In Code mode with `eval` and Browser enabled, the agent can open new tabs and work with any WISA Browser tab, including signed-in pages. Close the window to disconnect. Your personal Chrome profile is not included.
 
 ### Use your own Chrome session (optional)
 

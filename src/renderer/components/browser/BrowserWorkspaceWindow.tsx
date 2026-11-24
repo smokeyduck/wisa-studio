@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Globe2, Link2, Plus, RotateCw, Unlink2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Globe2, Link2, Plus, RotateCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { BrowserWorkspaceAction, BrowserWorkspaceState } from "../../../shared/browser-workspace";
 import { cx } from "../../lib/format";
@@ -11,8 +11,7 @@ export function BrowserWorkspaceWindow() {
 	const t = useT();
 	const [state, setState] = useState<BrowserWorkspaceState>();
 	const [draft, setDraft] = useState<string | null>(null);
-	const [error, setError] = useState<"address" | "agent" | "action" | null>(null);
-	const [connecting, setConnecting] = useState(false);
+	const [error, setError] = useState<"address" | "action" | null>(null);
 	const addressRef = useRef<HTMLInputElement>(null);
 	const active = state?.pages.find(page => page.id === state.activeId);
 	const address = active?.url === "about:blank" ? "" : (active?.url ?? "");
@@ -37,15 +36,12 @@ export function BrowserWorkspaceWindow() {
 
 	async function run(action: BrowserWorkspaceAction) {
 		setError(null);
-		if (action.type === "connect") setConnecting(true);
 		try {
 			setState(await window.omp.browser.action(action));
-			if (action.type !== "connect" && action.type !== "disconnect") setDraft(null);
+			setDraft(null);
 			if (action.type === "new") addressRef.current?.focus();
 		} catch {
-			setError(action.type === "navigate" ? "address" : action.type === "connect" ? "agent" : "action");
-		} finally {
-			if (action.type === "connect") setConnecting(false);
+			setError(action.type === "navigate" ? "address" : "action");
 		}
 	}
 
@@ -155,22 +151,6 @@ export function BrowserWorkspaceWindow() {
 							{t(`browserWorkspace.error.${error}`)}
 						</span>
 					)}
-					<button
-						type="button"
-						disabled={connecting}
-						className="flex h-8 shrink-0 items-center gap-1 rounded border border-[var(--omp-border-muted)] px-2 text-xs disabled:opacity-50"
-						title={t(state?.connected ? "browserWorkspace.disconnect" : "browserWorkspace.shareHint")}
-						onClick={() => void run({ type: state?.connected ? "disconnect" : "connect" })}
-					>
-						{state?.connected ? <Unlink2 size={14} /> : <Link2 size={14} />}
-						{t(
-							connecting
-								? "common.loading"
-								: state?.connected
-									? "browserWorkspace.disconnect"
-									: "browserWorkspace.connect",
-						)}
-					</button>
 				</form>
 			</div>
 		</main>

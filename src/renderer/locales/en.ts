@@ -4239,13 +4239,8 @@ export const en: Record<string, string> = {
 	"browserWorkspace.back": "Back",
 	"browserWorkspace.forward": "Forward",
 	"browserWorkspace.address": "Enter a web address",
-	"browserWorkspace.connect": "Share with agent",
-	"browserWorkspace.disconnect": "Stop sharing",
-	"browserWorkspace.shareHint":
-		"Give the selected agent access to all tabs in this browser, including signed-in pages.",
 	"browserWorkspace.driven": "Agent is using this tab",
 	"browserWorkspace.error.address": "Could not open this address",
-	"browserWorkspace.error.agent": "Open this browser from a ready agent tab, then try again",
 	"browserWorkspace.error.action": "Browser action failed",
 	"titlebar.togglePanel": "Review changes and files",
 	"titlebar.review.changes": "{count} uncommitted file{plural} - review",

@@ -4036,13 +4036,8 @@ export const vi: Record<string, string> = {
 	"browserWorkspace.back": "Quay lại",
 	"browserWorkspace.forward": "Tiến tới",
 	"browserWorkspace.address": "Nhập địa chỉ web",
-	"browserWorkspace.connect": "Chia sẻ với agent",
-	"browserWorkspace.disconnect": "Dừng chia sẻ",
-	"browserWorkspace.shareHint":
-		"Cho agent đã chọn truy cập mọi tab trong trình duyệt này, kể cả các trang đã đăng nhập.",
 	"browserWorkspace.driven": "Agent đang sử dụng tab này",
 	"browserWorkspace.error.address": "Không mở được địa chỉ này",
-	"browserWorkspace.error.agent": "Mở trình duyệt từ tab agent đã sẵn sàng rồi thử lại",
 	"browserWorkspace.error.action": "Thao tác trình duyệt thất bại",
 	"titlebar.togglePanel": "Xem lại thay đổi và tệp",
 	"titlebar.review.changes": "{count} tệp chưa commit- xem lại",

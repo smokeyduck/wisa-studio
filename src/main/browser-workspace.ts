@@ -1,11 +1,11 @@
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { BrowserWindow, session, WebContentsView } from "electron";
 import Store from "electron-store";
 import type { BrowserWorkspaceAction, BrowserWorkspaceState } from "../shared/browser-workspace";
 import { IPC_EVENTS } from "../shared/ipc-types";
 import { getMainLanguage } from "./i18n";
 import type { RpcClient } from "./rpc-client";
-import { writeRuntimeLog } from "./runtime-log";
 
 const BLANK = "about:blank";
 const CHROME_HEIGHT = 88;
@@ -57,27 +57,51 @@ export class BrowserWorkspace {
 	#pages = new Map<number, Page>();
 	#active = 0;
 	#next = 0;
-	#target: (() => RpcClient | null) | null = null;
 	#connection: BrowserConnection | null = null;
-	#connectTimer: ReturnType<typeof setTimeout> | undefined;
+	#opening: Promise<void> | undefined;
 
-	async show(target: () => RpcClient | null): Promise<void> {
-		this.#target = target;
-		this.#cancelAutoConnect();
-		if (this.#connection && this.#connection.client !== target()) this.disconnect();
-		if (this.#win) {
-			this.#win.show();
-			this.#win.focus();
-			this.#publish();
-			this.#connectOnOpen();
-			return;
+	show(target: () => RpcClient | null): Promise<void> {
+		this.#opening ??= this.#show(target).finally(() => {
+			this.#opening = undefined;
+		});
+		return this.#opening;
+	}
+
+	async #show(target: () => RpcClient | null): Promise<void> {
+		const deadline = Date.now() + 15_000;
+		let client = target();
+		while (!client && Date.now() < deadline) {
+			await delay(250);
+			client = target();
 		}
+		if (!client) throw new Error("Agent tab is not ready");
+		const win = this.#win ?? (await this.#createWindow());
+		try {
+			if (target() !== client) throw new Error("Agent changed while opening the browser");
+			if (this.#connection?.client !== client) {
+				win.hide();
+				this.#detach();
+				await this.#connect(client);
+			}
+			if (this.#win !== win || this.#connection?.socket?.readyState !== WebSocket.OPEN) {
+				throw new Error("Browser relay is not ready");
+			}
+			win.show();
+			win.focus();
+		} catch (error) {
+			if (!win.isDestroyed()) win.destroy();
+			throw error;
+		}
+	}
+
+	async #createWindow(): Promise<BrowserWindow> {
 		const win = new BrowserWindow({
 			width: 1120,
 			height: 800,
 			minWidth: 460,
 			minHeight: 300,
 			title: "WISA Browser",
+			show: false,
 			autoHideMenuBar: true,
 			webPreferences: {
 				sandbox: true,
@@ -96,8 +120,7 @@ export class BrowserWorkspace {
 		win.on("close", () => this.#save());
 		win.on("closed", () => {
 			this.#win = null;
-			this.disconnect();
-			this.#target = null;
+			this.#detach();
 			for (const page of this.#pages.values()) {
 				if (!page.view.webContents.isDestroyed()) page.view.webContents.close();
 			}
@@ -114,7 +137,7 @@ export class BrowserWorkspace {
 		win.webContents.on("will-frame-navigate", event => event.preventDefault());
 		try {
 			await loaded;
-			if (this.#win === win) this.#connectOnOpen();
+			return win;
 		} catch (error) {
 			if (!win.isDestroyed()) win.destroy();
 			throw error;
@@ -149,12 +172,6 @@ export class BrowserWorkspace {
 			case "reload":
 				if (page?.getURL() !== BLANK) page?.reload();
 				break;
-			case "connect":
-				await this.#connect();
-				break;
-			case "disconnect":
-				this.disconnect();
-				break;
 			case "navigate": {
 				const address = action.address.trim();
 				const url =
@@ -169,10 +186,13 @@ export class BrowserWorkspace {
 		return this.#state();
 	}
 
-	disconnect(client?: RpcClient): void {
-		if (!client) this.#cancelAutoConnect();
+	disconnect(client: RpcClient): void {
+		if (this.#connection?.client === client) this.#win?.close();
+	}
+
+	#detach(): void {
 		const connection = this.#connection;
-		if (!connection || (client && connection.client !== client)) return;
+		if (!connection) return;
 		this.#connection = null;
 		connection.socket?.close();
 		connection.client.fire({ type: "browser_host_stop" });
@@ -182,7 +202,6 @@ export class BrowserWorkspace {
 			const { debugger: debug } = page.view.webContents;
 			if (debug.isAttached()) debug.detach();
 		}
-		this.#publish();
 	}
 
 	#add(url: string, select: boolean, deferNavigation = false): Page {
@@ -294,7 +313,6 @@ export class BrowserWorkspace {
 			back: page?.navigationHistory.canGoBack() ?? false,
 			forward: page?.navigationHistory.canGoForward() ?? false,
 			loading: page?.isLoading() ?? false,
-			connected: this.#connection?.socket?.readyState === WebSocket.OPEN,
 		};
 	}
 
@@ -330,33 +348,7 @@ export class BrowserWorkspace {
 		if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 	}
 
-	#cancelAutoConnect(): void {
-		clearTimeout(this.#connectTimer);
-		this.#connectTimer = undefined;
-	}
-
-	#connectOnOpen(): void {
-		this.#cancelAutoConnect();
-		const deadline = Date.now() + 15_000;
-		const connectWhenReady = () => {
-			this.#connectTimer = undefined;
-			if (!this.#win || this.#connection) return;
-			if (!this.#target?.()) {
-				// The originating sidecar can still be starting when the browser opens.
-				if (Date.now() < deadline) this.#connectTimer = setTimeout(connectWhenReady, 250);
-				return;
-			}
-			void this.#connect().catch(error => {
-				writeRuntimeLog({ source: "browser-workspace", message: error instanceof Error ? error.message : String(error) });
-			});
-		};
-		connectWhenReady();
-	}
-
-	async #connect(): Promise<void> {
-		if (this.#connection) return;
-		const client = this.#target?.();
-		if (!client) throw new Error("Agent tab is not ready");
+	async #connect(client: RpcClient): Promise<void> {
 		const connection: BrowserConnection = { client };
 		this.#connection = connection;
 		try {
@@ -395,7 +387,7 @@ export class BrowserWorkspace {
 			socket.onerror = () => open.reject(new Error("Browser relay connection failed"));
 			socket.onclose = () => {
 				open.reject(new Error("Browser relay closed"));
-				if (this.#connection === connection) this.disconnect();
+				if (this.#connection === connection) this.disconnect(client);
 			};
 			socket.onmessage = event => {
 				if (this.#connection !== connection) return;
@@ -417,7 +409,7 @@ export class BrowserWorkspace {
 				clearTimeout(timer);
 			}
 		} catch (error) {
-			if (this.#connection === connection) this.disconnect();
+			if (this.#connection === connection) this.#detach();
 			throw error;
 		}
 	}

@@ -4071,13 +4071,8 @@ export const ru: Record<string, string> = {
 	"browserWorkspace.back": "Назад",
 	"browserWorkspace.forward": "Вперёд",
 	"browserWorkspace.address": "Введите веб-адрес",
-	"browserWorkspace.connect": "Поделиться с агентом",
-	"browserWorkspace.disconnect": "Остановить доступ",
-	"browserWorkspace.shareHint":
-		"Выбранный агент получит доступ ко всем вкладкам этого браузера, включая страницы с активным входом.",
 	"browserWorkspace.driven": "Агент использует эту вкладку",
 	"browserWorkspace.error.address": "Не удалось открыть этот адрес",
-	"browserWorkspace.error.agent": "Откройте браузер из готовой вкладки агента и повторите попытку",
 	"browserWorkspace.error.action": "Действие в браузере не выполнено",
 	"titlebar.togglePanel": "Проверить изменения и файлы",
 	"titlebar.review.changes": "Незакоммиченных файлов: {count} - проверка",
