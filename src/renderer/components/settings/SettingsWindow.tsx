@@ -22,12 +22,14 @@ import { useTabRpc } from "../../lib/tab-rpc";
 import {
 	AlertTriangle,
 	ArrowLeft,
+	ArrowUpRight,
 	Blocks,
 	BookOpen,
 	Braces,
 	Cpu,
 	Folder,
 	HardDriveDownload,
+	HelpCircle,
 	Keyboard,
 	Network,
 	RefreshCw,
@@ -93,6 +95,8 @@ import {
 } from "./settings-schema-utils";
 import {
 	ADVANCED_TAB_ID,
+	APP_HELP_DESTINATIONS,
+	APP_HELP_TAB_ID,
 	buildSettingsNavGroups,
 	COMMANDS_TAB_ID,
 	FILL_HEIGHT_TAB_IDS,
@@ -125,6 +129,7 @@ const SETTINGS_NAV_ICONS: Record<string, typeof SlidersHorizontal> = {
 	[SSH_TAB_ID]: Server,
 	[UPDATES_TAB_ID]: HardDriveDownload,
 	[SHORTCUTS_TAB_ID]: Keyboard,
+	[APP_HELP_TAB_ID]: HelpCircle,
 	model: Cpu,
 	providers: Network,
 	files: Folder,
@@ -787,12 +792,12 @@ export function SettingsWindow() {
 		return GUI_SETTING_SEARCH_ITEMS.filter(
 			item =>
 				(item.id !== "configEditor" || window.omp?.platform === "darwin") &&
-				`${item.id} ${en[item.labelKey]} ${zh[item.labelKey]} ${ru[item.labelKey]} ${item.aliases}`
+				`${item.id} ${t(item.labelKey)} ${en[item.labelKey]} ${zh[item.labelKey]} ${ru[item.labelKey]} ${item.aliases}`
 					.normalize("NFKC")
 					.toLowerCase()
 					.includes(q),
 		);
-	}, [query]);
+	}, [query, t]);
 	const locateSetting = (targetTab: string, id: string) => {
 		setTab(targetTab);
 		setQuery("");
@@ -1018,6 +1023,41 @@ export function SettingsWindow() {
 										{tab === SSH_TAB_ID && <SshSettingsPage />}
 										{tab === UPDATES_TAB_ID && <UpdatesSettingsPage />}
 										{tab === SHORTCUTS_TAB_ID && <ShortcutsSettingsPage />}
+										{tab === APP_HELP_TAB_ID && (
+											<ul className="space-y-2">
+												{APP_HELP_DESTINATIONS.map(item => (
+													<li id={`setting-gui-${item.id}`} key={item.id}>
+														<button
+															aria-describedby={`app-help-${item.id}-description`}
+															aria-labelledby={`app-help-${item.id}-label`}
+															className="flex w-full items-center gap-3 rounded-lg border border-(--omp-border-muted) p-3 text-left hover:bg-(--omp-selected-bg)"
+															onClick={() => {
+																close();
+																useUiStore.getState()[item.action]();
+															}}
+															type="button"
+														>
+															<span className="min-w-0 flex-1">
+																<span className="block text-omp-md" id={`app-help-${item.id}-label`}>
+																	{t(item.labelKey)}
+																</span>
+																<span
+																	className="mt-1 block text-omp-sm text-(--omp-muted)"
+																	id={`app-help-${item.id}-description`}
+																>
+																	{t(item.descriptionKey)}
+																</span>
+															</span>
+															<ArrowUpRight
+																aria-hidden="true"
+																className="shrink-0 text-(--omp-muted)"
+																size={15}
+															/>
+														</button>
+													</li>
+												))}
+											</ul>
+										)}
 										{tab === GUI_TAB_ID && (
 											<>
 												<Section id="setting-gui-theme" title={t("settings.gui.themeSection")}>
@@ -1522,15 +1562,14 @@ export function SettingsWindow() {
 												className="mb-2 block w-full rounded-lg border border-(--omp-border-muted) p-3 text-left hover:bg-(--omp-selected-bg)"
 												onClick={() =>
 													locateSetting(
-														"tabId" in item ? item.tabId : GUI_TAB_ID,
+														("tabId" in item && item.tabId) || GUI_TAB_ID,
 														`setting-gui-${item.id === "followAgentTheme" ? "theme" : item.id}`,
 													)
 												}
 											>
 												<span className="text-omp-md">{t(item.labelKey)}</span>
 												<span className="mt-1 block text-omp-xs text-(--omp-dim)">
-													{t("tabId" in item ? `settings.tabs.${item.tabId}` : "settings.tabs.gui")} -{" "}
-													{item.id}
+													{t(`settings.tabs.${("tabId" in item && item.tabId) || GUI_TAB_ID}`)} - {item.id}
 												</span>
 											</button>
 										))}
@@ -1553,7 +1592,7 @@ export function SettingsWindow() {
 										))}
 									</>
 								)}
-								{!managementTab && (
+								{!managementTab && tab !== APP_HELP_TAB_ID && (
 									<div className="mt-8 border-t border-(--omp-border-muted) pt-4">
 										<span className="text-omp-sm text-(--omp-dim)">{t("settings.applyImmediately")}</span>
 									</div>

@@ -20,20 +20,17 @@ import {
 	GitBranchPlus,
 	GitPullRequest,
 	GripVertical,
-	Keyboard,
 	LayoutTemplate,
 	List,
 	ListChecks,
 	LoaderCircle,
 	type LucideIcon,
 	MessageCircle,
-	MessageSquareWarning,
 	MoreHorizontal,
 	Palette,
 	Pencil,
 	Pin,
 	PinOff,
-	Plug,
 	Plus,
 	Puzzle,
 	RefreshCw,
@@ -41,7 +38,6 @@ import {
 	ScanSearch,
 	Settings,
 	ShieldCheck,
-	Sparkles,
 	Square,
 	SquareCheck,
 	SquarePen,
@@ -344,6 +340,14 @@ export function Sidebar() {
 	const sessionId = useSessionStore(s => s.sessionId);
 	const agentTranscripts = useSidebarAgentTranscripts();
 	const cwd = useSessionStore(s => s.cwd);
+	const currentProject = activeTab?.kind === "chat" ? null : activeTab?.cwd || cwd;
+	const [visitedProjects, setVisitedProjects] = useState<ReadonlySet<string>>(() => new Set());
+	useEffect(() => {
+		if (!currentProject) return;
+		setVisitedProjects(previous =>
+			previous.has(currentProject) ? previous : new Set([...previous, currentProject]),
+		);
+	}, [currentProject]);
 	const isStreaming = useSessionStore(s => s.isStreaming);
 	const isCompacting = useSessionStore(s => s.isCompacting);
 	// Sidebar signal-light state for the ATTACHED session: a blocking
@@ -518,8 +522,8 @@ export function Sidebar() {
 		workspaceOrder,
 	]);
 	function isCollapsedGroup(groupCwd: string): boolean {
-		// Before the first explicit choice, open the current workspace by default.
-		return collapsed[groupCwd] ?? groupCwd !== cwd;
+		// An explicit disclosure choice wins; visiting another project never closes this one.
+		return collapsed[groupCwd] ?? (groupCwd !== currentProject && !visitedProjects.has(groupCwd));
 	}
 	// Counts name the sessions you started; subagent transcripts sit inside them.
 	const listedCount = (list: readonly SessionInfo[]) => list.filter(session => !isSubagentSession(session)).length;
@@ -1478,36 +1482,6 @@ export function Sidebar() {
 			onClick: () => useSchedulerStore.getState().openTasks(pendingTaskReviews > 0 ? { view: "review" } : undefined),
 		},
 	];
-	const appNavigation: NavigationItem[] = [
-		{
-			id: "capabilities",
-			page: "capabilities",
-			icon: Sparkles,
-			label: t("sidebar.navigation.capabilities"),
-			title: t("settings.capabilities.description"),
-			onClick: () => useUiStore.getState().openCapabilitiesPage(),
-		},
-		{
-			id: "providers",
-			icon: Plug,
-			label: t("titlebar.providers"),
-			onClick: () => useUiStore.getState().openProviders(),
-		},
-		{
-			id: "hotkeys",
-			icon: Keyboard,
-			label: t("titlebar.hotkeys"),
-			shortcut: actionChords.get("hotkeys")?.[0],
-			onClick: () => useUiStore.getState().openHotkeys(),
-		},
-		{
-			id: "feedback",
-			icon: MessageSquareWarning,
-			label: t("titlebar.feedback"),
-			title: t("titlebar.feedbackHint"),
-			onClick: () => useUiStore.getState().openFeedback(),
-		},
-	];
 	const insightNavigation: NavigationItem[] = [
 		{ id: "usage", icon: Coins, label: t("titlebar.usage"), onClick: () => useUiStore.getState().openUsage() },
 		{
@@ -1538,7 +1512,6 @@ export function Sidebar() {
 		{ id: "workspace", label: t("sidebar.navigation.workspace"), items: workspaceNavigation },
 		{ id: "library", label: t("sidebar.navigation.library"), items: libraryNavigation },
 		{ id: "insights", label: t("sidebar.navigation.insights"), items: insightNavigation },
-		{ id: "app", label: t("sidebar.navigation.app"), items: appNavigation },
 	];
 	const indexedNavigation = new Map(toolGroups.flatMap(group => group.items.map(item => [item.id, item] as const)));
 	const pinnedNavigation = pinnedNav

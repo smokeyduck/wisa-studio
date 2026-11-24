@@ -10,6 +10,8 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - Spaced out reasoning and execution disclosures in the conversation. Active subagents have separate transcript cards; finished and failed agents remain available in the right-hand Agents panel.
 - The model picker shows the session model and cached choices without waiting for provider catalog discovery or forcing a refresh on every open.
 - On Windows, switching between Work and Coding no longer reuses the wrong tool profile when a saved workspace path differs only in case or slash style. Coding tool profile settings identify the subagent tool as `task`.
+- The sidebar keeps visited workspaces expanded when switching sessions, unless explicitly collapsed. Memory, Skills, Plugins, and Templates are pinned by default when no pin list exists; saved choices are preserved.
+- Moved Wisa Capabilities, Providers & login, and Feedback from the sidebar to Settings → App & help, next to Keyboard shortcuts.
 
 ## [0.9.55] - 2026-11-24
 

@@ -1,12 +1,10 @@
-/**
- * Tests for the schema-driven settings window: closed-state rendering and the
- * pure tab/group bucketing contract that drives schema-tab rendering order.
- * (Open-state SSR assertions are not viable: react-dom/server renders
- * createPortal children as empty in this repo's test environment.)
- */
+/** Settings navigation, schema bucketing, and workspace handoff contracts. */
 
+import { parseHTML } from "linkedom";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SettingEntry } from "../../../shared/rpc-types";
 import { I18nProvider } from "../../lib/i18n";
 import { useUiStore } from "../../stores/ui";
@@ -214,11 +212,14 @@ describe("GUI settings visibility", () => {
 		expect(isAgentSchemaTab("model", { tabs: [{ id: "model" }] })).toBe(true);
 		expect(isAgentSchemaTab("gui", null)).toBe(false);
 		expect(isAgentSchemaTab("skills", null)).toBe(false);
+		expect(isAgentSchemaTab("app-help", null)).toBe(false);
 	});
 
-	it("omits the capabilities workspace page from Settings navigation", () => {
-		const pages = buildSettingsNavGroups(null).flatMap(group => group.items);
-		expect(pages.some(item => item.id === "capabilities")).toBe(false);
+	it("registers App & help and one shortcut editor without turning capabilities into a Settings page", () => {
+		const pages = buildSettingsNavGroups(null).flatMap(group => group.items.map(item => item.id));
+		expect(pages).toContain("app-help");
+		expect(pages.filter(id => id === "shortcuts")).toHaveLength(1);
+		expect(pages).not.toContain("capabilities");
 	});
 
 	it("explains why cached schema controls are locked while the sidecar is down", () => {
@@ -402,6 +403,60 @@ describe("SchemaTabContent zh translations", () => {
 });
 
 describe("SettingsWindow", () => {
+	it("finds App & help and closes Settings when opening each external destination", async () => {
+		const { document, window, HTMLElement, Event } = parseHTML("<html><body></body></html>");
+		vi.stubGlobal("document", document);
+		vi.stubGlobal(
+			"window",
+			Object.assign(window, {
+				omp: {
+					initialLanguage: "en",
+					prefs: { get: async () => undefined },
+					events: { onConfigUpdate: () => () => {} },
+				},
+			}),
+		);
+		vi.stubGlobal("HTMLElement", HTMLElement);
+		vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+		const root = createRoot(document.body as unknown as Element);
+		const clickButton = async (label: string) => {
+			const button = [...document.querySelectorAll("button")].find(item =>
+				item.textContent?.trim().startsWith(label),
+			);
+			if (!button) throw new Error(`No Settings button starting with ${label}`);
+			await act(async () => {
+				button.dispatchEvent(new Event("click", { bubbles: true }));
+			});
+		};
+		try {
+			await act(async () => {
+				root.render(
+					<I18nProvider>
+						<SettingsWindow />
+					</I18nProvider>,
+				);
+			});
+			const destinations = [
+				["Wisa Capabilities", { workspacePage: "capabilities" }],
+				["Providers & login", { workspacePage: "providersOpen", providersOpen: true }],
+				["Feedback", { feedbackOpen: true }],
+			] as const;
+			for (const [label, destination] of destinations) {
+				await act(async () => useUiStore.getState().openSettings());
+				await clickButton("App & help");
+				expect(document.querySelector("h1")?.textContent).toBe("App & help");
+				await clickButton(label);
+				expect(useUiStore.getState()).toMatchObject({ settingsOpen: false, ...destination });
+				expect(document.querySelector('[role="dialog"][aria-label="Settings"]')).toBeNull();
+			}
+		} finally {
+			await act(async () => root.unmount());
+			useUiStore.getState().returnToConversation();
+			useUiStore.getState().closeFeedback();
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("routes the appearance and interaction pages to the General destination", () => {
 		expect(resolveSettingsTarget("appearance")).toEqual({ tab: "gui" });
 		expect(resolveSettingsTarget("interaction")).toEqual({ tab: "gui" });

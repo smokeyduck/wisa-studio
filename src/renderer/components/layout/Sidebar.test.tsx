@@ -256,39 +256,35 @@ async function reloadSidebar(): Promise<void> {
 }
 
 describe("Sidebar menus and pinned ordering", () => {
-	it("unpins a promoted tool without reopening the index", async () => {
+	it("pins library shortcuts by default and keeps an explicit unpin after reload", async () => {
 		installMockOmp(LIST);
 		seedStores();
+		await useSidebarPrefs.getState().hydrate();
 		await mount(<Sidebar />);
 
 		const navigation = () => container.querySelector("[data-sidebar-navigation]");
-		expect(navigation()?.textContent).not.toContain("Plugins");
-
+		for (const name of ["Memory", "Skills", "Plugins", "Templates"]) {
+			expect(navigation()?.querySelector(`[aria-label="Unpin: ${name}"]`)).toBeTruthy();
+		}
 		const index = () => navigation()?.querySelector('button[aria-controls="sidebar-tool-index"]');
+		const unpin = navigation()?.querySelector('[aria-label="Unpin: Plugins"]');
+		await fire(unpin ?? null, "onClick");
+		await reloadSidebar();
+		expect(navigation()?.textContent).not.toContain("Plugins");
+		expect(navigation()?.querySelector('[aria-label="Unpin: Skills"]')).toBeTruthy();
+		expect(index()?.getAttribute("aria-expanded")).toBe("false");
 		await fire(index() ?? null, "onClick");
 		const pin = navigation()?.querySelector('[aria-label="Pin to top: Plugins"]');
 		await fire(pin ?? null, "onClick");
-
-		expect(useSidebarPrefs.getState().pinnedNav).toEqual(["plugins"]);
-		// Collapse the index so only the promoted shortcut can open the page.
 		await fire(index() ?? null, "onClick");
 		const promoted = [...(navigation()!.querySelectorAll("button") as unknown as Element[])].find(button =>
 			(button.textContent ?? "").includes("Plugins"),
 		);
-		expect(promoted).not.toBeUndefined();
-		await fire(promoted as Element, "onClick");
+		await fire(promoted ?? null, "onClick");
 		expect(useUiStore.getState().workspacePage).toBe("pluginsOpen");
-
-		const unpin = navigation()?.querySelector('[aria-label="Unpin: Plugins"]');
-		await fire(unpin ?? null, "onClick");
-		expect(useSidebarPrefs.getState().pinnedNav).toEqual([]);
-		expect(navigation()?.textContent).not.toContain("Plugins");
-		expect(index()?.getAttribute("aria-expanded")).toBe("false");
-		await fire(index() ?? null, "onClick");
-		expect(navigation()?.querySelector('[aria-label="Pin to top: Plugins"]')).toBeTruthy();
 	});
 
-	it("keeps session tools visible and opens app-wide tools from a grouped index", async () => {
+	it("keeps workspace tools in the grouped index and app help out of it", async () => {
 		installMockOmp(LIST);
 		seedStores();
 		await mount(<Sidebar />);
@@ -328,18 +324,10 @@ describe("Sidebar menus and pinned ordering", () => {
 		const insights = index?.querySelector('section[aria-labelledby="sidebar-tools-insights"]');
 		expect(insights?.textContent).toContain("Usage & quotas");
 		expect(insights?.textContent).toContain("Session stats");
-		const app = index?.querySelector('section[aria-labelledby="sidebar-tools-app"]');
-		expect(app?.textContent).toContain("Providers & login");
-		const capabilities = index?.querySelector('[data-sidebar-index-item="capabilities"] button');
-		await fire(capabilities ?? null, "onClick");
-		expect(useUiStore.getState().settingsOpen).toBe(false);
-		expect(useUiStore.getState().workspacePage).toBe("capabilities");
-		expect(capabilities?.getAttribute("aria-current")).toBe("page");
-		expect(indexToggle?.getAttribute("aria-expanded")).toBe("true");
-
-		const hotkeys = index?.querySelector('[data-sidebar-index-item="hotkeys"] button');
-		await fire(hotkeys ?? null, "onClick");
-		expect(useUiStore.getState().hotkeysOpen).toBe(true);
+		expect(index?.querySelector('section[aria-labelledby="sidebar-tools-app"]')).toBeNull();
+		for (const id of ["capabilities", "providers", "hotkeys", "feedback"]) {
+			expect(index?.querySelector(`[data-sidebar-index-item="${id}"]`)).toBeNull();
+		}
 
 		const commandCenter = navigation?.querySelector('button[data-command-center-entry="true"]');
 		// The hover hint names the first configured chord; the tooltip lists them all.
@@ -985,6 +973,32 @@ describe("Sidebar menus and pinned ordering", () => {
 
 		await fire(alphaHeader as unknown as TestElement, "onClick");
 		expect(alphaContent()?.getAttribute("data-state")).toBe("expanded");
+	});
+
+	it("keeps visited workspaces open across a session switch unless the user collapses them", async () => {
+		installMockOmp(LIST);
+		seedStores();
+		await mount(<Sidebar />);
+		const content = (project: string) => container.querySelector(`[data-session-group="/work/${project}"]`);
+		const select = (project: string, name: string) =>
+			act(async () => {
+				const cwd = `/work/${project}`;
+				const sessionPath = `${cwd}/${name}.jsonl`;
+				useTabsStore.setState({
+					tabs: [{ id: "t0", cwd, sessionPath, status: "ready", kind: "agent", unreadDone: false }],
+				});
+				useSessionStore.setState({ cwd, sessionId: sessionPath, sessionFile: sessionPath });
+			});
+
+		expect(content("alpha")?.textContent).toContain("Session /work/alpha/one");
+		expect(content("beta")).toBeNull();
+		await select("beta", "three");
+		expect(content("alpha")?.textContent).toContain("Session /work/alpha/one");
+		expect(content("beta")?.textContent).toContain("Session /work/beta/three");
+		await fire(container.querySelector('[data-workspace-group="/work/alpha"] button[aria-expanded]'), "onClick");
+		await select("alpha", "one");
+		expect(content("alpha")).toBeNull();
+		expect(content("beta")?.textContent).toContain("Session /work/beta/three");
 	});
 
 	it("pinned groups sort before unpinned; pinned sessions sort first inside their group", async () => {

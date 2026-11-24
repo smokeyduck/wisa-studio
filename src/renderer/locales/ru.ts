@@ -3594,6 +3594,7 @@ export const ru: Record<string, string> = {
 	"settings.tabs.ssh": "SSH-хосты",
 	"settings.tabs.updates": "Обновления",
 	"settings.tabs.shortcuts": "Сочетания клавиш",
+	"settings.tabs.app-help": "Приложение и справка",
 	"security.title": "Центр безопасности",
 	"security.subtitle": "Проверка текущего проекта перед выпуском изменений.",
 	"security.ready.enabled": "Защита включена",
@@ -4639,7 +4640,6 @@ export const ru: Record<string, string> = {
 	"sidebar.navigation.workspace": "Инструменты рабочих областей",
 	"sidebar.navigation.library": "Библиотека",
 	"sidebar.navigation.insights": "Использование и статистика",
-	"sidebar.navigation.app": "Приложение и справка",
 	"dock.todo.abandoned": "Заброшено: {abandoned}",
 	"chat.todoReminder.instruction":
 		"Продолжите работу над этими задачами или отметьте их выполненными, если они уже готовы.",

@@ -35,6 +35,7 @@ export const UPDATES_TAB_ID = "updates";
 /** Settings without UI metadata (advanced): searchable flat list. */
 export const ADVANCED_TAB_ID = "advanced";
 export const SHORTCUTS_TAB_ID = "shortcuts";
+export const APP_HELP_TAB_ID = "app-help";
 
 export const MANAGEMENT_TAB_IDS = new Set([
 	SKILLS_TAB_ID,
@@ -51,7 +52,13 @@ export const FILL_HEIGHT_TAB_IDS = new Set([SKILLS_TAB_ID, SSH_TAB_ID]);
 
 export function isAgentSchemaTab(tab: string, schema: { tabs: { id: string }[] } | null): boolean {
 	if (schema?.tabs.some(schemaTab => schemaTab.id === tab)) return true;
-	return !MANAGEMENT_TAB_IDS.has(tab) && tab !== GUI_TAB_ID && tab !== SHORTCUTS_TAB_ID && tab !== ADVANCED_TAB_ID;
+	return (
+		!MANAGEMENT_TAB_IDS.has(tab) &&
+		tab !== GUI_TAB_ID &&
+		tab !== SHORTCUTS_TAB_ID &&
+		tab !== APP_HELP_TAB_ID &&
+		tab !== ADVANCED_TAB_ID
+	);
 }
 
 export const SEARCHABLE_MANAGEMENT_TAB_IDS = new Set([
@@ -80,6 +87,7 @@ export function buildSettingsNavGroups(
 			items: [
 				{ id: GUI_TAB_ID, label: "General" },
 				{ id: SHORTCUTS_TAB_ID, label: "Keyboard shortcuts" },
+				{ id: APP_HELP_TAB_ID, label: "App & help" },
 			],
 		},
 		{ id: "models", items: [] },
@@ -122,6 +130,30 @@ export function buildSettingsNavGroups(
 	}
 	return groups.filter(group => group.items.length > 0);
 }
+
+export const APP_HELP_DESTINATIONS = [
+	{
+		id: "capabilities",
+		labelKey: "sidebar.navigation.capabilities",
+		descriptionKey: "settings.capabilities.description",
+		action: "openCapabilitiesPage",
+		aliases: "capabilities wisa features",
+	},
+	{
+		id: "providersAndLogin",
+		labelKey: "titlebar.providers",
+		descriptionKey: "cmd.providers.desc",
+		action: "openProviders",
+		aliases: "provider login sign in auth",
+	},
+	{
+		id: "feedback",
+		labelKey: "titlebar.feedback",
+		descriptionKey: "titlebar.feedbackHint",
+		action: "openFeedback",
+		aliases: "feedback report bug suggest feature github",
+	},
+] as const;
 
 /** Search metadata points to existing controls; it does not create a second settings store. */
 export const GUI_SETTING_SEARCH_ITEMS = [
@@ -198,6 +230,7 @@ export const GUI_SETTING_SEARCH_ITEMS = [
 		aliases:
 			"keymapOverrides keymapDisabled keyboard shortcuts hotkeys keybindings keys 快捷键 键盘 按键 горячие клавиши сочетания",
 	},
+	...APP_HELP_DESTINATIONS.map(item => ({ ...item, tabId: APP_HELP_TAB_ID })),
 	{
 		id: "launch",
 		tabId: ADVANCED_TAB_ID,

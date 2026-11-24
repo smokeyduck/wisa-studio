@@ -46,6 +46,25 @@ describe("sidebar-prefs store", () => {
 		expect(useSidebarPrefs.getState().pinnedSessions).toEqual(["/s/one.jsonl", "/s/two.jsonl"]);
 	});
 
+	it("starts with the default navigation pins when no preferences have been stored", async () => {
+		const pins = ["memory", "skills", "plugins", "templates"];
+		expect(useSidebarPrefs.getState().pinnedNav).toEqual(pins);
+		await useSidebarPrefs.getState().hydrate();
+		expect(useSidebarPrefs.getState().pinnedNav).toEqual(pins);
+	});
+
+	it.each([{ pins: [] }, { pins: ["templates", "scheduled-tasks", "memory"] }])(
+		"preserves navigation pins $pins from a stored blob and through routine writes",
+		async ({ pins }) => {
+			get.mockResolvedValueOnce({ pinnedNav: pins, lane: "work" });
+			await useSidebarPrefs.getState().hydrate();
+			expect(useSidebarPrefs.getState().pinnedNav).toEqual(pins);
+
+			useSidebarPrefs.getState().touchWorkspace("/work/a");
+			expect(set).toHaveBeenLastCalledWith("sidebar", expect.objectContaining({ pinnedNav: pins }));
+		},
+	);
+
 	it("sets and clears workspace aliases, dropping empty values", () => {
 		useSidebarPrefs.getState().setGroupAlias("/work/a", "  Frontend  ");
 		expect(useSidebarPrefs.getState().groupAliases).toEqual({ "/work/a": "Frontend" });
@@ -91,6 +110,7 @@ describe("sidebar-prefs store", () => {
 		await useSidebarPrefs.getState().hydrate();
 		expect(useSidebarPrefs.getState().pinnedGroups).toEqual(["/work/pinned"]);
 		expect(useSidebarPrefs.getState().pinnedSessions).toEqual(["/s/p.jsonl"]);
+		expect(useSidebarPrefs.getState().pinnedNav).toEqual(["memory", "skills", "plugins", "templates"]);
 		expect(useSidebarPrefs.getState().groupAliases).toEqual({ "/work/a": "Alias" });
 		expect(useSidebarPrefs.getState().workspaceLastUsed).toEqual({ "/work/a": 100 });
 		expect(useSidebarPrefs.getState().sessionLastUsed).toEqual({ "/s/p.jsonl": 200 });
@@ -100,7 +120,7 @@ describe("sidebar-prefs store", () => {
 		await useSidebarPrefs.getState().hydrate();
 		expect(get.mock.calls.length).toBe(calls);
 
-		// Unreadable prefs degrade to empty defaults, never a throw.
+		// Unreadable prefs degrade to defaults, never a throw.
 		useSidebarPrefs.getState().reset();
 		get.mockRejectedValueOnce(new Error("io"));
 		await useSidebarPrefs.getState().hydrate();

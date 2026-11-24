@@ -11,12 +11,13 @@ import { optimisticWrite } from "../lib/optimistic";
 import { toast } from "./toast";
 
 const PREFS_KEY = "sidebar";
+const DEFAULT_NAV_PINS = ["memory", "skills", "plugins", "templates"] as const;
 
 interface SidebarPrefsBlob {
 	registeredWorkspaces?: string[];
 	pinnedGroups?: string[];
 	pinnedSessions?: string[];
-	/** Navigation entries the user promoted out of the tool index, in pin order. */
+	/** Navigation pin order. Older routine writes included [], so an empty list is authoritative. */
 	pinnedNav?: string[];
 	archivedSessions?: string[];
 	groupAliases?: Record<string, string>;
@@ -147,7 +148,7 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 	registeredWorkspaces: [],
 	pinnedGroups: [],
 	pinnedSessions: [],
-	pinnedNav: [],
+	pinnedNav: [...DEFAULT_NAV_PINS],
 	archivedSessions: [],
 	groupAliases: {},
 	workspaceLastUsed: {},
@@ -166,7 +167,7 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 				registeredWorkspaces: validIds(blob?.registeredWorkspaces),
 				pinnedGroups: Array.isArray(blob?.pinnedGroups) ? blob.pinnedGroups : [],
 				pinnedSessions: Array.isArray(blob?.pinnedSessions) ? blob.pinnedSessions : [],
-				pinnedNav: validIds(blob?.pinnedNav),
+				pinnedNav: Array.isArray(blob?.pinnedNav) ? validIds(blob.pinnedNav) : [...DEFAULT_NAV_PINS],
 				archivedSessions: Array.isArray(blob?.archivedSessions) ? blob.archivedSessions : [],
 				groupAliases: blob?.groupAliases && typeof blob.groupAliases === "object" ? blob.groupAliases : {},
 				workspaceLastUsed: validRecencyMap(blob?.workspaceLastUsed),
@@ -344,7 +345,7 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 			registeredWorkspaces: [],
 			pinnedGroups: [],
 			pinnedSessions: [],
-			pinnedNav: [],
+			pinnedNav: [...DEFAULT_NAV_PINS],
 			archivedSessions: [],
 			groupAliases: {},
 			workspaceLastUsed: {},
