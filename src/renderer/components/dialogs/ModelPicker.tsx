@@ -10,6 +10,7 @@ import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	useCallback,
 	useEffect,
+	useEffectEvent,
 	useId,
 	useLayoutEffect,
 	useMemo,
@@ -63,7 +64,7 @@ export function ModelPicker() {
 	const t = useT();
 	const open = useUiStore(state => state.modelPickerOpen);
 	const close = useUiStore(state => state.closeModelPicker);
-	const availableModels = useModelStore(state => state.availableModels);
+	const catalog = useModelStore(state => state.availableModels);
 	const refreshPending = useModelStore(state => state.catalogRefreshPending);
 	const current = useModelStore(state => state.model);
 	const refreshAvailableModels = useModelStore(state => state.refreshAvailableModels);
@@ -72,6 +73,18 @@ export function ModelPicker() {
 	// over-context warning and compact-first on pick (TUI markOverContext parity).
 	const contextUsage = useSessionStore(state => state.contextUsage);
 	const sidecarReady = useSessionStore(state => state.status) === "ready";
+	// A cold tab already knows its live model. Keep it usable while the first
+	// catalog read is in flight or the sidecar has only a partial catalog.
+	const availableModels = useMemo(() => {
+		if (
+			current &&
+			(catalog.length === 0 ||
+				(refreshPending && !catalog.some(model => model.provider === current.provider && model.id === current.id)))
+		) {
+			return [current, ...catalog];
+		}
+		return catalog;
+	}, [catalog, current, refreshPending]);
 
 	const [query, setQuery] = useState("");
 	const [login, setLogin] = useState<{ rpc: typeof tabRpc; providers: LoginProvider[] }>();
@@ -155,7 +168,7 @@ export function ModelPicker() {
 	// Keep showing the scoped catalog while discovery revalidates it. Reads and
 	// model_catalog_update pushes share the store's generation guard.
 	const load = useCallback(
-		async (failedCopy?: string): Promise<void> => {
+		async (forceRefresh = false, failedCopy?: string): Promise<void> => {
 			const version = ++requestVersion.current;
 			setLoading(true);
 			setError(null);
@@ -165,7 +178,7 @@ export function ModelPicker() {
 				return;
 			}
 			try {
-				await refreshAvailableModels(true);
+				await refreshAvailableModels(forceRefresh);
 			} catch (cause) {
 				if (version === requestVersion.current) setError(failedCopy ?? describeProviderError(cause));
 			} finally {
@@ -174,7 +187,18 @@ export function ModelPicker() {
 		},
 		[refreshAvailableModels, sidecarReady, t],
 	);
+	const loadOnOpen = useEffectEvent(() => {
+		if (sidecarReady && refreshPending) {
+			// The in-progress discovery will push its completed snapshot. Another
+			// read would only queue behind that discovery and delay model switches.
+			setLoading(false);
+			setError(null);
+			return;
+		}
+		void load();
+	});
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset search and focus when the open picker changes tab.
 	useEffect(() => {
 		if (!open) return undefined;
 		setQuery("");
@@ -184,13 +208,14 @@ export function ModelPicker() {
 		return () => cancelAnimationFrame(frame);
 	}, [open, tabId]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reload when the tab or its connection changes; not on catalog pushes.
 	useEffect(() => {
 		if (!open) return;
-		void load();
+		loadOnOpen();
 		return () => {
 			requestVersion.current++;
 		};
-	}, [open, load]);
+	}, [open, sidecarReady, tabId]);
 
 	useEffect(() => {
 		if (!open || !sidecarReady) return;
@@ -404,7 +429,7 @@ export function ModelPicker() {
 						ref={inputRef}
 						value={query}
 					/>
-					{refreshing && availableModels.length > 0 && (
+					{refreshing && showOptions && (
 						<span title={t("modelPicker.loading")} role="status" aria-label={t("modelPicker.loading")}>
 							<Spinner size="sm" />
 						</span>
@@ -426,7 +451,7 @@ export function ModelPicker() {
 						<button
 							type="button"
 							className="rounded-md border border-(--omp-border-muted) px-3 py-1 text-omp-sm font-medium text-(--omp-text) hover:bg-(--omp-selected-bg)"
-							onClick={() => void load(t("modelPicker.stillNotResponding"))}
+							onClick={() => void load(true, t("modelPicker.stillNotResponding"))}
 							disabled={!sidecarReady}
 						>
 							{t("modelPicker.retry")}
@@ -440,7 +465,7 @@ export function ModelPicker() {
 					ref={listRef}
 					role={showOptions ? "listbox" : undefined}
 				>
-					{availableModels.length === 0 && refreshing ? (
+					{!showOptions && refreshing ? (
 						<div className="flex items-center justify-center gap-2 py-10">
 							<Spinner size="sm" />
 							<span className="text-omp-xs text-(--omp-dim)">{t("modelPicker.loading")}</span>
@@ -449,7 +474,7 @@ export function ModelPicker() {
 						error ? null : (
 							<div className="py-10 text-center text-omp-xs text-(--omp-dim)">{t("modelPicker.empty")}</div>
 						)
-					) : groups.length === 0 ? (
+					) : !showOptions ? (
 						<div className="py-10 text-center text-omp-xs text-(--omp-dim)">
 							{t("modelPicker.noMatch", { query })}
 						</div>

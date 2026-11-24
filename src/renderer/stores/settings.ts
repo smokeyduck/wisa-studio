@@ -43,7 +43,7 @@ export interface SettingsStore {
 	pasteMenuThreshold: number;
 	/** Agent `emojiAutocomplete` setting: `:name:`/emoticon completion and expansion in the composer. */
 	emojiAutocomplete: boolean;
-	/** Agent `display.pinnedAgents` setting: the dock Agents card is hidden, a summary, or the full list. */
+	/** Agent `display.pinnedAgents` setting for hiding active cards or showing their current progress. */
 	pinnedAgents: PinnedAgentsMode;
 	setFromState: (state: RpcSessionState) => void;
 	setApprovalMode: (mode: ApprovalMode) => Promise<void>;
@@ -86,7 +86,7 @@ const initialState = {
 	pasteMenuThreshold: 100,
 	// Schema default (settings-schema.ts emojiAutocomplete): on.
 	emojiAutocomplete: true,
-	// Schema default (settings.ts display.pinnedAgents): summary card.
+	// The Core schema defaults to collapsed; active cards show a short summary.
 	pinnedAgents: "collapsed" as PinnedAgentsMode,
 };
 

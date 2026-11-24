@@ -1595,7 +1595,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	},
 	"display.pinnedAgents": {
 		label: "固定代理列表",
-		description: "编辑器上方固定的活跃代理跳转列表（off 隐藏；collapsed 显示少量行并提供展开器；full 列出全部）。",
+		description: "在编辑器上方显示各个活跃代理的独立卡片（off 隐藏；collapsed 简略；full 显示当前进度）。已结束的代理仍在侧栏中。",
 	},
 	"display.showTurnTime": {
 		label: "显示回合耗时",

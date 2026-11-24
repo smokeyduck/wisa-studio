@@ -139,24 +139,23 @@ describe("SubagentTranscriptBlock", () => {
 		expect(containerText()).toBe("");
 	});
 
-	it("keeps real rows and model facts visible after the agents finish", async () => {
-		useSubagentsStore.getState().setSnapshots([
-			snap({ agent: "scout", progress: progress({ resolvedModel: "openai-codex/gpt-5.6-sol:max" }) }),
-			snap({ id: "a2", index: 2, agent: "reviewer", status: "completed" }),
-		]);
+	it("leaves only active cards in the transcript without deleting sidebar history", async () => {
+		const running = snap({ agent: "scout", progress: progress({ resolvedModel: "openai-codex/gpt-5.6-sol:max" }) });
+		const done = snap({ id: "a2", index: 2, agent: "reviewer", status: "completed" });
+		const failed = snap({ id: "a3", index: 3, agent: "builder", status: "failed" });
+		const stale = snap({ id: "a4", index: 4, agent: "stale worker", live: false });
+		useSubagentsStore.getState().setSnapshots([running, done, failed, stale]);
 		await mount(<SubagentTranscriptBlock dialogHost={null} />);
-		expect(containerText()).toContain("1/2");
+		expect(container.querySelectorAll('[aria-haspopup="dialog"]')).toHaveLength(1);
 		expect(containerText()).toContain("openai-codex/gpt-5.6-sol:max");
 		expect(containerText()).toContain("12.3k tokens");
 		expect(containerText()).toContain("$0.4321");
 		await act(async () => {
-			useSubagentsStore.getState().setSnapshots([
-				snap({ agent: "scout", status: "completed" }),
-				snap({ id: "a2", index: 2, agent: "reviewer", status: "completed" }),
-			]);
+			useSubagentsStore.getState().setSnapshots([{ ...running, status: "completed" }, done, failed, stale]);
 		});
-		expect(containerText()).toContain("0/2");
-		expect(container.querySelectorAll('[aria-haspopup="dialog"]')).toHaveLength(2);
+		expect(containerText()).toBe("");
+		expect(useSubagentsStore.getState().subagents.get(running.id)?.status).toBe("completed");
+		expect(useSubagentsStore.getState().subagents.get(failed.id)?.status).toBe("failed");
 	});
 
 	it("loads the clicked row’s transcript from its owning tab and centers it in that chat host", async () => {
@@ -192,16 +191,14 @@ describe("SubagentTranscriptBlock", () => {
 		}
 	});
 
-	it("reveals all session rows from a large compact preview", async () => {
-		useSubagentsStore.getState().setSnapshots(Array.from({ length: 8 }, (_, index) =>
-			snap({ id: `row-${index}`, index: index + 1, status: "completed", lastUpdate: index }),
-		));
+	it("renders each active subagent as a separate card, including beyond five agents", async () => {
+		useSubagentsStore
+			.getState()
+			.setSnapshots(Array.from({ length: 8 }, (_, index) => snap({ id: `row-${index}`, index: index + 1 })));
 		await mount(<SubagentTranscriptBlock dialogHost={null} />);
-		expect(container.querySelectorAll('[aria-haspopup="dialog"]')).toHaveLength(5);
-		const viewAll = [...container.querySelectorAll("button")].find(button => button.textContent?.includes("View all 8 agents"));
-		if (!viewAll) throw new Error("missing full roster control");
-		await act(async () => viewAll.click());
-		expect(container.querySelectorAll('[aria-haspopup="dialog"]')).toHaveLength(8);
+		const buttons = [...container.querySelectorAll('[aria-haspopup="dialog"]')];
+		expect(buttons).toHaveLength(8);
+		expect(buttons.every(button => button.parentElement?.parentElement === container)).toBe(true);
 	});
 
 	it("polls get_subagents while streaming independently of the transcript block and stops when the turn ends", async () => {

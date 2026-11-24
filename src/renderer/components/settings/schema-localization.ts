@@ -9,7 +9,14 @@ import { ZH_GROUP_TITLES, ZH_SETTINGS } from "./schema-zh";
 export function settingTranslation(language: Language, path: string) {
 	if (language === "ru") return RU_SETTINGS[path];
 	if (language === "vi") return VI_SETTINGS[path];
-	return language === "zh" ? ZH_SETTINGS[path] : undefined;
+	if (language === "zh") return ZH_SETTINGS[path];
+	if (path === "display.pinnedAgents") {
+		return {
+			label: "Pinned agents",
+			description:
+				"Separate cards for active agents above the composer (Off: hide; Collapsed: brief; Full: show current progress). Finished agents stay in the sidebar.",
+		};
+	}
 }
 
 export function schemaGroupTitle(language: Language, title: string): string {

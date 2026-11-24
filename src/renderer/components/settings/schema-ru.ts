@@ -274,7 +274,7 @@ export const RU_SETTINGS: Record<string, { label?: string; description?: string 
 	"display.pinnedAgents": {
 		label: "Закреплённые агенты",
 		description:
-			"Список переходов к закреплённым активным агентам над редактором (off: скрыть; collapsed: показать несколько строк с кнопкой разворота; full: показать все)",
+			"Отдельные карточки активных агентов над редактором (off: скрыть; collapsed: кратко; full: с текущим прогрессом). Завершённые агенты остаются в боковой панели.",
 	},
 	"display.subagentLivePreview": {
 		label: "Предпросмотр субагента",

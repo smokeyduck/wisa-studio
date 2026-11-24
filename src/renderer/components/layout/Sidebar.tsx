@@ -91,7 +91,7 @@ import { usePendingSkillReviews } from "../../stores/skill-review";
 import { type SplitAxis, useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
 import { activeWorkspacePage, useEffectiveKeymapOverrides, useUiStore, type WorkspacePageId } from "../../stores/ui";
-import { useDefaultWorkspace } from "../../stores/workspace-mode";
+import { isWorkCwd, useDefaultWorkspace } from "../../stores/workspace-mode";
 import {
 	SessionAgentsScope,
 	type SidebarAgentsInfo,
@@ -417,7 +417,7 @@ export function Sidebar() {
 		// loading) still knows its folder — enough to tell the two lanes apart.
 		const cwd = active ? familyRoot(active).cwd : activeTab?.kind === "chat" ? null : activeTab?.cwd;
 		if (!cwd) return;
-		const next = cwd === defaultWorkspace ? "work" : "code";
+		const next = isWorkCwd(cwd, defaultWorkspace) ? "work" : "code";
 		if (next !== useSidebarPrefs.getState().lane) void setLane(next);
 	}, [
 		activeTab?.kind,
@@ -446,7 +446,7 @@ export function Sidebar() {
 			}
 			const root = familyRoot(session);
 			if (root.kind === "chat" || !root.cwd) projectlessSessions.push(session);
-			else if (root.cwd === defaultWorkspace) workSessions.push(session);
+			else if (isWorkCwd(root.cwd, defaultWorkspace)) workSessions.push(session);
 			else projectSessions.push(session);
 		}
 		return {
@@ -462,7 +462,7 @@ export function Sidebar() {
 		() =>
 			(session: SessionInfo): boolean => {
 				const root = familyRoot(session);
-				const isWork = root.kind !== "chat" && root.cwd === defaultWorkspace;
+				const isWork = root.kind !== "chat" && isWorkCwd(root.cwd, defaultWorkspace);
 				return lane === "work" ? isWork : !isWork;
 			},
 		[lane, familyRoot, defaultWorkspace],

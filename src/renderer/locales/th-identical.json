@@ -46,7 +46,6 @@
 	"debug.col.id",
 	"debug.meta.exitCode",
 	"diffPanel.mode.repository",
-	"dock.agents",
 	"dock.queue.steering",
 	"extPanel.commands.source.mcp_prompt",
 	"extPanel.commands.source.skill",

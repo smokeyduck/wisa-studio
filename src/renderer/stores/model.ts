@@ -69,6 +69,15 @@ interface CatalogSnapshot {
 	generation: number;
 }
 
+/** Pending discovery may omit cached rows, but models it already reports are usable. */
+function mergePendingModels(cached: ModelInfo[], partial: ModelInfo[]): ModelInfo[] {
+	if (partial.length === 0) return cached;
+	if (cached.length === 0) return partial;
+	const models = new Map(cached.map(model => [JSON.stringify([model.provider, model.id]), model]));
+	for (const model of partial) models.set(JSON.stringify([model.provider, model.id]), model);
+	return [...models.values()];
+}
+
 const initialState = {
 	model: null as ModelInfo | null,
 	thinkingLevel: undefined as ThinkingLevel | undefined,
@@ -92,15 +101,17 @@ const initialState = {
 export const createModelStore = (command: TabCommand = activeTabCommand) =>
 	createStore<ModelStore>()((set, get) => {
 		let catalogEpoch = 0;
+		let availableModelsRead: Promise<AvailableModelsResult> | undefined;
 		const applyCatalog = (snapshot: CatalogSnapshot): void => {
 			set(state => {
 				if (snapshot.generation < state.catalogGeneration) return state;
-				// Discovery can report a partial list while its provider requests run.
-				// Keep warm rows until a completed read or push replaces them.
-				const keepModels = snapshot.refreshPending && state.availableModels.length > 0;
 				const keepProviders = snapshot.refreshPending && state.providers.length > 0;
 				return {
-					...(!keepModels && snapshot.models ? { availableModels: snapshot.models } : {}),
+					...(snapshot.models && {
+						availableModels: snapshot.refreshPending
+							? mergePendingModels(state.availableModels, snapshot.models)
+							: snapshot.models,
+					}),
 					...(!keepProviders && snapshot.providers ? { providers: snapshot.providers } : {}),
 					...(snapshot.discoveryStates ? { discoveryStates: snapshot.discoveryStates } : {}),
 					...(snapshot.refreshPending !== undefined ? { catalogRefreshPending: snapshot.refreshPending } : {}),
@@ -145,7 +156,17 @@ export const createModelStore = (command: TabCommand = activeTabCommand) =>
 					slowModeScope: state.slowModeScope ?? null,
 					tokensPerSecond: state.tokensPerSecond,
 				}),
-			refreshAvailableModels: (forceRefresh = false) => refreshCatalog("get_available_models", forceRefresh),
+			refreshAvailableModels: (forceRefresh = false) => {
+				if (forceRefresh) return refreshCatalog("get_available_models", true);
+				// Ready-time model preferences and the picker may read together. Only
+				// queue one cache-aware read on the sidecar's serial command loop.
+				if (availableModelsRead) return availableModelsRead;
+				const read = refreshCatalog("get_available_models", false).finally(() => {
+					if (availableModelsRead === read) availableModelsRead = undefined;
+				});
+				availableModelsRead = read;
+				return read;
+			},
 			refreshProviders: (forceRefresh = false) => refreshCatalog("get_providers", forceRefresh),
 			applyCatalogUpdate: update =>
 				applyCatalog({
@@ -180,6 +201,7 @@ export const createModelStore = (command: TabCommand = activeTabCommand) =>
 			},
 			reset: () => {
 				catalogEpoch++;
+				availableModelsRead = undefined;
 				set(initialState);
 			},
 		};

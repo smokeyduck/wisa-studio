@@ -47,7 +47,7 @@ it("refreshes Work choices on restart and leaves Coding, Chat, and scheduled run
 	});
 	sidecars.push(work, coding, chat, scheduled);
 	fixture.prefs.set("launchProfiles", { [work.cwd]: { tools: ["bash", "write"] } });
-	fixture.prefs.set(CODING_TOOL_PROFILE_PREF, { disabled: ["bash", "grep"], editMode: "replace" });
+	fixture.prefs.set(CODING_TOOL_PROFILE_PREF, { disabled: ["bash", "grep", "task"], editMode: "replace" });
 	const launch = () => {
 		const [, args, { env }] = fixture.spawn.mock.lastCall!;
 		return {
@@ -75,7 +75,15 @@ it("refreshes Work choices on restart and leaves Coding, Chat, and scheduled run
 
 	coding.start();
 	expect(fixture.spawn.mock.lastCall?.[2].env.WISA_STUDIO_DEFAULTS).toBe("1");
-	expect(launch()).toEqual({ args: ["--mode", "rpc-ui"], profile: "coding:grep,bash", edit: "replace", btw: "1" });
+	expect(launch()).toEqual({
+		args: ["--mode", "rpc-ui"],
+		profile: "coding:grep,bash,task",
+		edit: "replace",
+		btw: "1",
+	});
+	fixture.prefs.delete(CODING_TOOL_PROFILE_PREF);
+	coding.restart();
+	expect(launch()).toEqual({ args: ["--mode", "rpc-ui"], profile: "", edit: "hashline", btw: "1" });
 	chat.start();
 	expect(fixture.spawn.mock.lastCall?.[2].env.WISA_STUDIO_DEFAULTS).toBe("1");
 	expect(launch()).toEqual({ args: ["--mode", "rpc-ui", "--chat"], profile: "", edit: "", btw: "0" });

@@ -131,6 +131,29 @@ describe("deriveThinkingSelectors", () => {
 });
 
 describe("model catalog reads", () => {
+	it("shares overlapping cache-aware model reads but still lets explicit refreshes reload discovery", async () => {
+		const pending = Promise.withResolvers<RpcResponse>();
+		const command = vi.fn(() => pending.promise);
+		store = createModelStore(command);
+		const read = store.getState().refreshAvailableModels();
+		expect(store.getState().refreshAvailableModels()).toBe(read);
+		const forced = store.getState().refreshAvailableModels(true);
+		expect(command.mock.calls).toEqual([
+			[{ type: "get_available_models", forceRefresh: false }],
+			[{ type: "get_available_models", forceRefresh: true }],
+		]);
+
+		pending.resolve({
+			type: "response",
+			command: "get_available_models",
+			success: true,
+			data: { models: [minimax], generation: 1, refreshPending: false },
+		});
+		await Promise.all([read, forced]);
+		expect(await store.getState().refreshAvailableModels()).toMatchObject({ models: [minimax], generation: 1 });
+		expect(command).toHaveBeenCalledTimes(3);
+	});
+
 	it("returns the newer catalog push to callers even when the pending read finishes later", async () => {
 		const pending = Promise.withResolvers<RpcResponse>();
 		store = createModelStore(() => pending.promise);

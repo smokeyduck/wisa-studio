@@ -26,6 +26,7 @@ function ToolChoices<T extends string>({
 	isChecked: (tool: T) => boolean;
 	onChange: (tool: T, checked: boolean) => void;
 }) {
+	const t = useT();
 	return (
 		<div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3">
 			{tools.map(tool => (
@@ -37,7 +38,7 @@ function ToolChoices<T extends string>({
 						onChange={event => onChange(tool, event.target.checked)}
 						type="checkbox"
 					/>
-					<code>{tool}</code>
+					{tool === "task" ? <span>{t("settings.toolProfiles.subagents")}</span> : <code>{tool}</code>}
 				</label>
 			))}
 		</div>

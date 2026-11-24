@@ -151,13 +151,40 @@ describe("ModelPicker vendor groups", () => {
 		expect(provider?.classList.contains("text-(--omp-text)")).toBe(true);
 	});
 
+	it("opens cold with the live model and lets the user pick it while discovery is pending", async () => {
+		const pending = Promise.withResolvers<RpcResponse>();
+		command.mockImplementationOnce(() => pending.promise);
+		useModelStore.setState({ model: { provider: "example", id: "live", name: "Live model" } });
+		await openPicker();
+
+		const option = panel()?.querySelector('[role="option"][aria-selected="true"]');
+		expect(option?.textContent).toContain("Live model");
+		expect(option?.hasAttribute("disabled")).toBe(false);
+		await act(async () => {
+			option?.dispatchEvent(new Event("click", { bubbles: true }));
+		});
+		expect(command).toHaveBeenCalledWith(
+			{ type: "set_model", provider: "example", modelId: "live" },
+			expect.any(Number),
+		);
+
+		await act(async () => {
+			pending.resolve({
+				type: "response",
+				command: "get_available_models",
+				success: true,
+				data: { models: CATALOG, generation: 1, refreshPending: false },
+			});
+		});
+	});
+
 	it("shows cached rows immediately and keeps them through a bounded refresh", async () => {
 		const pending = Promise.withResolvers<RpcResponse>();
 		command.mockImplementationOnce(() => pending.promise);
 		useModelStore.setState({ availableModels: CATALOG, catalogGeneration: 1 });
 		await openPicker();
 
-		expect(command).toHaveBeenCalledWith({ type: "get_available_models", forceRefresh: true }, undefined);
+		expect(command).toHaveBeenCalledWith({ type: "get_available_models", forceRefresh: false }, undefined);
 		expect(panel()?.querySelectorAll('[role="option"]').length).toBe(CATALOG.length);
 
 		await act(async () => {
@@ -165,11 +192,22 @@ describe("ModelPicker vendor groups", () => {
 				type: "response",
 				command: "get_available_models",
 				success: true,
-				data: { models: [], refreshPending: true, discoveryStates: [], generation: 1 },
+				data: {
+					models: [{ provider: "wisa", id: "discovered", name: "Discovered model" }],
+					refreshPending: true,
+					discoveryStates: [],
+					generation: 1,
+				},
 			});
 		});
-		expect(panel()?.querySelectorAll('[role="option"]').length).toBe(CATALOG.length);
+		expect(panel()?.querySelectorAll('[role="option"]').length).toBe(CATALOG.length + 1);
+		expect(panel()?.textContent).toContain("Discovered model");
 		expect(panel()?.querySelector('[role="listbox"]')?.getAttribute("aria-busy")).toBe("true");
+
+		await act(async () => useUiStore.getState().closeModelPicker());
+		await act(async () => useUiStore.getState().openModelPicker());
+		expect(command.mock.calls.filter(([request]) => request.type === "get_available_models")).toHaveLength(1);
+		expect(panel()?.querySelectorAll('[role="option"]').length).toBe(CATALOG.length + 1);
 
 		await act(async () => {
 			useModelStore.getState().applyCatalogUpdate({
@@ -197,6 +235,13 @@ describe("ModelPicker vendor groups", () => {
 
 		expect(panel()?.querySelectorAll('[role="option"]').length).toBe(CATALOG.length);
 		expect(panel()?.textContent).toContain(translate("modelPicker.retry"));
+		const retry = Array.from(panel()?.querySelectorAll("button") ?? []).find(
+			button => button.textContent === translate("modelPicker.retry"),
+		);
+		await act(async () => {
+			retry?.dispatchEvent(new Event("click", { bubbles: true }));
+		});
+		expect(command).toHaveBeenCalledWith({ type: "get_available_models", forceRefresh: true }, undefined);
 	});
 
 	it("shows a human model name in the open group", async () => {

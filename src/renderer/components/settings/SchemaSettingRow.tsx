@@ -568,7 +568,11 @@ function SchemaSettingRow({
 						{options.map(option => (
 							<option
 								key={option.value}
-								title={option.description ? schemaOptionText(lang, option.description) : undefined}
+								title={
+									entry.path !== "display.pinnedAgents" && option.description
+										? schemaOptionText(lang, option.description)
+										: undefined
+								}
 								value={option.value}
 							>
 								{schemaOptionText(lang, option.label)}

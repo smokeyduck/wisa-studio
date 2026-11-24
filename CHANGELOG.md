@@ -5,6 +5,12 @@ build is based on, so `0.9.46` here is the first WISA STUDIO release and also
 the point where the upstream GUI's history ends in this file. Release notes for
 earlier versions belong to that project; see [NOTICE](NOTICE).
 
+## [Unreleased]
+
+- Spaced out reasoning and execution disclosures in the conversation. Active subagents have separate transcript cards; finished and failed agents remain available in the right-hand Agents panel.
+- The model picker shows the session model and cached choices without waiting for provider catalog discovery or forcing a refresh on every open.
+- On Windows, switching between Work and Coding no longer reuses the wrong tool profile when a saved workspace path differs only in case or slash style. Coding tool profile settings identify the subagent tool as `task`.
+
 ## [0.9.55] - 2026-11-24
 
 Core source: `smokeyduck/oh-my-pi@4bf416b5dedfc7dde2730b51435d149fb4de1910` (Core 19.1.1).

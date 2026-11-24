@@ -449,10 +449,12 @@ describe("switchSessionNow F-OWN owner guard", () => {
 	});
 
 	it.each([
-		["/alpha", "/work"],
-		["/work", "/alpha"],
-	])("opens a fresh sidecar across a profile boundary: %s → %s", async (from, to) => {
-		useWorkspaceMode.setState({ defaultWorkspace: "/work" });
+		["/alpha", "/work", "/work"],
+		["/work", "/alpha", "/work"],
+		["c:/Users/Example/WISA/WORK/", "C:\\projects\\alpha", "C:\\Users\\Example\\Wisa\\work"],
+		["C:\\projects\\alpha", "c:/Users/Example/WISA/WORK/", "C:\\Users\\Example\\Wisa\\work"],
+	])("opens a fresh sidecar across a profile boundary: %s → %s", async (from, to, defaultWorkspace) => {
+		useWorkspaceMode.setState({ defaultWorkspace });
 		useTabsStore.setState({
 			tabs: [{ kind: "agent", id: "t0", cwd: from, status: "ready", unreadDone: false }],
 			activeTabId: "t0",

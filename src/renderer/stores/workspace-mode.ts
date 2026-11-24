@@ -34,7 +34,12 @@ export const useWorkspaceMode = create<WorkspaceModeStore>((set, get) => ({
  * read can never label a project session as work.
  */
 export function isWorkCwd(cwd: string | null | undefined, defaultWorkspace: string | null): boolean {
-	return Boolean(cwd && defaultWorkspace && cwd === defaultWorkspace);
+	if (!cwd || !defaultWorkspace) return false;
+	if (cwd === defaultWorkspace) return true;
+	// Match Windows path spelling differences that main's node:path.relative ignores.
+	if (!/^(?:[a-z]:[/\\]|[/\\]{2}[^/\\])/i.test(defaultWorkspace)) return false;
+	const windowsKey = (value: string) => value.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
+	return windowsKey(cwd) === windowsKey(defaultWorkspace);
 }
 
 /** Subscribe to the Work workspace path, loading it on first use. */

@@ -13,7 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { createSessionRpcClient } from "../../../shared/rpc-client";
 import type { ModelInfo, RpcResponse } from "../../../shared/rpc-types";
-import { I18nProvider } from "../../lib/i18n";
+import { I18nProvider, translate } from "../../lib/i18n";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
 import { useUiStore } from "../../stores/ui";
@@ -354,6 +354,29 @@ describe("ModelPicker full catalog", () => {
 				.map(entry => entry.key)
 				.sort(),
 		).toEqual(["wisa/qwen3.8-flash", "wisa/qwen3.8-max"]);
+	});
+
+	it("finds a model that arrives after the user starts searching", async () => {
+		useModelStore.setState({ availableModels: [], catalogRefreshPending: true, catalogGeneration: 1 });
+		await openPicker();
+		await typeQuery("NVIDIA");
+		expect(renderedOwnership()).toEqual([]);
+		expect(panel().textContent).toContain(translate("modelPicker.loading"));
+
+		await act(async () => {
+			useModelStore.getState().applyCatalogUpdate({
+				type: "model_catalog_update",
+				models: CATALOG,
+				providers: [],
+				discoveryStates: [],
+				refreshPending: false,
+				generation: 2,
+			});
+		});
+		const nvidia = renderedOwnership();
+		expect(nvidia.length).toBeGreaterThan(0);
+		expect(nvidia.every(entry => entry.maker === "NVIDIA")).toBe(true);
+		expect(searchField().value).toBe("NVIDIA");
 	});
 
 	it("routes a duplicate id by mouse to the provider the row shows", async () => {
