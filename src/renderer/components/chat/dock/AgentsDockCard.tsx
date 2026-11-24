@@ -41,7 +41,7 @@ const SubagentRow = memo(function SubagentRow({
 	const facts = subagentFacts(agent, t("sessionInfo.tokens"));
 
 	return (
-		<div className="relative my-2 ms-(--omp-editorial-inset) me-(--omp-editorial-edge) overflow-hidden rounded-lg border border-(--omp-border-muted) bg-transparent transition-colors duration-150 hover:bg-(--omp-bg-tertiary)">
+		<div className="relative my-2 ms-(--omp-editorial-inset) w-fit max-w-[calc(100%-var(--omp-editorial-inset)-var(--omp-editorial-edge))] overflow-hidden rounded-lg border border-(--omp-border-muted) bg-transparent transition-colors duration-150 hover:bg-(--omp-bg-tertiary)">
 			<span
 				aria-hidden
 				className={cx(

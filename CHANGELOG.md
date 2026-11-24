@@ -15,6 +15,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 - Long filenames stay inside the Overview changes card. The Plugins catalog renders only rows near the viewport and preserves its scroll position when returning from a detail page.
 - Installed plugins offer Upgrade only when the cached catalog advertises a newer release. Declarative plugins such as Cloudflare can open their settings without an npm manifest, and MCP servers that challenge for OAuth expose an authorization action directly on their card.
 - The subagent dialog shows only sent messages and replies, renders them as Markdown, and lets you expand each long message independently.
+- Active subagent cards fit their content without stretching across the conversation, and respect the transcript gutters in narrow panes.
 
 ## [0.9.55] - 2026-11-24
 
