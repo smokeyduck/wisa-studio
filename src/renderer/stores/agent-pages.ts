@@ -129,11 +129,6 @@ useTabsStore.subscribe((state, previous) => {
 	}
 });
 
-/** The agent page a session tab shows in place of its conversation, if any. */
-export function useShownAgentPage(tabId: string | null): string | null {
-	return useAgentPagesStore(state => (tabId ? (state.shown[tabId] ?? null) : null));
-}
-
 /**
  * Failures seen in the drawer's Agents tab or on their page. The tab's error
  * dot is for the others (plan/24 §5.6).

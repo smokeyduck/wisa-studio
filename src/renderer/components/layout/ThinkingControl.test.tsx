@@ -1,11 +1,4 @@
-/**
- * Contract tests for the composer thinking-level picker (Codex-style):
- * the menu must offer exactly the selectors the active model supports — off,
- * auto, and the model's own ladder — with the current selector checked, and
- * a click must send that explicit value (never an unspecified "next" one).
- * Unsupported models get an honest note instead of a dead cycler.
- * Rendered with react-dom/client into a linkedom document.
- */
+/** The menu renders only verified selectors and applies authoritative sidecar receipts. */
 
 import { parseHTML } from "linkedom";
 import { act, type ReactElement } from "react";
@@ -60,7 +53,7 @@ function installMockOmp(): void {
 				type: "response",
 				command: "set_thinking_level",
 				success: true,
-				data: { thinkingLevel: level === "auto" ? "medium" : level, thinkingConfigured: level },
+				data: { thinkingLevel: level === "auto" || level === "inherit" ? undefined : level, thinkingConfigured: level },
 			}) as RpcResponse,
 	);
 	const ompWindow = window as unknown as { omp: { rpc: { setThinkingLevel: typeof setThinkingLevelMock } } };
@@ -117,12 +110,12 @@ afterEach(async () => {
 });
 
 describe("ThinkingControl", () => {
-	it("lists off, auto, and exactly the model-supported ladder with the current selector checked", async () => {
+	it("lists the fixed model's supported ladder without fabricating Auto", async () => {
 		installMockOmp();
 		useModelStore.setState({
 			thinkingLevel: "medium",
 			thinkingConfigured: "medium",
-			availableThinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+			availableThinkingSelectors: ["off", "inherit", "low", "medium", "high", "xhigh", "max"],
 		});
 		await mount(<ThinkingControl />);
 
@@ -134,11 +127,11 @@ describe("ThinkingControl", () => {
 		});
 
 		const body = document.body.textContent ?? "";
-		for (const option of ["off", "auto", "low", "medium", "high", "xhigh", "max"]) {
+		for (const option of ["off", "inherit", "low", "medium", "high", "xhigh", "max"]) {
 			expect(body).toContain(labelFor(option));
 		}
-		// Unsupported levels must not be offered.
-		expect(body).not.toContain("minimal");
+		expect(body).not.toContain(labelFor("minimal"));
+		expect(buttonWithMono(labelFor("auto"))).toBeUndefined();
 	});
 
 	it("sends the explicitly picked value and applies the authoritative receipt", async () => {
@@ -146,7 +139,7 @@ describe("ThinkingControl", () => {
 		useModelStore.setState({
 			thinkingLevel: "medium",
 			thinkingConfigured: "medium",
-			availableThinkingLevels: ["low", "medium", "high"],
+			availableThinkingSelectors: ["off", "low", "medium", "high"],
 		});
 		await mount(<ThinkingControl />);
 
@@ -179,7 +172,7 @@ describe("ThinkingControl", () => {
 		useModelStore.setState({
 			thinkingLevel: "medium",
 			thinkingConfigured: "medium",
-			availableThinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+			availableThinkingSelectors: ["off", "low", "medium", "high", "xhigh", "max"],
 		});
 		await mount(<ThinkingControl />);
 
@@ -212,7 +205,7 @@ describe("ThinkingControl", () => {
 		useModelStore.setState({
 			thinkingLevel: "medium",
 			thinkingConfigured: "medium",
-			availableThinkingLevels: ["medium", "high"],
+			availableThinkingSelectors: ["off", "medium", "high"],
 		});
 		await mount(<ThinkingControl />);
 
@@ -240,12 +233,12 @@ describe("ThinkingControl", () => {
 		expect(useModelStore.getState().thinkingLevel).toBe("low");
 	});
 
-	it("offers auto as a first-class selector", async () => {
+	it("offers confirmed native Auto and keeps its receipt separate from the effective effort", async () => {
 		installMockOmp();
 		useModelStore.setState({
 			thinkingLevel: "high",
 			thinkingConfigured: "high",
-			availableThinkingLevels: ["low", "medium", "high"],
+			availableThinkingSelectors: ["off", "auto", "low", "medium", "high"],
 		});
 		await mount(<ThinkingControl />);
 
@@ -264,44 +257,38 @@ describe("ThinkingControl", () => {
 
 		expect(setThinkingLevelMock).toHaveBeenCalledWith("auto");
 		expect(useModelStore.getState().thinkingConfigured).toBe("auto");
-		expect(useModelStore.getState().thinkingLevel).toBe("medium");
+		expect(useModelStore.getState().thinkingLevel).toBeUndefined();
 	});
 
-	it("shows an honest note when the model does not reason", async () => {
+	it("shows an honest note when the model has no verified controls", async () => {
 		installMockOmp();
-		useModelStore.setState({ thinkingLevel: undefined, thinkingConfigured: undefined, availableThinkingLevels: [] });
+		useModelStore.setState({ thinkingLevel: undefined, thinkingConfigured: undefined, availableThinkingSelectors: [] });
 		await mount(<ThinkingControl />);
 
-		const trigger = buttonWithMono(labelFor("off"));
+		const trigger = buttonWithMono(translate("input.thinking.label"));
 		if (!trigger) throw new Error("trigger missing");
 		await act(async () => {
 			click(trigger);
 		});
-		expect(document.body.textContent).toContain("does not support reasoning");
+		expect(document.body.textContent).toContain(translate("input.thinking.unsupported"));
 	});
 
-	// The bug: the sidecar reports `thinkingLevel: "high"` plus a
-	// `thinking_level_changed { configured: "auto" }`, but never a ladder, so the
-	// menu was empty while the trigger advertised "auto" — a selector that did
-	// not exist. With no ladder the trigger must read as "off".
-	it("does not advertise auto or a level on the trigger when the ladder is empty", async () => {
+	it("does not advertise stale Auto or a stale effort when no controls are verified", async () => {
 		installMockOmp();
-		useModelStore.setState({ thinkingLevel: "high", thinkingConfigured: "auto", availableThinkingLevels: [] });
+		useModelStore.setState({ thinkingLevel: "high", thinkingConfigured: "auto", availableThinkingSelectors: [] });
 		await mount(<ThinkingControl />);
 
-		const trigger = buttonWithMono(labelFor("off"));
+		const trigger = buttonWithMono(translate("input.thinking.label"));
 		expect(trigger).toBeDefined();
 		if (!trigger) return;
 		const text = trigger.textContent ?? "";
-		expect(text).toContain(labelFor("off"));
 		expect(text).not.toContain(labelFor("auto"));
 		expect(text).not.toContain(labelFor("high"));
 	});
 
-	it("advertises the derived ladder once get_state reports the model's efforts", async () => {
+	it("does not show legacy classifier Auto despite a verified fixed effort ladder", async () => {
 		installMockOmp();
-		// Exactly what the real sidecar returns for minimax-m3.1-flash: the flat
-		// ladder is null, the efforts live on the model.
+		// Old sidecars report classifier Auto in the selector list for every ladder.
 		useModelStore.getState().setFromState({
 			model: {
 				provider: "minimax",
@@ -312,19 +299,21 @@ describe("ThinkingControl", () => {
 			thinkingLevel: "high",
 			thinkingConfigured: "auto",
 			availableThinkingLevels: null,
+			thinkingLevels: ["off", "auto", "minimal", "low", "medium", "high", "xhigh"],
 		} as unknown as RpcSessionState);
 		await mount(<ThinkingControl />);
 
-		const trigger = buttonWithMono(labelFor("auto"));
+		const trigger = buttonWithMono(translate("input.thinking.label"));
 		expect(trigger).toBeDefined();
 		if (!trigger) return;
 		await act(async () => {
 			click(trigger);
 		});
 		const body = document.body.textContent ?? "";
-		for (const option of ["off", "auto", "minimal", "low", "medium", "high", "xhigh"]) {
+		for (const option of ["off", "minimal", "low", "medium", "high", "xhigh"]) {
 			expect(body).toContain(labelFor(option));
 		}
-		expect(body).not.toContain(labelFor("max"));
+		expect(buttonWithMono(labelFor("max"))).toBeUndefined();
+		expect(buttonWithMono(labelFor("auto"))).toBeUndefined();
 	});
 });

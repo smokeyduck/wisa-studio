@@ -173,23 +173,63 @@ export function browsableSessions(all: readonly SessionInfo[]): SessionInfo[] {
 	return listedSessions(all).sessions.filter(session => !isSubagentSession(session));
 }
 
-export interface SessionRank {
+interface SessionPreviewOptions {
 	pinned: (session: SessionInfo) => boolean;
 	recency: (session: SessionInfo) => number;
+	essential: (session: SessionInfo) => boolean;
+	partnerPath: (rootPath: string) => string | undefined;
+	limit: number;
+	expanded: boolean;
+}
+
+interface SessionFamilyRank {
+	pinned: boolean;
+	essential: boolean;
+	lastUsed: number;
 }
 
 /**
- * Roots only: a family is pinned when any member is, and sorts by its newest
- * member, so a subagent that just ran keeps its parent with it at the top.
- * Children keep the order {@link buildSessionTree} recorded.
+ * Rank roots by the newest member of each family. The preview also keeps any
+ * pinned or essential family and both roots of a split pair. Children remain in
+ * tree order and do not consume preview slots.
  */
-export function orderSessionForest(nodes: readonly SessionNode[], rank: SessionRank): SessionNode[] {
-	const pinned = (node: SessionNode): boolean => rank.pinned(node.session) || node.children.some(pinned);
-	const recency = (node: SessionNode): number =>
-		node.children.reduce((max, child) => Math.max(max, recency(child)), rank.recency(node.session));
-	return [...nodes].sort((a, b) => {
-		const pinDelta = (pinned(a) ? 0 : 1) - (pinned(b) ? 0 : 1);
-		if (pinDelta !== 0) return pinDelta;
-		return recency(b) - recency(a);
+export function previewSessionForest(
+	nodes: readonly SessionNode[],
+	{ pinned, recency, essential, partnerPath, limit, expanded }: SessionPreviewOptions,
+): { roots: SessionNode[]; byPath: ReadonlyMap<string, SessionNode>; hidden: number } {
+	const visit = (node: SessionNode, rank: SessionFamilyRank) => {
+		rank.pinned ||= pinned(node.session);
+		rank.essential ||= essential(node.session);
+		rank.lastUsed = Math.max(rank.lastUsed, recency(node.session));
+		for (const child of node.children) visit(child, rank);
+	};
+	const byPath = new Map<string, SessionNode>();
+	const ranked = nodes.map(node => {
+		byPath.set(node.session.path, node);
+		const entry = { node, pinned: false, essential: false, lastUsed: Number.NEGATIVE_INFINITY };
+		visit(node, entry);
+		return entry;
 	});
+	ranked.sort((a, b) => b.lastUsed - a.lastUsed);
+
+	const visible = ranked.length > limit ? new Set<string>() : null;
+	if (visible) {
+		for (const [index, entry] of ranked.entries()) {
+			if (index >= limit && !entry.pinned && !entry.essential) continue;
+			const path = entry.node.session.path;
+			visible.add(path);
+			const partner = partnerPath(path);
+			if (partner && byPath.has(partner)) visible.add(partner);
+		}
+	}
+
+	const roots: SessionNode[] = [];
+	for (const pinnedFirst of [true, false]) {
+		for (const entry of ranked) {
+			if (entry.pinned === pinnedFirst && (expanded || !visible || visible.has(entry.node.session.path))) {
+				roots.push(entry.node);
+			}
+		}
+	}
+	return { roots, byPath, hidden: visible ? ranked.length - visible.size : 0 };
 }

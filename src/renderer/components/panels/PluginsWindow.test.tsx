@@ -16,8 +16,10 @@ import { resetTabRoute } from "../../lib/tab-routing";
 import { useSessionStore } from "../../stores/session";
 import { useTabsStore } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
+import { InventorySettingsPage } from "./InventoryPanel";
 import { PluginsWindow } from "./PluginsWindow";
 import { DEFAULT_CATALOGS } from "./plugins/catalog-model";
+import { PluginCatalogProvider } from "./plugins/use-plugin-catalog";
 
 const { document, window, Event, HTMLElement, Node, Element } = parseHTML("<html><body></body></html>");
 const globals = globalThis as Record<string, unknown>;
@@ -107,7 +109,23 @@ function installAgent(overrides: Partial<Pick<Fake, "marketplaces" | "plugins">>
 	});
 	(window as unknown as { omp: unknown }).omp = {
 		rpc: {
-			getMarketplaces: vi.fn(async () => ok({ marketplaces: fake.marketplaces })),
+			getMarketplaces: vi.fn(async () => ok({ marketplaces: [...fake.marketplaces] })),
+			getPlugins: vi.fn(async () =>
+				ok({
+					plugins: fake.plugins
+						.filter(plugin => plugin.installed)
+						.map(plugin => ({
+							name: plugin.name,
+							id: `${plugin.name}@official`,
+							marketplace: "official",
+							enabled: true,
+							version: "1.0.0",
+						})),
+				}),
+			),
+			getPromptTemplates: vi.fn(async () =>
+				ok({ templates: [{ name: "pr-review", source: "(project)", description: "Review a pull request" }] }),
+			),
 			marketplaceAction: fake.marketplaceAction,
 		},
 		prefs: {
@@ -133,15 +151,17 @@ async function flush(): Promise<void> {
 	});
 }
 
-async function openPage(): Promise<void> {
-	useUiStore.getState().openPlugins();
+async function openPage(embedded = false, open = true): Promise<void> {
+	if (!embedded && open) useUiStore.getState().openPlugins();
 	container = document.createElement("div") as unknown as HTMLElement;
 	document.body.appendChild(container as never);
 	root = createRoot(container as unknown as globalThis.Element);
 	await act(async () => {
 		root?.render(
 			<I18nProvider>
-				<PluginsWindow />
+				<PluginCatalogProvider>
+					{embedded ? <InventorySettingsPage query="" /> : <PluginsWindow />}
+				</PluginCatalogProvider>
 			</I18nProvider>,
 		);
 	});
@@ -217,13 +237,107 @@ function addedSources(fake: Fake): string[] {
 		.map(payload => payload.source ?? "");
 }
 
+describe("combined plugin settings", () => {
+	it("shares catalog trust and installed state, with sources and templates in the same surface", async () => {
+		const fake = installAgent({ plugins: [SLACK] });
+		await openPage(true);
+		expect(pageText()).toContain("Slack");
+		expect(addedSources(fake)).toEqual([]);
+
+		const changeTab = async (id: string) => {
+			const tab = document.body.querySelector(`[data-tab-id="${id}"]`);
+			if (!tab) throw new Error(`Missing resource tab: ${id}`);
+			await clickElement(tab);
+		};
+		await changeTab("plugins");
+		expect(pageText()).toContain("No plugins installed.");
+		await changeTab("catalog");
+		await clickButton("Install");
+		expect(installs(fake)).toEqual([]);
+		await clickButton("Trust and install");
+		expect(installs(fake)).toEqual([{ action: "install", marketplace: "official", plugin: "slack" }]);
+		await changeTab("plugins");
+		expect(pageText()).toContain("slack");
+		expect(pageText()).not.toContain("No plugins installed.");
+
+		await changeTab("catalog");
+		await clickButton("Manage catalogs");
+		expect(document.body.querySelector('[data-tab-id="marketplaces"]')?.getAttribute("aria-selected")).toBe("true");
+		expect(pageText()).toContain("official");
+		await changeTab("templates");
+		expect(pageText()).toContain("pr-review");
+	});
+});
+
 describe("default catalogs", () => {
+	it("starts when the agent connects and keeps adding while the Plugins page is closed", async () => {
+		const fake = installAgent({ marketplaces: [], offered: [] });
+		useSessionStore.setState({ status: "starting" });
+		const held = Promise.withResolvers<void>();
+		const respond = fake.marketplaceAction.getMockImplementation()!;
+		fake.marketplaceAction.mockImplementation(async (payload: { action: string; source?: string }) => {
+			if (payload.action === "add" && payload.source === DEFAULT_SOURCES[1]) await held.promise;
+			return respond(payload);
+		});
+		await openPage(false, false);
+		expect(addedSources(fake)).toEqual([]);
+
+		await act(async () => useSessionStore.setState({ status: "ready" }));
+		await flush();
+		expect(addedSources(fake)).toEqual(DEFAULT_SOURCES.slice(0, 2));
+		expect(pageText()).not.toContain("Slack");
+
+		await act(async () => useUiStore.getState().openPlugins());
+		expect(pageText()).toContain("Slack");
+		expect(pageText()).toContain(`1 of ${DEFAULT_SOURCES.length}`);
+		await act(async () => useUiStore.getState().closePlugins());
+		held.resolve();
+		await flush();
+		expect(addedSources(fake)).toEqual(DEFAULT_SOURCES);
+		await act(async () => useUiStore.getState().openPlugins());
+		expect(pageText()).toContain("Slack");
+		expect(pageText()).not.toContain(`of ${DEFAULT_SOURCES.length}`);
+		expect(installs(fake)).toEqual([]);
+	});
+
+	it("restarts an interrupted preload when returning from a tab that never connected", async () => {
+		const fake = installAgent({ plugins: [SLACK] });
+		const held = Promise.withResolvers<void>();
+		fake.marketplaceAction.mockImplementationOnce(async () => {
+			await held.promise;
+			return ok({ ok: true, plugins: [SLACK] });
+		});
+		await openPage(false, false);
+		expect(fake.marketplaceAction).toHaveBeenCalledOnce();
+		await act(async () => {
+			useTabsStore.setState({ activeTabId: "t2" });
+			useSessionStore.setState({ status: "starting" });
+		});
+		held.resolve();
+		await flush();
+		fake.plugins = [SENTRY];
+		await act(async () => {
+			useTabsStore.setState({ activeTabId: "t1" });
+			useSessionStore.setState({ status: "ready" });
+		});
+		await flush();
+		expect(fake.marketplaceAction).toHaveBeenCalledTimes(2);
+		await act(async () => useUiStore.getState().openPlugins());
+		expect(pageText()).toContain("Sentry");
+		expect(pageText()).not.toContain("Slack");
+	});
+
 	it("adds every default in order, shows their plugins, and installs nothing", async () => {
 		const fake = installAgent({ marketplaces: [], offered: [] });
 		await openPage();
 		expect(addedSources(fake)).toEqual(DEFAULT_SOURCES);
 		expect(fake.prefs.get(OFFERED_PREF)).toEqual(DEFAULT_SOURCES);
 		expect(pageText()).toContain("Slack");
+		const listed = fake.marketplaceAction.mock.calls
+			.map(([payload]) => payload as { action: string; marketplace?: string })
+			.filter(payload => payload.action === "list_available")
+			.map(payload => payload.marketplace);
+		expect(listed).toEqual(fake.marketplaces.map(entry => entry.name));
 		expect(installs(fake)).toEqual([]);
 	});
 

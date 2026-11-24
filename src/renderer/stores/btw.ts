@@ -84,6 +84,7 @@ const INITIAL = {
 export function createBtwStore(command: TabCommand = activeTabCommand) {
 	/** Invalidates stale `get_btw_history` responses inside this tab runtime. */
 	let refreshVersion = 0;
+	let sessionGeneration = 0;
 	return createStore<BtwStore>()((set, get) => ({
 		...INITIAL,
 		refresh: async () => {
@@ -126,9 +127,11 @@ export function createBtwStore(command: TabCommand = activeTabCommand) {
 		select: id => set({ selectedId: id }),
 		ask: async (question, recordId) => {
 			if (get().pending) throw new Error("A side question is already starting");
+			const generation = sessionGeneration;
 			set({ pending: true });
 			try {
 				const response = await command({ type: "btw", question, ...(recordId ? { recordId } : {}) }, 120_000);
+				if (generation !== sessionGeneration) throw new Error("The session changed while starting the side question");
 				if (!response.success) throw new Error(response.error);
 				const record = (response.data as { record?: BtwHistoryRecord } | undefined)?.record;
 				if (!record) throw new Error("Malformed /btw response");
@@ -137,28 +140,31 @@ export function createBtwStore(command: TabCommand = activeTabCommand) {
 				set(state => ({
 					records: upsertRecord(state.records, next),
 					selectedId: next.id,
-					branchableId: null,
+					branchableId:
+						state.branchableId === next.id && getBtwLatestTurn(next).status === "complete" ? next.id : null,
 					pending: false,
 				}));
 				return next;
 			} catch (cause) {
-				set({ pending: false });
+				if (generation === sessionGeneration) set({ pending: false });
 				throw cause;
 			}
 		},
 		cancel: async recordId => {
+			const generation = sessionGeneration;
 			const response = await command({ type: "btw_cancel", recordId });
 			if (!response.success) throw new Error(response.error);
 			const data = (response.data ?? {}) as { cancelled?: boolean };
 			// The sidecar already settled (or the id no longer matches): re-read the
 			// history so a stale local `running` state cannot disable the composers.
-			if (data.cancelled === false) await get().refresh();
+			if (data.cancelled === false && generation === sessionGeneration) await get().refresh();
 		},
 		branch: async () => {
+			const generation = sessionGeneration;
 			const response = await command({ type: "btw_branch" });
 			if (!response.success) throw new Error(response.error);
 			const data = (response.data ?? {}) as { cancelled?: boolean };
-			if (data.cancelled !== true) set({ branchableId: null });
+			if (data.cancelled !== true && generation === sessionGeneration) set({ branchableId: null });
 			return data;
 		},
 		inject: async recordId => {
@@ -193,6 +199,7 @@ export function createBtwStore(command: TabCommand = activeTabCommand) {
 			}));
 		},
 		reset: () => {
+			sessionGeneration += 1;
 			refreshVersion += 1;
 			set({ ...INITIAL });
 		},

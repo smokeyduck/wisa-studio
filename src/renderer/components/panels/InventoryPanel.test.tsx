@@ -177,7 +177,7 @@ describe("InventoryPanel", () => {
 		await act(async () => {
 			root?.render(
 				<I18nProvider>
-					<InventorySettingsPage query="" />
+					<InventorySettingsPage initialTab="plugins" query="" />
 				</I18nProvider>,
 			);
 		});

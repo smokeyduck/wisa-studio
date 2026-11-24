@@ -26,6 +26,7 @@ import { useToastStore } from "../stores/toast";
 import { useTodoStore } from "../stores/todo";
 import { useToolsStore } from "../stores/tools";
 import { useUiStore } from "../stores/ui";
+import { useWorkspaceMode } from "../stores/workspace-mode";
 import {
 	dropSessionNow,
 	newSessionNow,
@@ -158,6 +159,7 @@ function resetAll(): void {
 	useUiStore.getState().closeSessionOverlays();
 	useForkHandoffStore.getState().closeHandoffDialog();
 	useToastStore.setState({ toasts: [] });
+	useWorkspaceMode.setState({ defaultWorkspace: null });
 }
 
 let omp: MockOmp;
@@ -443,6 +445,25 @@ describe("switchSessionNow F-OWN owner guard", () => {
 		expect(omp.rpc.switchSession).not.toHaveBeenCalled();
 		expect(omp.tabs.spawn).toHaveBeenCalledWith(
 			expect.objectContaining({ sessionPath: "/sessions/chat.jsonl", kind: "chat" }),
+		);
+	});
+
+	it.each([
+		["/alpha", "/work"],
+		["/work", "/alpha"],
+	])("opens a fresh sidecar across a profile boundary: %s → %s", async (from, to) => {
+		useWorkspaceMode.setState({ defaultWorkspace: "/work" });
+		useTabsStore.setState({
+			tabs: [{ kind: "agent", id: "t0", cwd: from, status: "ready", unreadDone: false }],
+			activeTabId: "t0",
+			bundles: new Map(),
+		});
+		const result = await switchSessionNow({ ...session("/sessions/destination.jsonl"), cwd: to });
+
+		expect(result).toBe(true);
+		expect(omp.rpc.switchSession).not.toHaveBeenCalled();
+		expect(omp.tabs.spawn).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd: to, sessionPath: "/sessions/destination.jsonl", kind: "agent" }),
 		);
 	});
 

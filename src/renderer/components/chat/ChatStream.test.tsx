@@ -118,6 +118,14 @@ describe("compact transcript rows", () => {
 					display: true,
 					timestamp: at,
 				},
+				{
+					role: "custom",
+					customType: "async-notify",
+					content: "<system-notice>Background job bg-1 is still running.\nLOG_LINE</system-notice>",
+					details: { reports: [{ id: "bg-1", running: true, lines: ["LOG_LINE"] }] },
+					display: true,
+					timestamp: at,
+				},
 				assistant([
 					{ type: "thinking", thinking: "The checks passed; launch the audit build." },
 					{ type: "text", text: "Launch the audit build." },
@@ -147,6 +155,7 @@ describe("compact transcript rows", () => {
 		expect(process.toolNames).toEqual(["bash", "bash", "bash", "hub"]);
 		expect(process.messages.map(message => message.customType).filter(Boolean)).toEqual([
 			"launch-completion",
+			"async-notify",
 			"async-result",
 		]);
 		expect(buildTimelineMarkers(rows)[0]?.state).toBe("error");

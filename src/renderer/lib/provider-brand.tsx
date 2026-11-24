@@ -1,59 +1,19 @@
-/**
- * Provider branding for the model picker: display labels and inline brand
- * marks.
- *
- * Two rules shape this file:
- *
- * 1. Labels come from a lookup table, never from title-casing an id. Provider
- *    ids are catalog/vendor strings (`wisa`, `openai-codex`, `moonshot`), so a
- *    blanket transform renders `wisa` and `xAI` wrong in opposite directions.
- * 2. Marks are hand-drawn geometry, not trademarked logo paths. Each glyph is a
- *    few primitives on a 16px grid in `currentColor`, so it inherits the row's
- *    colour, themes, and prints at any size. No network fetch, no dependency.
- */
+import type { ComponentType, SVGProps } from "react";
 
-import type { ComponentType, ReactNode, SVGProps } from "react";
-
-export type BrandKey =
-	| "openai"
-	| "anthropic"
-	| "google"
-	| "xai"
-	| "meta"
-	| "mistral"
-	| "deepseek"
-	| "qwen"
-	| "minimax"
-	| "moonshot"
-	| "wisa"
-	| "generic";
-
-export interface BrandIconProps extends SVGProps<SVGSVGElement> {
-	/** Rendered square size in px. Defaults to 16 — the picker's header scale. */
+interface BrandIconProps extends SVGProps<SVGSVGElement> {
 	size?: number;
 }
 
-export interface Brand {
-	key: BrandKey;
-	/** Display name for the vendor, e.g. `MiniMax`, `OpenAI`, `xAI`. */
-	label: string;
-	/** Inline SVG mark; 16px, `currentColor`, decorative. */
-	Icon: ComponentType<BrandIconProps>;
-}
-
-/** Shared wrapper: one 16px square, stroke inherited from the text colour. */
-function mark(key: string, children: ReactNode) {
+function brandMark(key: string, paths: readonly string[]) {
+	const children = paths.map(path => <path d={path} key={path} />);
 	const Mark = ({ size = 16, ...props }: BrandIconProps) => (
 		<svg
 			aria-hidden="true"
-			fill="none"
+			fill="currentColor"
+			fillRule="evenodd"
 			focusable="false"
 			height={size}
-			stroke="currentColor"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			strokeWidth={1.4}
-			viewBox="0 0 16 16"
+			viewBox="0 0 24 24"
 			width={size}
 			{...props}
 			data-brand={key}
@@ -65,191 +25,146 @@ function mark(key: string, children: ReactNode) {
 	return Mark;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Marks · abstract, geometric, deliberately not the vendors' real logo art.   */
-/* -------------------------------------------------------------------------- */
+const GenericMark = brandMark("generic", [
+	"M12 2 2 7.5v9L12 22l10-5.5v-9L12 2Zm0 2.3 7.7 4.2L12 12.7 4.3 8.5 12 4.3ZM4 10.6l7 3.8v4.8l-7-3.8v-4.8Zm16 0v4.8l-7 3.8v-4.8l7-3.8Z",
+]);
 
-/** Hexagonal knot: a hexagon outline with a counter-rotating inner triangle. */
-const OpenAIMark = mark(
-	"openai",
-	<>
-		<path d="M8 1.7 13.4 4.8v6.4L8 14.3 2.6 11.2V4.8z" />
-		<path d="M8 4.6 11 6.3v3.4L8 11.4 5 9.7V6.3z" opacity={0.55} />
-	</>,
-);
-
-/** Three crossing strokes: a starburst, the "A" read as a spark. */
-const AnthropicMark = mark(
-	"anthropic",
-	<>
-		<path d="M3 12.6 8 3.4l5 9.2" />
-		<path d="M5.2 9.4h5.6" opacity={0.55} />
-	</>,
-);
-
-/** Ring with a bar through the gap: a "G" reduced to circle plus radius. */
-const GoogleMark = mark(
-	"google",
-	<>
-		<path d="M12.9 5.4A5.5 5.5 0 1 0 13.5 8" />
-		<path d="M8.4 8h5.1" />
-	</>,
-);
-
-/** Two crossing diagonals: the X of xAI. */
-const XAIMark = mark(
-	"xai",
-	<>
-		<path d="M2.8 2.8 13.2 13.2" />
-		<path d="M13.2 2.8 2.8 13.2" opacity={0.55} />
-	</>,
-);
-
-/** Two interlocking loops: the infinity read of Meta. */
-const MetaMark = mark(
-	"meta",
-	<path d="M1.8 8c0-2.2 1.2-3.6 2.7-3.6C6.6 4.4 8 8 8 8s1.4 3.6 3.5 3.6c1.5 0 2.7-1.4 2.7-3.6s-1.2-3.6-2.7-3.6C9.4 4.4 8 8 8 8S6.6 11.6 4.5 11.6C3 11.6 1.8 10.2 1.8 8z" />,
-);
-
-/** Three stepped bars: the Mistral fan, flattened to stripes. */
-const MistralMark = mark(
-	"mistral",
-	<>
-		<path d="M2.5 3.5h11" />
-		<path d="M2.5 8h7.5" />
-		<path d="M2.5 12.5h11" opacity={0.55} />
-	</>,
-);
-
-/** Nested arcs over a baseline: a wave (the deep) on the seabed. */
-const DeepSeekMark = mark(
-	"deepseek",
-	<>
-		<path d="M1.8 11.6c2-3.2 4-3.2 6.2 0 2.2-3.2 4.2-3.2 6.2 0" />
-		<path d="M4.4 6.6c1.2-1.6 2.4-1.6 3.6 0 1.2-1.6 2.4-1.6 3.6 0" opacity={0.55} />
-	</>,
-);
-
-/** Circle with a descender: a "q" cut to two strokes. */
-const QwenMark = mark(
-	"qwen",
-	<>
-		<circle cx={8} cy={7.4} r={4.4} />
-		<path d="M10.4 10.2 13 13.4" />
-	</>,
-);
-
-/** Two opposing triangles: an "M" as mirrored chevrons. */
-const MiniMaxMark = mark(
-	"minimax",
-	<>
-		<path d="M1.8 12.4 6 3.6v8.8" />
-		<path d="M14.2 12.4 10 3.6v8.8" opacity={0.55} />
-	</>,
-);
-
-/** Crescent: a filled disc with an offset bite. */
-const MoonshotMark = mark("moonshot", <path d="M11.6 10.9A5 5 0 0 1 6.1 4a5 5 0 1 0 5.5 6.9z" />);
-
-/** Concentric arcs opening upward: the gateway's "W" as nested rings. */
-const WisaMark = mark(
-	"wisa",
-	<>
-		<circle cx={8} cy={8} r={5.6} />
-		<path d="M4.6 8.6 8 5.2l3.4 3.4" />
-	</>,
-);
-
-/** Fallback: a plain cube outline, readable at 10px. */
-const GenericMark = mark(
-	"generic",
-	<>
-		<rect height={9.4} rx={2.2} width={9.4} x={3.3} y={3.3} />
-		<path d="M3.3 8h9.4" opacity={0.45} />
-	</>,
-);
-
-/* -------------------------------------------------------------------------- */
-/* Label table — the single source of truth for group headers.                 */
-/* -------------------------------------------------------------------------- */
-
-interface BrandEntry {
-	key: BrandKey;
+// Monochrome SVG paths from Lobe Icons (MIT), see NOTICE for revision and license.
+const BRANDS: readonly {
+	key: string;
 	label: string;
-	Icon: ComponentType<BrandIconProps>;
-	/** Normalised ids/aliases that resolve here (see `normalizeId`). */
-	aliases: readonly string[];
-}
-
-/** Fallback row: no aliases, so it is reachable only through the resolver. */
-const GENERIC_ENTRY: BrandEntry = { key: "generic", label: "Other", Icon: GenericMark, aliases: [] };
-
-const ENTRIES: readonly BrandEntry[] = [
+	aliases?: readonly string[];
+	paths: readonly string[];
+}[] = [
 	{
 		key: "openai",
 		label: "OpenAI",
-		Icon: OpenAIMark,
-		aliases: ["openai", "openaicodex", "gpt", "chatgpt", "codex"],
+		aliases: ["openaicodex", "gpt", "chatgpt", "codex"],
+		paths: [
+			"M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z",
+		],
 	},
 	{
 		key: "anthropic",
 		label: "Anthropic",
-		Icon: AnthropicMark,
-		aliases: ["anthropic", "claude", "claudecode"],
+		aliases: ["claude"],
+		paths: [
+			"M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm4.132 9.959L8.453 7.687 6.205 13.48H10.7z",
+		],
 	},
 	{
 		key: "google",
 		label: "Google",
-		Icon: GoogleMark,
-		aliases: ["google", "googleai", "googlevertex", "vertex", "vertexai", "gemini", "antigravity"],
+		aliases: ["googleai", "googlevertex", "gemini"],
+		paths: [
+			"M23 12.245c0-.905-.075-1.565-.236-2.25h-10.54v4.083h6.186c-.124 1.014-.797 2.542-2.294 3.569l-.021.136 3.332 2.53.23.022C21.779 18.417 23 15.593 23 12.245z",
+			"M12.225 23c3.03 0 5.574-.978 7.433-2.665l-3.542-2.688c-.948.648-2.22 1.1-3.891 1.1a6.745 6.745 0 01-6.386-4.572l-.132.011-3.465 2.628-.045.124C4.043 20.531 7.835 23 12.225 23z",
+			"M5.84 14.175A6.65 6.65 0 015.463 12c0-.758.138-1.491.361-2.175l-.006-.147-3.508-2.67-.115.054A10.831 10.831 0 001 12c0 1.772.436 3.447 1.197 4.938l3.642-2.763z",
+			"M12.225 5.253c2.108 0 3.529.892 4.34 1.638l3.167-3.031C17.787 2.088 15.255 1 12.225 1 7.834 1 4.043 3.469 2.197 7.062l3.63 2.763a6.77 6.77 0 016.398-4.572z",
+		],
 	},
-	{ key: "xai", label: "xAI", Icon: XAIMark, aliases: ["xai", "xgrok", "grok"] },
-	{ key: "meta", label: "Meta", Icon: MetaMark, aliases: ["meta", "metaai", "llama", "together"] },
-	{ key: "mistral", label: "Mistral", Icon: MistralMark, aliases: ["mistral", "mistralai", "mixtral", "codestral"] },
-	{ key: "deepseek", label: "DeepSeek", Icon: DeepSeekMark, aliases: ["deepseek", "deepseekai"] },
-	{ key: "qwen", label: "Qwen", Icon: QwenMark, aliases: ["qwen", "qwenai", "alibaba", "dashscope", "tongyi"] },
-	{ key: "minimax", label: "MiniMax", Icon: MiniMaxMark, aliases: ["minimax", "minimaxi", "hailuo"] },
-	{ key: "moonshot", label: "Moonshot", Icon: MoonshotMark, aliases: ["moonshot", "moonshotai", "kimi", "kimicode"] },
-	{ key: "wisa", label: "Wisa", Icon: WisaMark, aliases: ["wisa", "wisastudio", "wisagateway"] },
-	GENERIC_ENTRY,
+	{
+		key: "xai",
+		label: "xAI",
+		aliases: ["grok"],
+		paths: [
+			"M6.469 8.776L16.512 23h-4.464L2.005 8.776H6.47zm-.004 7.9l2.233 3.164L6.467 23H2l4.465-6.324zM22 2.582V23h-3.659V7.764L22 2.582zM22 1l-9.952 14.095-2.233-3.163L17.533 1H22z",
+		],
+	},
+	{
+		key: "meta",
+		label: "Meta",
+		aliases: ["metallama", "metaai", "llama"],
+		paths: [
+			"M6.897 4c1.915 0 3.516.932 5.43 3.376l.282-.373c.19-.246.383-.484.58-.71l.313-.35C14.588 4.788 15.792 4 17.225 4c1.273 0 2.469.557 3.491 1.516l.218.213c1.73 1.765 2.917 4.71 3.053 8.026l.011.392.002.25c0 1.501-.28 2.759-.818 3.7l-.14.23-.108.153c-.301.42-.664.758-1.086 1.009l-.265.142-.087.04a3.493 3.493 0 01-.302.118 4.117 4.117 0 01-1.33.208c-.524 0-.996-.067-1.438-.215-.614-.204-1.163-.56-1.726-1.116l-.227-.235c-.753-.812-1.534-1.976-2.493-3.586l-1.43-2.41-.544-.895-1.766 3.13-.343.592C7.597 19.156 6.227 20 4.356 20c-1.21 0-2.205-.42-2.936-1.182l-.168-.184c-.484-.573-.837-1.311-1.043-2.189l-.067-.32a8.69 8.69 0 01-.136-1.288L0 14.468c.002-.745.06-1.49.174-2.23l.1-.573c.298-1.53.828-2.958 1.536-4.157l.209-.34c1.177-1.83 2.789-3.053 4.615-3.16L6.897 4zm-.033 2.615l-.201.01c-.83.083-1.606.673-2.252 1.577l-.138.199-.01.018c-.67 1.017-1.185 2.378-1.456 3.845l-.004.022a12.591 12.591 0 00-.207 2.254l.002.188c.004.18.017.36.04.54l.043.291c.092.503.257.908.486 1.208l.117.137c.303.323.698.492 1.17.492 1.1 0 1.796-.676 3.696-3.641l2.175-3.4.454-.701-.139-.198C9.11 7.3 8.084 6.616 6.864 6.616zm10.196-.552l-.176.007c-.635.048-1.223.359-1.82.933l-.196.198c-.439.462-.887 1.064-1.367 1.807l.266.398c.18.274.362.56.55.858l.293.475 1.396 2.335.695 1.114c.583.926 1.03 1.6 1.408 2.082l.213.262c.282.326.529.54.777.673l.102.05c.227.1.457.138.718.138.176.002.35-.023.518-.073.338-.104.61-.32.813-.637l.095-.163.077-.162c.194-.459.29-1.06.29-1.785l-.006-.449c-.08-2.871-.938-5.372-2.2-6.798l-.176-.189c-.67-.683-1.444-1.074-2.27-1.074z",
+		],
+	},
+	{
+		key: "mistral",
+		label: "Mistral",
+		aliases: ["mistralai", "mixtral", "codestral"],
+		paths: [
+			"M3.428 3.4h3.429v3.428h3.429v3.429h-.002 3.431V6.828h3.427V3.4h3.43v13.714H24v3.429H13.714v-3.428h-3.428v-3.429h-3.43v3.428h3.43v3.429H0v-3.429h3.428V3.4zm10.286 13.715h3.428v-3.429h-3.427v3.429z",
+		],
+	},
+	{
+		key: "deepseek",
+		label: "DeepSeek",
+		aliases: ["deepseekai"],
+		paths: [
+			"M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z",
+		],
+	},
+	{
+		key: "qwen",
+		label: "Qwen",
+		aliases: ["qwenai", "alibaba", "dashscope", "tongyi"],
+		paths: [
+			"M19.713 2.825h-5.907c0-.251-.066-.503-.196-.728L12.819.728A1.46 1.46 0 0 0 11.559 0h-1.58c-.52 0-1 .275-1.26.728l-2.42 4.19a1.45 1.45 0 0 0 0 1.453l.791 1.37c.26.448.74.727 1.26.727h11.36c.52 0 1-.275 1.26-.728l.79-1.37a1.45 1.45 0 0 0 0-1.451l-.79-1.37a1.46 1.46 0 0 0-1.26-.728zM.195 9.905l2.951 5.115a1.46 1.46 0 0 0-.531.531l-.791 1.37a1.45 1.45 0 0 0 0 1.452l.79 1.37c.26.448.74.727 1.26.727h4.84c.52 0 1-.275 1.26-.728l.79-1.37a1.45 1.45 0 0 0 0-1.451L5.086 7.083a1.46 1.46 0 0 0-1.26-.728h-1.58c-.52 0-1 .276-1.26.728l-.79 1.37a1.45 1.45 0 0 0 0 1.452m15.888 13.367 2.951-5.115c.217.125.469.196.728.196h1.582c.52 0 1-.275 1.26-.728l.79-1.37a1.45 1.45 0 0 0 0-1.451l-2.42-4.191a1.46 1.46 0 0 0-1.259-.728h-1.582c-.52 0-1 .276-1.259.728l-5.678 9.838a1.45 1.45 0 0 0 0 1.452l.79 1.37c.26.448.74.727 1.26.727h1.582c.52 0 1-.275 1.26-.728z",
+		],
+	},
+	{
+		key: "minimax",
+		label: "MiniMax",
+		aliases: ["minimaxi"],
+		paths: [
+			"M16.278 2c1.156 0 2.093.927 2.093 2.07v12.501a.74.74 0 00.744.709.74.74 0 00.743-.709V9.099a2.06 2.06 0 012.071-2.049A2.06 2.06 0 0124 9.1v6.561a.649.649 0 01-.652.645.649.649 0 01-.653-.645V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v7.472a2.037 2.037 0 01-2.048 2.026 2.037 2.037 0 01-2.048-2.026v-12.5a.785.785 0 00-.788-.753.785.785 0 00-.789.752l-.001 15.904A2.037 2.037 0 0113.441 22a2.037 2.037 0 01-2.048-2.026V18.04c0-.356.292-.645.652-.645.36 0 .652.289.652.645v1.934c0 .263.142.506.372.638.23.131.514.131.744 0a.734.734 0 00.372-.638V4.07c0-1.143.937-2.07 2.093-2.07zm-5.674 0c1.156 0 2.093.927 2.093 2.07v11.523a.648.648 0 01-.652.645.648.648 0 01-.652-.645V4.07a.785.785 0 00-.789-.78.785.785 0 00-.789.78v14.013a2.06 2.06 0 01-2.07 2.048 2.06 2.06 0 01-2.071-2.048V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v3.8a2.06 2.06 0 01-2.071 2.049A2.06 2.06 0 010 12.9v-1.378c0-.357.292-.646.652-.646.36 0 .653.29.653.646V12.9c0 .418.343.757.766.757s.766-.339.766-.757V9.099a2.06 2.06 0 012.07-2.048 2.06 2.06 0 012.071 2.048v8.984c0 .419.343.758.767.758.423 0 .766-.339.766-.758V4.07c0-1.143.937-2.07 2.093-2.07z",
+		],
+	},
+	{
+		key: "moonshot",
+		label: "Moonshot",
+		aliases: ["moonshotai", "kimi", "kimicode"],
+		paths: [
+			"M1.052 16.916l9.539 2.552a21.007 21.007 0 00.06 2.033l5.956 1.593a11.997 11.997 0 01-5.586.865l-.18-.016-.044-.004-.084-.009-.094-.01a11.605 11.605 0 01-.157-.02l-.107-.014-.11-.016a11.962 11.962 0 01-.32-.051l-.042-.008-.075-.013-.107-.02-.07-.015-.093-.019-.075-.016-.095-.02-.097-.023-.094-.022-.068-.017-.088-.022-.09-.024-.095-.025-.082-.023-.109-.03-.062-.02-.084-.025-.093-.028-.105-.034-.058-.019-.08-.026-.09-.031-.066-.024a6.293 6.293 0 01-.044-.015l-.068-.025-.101-.037-.057-.022-.08-.03-.087-.035-.088-.035-.079-.032-.095-.04-.063-.028-.063-.027a5.655 5.655 0 01-.041-.018l-.066-.03-.103-.047-.052-.024-.096-.046-.062-.03-.084-.04-.086-.044-.093-.047-.052-.027-.103-.055-.057-.03-.058-.032a6.49 6.49 0 01-.046-.026l-.094-.053-.06-.034-.051-.03-.072-.041-.082-.05-.093-.056-.052-.032-.084-.053-.061-.039-.079-.05-.07-.047-.053-.035a7.785 7.785 0 01-.054-.036l-.044-.03-.044-.03a6.066 6.066 0 01-.04-.028l-.057-.04-.076-.054-.069-.05-.074-.054-.056-.042-.076-.057-.076-.059-.086-.067-.045-.035-.064-.052-.074-.06-.089-.073-.046-.039-.046-.039a7.516 7.516 0 01-.043-.037l-.045-.04-.061-.053-.07-.062-.068-.06-.062-.058-.067-.062-.053-.05-.088-.084a13.28 13.28 0 01-.099-.097l-.029-.028-.041-.042-.069-.07-.05-.051-.05-.053a6.457 6.457 0 01-.168-.179l-.08-.088-.062-.07-.071-.08-.042-.049-.053-.062-.058-.068-.046-.056a7.175 7.175 0 01-.027-.033l-.045-.055-.066-.082-.041-.052-.05-.064-.02-.025a11.99 11.99 0 01-1.44-2.402zm-1.02-5.794l11.353 3.037a20.468 20.468 0 00-.469 2.011l10.817 2.894a12.076 12.076 0 01-1.845 2.005L.657 15.923l-.016-.046-.035-.104a11.965 11.965 0 01-.05-.153l-.007-.023a11.896 11.896 0 01-.207-.741l-.03-.126-.018-.08-.021-.097-.018-.081-.018-.09-.017-.084-.018-.094c-.026-.141-.05-.283-.071-.426l-.017-.118-.011-.083-.013-.102a12.01 12.01 0 01-.019-.161l-.005-.047a12.12 12.12 0 01-.034-2.145zm1.593-5.15l11.948 3.196c-.368.605-.705 1.231-1.01 1.875l11.295 3.022c-.142.82-.368 1.612-.668 2.365l-11.55-3.09L.124 10.26l.015-.1.008-.049.01-.067.015-.087.018-.098c.026-.148.056-.295.088-.442l.028-.124.02-.085.024-.097c.022-.09.045-.18.07-.268l.028-.102.023-.083.03-.1.025-.082.03-.096.026-.082.031-.095a11.896 11.896 0 011.01-2.232zm4.442-4.4L17.352 4.59a20.77 20.77 0 00-1.688 1.721l7.823 2.093c.267.852.442 1.744.513 2.665L2.106 5.213l.045-.065.027-.04.04-.055.046-.065.055-.076.054-.072.064-.086.05-.065.057-.073.055-.07.06-.074.055-.069.065-.077.054-.066.066-.077.053-.06.072-.082.053-.06.067-.074.054-.058.073-.078.058-.06.063-.067.168-.17.1-.098.059-.056.076-.071a12.084 12.084 0 012.272-1.677zM12.017 0h.097l.082.001.069.001.054.002.068.002.046.001.076.003.047.002.06.003.054.002.087.005.105.007.144.011.088.007.044.004.077.008.082.008.047.005.102.012.05.006.108.014.081.01.042.006.065.01.207.032.07.012.065.011.14.026.092.018.11.022.046.01.075.016.041.01L14.7.3l.042.01.065.015.049.012.071.017.096.024.112.03.113.03.113.032.05.015.07.02.078.024.073.023.05.016.05.016.076.025.099.033.102.036.048.017.064.023.093.034.11.041.116.045.1.04.047.02.06.024.041.018.063.026.04.018.057.025.11.048.1.046.074.035.075.036.06.028.092.046.091.045.102.052.053.028.049.026.046.024.06.033.041.022.052.029.088.05.106.06.087.051.057.034.053.032.096.059.088.055.098.062.036.024.064.041.084.056.04.027.062.042.062.043.023.017c.054.037.108.075.161.114l.083.06.065.048.056.043.086.065.082.064.04.03.05.041.086.069.079.065.085.071c.712.6 1.353 1.283 1.909 2.031L7.222.994l.062-.027.065-.028.081-.034.086-.035c.113-.045.227-.09.341-.131l.096-.035.093-.033.084-.03.096-.031c.087-.03.176-.058.264-.085l.091-.027.086-.025.102-.03.085-.023.1-.026L9.04.37l.09-.023.091-.022.095-.022.09-.02.098-.021.091-.02.095-.018.092-.018.1-.018.091-.016.098-.017.092-.014.097-.015.092-.013.102-.013.091-.012.105-.012.09-.01.105-.01c.093-.01.186-.018.28-.024l.106-.008.09-.005.11-.006.093-.004.1-.004.097-.002.099-.002.197-.002z",
+		],
+	},
+	{
+		key: "zai",
+		label: "Z.ai",
+		aliases: ["zhipu", "zhipuai", "glm"],
+		paths: [
+			"M12.105 2L9.927 4.953H.653L2.83 2h9.276zM23.254 19.048L21.078 22h-9.242l2.174-2.952h9.244zM24 2L9.264 22H0L14.736 2H24z",
+		],
+	},
+	{
+		key: "nvidia",
+		label: "NVIDIA",
+		paths: [
+			"M10.212 8.976V7.62c.127-.01.256-.017.388-.021 3.596-.117 5.957 3.184 5.957 3.184s-2.548 3.647-5.282 3.647a3.227 3.227 0 01-1.063-.175v-4.109c1.4.174 1.681.812 2.523 2.258l1.873-1.627a4.905 4.905 0 00-3.67-1.846 6.594 6.594 0 00-.729.044m0-4.476v2.025c.13-.01.259-.019.388-.024 5.002-.174 8.261 4.226 8.261 4.226s-3.743 4.69-7.643 4.69c-.338 0-.675-.031-1.007-.092v1.25c.278.038.558.057.838.057 3.629 0 6.253-1.91 8.794-4.169.421.347 2.146 1.193 2.501 1.564-2.416 2.083-8.048 3.763-11.24 3.763-.308 0-.603-.02-.894-.048V19.5H24v-15H10.21zm0 9.756v1.068c-3.356-.616-4.287-4.21-4.287-4.21a7.173 7.173 0 014.287-2.138v1.172h-.005a3.182 3.182 0 00-2.502 1.178s.615 2.276 2.507 2.931m-5.961-3.3c1.436-1.935 3.604-3.148 5.961-3.336V6.523C5.81 6.887 2 10.723 2 10.723s2.158 6.427 8.21 7.015v-1.166C5.77 16 4.25 10.958 4.25 10.958h-.002z",
+		],
+	},
+	{
+		key: "stepfun",
+		label: "StepFun",
+		paths: [
+			"M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM8.762 19.614H4.376v-4.386h4.386v4.386zm5.423 0H9.798v-4.386h4.387v4.386zm0-5.42H9.798V9.81h4.387v4.386zm0-5.418H9.798V4.39h4.387v4.386zm5.422-.004h-4.386V4.386h4.386v4.386z",
+		],
+	},
+	{
+		key: "capcut",
+		label: "CapCut",
+		paths: [
+			"M24.189 6.442V2.671l-4.535 2.383V4.91c.002-1.505-1.078-2.411-2.638-2.411H2.64C.993 2.5 0 3.407 0 4.91V8.72L6.354 12 0 15.316v3.8C0 20.595 1 21.5 2.64 21.5h14.373c1.56 0 2.639-.907 2.639-2.382v-.197l4.536 2.409v-3.828L13.64 12 24.19 6.443zM9.982 13.873l7.797 4.083H2.157l7.825-4.083zm7.741-7.828l-7.742 4.057-7.825-4.057h15.567z",
+		],
+	},
 ];
 
-/** `openai-codex` / `OpenAI_Codex` / `OpenAI Codex` → `openaicodex`. */
-function normalizeId(id: string): string {
-	return id.toLowerCase().replace(/[^a-z0-9]+/g, "");
+const BY_ALIAS: Record<string, { label: string; Icon: ComponentType<BrandIconProps> }> = Object.create(null);
+for (const { key, label, aliases, paths } of BRANDS) {
+	const brand = { label, Icon: brandMark(key, paths) };
+	BY_ALIAS[key] = brand;
+	if (aliases) for (const alias of aliases) BY_ALIAS[alias] = brand;
 }
 
-const BY_ALIAS: Record<string, BrandEntry> = {};
-for (const entry of ENTRIES) {
-	for (const alias of entry.aliases) BY_ALIAS[alias] = entry;
+/** Only use model ownership evidence, never the connection or its transport. */
+export function manufacturerIcon(manufacturer: string): ComponentType<BrandIconProps> {
+	return BY_ALIAS[manufacturer.toLowerCase().replace(/[^a-z0-9]+/g, "")]?.Icon ?? GenericMark;
 }
 
-/**
- * The wire protocol is a weak hint, and only for protocols that belong to one
- * vendor. `openai-completions` is the universal compatibility layer — most
- * gateways speak it — so it never implies OpenAI; `openai-responses` does.
- */
-function brandFromApi(api: string): BrandEntry | undefined {
-	const normalised = normalizeId(api);
-	if (normalised.startsWith("anthropic")) return BY_ALIAS.anthropic;
-	if (normalised.startsWith("openairesponses")) return BY_ALIAS.openai;
-	if (normalised.startsWith("google") || normalised.startsWith("gemini")) return BY_ALIAS.google;
-	return undefined;
-}
-
-/**
- * Resolve a provider id (and optionally its wire `api`) to a vendor brand.
- * Unknown ids resolve to the generic mark, labelled with the id itself, so a
- * user-defined gateway still reads as itself in the picker.
- */
-export function providerBrand(provider: string, api?: string): Brand {
-	const id = typeof provider === "string" ? provider : "";
-	const direct = BY_ALIAS[normalizeId(id)];
-	if (direct) return { key: direct.key, label: direct.label, Icon: direct.Icon };
-	const hinted = api ? brandFromApi(api) : undefined;
-	if (hinted) return { key: hinted.key, label: hinted.label, Icon: hinted.Icon };
-	// Keep the id exactly as configured: a user-defined gateway still reads as itself.
-	const trimmed = id.trim();
-	const label = trimmed || GENERIC_ENTRY.label;
-	return { key: GENERIC_ENTRY.key, label, Icon: GENERIC_ENTRY.Icon };
+/** A display name for the connection; the picker separately shows its actual namespace. */
+export function providerLabel(provider: string): string {
+	const normalized = provider.toLowerCase().replace(/[^a-z0-9]+/g, "");
+	if (normalized === "wisa" || normalized === "wisastudio" || normalized === "wisagateway") return "Wisa";
+	return BY_ALIAS[normalized]?.label ?? (provider.trim() || "Other");
 }

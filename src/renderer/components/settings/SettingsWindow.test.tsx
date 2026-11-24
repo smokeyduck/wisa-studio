@@ -27,7 +27,7 @@ function entry(partial: Partial<SettingEntry> & { path: string }): SettingEntry 
 }
 
 afterEach(() => {
-	useUiStore.setState({ settingsOpen: false, settingsTab: "capabilities" });
+	useUiStore.setState({ settingsOpen: false, settingsTab: "gui", settingsQuery: "" });
 });
 
 describe("Toggle", () => {
@@ -76,7 +76,7 @@ describe("CapabilitiesHome", () => {
 			</I18nProvider>,
 		);
 
-		expect(html).toContain("Start with what makes OMP different");
+		expect(html).toContain("Start with what makes Wisa different");
 		expect(html.indexOf("Mid-stream correction - TTSR")).toBeLessThan(html.indexOf("Parallel subagents"));
 		expect(html).toContain("Configure rules");
 		expect(html).toContain("Open Agent Hub");
@@ -197,8 +197,12 @@ describe("GUI settings visibility", () => {
 		expect(isAgentSchemaTab("model", null)).toBe(true);
 		expect(isAgentSchemaTab("model", { tabs: [{ id: "model" }] })).toBe(true);
 		expect(isAgentSchemaTab("gui", null)).toBe(false);
-		expect(isAgentSchemaTab("capabilities", null)).toBe(false);
 		expect(isAgentSchemaTab("skills", null)).toBe(false);
+	});
+
+	it("omits the capabilities workspace page from Settings navigation", () => {
+		const pages = buildSettingsNavGroups(null).flatMap(group => group.items);
+		expect(pages.some(item => item.id === "capabilities")).toBe(false);
 	});
 
 	it("explains why cached schema controls are locked while the sidecar is down", () => {
@@ -406,7 +410,7 @@ describe("SettingsWindow", () => {
 			tab: "resources",
 			resourceTab: "marketplaces",
 		});
-		expect(resolveSettingsTarget("resources:unknown")).toEqual({ tab: "resources", resourceTab: "plugins" });
+		expect(resolveSettingsTarget("resources:unknown")).toEqual({ tab: "resources", resourceTab: "catalog" });
 	});
 
 	it("supports deep-linking the first-class Skills page from commands", () => {

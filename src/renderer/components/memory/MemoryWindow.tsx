@@ -237,7 +237,8 @@ export function MemoryWindow() {
 	const close = useUiStore(state => state.closeMemory);
 	const sessionCwd = useSessionStore(state => state.cwd);
 	const pendingSkills = usePendingSkillReviews();
-	const [cwd, setCwd] = useState<string | null>(null);
+	const cwd = useUiStore(state => state.memoryCwd);
+	const setCwd = (memoryCwd: string | null) => useUiStore.setState({ memoryCwd });
 	const [eraseOpen, setEraseOpen] = useState(false);
 	const [erasing, setErasing] = useState(false);
 	const [updating, setUpdating] = useState(false);

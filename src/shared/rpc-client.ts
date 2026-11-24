@@ -1,20 +1,22 @@
 import type { OmpApi } from "./ipc-types";
 import type { SessionModelOverride } from "./model-restore";
-import type {
-	DiscoverProviderModelsParams,
-	ImageContent,
-	MessagesPage,
-	RpcChatConfig,
-	RpcCommand,
-	RpcDebugParams,
-	RpcMcpServerInput,
-	RpcMemoryEdit,
-	RpcResponse,
-	RpcSecurityDispositionStatus,
-	RpcSecurityTargetInput,
-	RpcSshHostInput,
-	ThinkingLevel,
-	TodoPhase,
+import {
+	deriveThinkingSelectors,
+	type DiscoverProviderModelsParams,
+	type ImageContent,
+	type MessagesPage,
+	type RpcChatConfig,
+	type RpcCommand,
+	type RpcDebugParams,
+	type RpcMcpServerInput,
+	type RpcMemoryEdit,
+	type RpcResponse,
+	type RpcSecurityDispositionStatus,
+	type RpcSecurityTargetInput,
+	type RpcSessionState,
+	type RpcSshHostInput,
+	type ThinkingLevel,
+	type TodoPhase,
 } from "./rpc-types";
 
 export type SessionRpcClient = Omit<OmpApi["rpc"], "commandForTab">;
@@ -65,12 +67,12 @@ function transcriptPageData(response: RpcResponse): MessagesPage | undefined {
 	return data as unknown as MessagesPage;
 }
 
-async function fetchTranscript(transport: RpcTransport): Promise<RpcResponse> {
-	// Every page rebuilds the sidecar's entire transcript. Prefer one snapshot;
-	// engines with a smaller transport ceiling return an error and use paging.
-	const snapshot = await transport({ type: "get_transcript" });
+export async function fetchTranscript(transport: RpcTransport, folded = false): Promise<RpcResponse> {
+	const projection = folded ? { folded: true } : {};
+	// Prefer one display snapshot; engines with a smaller transport ceiling use paging.
+	const snapshot = await transport({ type: "get_transcript", ...projection });
 	if (snapshot.success) return snapshot;
-	let page = await transport({ type: "get_transcript_page", limit: TRANSCRIPT_PAGE_LIMIT });
+	let page = await transport({ type: "get_transcript_page", limit: TRANSCRIPT_PAGE_LIMIT, ...projection });
 	if (!page.success) return snapshot;
 
 	const messages: MessagesPage["messages"] = [];
@@ -88,7 +90,7 @@ async function fetchTranscript(transport: RpcTransport): Promise<RpcResponse> {
 		}
 		if (seenCursors.has(cursor)) return snapshot;
 		seenCursors.add(cursor);
-		page = await transport({ type: "get_transcript_page", cursor, limit: TRANSCRIPT_PAGE_LIMIT });
+		page = await transport({ type: "get_transcript_page", cursor, limit: TRANSCRIPT_PAGE_LIMIT, ...projection });
 		if (!page.success) return page;
 	}
 }
@@ -206,7 +208,18 @@ export function createSessionRpcClient(transport: RpcTransport): SessionRpcClien
 		discoverProviderModels: (params: DiscoverProviderModelsParams) =>
 			rpcCommand({ type: "discover_provider_models", ...params }, 30_000),
 		setThinkingLevel: (level: ThinkingLevel | "auto") => rpcCommand({ type: "set_thinking_level", level }),
-		cycleThinkingLevel: () => rpcCommand({ type: "cycle_thinking_level" }),
+		cycleThinkingLevel: async () => {
+			// Legacy Core's cycle command visits the client classifier even on models
+			// without native Auto. Cycle only selectors from a fresh, verified snapshot.
+			const snapshot = await rpcCommand({ type: "get_state" });
+			if (!snapshot.success) return snapshot;
+			const state = snapshot.data as RpcSessionState | undefined;
+			const selectors = state ? deriveThinkingSelectors(state) : [];
+			if (!state || !selectors.length) return { ...snapshot, command: "cycle_thinking_level", data: null };
+			const current = state.thinkingConfigured ?? state.configuredThinkingLevel ?? state.thinkingLevel;
+			const index = current === undefined ? -1 : selectors.indexOf(current);
+			return rpcCommand({ type: "set_thinking_level", level: selectors[(index + 1) % selectors.length] });
+		},
 		setFastMode: (enabled: boolean, ultrafast?: boolean) => rpcCommand({ type: "set_fast_mode", enabled, ultrafast }),
 		setSlowMode: (enabled: boolean) => rpcCommand({ type: "set_slow_mode", enabled }),
 		setSteeringMode: (mode: "all" | "one-at-a-time") => rpcCommand({ type: "set_steering_mode", mode }),

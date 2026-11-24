@@ -31,6 +31,8 @@ export interface ModalProps {
 	open: boolean;
 	/** The outer surface of a management page can be embedded in the workspace. */
 	dockable?: boolean;
+	/** Position this overlay inside a positioned surface instead of the window. */
+	host?: HTMLElement;
 	onClose: () => void;
 	title?: ReactNode;
 	size?: ModalSize;
@@ -113,6 +115,7 @@ function WorkspacePage({ open, onClose, title, ariaLabel, bodyClassName = "px-4 
 
 function OverlayModal({
 	open,
+	host,
 	onClose,
 	title,
 	size = "md",
@@ -213,7 +216,7 @@ function OverlayModal({
 
 	return createPortal(
 		<div
-			className={`omp-dialog-overlay ${closing ? "omp-fade-out" : "omp-fade-in"} fixed inset-0 ${DIALOG_OVERLAY_Z} flex justify-center bg-(--omp-overlay-bg) p-4 ${placement === "top" ? "items-start pt-[12dvh]" : "items-center"}`}
+			className={`${host ? "absolute p-3" : "omp-dialog-overlay fixed p-4"} ${closing ? "omp-fade-out" : "omp-fade-in"} inset-0 ${DIALOG_OVERLAY_Z} flex justify-center bg-(--omp-overlay-bg) ${placement === "top" ? "items-start pt-[12dvh]" : "items-center"}`}
 			inert={closing}
 			onMouseDown={event => {
 				if (closing) return;
@@ -234,6 +237,7 @@ function OverlayModal({
 				// DOM fallback must not treat the animating portal as a covering
 				// layer, or Escape cannot reach the dialog beneath.
 				role={closing ? "presentation" : "dialog"}
+				style={host ? { maxHeight: "100%", maxWidth: "100%" } : undefined}
 				tabIndex={-1}
 			>
 				{!chromeless && (
@@ -257,6 +261,6 @@ function OverlayModal({
 				<div className={`min-h-0 flex-1 overflow-y-auto ${bodyClassName}`.trim()}>{shown.body}</div>
 			</div>
 		</div>,
-		document.body,
+		host ?? document.body,
 	);
 }

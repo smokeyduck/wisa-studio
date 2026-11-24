@@ -98,6 +98,8 @@ export type RpcCommand =
 	| { id?: string; type: "get_settings_schema" }
 	| { id?: string; type: "get_settings"; paths?: string[] }
 	| { id?: string; type: "set_setting"; path: string; value: unknown }
+	| { id?: string; type: "set_session_compaction"; sessionId: string; values: Record<string, unknown> }
+	| { id?: string; type: "reset_settings" }
 	| { id?: string; type: "get_providers"; forceRefresh?: boolean }
 	| { id?: string; type: "set_plan_mode"; enabled: boolean }
 	| { id?: string; type: "get_plan_mode" }
@@ -154,8 +156,15 @@ export type RpcCommand =
 	| { id?: string; type: "get_session_tree" }
 	| { id?: string; type: "get_themes" }
 	| { id?: string; type: "get_theme_colors"; name: string }
-	| { id?: string; type: "get_transcript" }
-	| { id?: string; type: "get_transcript_page"; cursor?: string; limit?: number }
+	| { id?: string; type: "get_transcript"; folded?: boolean }
+	| {
+			id?: string;
+			type: "get_transcript_page";
+			cursor?: string;
+			limit?: number;
+			folded?: boolean;
+			archive?: { sessionId: string; boundaryId: string; depth: number; targetEntryId?: string };
+	  }
 	| { id?: string; type: "get_copy_targets" }
 
 	// Plan approval (structured)
@@ -280,8 +289,6 @@ export type RpcCommand =
 	| { id?: string; type: "terminal_list" }
 	| { id?: string; type: "terminal_snapshot"; terminalId: string }
 	| { id?: string; type: "terminal_configure"; interactiveCommands: boolean; agentTools?: boolean }
-	| { id?: string; type: "browser_host_start" }
-	| { id?: string; type: "browser_host_stop" }
 	| { id?: string; type: "debug"; params: RpcDebugParams }
 	| { id?: string; type: "collab_start"; relayUrl?: string; view?: boolean }
 	| { id?: string; type: "collab_join"; link: string }
@@ -819,11 +826,6 @@ export interface RpcTerminalSnapshot {
 	terminal: RpcTerminalInfo;
 	data: string;
 	seq: number;
-}
-
-/** `browser_host_start` result: the relay websocket the GUI dials as the extension. */
-export interface RpcBrowserHostInfo {
-	extensionUrl: string;
 }
 
 /** One /btw turn (upstream wire shape: `session/btw-history`). */
@@ -1601,15 +1603,16 @@ export interface ModelInfo {
 	cost?: ModelCost;
 	/** Wire API the model speaks (`openai-responses`, `anthropic-messages`, …); present on `get_state`. */
 	api?: string;
+	/** Endpoint and model identity from the sidecar's full Model snapshot. */
+	baseUrl?: string;
+	identity?: { class?: string };
 	serviceTiers?: readonly string[];
 	/** Input modalities; `image` means snapcompact can archive history for this model. */
 	input?: string[];
 	/** Whether the model reasons at all. A non-reasoning model reports `false` and no ladder. */
 	reasoning?: boolean;
-	/** Structured thinking config as `get_state` reports it. This is the only
-	 * carrier of the effort ladder: the flat `availableThinkingLevels` field is
-	 * never populated by the sidecar, so the picker derives from `efforts`. */
-	thinking?: { mode?: string; efforts?: readonly string[] } | null;
+	/** Verified catalog controls and, for discovery rows, provisional capability hypotheses. */
+	thinking?: { mode?: string; efforts?: readonly string[]; unverified?: boolean } | null;
 	/** Catalog-resolved quirks (an opaque bag here); the context strategy reads only `supportsServerCompaction`. */
 	compat?: object;
 }
@@ -1618,12 +1621,14 @@ export interface RpcSessionState {
 	collab?: RpcCollabState;
 	model?: ModelInfo | null;
 	thinkingLevel: ThinkingLevel | undefined;
-	/** Configured selector: "auto" while auto mode is active, else the effective level. */
+	/** Configured selector, which may not pin a concrete effort. */
 	thinkingConfigured?: ThinkingLevel | "auto";
-	/** Levels the active model supports (empty = no reasoning); the picker must not offer unsupported values.
-	 * The sidecar currently sends `null` for every model — the real ladder is
-	 * `model.thinking.efforts` — so consumers derive rather than trust this alone. */
+	configuredThinkingLevel?: ThinkingLevel | "auto";
+	/** Selectors accepted for the active model; an explicit empty list is authoritative. */
+	thinkingLevels?: (ThinkingLevel | "auto")[] | null;
 	availableThinkingLevels?: ThinkingLevel[] | null;
+	/** Required before treating `auto` as provider adaptation, not the legacy classifier. */
+	thinkingAutoMode?: "provider";
 	isStreaming: boolean;
 	isCompacting: boolean;
 	isBackgroundCompacting?: boolean;
@@ -2011,6 +2016,13 @@ export interface RpcAgentDefinitionInfo {
 	effectivePatterns: string[];
 	effectiveResolved?: string;
 	effectiveThinkingLevel?: string;
+	/** Absent on older sidecars; this is a catalog preview, not a health probe. */
+	modelSelection?: {
+		source: "request" | "override" | "definition" | "configuredRole" | "catalogRole" | "session";
+		role?: string;
+		provider?: string;
+		usesParentFallback: boolean;
+	};
 	prewalkPattern?: string;
 	prewalkResolved?: string;
 }
@@ -2135,7 +2147,23 @@ export const THINKING_LEVEL_VALUES: readonly ThinkingLevel[] = [
 
 /** Runtime narrowing for wire values (thinking_level_changed.configured, get_state). */
 export function isThinkingLevel(value: unknown): value is ThinkingLevel {
-	return typeof value === "string" && (THINKING_LEVEL_VALUES as readonly string[]).includes(value);
+	return value === "inherit" || (typeof value === "string" && THINKING_LEVEL_VALUES.includes(value as ThinkingLevel));
+}
+
+/** Composer selectors from the current RPC snapshot, safe across sidecar versions. */
+export function deriveThinkingSelectors(
+	state: Pick<RpcSessionState, "model" | "thinkingLevels" | "availableThinkingLevels" | "thinkingAutoMode">,
+): (ThinkingLevel | "auto")[] {
+	if (state.model?.reasoning !== true || state.model.thinking?.unverified === true) return [];
+	const reported = state.thinkingLevels ?? state.availableThinkingLevels ?? state.model.thinking?.efforts ?? [];
+	const ladder = THINKING_LEVEL_VALUES.filter(level => level !== "off" && reported.includes(level));
+	const nativeAuto = state.thinkingAutoMode === "provider" && state.thinkingLevels?.includes("auto");
+	if (ladder.length === 0 && !nativeAuto) return [];
+	return [
+		...(state.thinkingLevels == null || state.thinkingLevels.includes("off") ? ["off" as const] : []),
+		...(nativeAuto ? ["auto" as const] : state.thinkingLevels?.includes("inherit") ? ["inherit" as const] : []),
+		...ladder,
+	];
 }
 
 export interface ImageContent {
@@ -2171,6 +2199,7 @@ export interface AgentMessage {
 	role:
 		| "user"
 		| "assistant"
+		| "developer"
 		| "system"
 		| "toolResult"
 		| "bashExecution"
@@ -2181,6 +2210,7 @@ export interface AgentMessage {
 		| "compactionSummary"
 		| "fileMention";
 	content?: MessageContent[] | string;
+	attribution?: "user" | "agent";
 	steering?: boolean;
 	stopReason?: string;
 	errorMessage?: string;
@@ -2757,6 +2787,21 @@ export type AgentSessionEvent =
 	// drain/consume, remove, move, clear, dequeue restore). The queue store
 	// treats this as the update channel; get_queue is only a hydrate fallback.
 	| { type: "queue_update"; steering: RpcQueuedMessage[]; followUp: RpcQueuedMessage[] };
+
+/** Only a terminal assistant reply can establish the outcome of an agent turn. */
+export function agentTurnOutcome(event: Extract<AgentSessionEvent, { type: "agent_end" }>) {
+	if (event.isTerminal === false) return undefined;
+	const last = event.messages?.findLast(message => message.role === "assistant");
+	if (last?.stopReason === "error") return { tone: "failed" as const, detail: last.errorMessage };
+	if (
+		last?.stopReason === "stop" &&
+		!last.errorMessage &&
+		(!Array.isArray(last.content) || !last.content.some(block => block.type === "toolCall"))
+	) {
+		return { tone: "complete" as const };
+	}
+	return undefined;
+}
 
 /**
  * The GUI opts into delta-only `message_update` frames, so `partial` (the

@@ -1,13 +1,10 @@
 /**
- * Web addresses in terminal output are links: a dev server's
- * "Local: http://localhost:5173/" opens in the tab's browser panel like any
- * other link (⌘/Ctrl-click: the system browser). Addresses that soft-wrap
- * across rows stay one link, and end where CJK prose takes over, as they do
+ * Terminal web links open in the system browser. Addresses that soft-wrap
+ * across rows stay one link and end where CJK prose takes over, as they do
  * in rendered replies (`bareAddressEnd`).
  */
 import type { IBufferCell, ILink, ILinkHandler, Terminal } from "@xterm/xterm";
 import { bareAddressEnd, trimAddress } from "./link-targets";
-import { openLink } from "./open-link";
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s"'<>`]+/gi;
 
@@ -74,7 +71,7 @@ export function registerTerminalLinks(term: Terminal): void {
 				links.push({
 					range: { start, end },
 					text: link.url,
-					activate: (event, text) => openLink(text, event),
+					activate: (_event, text) => void window.omp.system.openExternal(text),
 				});
 			}
 			callback(links.length > 0 ? links : undefined);
@@ -84,6 +81,6 @@ export function registerTerminalLinks(term: Terminal): void {
 
 /** `linkHandler` option: OSC 8 hyperlinks open like any other link instead of a confirm prompt. */
 export const terminalLinkHandler: ILinkHandler = {
-	activate: (event, text) => openLink(text, event),
+	activate: (_event, text) => void window.omp.system.openExternal(text),
 	allowNonHttpProtocols: false,
 };

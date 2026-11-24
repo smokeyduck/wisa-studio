@@ -285,7 +285,6 @@ function AgentBar({
 	const rpc = useTabRpc();
 	const ready = useSessionStore(state => state.status === "ready");
 	const refresh = useSubagentsStore(state => state.refresh);
-	const pages = useAgentPagesStore(state => state.pages[tabId]);
 	const splitWindow = useTabsStore(state => state.split !== null);
 	const [confirming, setConfirming] = useState(false);
 	const [working, setWorking] = useState(false);
@@ -297,7 +296,6 @@ function AgentBar({
 	// The Hub's conditions (plan/24 §5.4).
 	const abortable = (live || agent.status === "stale") && !advisor && !disabled;
 	const revivable = agent.status === "parked" && !advisor && !disabled;
-	const pinned = pages?.some(page => page.agentId === agent.id && page.pinned) ?? false;
 	const progress = agent.progress;
 	const model = progress?.resolvedModel;
 
@@ -342,12 +340,6 @@ function AgentBar({
 					disabledReason: t("agents.page.besideSplit"),
 					onSelect: () => useAgentPagesStore.getState().open(tabId, agent.id, { beside: true }),
 				},
-		{
-			id: "keep",
-			label: t("agents.page.keepOpen"),
-			disabled: pinned,
-			onSelect: () => useAgentPagesStore.getState().pin(tabId, agent.id),
-		},
 		{
 			id: "copy",
 			label: t("agents.page.copyTranscript"),

@@ -15,7 +15,6 @@ import { create } from "zustand";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { useAgentPagesStore } from "../../stores/agent-pages";
-import { useSessionStore } from "../../stores/session";
 import { SessionRuntimeProvider, sessionRuntime } from "../../stores/session-runtime-context";
 import { useUiStore } from "../../stores/ui";
 import { subagentPrimaryLabel } from "../panels/subagent-graph";
@@ -54,7 +53,7 @@ export interface SidebarAgentsLayout {
 const FLAT_LAYOUT: SidebarAgentsLayout = { offset: 0, lines: [], trunk: false };
 
 interface SidebarAgentsState {
-	/** Your choice sticks per session while it is open; nothing expands on its own later. */
+	/** Explicit disclosure choice per session; unset sessions start collapsed. */
 	expanded: Record<string, boolean>;
 	/** Per session, the transcripts its agent rows stand for (see transcriptKey). */
 	transcripts: Record<string, ReadonlySet<string>>;
@@ -121,12 +120,11 @@ function SessionAgents({
 	children: (info: SidebarAgentsInfo | null) => ReactNode;
 }) {
 	const projection = useAgentProjection();
-	const stored = useSidebarAgentsStore(state => state.expanded[sessionKey]);
+	const expanded = useSidebarAgentsStore(state => state.expanded[sessionKey] === true);
 	const shownPage = useAgentPagesStore(state => state.shown[tabId] ?? null);
 	const thisTurn = projection.turnCount > 0;
 	const rows = thisTurn ? projection.turn : projection.all;
 	const count = thisTurn ? projection.turnCount : projection.allCount;
-	const streaming = useSessionStore(state => state.isStreaming);
 	// The sidebar lists this session's subagent transcripts only where no agent row stands for one.
 	const files = rows.flatMap(row => (row.agent.sessionFile ? [transcriptKey(row.agent.sessionFile)] : [])).join("\n");
 	useEffect(() => {
@@ -134,8 +132,6 @@ function SessionAgents({
 		return () => setTranscripts(sessionKey, undefined);
 	}, [files, sessionKey]);
 	const working = rows.some(row => !row.context && row.activity === "working");
-	// Open while this turn is at it. When it is done its agents fold away, unless the arrow was used.
-	const expanded = stored ?? (thisTurn && (streaming || working));
 	const info = useMemo<SidebarAgentsInfo | null>(
 		() =>
 			count === 0

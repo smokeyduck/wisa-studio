@@ -13,9 +13,9 @@
  * deserves to know where the bytes land and what did not happen to them.
  */
 
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { Download, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { observeElementRect, useVirtualizer } from "@tanstack/react-virtual";
+import { BookOpen, Download, RefreshCw, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	COMMUNITY_BOARDS,
 	type CommunityBoard,
@@ -29,13 +29,16 @@ import { getFormattingLocale, useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
 import { toast } from "../../stores/toast";
 import { Button, Input, Modal, Spinner, Tabs } from "../common";
+import { CatalogCard } from "../common/CatalogCard";
 
 /** Rank shown as a "Top" chip: the index's first ten rows on every board. */
 const TOP_RANK = 10;
-/** One row: name over provenance, sized so the virtualizer can place it. */
-const ROW_HEIGHT = 54;
-/** Rows rendered when the list has no measurable viewport yet. */
-const UNMEASURED_ROWS = 40;
+const CARD_MIN_WIDTH = 280;
+const CARD_GAP = 12;
+const CARD_INSET = CARD_GAP / 2;
+const ESTIMATED_ROW_HEIGHT = 140;
+/** Limit the initial render when there is no measurable viewport yet. */
+const UNMEASURED_CARDS = 40;
 
 type CatalogState =
 	| { status: "loading" }
@@ -61,6 +64,7 @@ export function SkillsCommunityTab({ onInstalled }: { onInstalled?: () => void }
 	const [installing, setInstalling] = useState<string | null>(null);
 	const [refreshing, setRefreshing] = useState(false);
 	const [preview, setPreview] = useState<{ skill: CommunitySkill; state: PreviewState } | null>(null);
+	const [columns, setColumns] = useState(1);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const bridge = typeof window === "undefined" ? undefined : window.omp?.skillsCommunity;
 
@@ -105,10 +109,16 @@ export function SkillsCommunityTab({ onInstalled }: { onInstalled?: () => void }
 
 	const catalog = state.status === "ok" ? state.catalog : null;
 	const current = catalog?.boards[board] ?? { skills: [], total: 0, complete: false };
+	// The disk inventory and installs from this session share the same folder slug.
+	const isInstalled = (skill: CommunitySkill) => {
+		const slug = communitySkillSlug(skill.id) ?? skill.skillId;
+		return Boolean(installed[slug] ?? catalog?.installed[slug]);
+	};
+	const previewInstalled = preview !== null && isInstalled(preview.skill);
 
 	// The catalogue is local, so filtering is a substring test over what is
 	// loaded - no request, no debounce, and it narrows as more rows arrive.
-	const rows = useMemo(() => {
+	const matches = useMemo(() => {
 		const needle = query.trim().toLowerCase();
 		if (!needle) return current.skills;
 		return current.skills.filter(skill => skill.id.toLowerCase().includes(needle));
@@ -118,11 +128,25 @@ export function SkillsCommunityTab({ onInstalled }: { onInstalled?: () => void }
 	// skill filtered to the top of the list keeps the rank it has on skills.sh.
 	const ranks = useMemo(() => new Map(current.skills.map((skill, index) => [skill.id, index + 1])), [current.skills]);
 
-	const virtualizer = useVirtualizer({
-		count: rows.length,
+	// Virtualize whole grid rows so every card in a row aligns, even when one
+	// locale or text size makes its metadata wrap.
+	const rowCount = Math.ceil(matches.length / columns);
+	const rowKey = useCallback((index: number) => matches[index * columns]?.id ?? index, [matches, columns]);
+	const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+		count: rowCount,
 		getScrollElement: () => scrollRef.current,
-		estimateSize: () => ROW_HEIGHT,
-		overscan: 8,
+		getItemKey: rowKey,
+		observeElementRect: (instance, onRect) =>
+			observeElementRect(instance, rect => {
+				setColumns(Math.max(1, Math.floor((rect.width || 0) / (CARD_MIN_WIDTH + CARD_GAP))));
+				onRect(rect);
+			}),
+		estimateSize: () => ESTIMATED_ROW_HEIGHT,
+		gap: CARD_GAP,
+		paddingStart: CARD_INSET,
+		paddingEnd: CARD_INSET,
+		overscan: 4,
+		useFlushSync: false,
 	});
 
 	// Switching board or filter changes what row N is, so the list starts over.
@@ -175,7 +199,7 @@ export function SkillsCommunityTab({ onInstalled }: { onInstalled?: () => void }
 	};
 
 	const install = async (skill: CommunitySkill) => {
-		if (!bridge || installing) return;
+		if (!bridge || installing || isInstalled(skill)) return;
 		setInstalling(skill.id);
 		try {
 			const result = await bridge.install({ id: skill.id });
@@ -217,96 +241,97 @@ export function SkillsCommunityTab({ onInstalled }: { onInstalled?: () => void }
 				</div>
 			);
 		}
-		if (rows.length === 0) {
+		if (matches.length === 0) {
 			return (
 				<div className="flex items-center justify-center px-5 py-12 text-center text-omp-sm text-(--omp-dim)">
 					{query.trim() ? t("skills.community.empty") : t("skills.community.loading")}
 				</div>
 			);
 		}
-		// The virtualizer needs a measurable viewport, and reports none before
-		// layout (and in tests): render the first screenful at its natural height
-		// rather than an empty box, then hand the list back to the virtualizer.
+		// Before layout there is no viewport range, so render a bounded first batch.
 		const placed = virtualizer.getVirtualItems();
-		const visible =
-			placed.length > 0
-				? placed.map(item => ({ index: item.index, start: item.start }))
-				: rows.slice(0, UNMEASURED_ROWS).map((_, index) => ({ index, start: index * ROW_HEIGHT }));
+		const visible = placed.length
+			? placed
+			: Array.from({ length: Math.min(Math.ceil(UNMEASURED_CARDS / columns), rowCount) }, (_, index) => ({
+					index,
+					key: rowKey(index),
+					start: CARD_INSET + index * (ESTIMATED_ROW_HEIGHT + CARD_GAP),
+				}));
 		return (
-			<div className="h-full overflow-y-auto p-1.5" ref={scrollRef}>
-				<div
-					className="relative w-full"
-					style={{ height: Math.max(virtualizer.getTotalSize(), visible.length * ROW_HEIGHT) }}
-				>
-					{visible.map(item => {
-						const skill = rows[item.index];
-						if (!skill) return null;
-						// Either answer counts: this session's install, or the folder main
-						// found on disk. Both are keyed by the folder name, which is the
-						// id's slug segment.
-						const slug = communitySkillSlug(skill.id) ?? skill.skillId;
-						const installedDir = installed[slug] ?? catalog?.installed[slug] ?? null;
-						const busy = installing === skill.id;
-						const rank = ranks.get(skill.id) ?? item.index + 1;
-						return (
-							<div
-								className="absolute inset-x-0 top-0 flex items-center gap-2 rounded-lg px-2.5 transition-colors hover:bg-(--omp-bg-tertiary)"
-								key={skill.id}
-								style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
-							>
-								<span
-									className="w-9 shrink-0 text-right font-mono text-omp-xxs text-(--omp-dim) tabular-nums"
-									title={t("skills.community.rankHint")}
-								>
-									#{rank}
-								</span>
-								<span className="min-w-0 flex-1">
-									<span className="flex items-center gap-1.5">
-										<span className="truncate font-mono text-omp-sm font-medium text-(--omp-text)">
-											{skill.name}
+			<div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+				{visible.map(row => (
+					<div
+						className="absolute top-0 grid"
+						data-index={row.index}
+						key={row.key}
+						ref={placed.length ? virtualizer.measureElement : undefined}
+						style={{
+							columnGap: CARD_GAP,
+							gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+							insetInline: CARD_INSET,
+							transform: `translateY(${row.start}px)`,
+						}}
+					>
+						{matches.slice(row.index * columns, (row.index + 1) * columns).map((skill, index) => {
+							const busy = installing === skill.id;
+							const rank = ranks.get(skill.id) ?? row.index * columns + index + 1;
+							const previewLabel = t("skills.community.preview");
+							return (
+								<CatalogCard
+									byline={skill.source}
+									description={
+										<span title={t("skills.community.installsHint")}>{installsLabel(t, skill.installs)}</span>
+									}
+									install={
+										isInstalled(skill)
+											? { installed: true, label: t("skills.community.installed") }
+											: {
+													installed: false,
+													label: t(busy ? "skills.community.installing" : "skills.community.install"),
+													disabled: installing !== null,
+													loading: busy,
+													onClick: () => void install(skill),
+												}
+									}
+									key={skill.id}
+									logo={
+										<span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-(--omp-accent-soft) text-(--omp-accent)">
+											<BookOpen aria-hidden="true" size={18} />
 										</span>
-										{rank <= TOP_RANK && (
-											<span
-												className="shrink-0 rounded-md bg-(--omp-accent-soft) px-1.5 py-0.5 text-omp-xxs font-medium text-(--omp-accent)"
-												title={t("skills.community.topHint")}
-											>
-												{t("skills.community.top")}
+									}
+									metadata={
+										<>
+											<div className="flex min-w-0 flex-wrap items-center gap-1.5">
+												<span className="font-mono tabular-nums" title={t("skills.community.rankHint")}>
+													#{rank}
+												</span>
+												{rank <= TOP_RANK && (
+													<span
+														className="rounded-md bg-(--omp-accent-soft) px-1.5 py-0.5 text-omp-xxs font-medium text-(--omp-accent)"
+														title={t("skills.community.topHint")}
+													>
+														{t("skills.community.top")}
+													</span>
+												)}
+												{skill.official && (
+													<span className="rounded-md border border-(--omp-border-muted) px-1.5 py-0.5 text-omp-xxs text-(--omp-muted)">
+														{t("skills.community.official")}
+													</span>
+												)}
+											</div>
+											<span aria-hidden="true" className="ml-auto shrink-0 text-(--omp-accent)">
+												{previewLabel}
 											</span>
-										)}
-										{skill.official && (
-											<span className="shrink-0 rounded-md border border-(--omp-border-muted) px-1.5 py-0.5 text-omp-xxs text-(--omp-muted)">
-												{t("skills.community.official")}
-											</span>
-										)}
-									</span>
-									<span className="mt-0.5 block truncate text-omp-xxs text-(--omp-dim)">{skill.source}</span>
-								</span>
-								<span
-									className="shrink-0 rounded-md border border-(--omp-border-muted) bg-transparent px-1.5 py-0.5 text-omp-xxs font-medium tracking-wide text-(--omp-dim) tabular-nums"
-									title={t("skills.community.installsHint")}
-								>
-									{installsLabel(t, skill.installs)}
-								</span>
-								<Button onClick={() => openPreview(skill)} size="sm" variant="ghost">
-									{t("skills.community.preview")}
-								</Button>
-								<Button
-									disabled={Boolean(installedDir) || installing !== null}
-									loading={busy}
-									onClick={() => void install(skill)}
-									size="sm"
-									variant={installedDir ? "ghost" : "primary"}
-								>
-									{installedDir
-										? t("skills.community.installed")
-										: busy
-											? t("skills.community.installing")
-											: t("skills.community.install")}
-								</Button>
-							</div>
-						);
-					})}
-				</div>
+										</>
+									}
+									onOpen={() => openPreview(skill)}
+									openLabel={`${previewLabel}: ${skill.name}`}
+									title={skill.name}
+								/>
+							);
+						})}
+					</div>
+				))}
 			</div>
 		);
 	})();
@@ -339,7 +364,7 @@ export function SkillsCommunityTab({ onInstalled }: { onInstalled?: () => void }
 				<span className="text-omp-xxs text-(--omp-dim) tabular-nums">
 					{query.trim()
 						? t("skills.community.filtered", {
-								shown: rows.length.toLocaleString(getFormattingLocale()),
+								shown: matches.length.toLocaleString(getFormattingLocale()),
 								total: current.total.toLocaleString(getFormattingLocale()),
 							})
 						: t("skills.community.count", {
@@ -363,7 +388,12 @@ export function SkillsCommunityTab({ onInstalled }: { onInstalled?: () => void }
 				</Button>
 			</div>
 
-			<div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-(--omp-border-muted)">{body}</div>
+			<div
+				className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-(--omp-border-muted) [scrollbar-gutter:stable]"
+				ref={scrollRef}
+			>
+				{body}
+			</div>
 
 			{/* Where the files go, and what the installer did not do with them. */}
 			<div className="flex flex-col gap-1.5 rounded-lg border border-(--omp-border-muted) px-3 py-2.5">
@@ -417,13 +447,13 @@ export function SkillsCommunityTab({ onInstalled }: { onInstalled?: () => void }
 								{t("common.close")}
 							</Button>
 							<Button
-								disabled={Boolean(installed[communitySkillSlug(preview.skill.id) ?? preview.skill.skillId])}
+								disabled={previewInstalled || installing !== null}
 								loading={installing === preview.skill.id}
 								onClick={() => void install(preview.skill)}
 								size="sm"
 							>
-								<Download size={12} />
-								{t("skills.community.install")}
+								{!previewInstalled && <Download size={12} />}
+								{t(previewInstalled ? "skills.community.installed" : "skills.community.install")}
 							</Button>
 						</div>
 					</>

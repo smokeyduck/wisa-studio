@@ -19,6 +19,7 @@ const baseCtx: CommandRegistryContext = {
 	tabKind: "agent",
 	isStreaming: false,
 	fastModeEnabled: false,
+	setFastMode: async () => {},
 	autoCompaction: false,
 	autoRetry: false,
 	steeringMode: "all",
@@ -54,13 +55,12 @@ const baseCtx: CommandRegistryContext = {
 	openHotkeys: () => {},
 	openImportDialog: () => {},
 	openProviderConfig: () => {},
-	focusDockCard: () => {},
+	focusTodoRibbon: () => {},
 	retryTurn: async () => {},
 	retryLastTurn: async () => {},
 	forkSession: async () => {},
 	hydrateSession: async () => {},
 	rpc: {
-		setFastMode: async () => ok(),
 		setAutoCompaction: async () => ok(),
 		setAutoRetry: async () => ok(),
 		setSteeringMode: async () => {},
@@ -128,6 +128,25 @@ const wired = (name: string): CommandAffordance => {
 };
 
 describe("one-shot action wiring", () => {
+	it("does not restore Fast from the sidecar's static command list for an unsupported route", () => {
+		const commands = buildCommandMenu({
+			...ctx,
+			fastModeEnabled: null,
+			availableCommands: [{ name: "fast", source: "builtin", description: "Toggle Fast" }],
+		});
+		expect(commands.some(item => item.name === "fast")).toBe(false);
+	});
+
+	it("dispatches the supported Fast toggle through the model-speed action", async () => {
+		const setFastMode = vi.fn(async () => {});
+		ctx = { ...ctx, fastModeEnabled: false, setFastMode };
+		const affordance = wired("fast");
+		if (affordance.kind !== "toggle") throw new Error("expected toggle");
+		expect(affordance.get()).toBe(false);
+		await affordance.set(true);
+		expect(setFastMode).toHaveBeenCalledWith(true);
+	});
+
 	it("prewalk toggle arms via set_prewalk and mirrors the server state into the store", async () => {
 		const affordance = wired("prewalk");
 		if (affordance.kind !== "toggle") throw new Error("expected toggle");

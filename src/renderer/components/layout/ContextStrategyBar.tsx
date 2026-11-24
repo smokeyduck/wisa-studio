@@ -5,7 +5,7 @@
  * Clicking the strategy opens its controls (strategy, threshold, retention).
  *
  * The strategy logic lives in `lib/context-strategy`; this file renders it and
- * writes the chosen settings back through `set_setting`.
+ * writes the chosen settings to the current conversation.
  */
 
 import { Check, ChevronRight, Layers } from "lucide-react";
@@ -13,7 +13,6 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import { useCompactionConfig } from "../../hooks/use-compaction-config";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
-import { ensureCompactionDefaults } from "../../lib/context-defaults";
 import {
 	CONTEXT_SETTING_PATHS,
 	compactionThreshold,
@@ -31,13 +30,10 @@ import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx, formatTokens } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { onEscape } from "../../lib/keymap";
-import { providerBrand } from "../../lib/provider-brand";
-import { useTabRpc } from "../../lib/tab-rpc";
+import { providerLabel } from "../../lib/provider-brand";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
-import { sessionRuntimeStore, useRuntimeTabId } from "../../stores/session-runtime-context";
-import { type SettingsStore, useSettingsStore } from "../../stores/settings";
-import { toast } from "../../stores/toast";
+import { useSettingsStore } from "../../stores/settings";
 import { useUiStore } from "../../stores/ui";
 import { ContextUsagePopover } from "./ContextUsagePopover";
 
@@ -164,8 +160,6 @@ function methodKey(method: ExpectedMethod | null): string {
 
 export function ContextStrategyBar() {
 	const t = useT();
-	const rpc = useTabRpc();
-	const tabId = useRuntimeTabId();
 	const model = useModelStore(state => state.model);
 	const ready = useSessionStore(state => state.status) === "ready";
 	const autoCompaction = useSettingsStore(state => state.autoCompaction);
@@ -176,13 +170,6 @@ export function ContextStrategyBar() {
 	const { mounted, closing } = useOverlayPresence(open);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const popoverRef = useRef<HTMLDivElement>(null);
-
-	// One-time: an unset threshold becomes 20%, the number readers kept asking
-	// for. Guarded by a pref, so choosing Auto afterwards sticks.
-	useEffect(() => {
-		if (!ready || !config) return;
-		void ensureCompactionDefaults(config, write);
-	}, [ready, config, write]);
 
 	useLayoutEffect(() => {
 		if (!open || !triggerRef.current) return;
@@ -229,18 +216,6 @@ export function ContextStrategyBar() {
 		if (strategy === id) return;
 		await write(strategyPatch(id));
 	};
-	const toggleAutoCompaction = async (next: boolean) => {
-		const settings = sessionRuntimeStore<SettingsStore>(tabId, "settings") ?? useSettingsStore;
-		try {
-			const response = await rpc.setAutoCompaction(next);
-			if (!response.success) throw new Error(response.error);
-			const state = await rpc.getState();
-			if (state.success)
-				settings.getState().setFromState(state.data as Parameters<SettingsStore["setFromState"]>[0]);
-		} catch (cause) {
-			toast({ variant: "error", title: t("contextStrategy.saveFailed"), message: String(cause) });
-		}
-	};
 
 	return (
 		<div className="omp-context-bar flex h-6 min-w-0 items-center justify-between gap-2 px-1">
@@ -286,7 +261,7 @@ export function ContextStrategyBar() {
 							closing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
 						)}
 					>
-						<ModelSummary name={modelName} provider={model.provider} api={model.api} profile={profile} />
+						<ModelSummary name={modelName} provider={model.provider} profile={profile} />
 
 						<div role="radiogroup" aria-label={t("contextStrategy.strategyLabel")} className="mt-3 space-y-1">
 							{STRATEGY_IDS.map(id => (
@@ -336,7 +311,7 @@ export function ContextStrategyBar() {
 								label={t("contextStrategy.autoCompact")}
 								checked={autoCompaction}
 								disabled={saving}
-								onChange={next => void toggleAutoCompaction(next)}
+								onChange={value => void write([{ path: CONTEXT_SETTING_PATHS.enabled, value }])}
 							/>
 							<Switch
 								label={t("contextStrategy.promotion")}
@@ -368,25 +343,13 @@ export function ContextStrategyBar() {
 	);
 }
 
-function ModelSummary({
-	name,
-	provider,
-	api,
-	profile,
-}: {
-	name: string;
-	provider: string;
-	api?: string;
-	profile: ModelProfile;
-}) {
+function ModelSummary({ name, provider, profile }: { name: string; provider: string; profile: ModelProfile }) {
 	const t = useT();
-	// The vendor name, not the gateway id: `wisa` reads `Wisa`.
-	const brand = providerBrand(provider, api);
 	return (
 		<div>
 			<div className="flex items-baseline justify-between gap-3">
 				<span className="min-w-0 truncate text-omp-md font-semibold text-(--omp-text)">{name}</span>
-				<span className="shrink-0 text-omp-xs font-semibold text-(--omp-muted)">{brand.label}</span>
+				<span className="shrink-0 text-omp-xs font-semibold text-(--omp-muted)">{providerLabel(provider)}</span>
 			</div>
 			<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
 				<span className="text-omp-xs tabular-nums text-(--omp-muted)">

@@ -29,6 +29,7 @@ globals.HTMLElement = HTMLElement;
 globals.Node = Node;
 globals.IS_REACT_ACT_ENVIRONMENT = true;
 globals.requestAnimationFrame = (callback: () => void) => setTimeout(callback, 0);
+globals.cancelAnimationFrame = clearTimeout;
 
 const elementPrototype = HTMLElement.prototype as unknown as Record<string, unknown>;
 if (typeof elementPrototype.focus !== "function") elementPrototype.focus = () => {};
@@ -169,15 +170,16 @@ describe("plan-approval store", () => {
 		const store = usePlanApprovalStore.getState();
 		expect(usePlanApprovalStore.getState().pending).toBeNull();
 		store.showProposal({ planFilePath: "/a.md", planContent: "first", options: [] });
-		usePlanApprovalStore.getState().setFeedback("change something");
-		expect(usePlanApprovalStore.getState().feedback).toBe("change something");
+		const comment = { id: "first", quote: "First", feedback: "Change this" };
+		usePlanApprovalStore.getState().setComments([comment]);
+		expect(usePlanApprovalStore.getState().comments).toEqual([comment]);
 		usePlanApprovalStore.getState().showProposal({ planFilePath: "/b.md", planContent: "second", options: [] });
 		expect(usePlanApprovalStore.getState().pending?.planFilePath).toBe("/b.md");
-		expect(usePlanApprovalStore.getState().feedback).toBe("");
-		usePlanApprovalStore.getState().setFeedback("more");
+		expect(usePlanApprovalStore.getState().comments).toEqual([]);
+		usePlanApprovalStore.getState().setComments([comment]);
 		usePlanApprovalStore.getState().clearProposal();
 		expect(usePlanApprovalStore.getState().pending).toBeNull();
-		expect(usePlanApprovalStore.getState().feedback).toBe("");
+		expect(usePlanApprovalStore.getState().comments).toEqual([]);
 	});
 });
 
@@ -286,22 +288,22 @@ describe("PlanApprovalPanel", () => {
 		expect(usePlanApprovalStore.getState().pending).toBeNull();
 	});
 
-	it("sends refine feedback as planApproval(false, undefined, feedback)", async () => {
+	it("does not open an unanchored editor or send until there are selected-text comments", async () => {
 		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: false, dispatched: true }));
 		installMockOmp(planApproval);
 		await mount(<PlanReview />);
 		await emit([proposal("# Plan")]);
 
-		// Refine stays disabled until feedback exists. (linkedom cannot drive
-		// React's controlled-input onChange, so feedback is set via the store —
-		// the same write the TextArea's onChange performs.)
 		const refineBefore = buttonWithText("Refine plan");
 		if (!refineBefore) throw new Error("missing refine button");
+		expect(document.querySelector("textarea")).toBeNull();
 		expect(refineBefore.disabled).toBe(true);
-		expect(document.querySelector("textarea")).not.toBeNull();
+		await act(async () => click(refineBefore));
+		expect(document.querySelector("textarea")).toBeNull();
+		expect(planApproval).not.toHaveBeenCalled();
 
 		await act(async () => {
-			usePlanApprovalStore.getState().setFeedback("Add a rollback step.");
+			usePlanApprovalStore.getState().setComments([{ id: "rollback", quote: "# Plan", feedback: "Add a rollback step." }]);
 		});
 		await flush();
 
@@ -310,9 +312,85 @@ describe("PlanApprovalPanel", () => {
 		expect(refine.disabled).toBe(false);
 		await act(async () => click(refine));
 		await flush();
-		expect(planApproval).toHaveBeenCalledWith(false, undefined, "Add a rollback step.");
+		expect(planApproval).toHaveBeenCalledWith(false, undefined, "> # Plan\n\nAdd a rollback step.");
 		expect(usePlanApprovalStore.getState().pending).toBeNull();
-		expect(usePlanApprovalStore.getState().feedback).toBe("");
+		expect(usePlanApprovalStore.getState().comments).toEqual([]);
+	});
+
+	it("keeps separate quoted comments in the refine RPC payload", async () => {
+		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: false, dispatched: true }));
+		installMockOmp(planApproval);
+		await mount(<PlanReview />);
+		await emit([proposal("# The Plan\n\nOne task.\n\nTwo tasks.")]);
+		const first = { id: "1", quote: "One task.", feedback: "Document the rollback." };
+		const second = { id: "2", quote: "Two tasks.\nShip separately.", feedback: "Add an integration check." };
+		await act(async () => usePlanApprovalStore.getState().setComments([first, second]));
+		expect(document.querySelectorAll("blockquote")).toHaveLength(2);
+		expect(document.querySelector("textarea")).toBeNull();
+		expect(planApproval).not.toHaveBeenCalled();
+		const refine = buttonWithText("Refine plan");
+		if (!refine) throw new Error("missing refine button");
+		await act(async () => click(refine));
+		await flush();
+		expect(planApproval).toHaveBeenCalledWith(false, undefined,
+			"> One task.\n\nDocument the rollback.\n\n---\n\n> Two tasks.\n> Ship separately.\n\nAdd an integration check.");
+		expect(usePlanApprovalStore.getState().comments).toEqual([]);
+	});
+
+	it("opens an inline editor quoting the selected passage without calling the sidecar", async () => {
+		const planApproval = vi.fn<PlanApprovalFn>();
+		installMockOmp(planApproval);
+		await mount(<PlanReview />);
+		await emit([proposal("# Plan heading\n\nOne task to review.")]);
+		const text = document.querySelector(".markdown-body p")?.firstChild;
+		if (!text) throw new Error("missing plan paragraph");
+		const previous = Object.getOwnPropertyDescriptor(document, "getSelection");
+		const selection = {
+			isCollapsed: false,
+			rangeCount: 1,
+			toString: () => "One task",
+			getRangeAt: () => ({
+				startContainer: text,
+				endContainer: text,
+				getBoundingClientRect: () => ({ width: 50, height: 15, bottom: 40 }),
+				cloneContents: () => {
+					const fragment = document.createDocumentFragment();
+					fragment.append(document.createTextNode("One task"));
+					return fragment;
+				},
+			}),
+			removeAllRanges: vi.fn(),
+		};
+		Object.defineProperty(document, "getSelection", { configurable: true, value: () => selection });
+		try {
+			await act(async () => { document.dispatchEvent(new Event("selectionchange")); });
+			await flush();
+			const action = document.querySelector("[data-plan-comment-action]") as unknown as TestElement | null;
+			if (!action) throw new Error("missing selection action");
+			await act(async () => click(action));
+			expect(document.querySelector("textarea")).not.toBeNull();
+			expect(document.querySelector("blockquote")?.textContent).toBe("One task");
+			expect(selection.removeAllRanges).toHaveBeenCalledOnce();
+			expect(planApproval).not.toHaveBeenCalled();
+		} finally {
+			if (previous) Object.defineProperty(document, "getSelection", previous);
+			else Reflect.deleteProperty(document, "getSelection");
+		}
+	});
+
+	it("never applies a delayed Save dialog to a replacement proposal", async () => {
+		const planApproval = vi.fn<PlanApprovalFn>(async () => success({ approved: true, dispatched: false }));
+		const path = Promise.withResolvers<string | null>();
+		installMockOmp(planApproval, vi.fn<SaveDialogFn>(() => path.promise));
+		await mount(<PlanReview />);
+		await emit([proposal("# Old Plan")]);
+		const save = buttonWithText("Save plan");
+		if (!save) throw new Error("missing save button");
+		await act(async () => click(save));
+		await emit([proposal("# Replacement Plan")]);
+		await act(async () => path.resolve("/work/old.md"));
+		expect(planApproval).not.toHaveBeenCalled();
+		expect(usePlanApprovalStore.getState().pending?.planContent).toBe("# Replacement Plan");
 	});
 
 	it("dismisses with planApproval(false) and closes", async () => {

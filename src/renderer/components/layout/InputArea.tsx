@@ -22,10 +22,10 @@ import { useFollowUpModifierHeld } from "../../hooks/use-follow-up-modifier";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { splitAttachmentMentions } from "../../lib/attachment-mentions";
 import { buildCurrentCommandMenu, runSessionCommand, withGuiNativeCommands } from "../../lib/command-registry";
+import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { useDisplayPreference } from "../../lib/display-preferences";
 import { tryEmojiInlineReplace } from "../../lib/emoji";
 import { describeError } from "../../lib/errors";
-import { fitLabel } from "../../lib/fit-label";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -44,7 +44,7 @@ import {
 } from "../../lib/paste-blobs";
 import { parseQueueShorthand, splitQueuedMessages } from "../../lib/queue-input";
 import { insertQuote } from "../../lib/quote-selection";
-import { supportsFastMode } from "../../lib/service-tier";
+import { supportsFastMode, supportsPriorityMode, supportsUltrafastMode } from "../../lib/service-tier";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { composerFileKey, useComposerStore } from "../../stores/composer";
 import { useInputHistoryStore } from "../../stores/input-history";
@@ -71,6 +71,7 @@ import { fileToImage, listMentionFiles, mentionFileCache } from "./input-area-ut
 import { ThinkingControl } from "./ThinkingControl";
 import { type CompletionItem, type CompletionMenu, useCompletionMenu } from "./use-completion-menu";
 import { useComposerFiles } from "./use-composer-files";
+import { useComposerMenuPosition } from "./use-composer-menu-position";
 import { useComposerSubmit } from "./use-composer-submit";
 import { useDictation } from "./use-dictation";
 
@@ -105,23 +106,7 @@ export function InputArea() {
 	const model = useModelStore(s => s.model);
 	/** Display name for the model trigger: catalog name, else a prettified id. */
 	const modelName = modelLabel(model);
-	/** Shrink within one toolbar line; CSS ellipsizes only at the legible floor. */
-	const modelLabelRef = useCallback((label: HTMLSpanElement | null) => {
-		if (!label) return;
-		// Fitting needs a layout engine; a DOM without getComputedStyle (test
-		// environments) keeps the CSS default size.
-		if (typeof getComputedStyle === "undefined") return;
-		const refit = (): void => {
-			label.style.fontSize = "";
-			fitLabel(label, Number.parseFloat(getComputedStyle(label).fontSize));
-		};
-		refit();
-		if (typeof ResizeObserver === "undefined") return;
-		const observer = new ResizeObserver(refit);
-		observer.observe(label);
-		return () => observer.disconnect();
-	}, []);
-	const fastModeActive = useModelStore(s => s.fastModeActive);
+	const fastModeActive = useModelStore(s => s.fastModeActive && supportsFastMode(s.model));
 	const modelPickerOpen = useUiStore(s => s.modelPickerOpen) && runtimeTabId === activeTabId;
 	/** Agent `stt.enabled` setting: microphone dictation button in the composer. */
 	const sttEnabled = useSettingsStore(s => s.sttEnabled);
@@ -147,7 +132,12 @@ export function InputArea() {
 	useEffect(() => {
 		menuListRef.current?.querySelector('[data-menu-active="true"]')?.scrollIntoView?.({ block: "nearest" });
 	}, [menu?.index, menu?.items]);
-	const [commands, setCommands] = useState<AvailableCommand[]>(() => withGuiNativeCommands([]));
+	const [availableCommands, setCommands] = useState<AvailableCommand[]>(() => withGuiNativeCommands([]));
+	const priorityAvailable = supportsPriorityMode(model);
+	const commands = useMemo(
+		() => (priorityAvailable ? availableCommands : availableCommands.filter(command => command.name !== "fast")),
+		[availableCommands, priorityAvailable],
+	);
 	const sending = useComposerStore(state => state.sending);
 	const setSending = useComposerStore(state => state.setSending);
 	const submissionUncertain = useComposerStore(state => state.submissionUncertain);
@@ -160,9 +150,11 @@ export function InputArea() {
 	const pasteMenuRef = useRef<HTMLDivElement>(null);
 	const [runSettingsOpen, setRunSettingsOpen] = useState(false);
 	const { mounted: runSettingsMounted, closing: runSettingsClosing } = useOverlayPresence(runSettingsOpen);
-	const [runSettingsPos, setRunSettingsPos] = useState<{ left: number; bottom: number } | null>(null);
+	const ownedRunSettingsClick = useRef<MouseEvent>(null);
 	const runSettingsTriggerRef = useRef<HTMLButtonElement>(null);
 	const runSettingsMenuRef = useRef<HTMLDivElement>(null);
+	const runSettingsStyle = useComposerMenuPosition(runSettingsOpen, runSettingsTriggerRef, runSettingsMenuRef, 248);
+	const runSettingsReady = runSettingsStyle.visibility !== "hidden";
 	const composerToolbarRef = useRef<HTMLDivElement>(null);
 	const [compactRunSettings, setCompactRunSettings] = useState(false);
 	const approvalMode = useSettingsStore(s => s.approvalMode);
@@ -172,62 +164,51 @@ export function InputArea() {
 	useLayoutEffect(() => {
 		const toolbar = composerToolbarRef.current;
 		if (!toolbar) return;
-		// Pane-local width, not the window: split sessions must fold independently.
-		// Labels collapse first in CSS, then secondary controls move to overflow.
+		// Measure each pane independently to choose inline controls or overflow.
+		// Model names, queue indicators and translated labels never decide the layout.
 		const inlineMinWidth = isChat ? 420 : 560;
 		const measure = () => {
 			const measured = toolbar.clientWidth;
 			const width = Number.isFinite(measured) && measured > 0 ? measured : window.innerWidth;
 			const compact = width < inlineMinWidth;
-			setCompactRunSettings(current => (current === compact ? current : compact));
+			setCompactRunSettings(compact);
 			if (!compact) setRunSettingsOpen(false);
 		};
 		measure();
 		const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
 		observer?.observe(toolbar);
-		window.addEventListener("resize", measure);
+		if (!observer) window.addEventListener("resize", measure);
 		return () => {
 			observer?.disconnect();
-			window.removeEventListener("resize", measure);
+			if (!observer) window.removeEventListener("resize", measure);
 		};
 	}, [isChat]);
 
-	useLayoutEffect(() => {
-		if (!runSettingsOpen || !runSettingsTriggerRef.current) return;
-		const place = () => {
-			const trigger = runSettingsTriggerRef.current;
-			if (!trigger) return;
-			const rect = trigger.getBoundingClientRect();
-			const menuWidth = runSettingsMenuRef.current?.offsetWidth || 240;
-			const left = Math.min(Math.max(12, rect.left), window.innerWidth - menuWidth - 12);
-			setRunSettingsPos({ left, bottom: window.innerHeight - rect.top + 6 });
-		};
-		place();
-		window.addEventListener("resize", place);
-		return () => window.removeEventListener("resize", place);
-	}, [runSettingsOpen]);
+	useEffect(() => {
+		if (!runSettingsOpen || !runSettingsReady) return;
+		runSettingsMenuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+	}, [runSettingsOpen, runSettingsReady]);
 
 	useEffect(() => {
 		if (!runSettingsOpen) return;
-		const onDown = (event: PointerEvent) => {
-			const target = event.target as Node;
-			if (runSettingsTriggerRef.current?.contains(target) || runSettingsMenuRef.current?.contains(target)) return;
+		const onClick = (event: MouseEvent) => {
+			// React bubbles portalled children through their logical parent. Don't
+			// dismiss settings when a nested menu or confirmation handles a click.
+			if (ownedRunSettingsClick.current === event || isDevOverlayEvent(event)) return;
+			if (runSettingsTriggerRef.current?.contains(event.target as Node)) return;
 			setRunSettingsOpen(false);
 		};
 		const onKey = (event: globalThis.KeyboardEvent) => {
+			if (event.defaultPrevented) return;
 			onEscape(event, () => {
 				setRunSettingsOpen(false);
 				runSettingsTriggerRef.current?.focus();
 			});
 		};
-		// Close on click rather than pointerdown. The controls inside this menu
-		// open their own body-level portals; closing on the nested option's
-		// pointerdown unmounted its React handler before the following click could
-		// dispatch the selected value.
-		document.addEventListener("click", onDown);
+		document.addEventListener("click", onClick);
 		document.addEventListener("keydown", onKey);
 		return () => {
-			document.removeEventListener("click", onDown);
+			document.removeEventListener("click", onClick);
 			document.removeEventListener("keydown", onKey);
 		};
 	}, [runSettingsOpen]);
@@ -790,20 +771,19 @@ export function InputArea() {
 	const hasDraft = text.trim().length > 0 || images.length > 0 || attachedFiles.length > 0;
 	/** Holding the follow-up modifier over a running turn turns the next send into a follow-up. */
 	const followUpHeld = useFollowUpModifierHeld(isStreaming && hasDraft);
+	const queueLabel =
+		queueSplitCount > 1
+			? t("input.queue.split", { count: queueSplitCount })
+			: queueBody !== undefined
+				? t("input.queue.badge")
+				: followUpHeld
+					? t("input.followUpHint")
+					: null;
+	const queueTitle = queueBody !== undefined && queueSplitCount <= 1 ? t("input.queue.title") : queueLabel;
 
 	return (
 		<div className="omp-composer-region relative shrink-0 bg-transparent pb-1">
 			<div className="omp-composer-shell relative w-full">
-				{queueBody !== undefined && (
-					<div
-						className="absolute -top-2 right-5 z-10 flex items-center gap-1.5 rounded-full border border-[var(--omp-warning)] px-2 py-0.5 text-omp-xs font-semibold text-[var(--omp-warning)]"
-						style={{ backgroundColor: "var(--omp-bg-primary)" }}
-						title={t("input.queue.title")}
-					>
-						➤ {t("input.queue.badge")}
-					</div>
-				)}
-
 				{pasteMenu && (
 					<div
 						ref={pasteMenuRef}
@@ -1063,15 +1043,125 @@ export function InputArea() {
 							<div className="px-3.5 pb-1 font-mono text-omp-sm text-[var(--omp-dim)]">💡 {argHint}</div>
 						)}
 
+						{collabReadOnly && (
+							<div role="status" className="px-4 pb-1 text-omp-sm text-(--omp-warning)">
+								{t("collab.readOnlyInput")}
+							</div>
+						)}
+
 						<div
 							ref={composerToolbarRef}
 							aria-busy={!routeReady}
 							className="omp-composer-toolbar flex h-11 min-w-0 items-center gap-1 px-2 pb-2 pt-1"
 							inert={!routeReady}
 						>
-							{/* Left: what goes into the message and how the run is configured.
-							    It is the only side that ever gives up room. */}
-							<div className="omp-composer-controls flex min-w-0 flex-1 items-center gap-0.5">
+							<div className="omp-composer-controls flex min-w-0 flex-1 items-center gap-1">
+								<button
+									type="button"
+									onClick={() => {
+										const ui = useUiStore.getState();
+										if (modelPickerOpen) ui.closeModelPicker();
+										else ui.openModelPicker();
+									}}
+									disabled={collabReadOnly}
+									aria-controls={modelPickerOpen ? "omp-model-picker" : undefined}
+									aria-expanded={modelPickerOpen}
+									data-model-picker-trigger={runtimeTabId ?? ""}
+									aria-label={`${t("input.model")}: ${modelName ?? t("input.chooseModel")}`}
+									// The label is the human name; the raw id stays in the tooltip so
+									// power users can still read the catalog key (issue: raw-id label).
+									title={
+										model && modelName
+											? `${t("input.model")}: ${modelName} (${model.id})`
+											: `${t("input.model")}: ${modelName ?? t("input.chooseModel")}`
+									}
+									className="omp-composer-model omp-pressable flex h-8 min-w-8 items-center gap-1.5 rounded-full px-2 text-omp-md font-medium text-[var(--omp-text-secondary)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
+								>
+									<span className="min-w-0 flex-1 truncate">{modelName ?? t("input.chooseModel")}</span>
+									<ChevronDown aria-hidden="true" size={13} className="shrink-0 text-[var(--omp-dim)]" />
+								</button>
+
+								{compactRunSettings ? (
+									<div className="relative shrink-0">
+										<button
+											ref={runSettingsTriggerRef}
+											type="button"
+											aria-expanded={runSettingsOpen}
+											aria-haspopup="menu"
+											data-run-settings-overflow-trigger
+											disabled={collabReadOnly}
+											title={t("input.moreModes")}
+											aria-label={t("input.moreModes")}
+											onClick={() => setRunSettingsOpen(open => !open)}
+											className="omp-pressable relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
+										>
+											<SlidersHorizontal size={15} />
+											{runSettingsActive && (
+												<span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-[var(--omp-accent)]" />
+											)}
+										</button>
+										{runSettingsMounted &&
+											createPortal(
+												<div
+													ref={runSettingsMenuRef}
+													role="menu"
+													data-run-settings-menu
+													onClickCapture={event => {
+														ownedRunSettingsClick.current = event.nativeEvent;
+													}}
+													aria-hidden={runSettingsClosing || undefined}
+													inert={collabReadOnly || runSettingsClosing}
+													style={runSettingsStyle}
+													className={cx(
+														"omp-composer-menu fixed z-[100] flex flex-col items-stretch gap-1 overflow-y-auto rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] p-1.5 shadow-[var(--omp-shadow-md)]",
+														runSettingsClosing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
+													)}
+												>
+													{!isChat && (
+														<CurrentWorkspaceControl
+															tabId={runtimeTabId}
+															disabled={
+																collabReadOnly ||
+																!routeReady ||
+																status !== "ready" ||
+																isStreaming ||
+																isCompacting
+															}
+														/>
+													)}
+													{!isChat && <AdvisorBadge />}
+													<ThinkingControl />
+													<FastModeControl menuItem />
+													{!isChat && <ApprovalControl />}
+													{!isChat && <ComposerModes />}
+												</div>,
+												document.body,
+											)}
+									</div>
+								) : (
+									<div
+										data-run-settings-inline
+										inert={collabReadOnly}
+										className="omp-composer-inline-settings flex min-w-0 shrink-0 items-center gap-0.5"
+									>
+										{!isChat && (
+											<CurrentWorkspaceControl
+												tabId={runtimeTabId}
+												disabled={
+													collabReadOnly || !routeReady || status !== "ready" || isStreaming || isCompacting
+												}
+											/>
+										)}
+										{!isChat && <AdvisorBadge />}
+										<ThinkingControl />
+										<FastModeControl />
+										{!isChat && <ApprovalControl />}
+										{!isChat && <ComposerModes />}
+									</div>
+								)}
+							</div>
+
+							<div className="omp-composer-attachments flex shrink-0 items-center gap-0.5">
 								<button
 									type="button"
 									disabled={collabReadOnly}
@@ -1201,153 +1291,26 @@ export function InputArea() {
 										)}
 									</button>
 								)}
-
-								{!isChat && !compactRunSettings && (
-									<CurrentWorkspaceControl
-										tabId={runtimeTabId}
-										disabled={
-											collabReadOnly || !routeReady || status !== "ready" || isStreaming || isCompacting
-										}
-									/>
-								)}
-								<button
-									type="button"
-									onClick={() => {
-										const ui = useUiStore.getState();
-										if (modelPickerOpen) ui.closeModelPicker();
-										else ui.openModelPicker();
-									}}
-									disabled={collabReadOnly}
-									aria-controls={modelPickerOpen ? "omp-model-picker" : undefined}
-									aria-expanded={modelPickerOpen}
-									data-model-picker-trigger={runtimeTabId ?? ""}
-									aria-label={`${t("input.model")}: ${modelName ?? t("input.chooseModel")}`}
-									// The label is the human name; the raw id stays in the tooltip so
-									// power users can still read the catalog key (issue: raw-id label).
-									title={
-										model && modelName
-											? `${t("input.model")}: ${modelName} (${model.id})`
-											: `${t("input.model")}: ${modelName ?? t("input.chooseModel")}`
-									}
-									className="omp-composer-model omp-pressable flex h-8 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
-								>
-									<span
-										className="omp-composer-model-label min-w-0 flex-1 leading-tight"
-										key={modelName ?? ""}
-										ref={modelLabelRef}
-									>
-										{modelName ?? t("input.chooseModel")}
-									</span>
-									<ChevronDown aria-hidden="true" size={13} className="shrink-0 text-[var(--omp-dim)]" />
-								</button>
-								{!isChat && !compactRunSettings && <AdvisorBadge />}
-
-								{compactRunSettings ? (
-									<div className="relative shrink-0">
-										<button
-											ref={runSettingsTriggerRef}
-											type="button"
-											aria-expanded={runSettingsOpen}
-											aria-haspopup="menu"
-											data-run-settings-overflow-trigger
-											disabled={collabReadOnly}
-											title={t("input.moreModes")}
-											aria-label={t("input.moreModes")}
-											onClick={() => setRunSettingsOpen(open => !open)}
-											className="omp-pressable relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
-										>
-											<SlidersHorizontal size={15} />
-											{runSettingsActive && (
-												<span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-[var(--omp-accent)]" />
-											)}
-										</button>
-										{runSettingsMounted &&
-											runSettingsPos &&
-											createPortal(
-												<div
-													ref={runSettingsMenuRef}
-													role="menu"
-													data-run-settings-menu
-													aria-hidden={runSettingsClosing || undefined}
-													inert={collabReadOnly || runSettingsClosing}
-													style={{ left: runSettingsPos.left, bottom: runSettingsPos.bottom }}
-													className={`fixed z-[100] flex min-w-56 flex-col gap-1 rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] p-1.5 shadow-[var(--omp-shadow-md)] ${
-														runSettingsClosing ? "omp-scale-out pointer-events-none" : "omp-pop-in"
-													}`}
-												>
-													{!isChat && (
-														<CurrentWorkspaceControl
-															tabId={runtimeTabId}
-															disabled={
-																collabReadOnly ||
-																!routeReady ||
-																status !== "ready" ||
-																isStreaming ||
-																isCompacting
-															}
-														/>
-													)}
-													{!isChat && <AdvisorBadge />}
-													<ThinkingControl />
-													<FastModeControl menuItem />
-													{!isChat && <ApprovalControl />}
-													{!isChat && <ComposerModes />}
-												</div>,
-												document.body,
-											)}
-									</div>
-								) : (
-									<div
-										data-run-settings-inline
-										inert={collabReadOnly}
-										className="flex shrink-0 items-center gap-0.5"
-									>
-										<ThinkingControl />
-										<FastModeControl />
-										{!isChat && <ApprovalControl />}
-										{!isChat && <ComposerModes />}
-									</div>
-								)}
 							</div>
 
-							{/* Right: the send cluster. It never shrinks or wraps — at any
-							    width the primary action stays where the hand expects it. */}
-							<div className="omp-composer-send-cluster flex shrink-0 items-center gap-1.5">
-								{queueSplitCount > 1 && (
-									<span
-										aria-label={t("input.queue.split", { count: queueSplitCount })}
-										title={t("input.queue.split", { count: queueSplitCount })}
-										className="omp-composer-send-status flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[var(--omp-warning)] px-2 py-0.5 text-omp-xs font-medium text-[var(--omp-warning)]"
-									>
-										<ListEnd aria-hidden size={13} />
-										<span className="omp-composer-send-status-label">
-											{t("input.queue.split", { count: queueSplitCount })}
-										</span>
-										<span className="omp-composer-send-status-count" aria-hidden>
-											{queueSplitCount}
-										</span>
-									</span>
-								)}
-
-								{collabReadOnly && (
+							<div className="omp-composer-send-cluster flex shrink-0 items-center gap-1">
+								{queueLabel && (
 									<span
 										role="status"
-										title={t("collab.readOnlyInput")}
-										className="max-w-24 truncate text-omp-sm text-(--omp-warning)"
+										aria-label={queueLabel}
+										title={queueTitle ?? undefined}
+										className={cx(
+											"omp-composer-queue flex h-7 min-w-7 items-center justify-center gap-1 rounded-full border border-current px-1.5 text-omp-xs font-medium",
+											queueBody !== undefined ? "text-[var(--omp-warning)]" : "text-[var(--omp-accent)]",
+										)}
 									>
-										{t("collab.readOnlyInput")}
-									</span>
-								)}
-
-								{followUpHeld && (
-									<span
-										role="status"
-										aria-label={t("input.followUpHint")}
-										title={t("input.followUpHint")}
-										className="omp-composer-send-status omp-fade-in flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[var(--omp-accent)] px-2.5 text-omp-sm font-medium text-[var(--omp-accent)]"
-									>
-										<ListEnd aria-hidden size={13} />
-										<span className="omp-composer-send-status-label">{t("input.followUpHint")}</span>
+										<ListEnd aria-hidden size={13} className="shrink-0" />
+										<span className="omp-composer-queue-label truncate">{queueLabel}</span>
+										{queueSplitCount > 1 && (
+											<span className="omp-composer-queue-count max-w-7 truncate tabular-nums" aria-hidden>
+												{queueSplitCount}
+											</span>
+										)}
 									</span>
 								)}
 								{(!isStreaming || hasDraft) && (
@@ -1404,32 +1367,31 @@ function FastModeControl({ menuItem = false }: { menuItem?: boolean }) {
 	const enabled = useModelStore(s => s.fastModeEnabled);
 	const active = useModelStore(s => s.fastModeActive);
 	const ultrafast = useModelStore(s => s.fastModeUltrafast);
-	const supportsUltrafast = useModelStore(s => s.fastModeUltrafastSupported);
+	const sidecarSupportsUltrafast = useModelStore(s => s.fastModeUltrafastSupported);
 	const toggleFastMode = useModelStore(s => s.toggleFastMode);
 	const setModelSpeed = useModelStore(s => s.setModelSpeed);
 	const [menu, setMenu] = useState<ContextMenuAnchor | null>(null);
-	// Nothing to offer when the active model has no serving-priority family:
-	// the request would drop the tier, so the control would only lie.
-	if (!supportsFastMode(model)) return null;
-	const chatGpt = model?.api === "openai-codex-responses" || model?.provider === "openai-codex";
-	const selected: ModelSpeed = active ? (ultrafast ? "ultrafast" : "fast") : "standard";
-	const speeds: ModelSpeed[] = supportsUltrafast ? ["standard", "fast", "ultrafast"] : ["standard", "fast"];
-	const options = speeds.map(id => {
-		const tiers = model?.serviceTiers;
-		const disabled =
-			id === "ultrafast"
-				? !tiers?.includes("ultrafast")
-				: id === "fast" && !!tiers?.length && !tiers.includes("priority");
-		return {
-			id,
-			label: t(`input.speed.${id}`),
-			disabled,
-			disabledReason: disabled ? t("input.speed.unavailable") : undefined,
-			icon: id === selected ? Check : undefined,
-			onSelect: () => void setModelSpeed(id),
-		};
-	});
-	if (chatGpt && menuItem) {
+	const priority = supportsPriorityMode(model);
+	const ultra = sidecarSupportsUltrafast && supportsUltrafastMode(model);
+	if (!priority && !ultra) return null;
+	const speedMenu = model?.provider === "openai-codex" || ultra;
+	const selected: ModelSpeed = !active ? "standard" : ultrafast && ultra ? "ultrafast" : priority ? "fast" : "standard";
+	const speeds: ModelSpeed[] = ["standard"];
+	if (priority) speeds.push("fast");
+	if (ultra) speeds.push("ultrafast");
+	const options = speeds.map(id => ({
+		id,
+		label: t(`input.speed.${id}`),
+		icon: id === selected ? Check : undefined,
+		onSelect: () => {
+			setMenu(null);
+			void setModelSpeed(id);
+		},
+	}));
+	const triggerTitle = speedMenu
+		? t("input.speed.title")
+		: `${enabled ? t("input.fast.on") : t("input.fast.off")}${active ? t("input.fast.active") : ""}`;
+	if (speedMenu && menuItem) {
 		return (
 			<div role="group" aria-label={t("input.speed.title")} className="flex flex-wrap gap-0.5 px-1 py-0.5">
 				{options.map(item => (
@@ -1438,11 +1400,9 @@ function FastModeControl({ menuItem = false }: { menuItem?: boolean }) {
 						type="button"
 						role="menuitemradio"
 						aria-checked={item.id === selected}
-						title={item.disabledReason}
-						disabled={item.disabled}
 						onClick={item.onSelect}
 						className={cx(
-							"omp-pressable rounded-md px-2 py-1 text-omp-sm disabled:opacity-40",
+							"omp-pressable rounded-md px-2 py-1 text-omp-sm",
 							item.id === selected && "bg-(--omp-selected-bg) text-(--omp-accent)",
 						)}
 					>
@@ -1457,35 +1417,32 @@ function FastModeControl({ menuItem = false }: { menuItem?: boolean }) {
 			<button
 				type="button"
 				role={menuItem ? "menuitem" : undefined}
-				aria-pressed={chatGpt ? undefined : enabled}
-				aria-haspopup={chatGpt ? "menu" : undefined}
-				aria-expanded={chatGpt ? menu !== null : undefined}
+				aria-pressed={speedMenu ? undefined : enabled}
+				aria-haspopup={speedMenu ? "menu" : undefined}
+				aria-expanded={speedMenu ? menu !== null : undefined}
 				onClick={event => {
-					if (!chatGpt) {
+					if (!speedMenu) {
 						void toggleFastMode();
 						return;
 					}
 					const rect = event.currentTarget.getBoundingClientRect();
 					setMenu(menu ? null : { x: rect.left, y: rect.top - 6 });
 				}}
-				title={
-					chatGpt
-						? t("input.speed.title")
-						: `${enabled ? t("input.fast.on") : t("input.fast.off")}${active ? t("input.fast.active") : ""}`
-				}
+				title={triggerTitle}
+				aria-label={triggerTitle}
 				className={cx(
 					"omp-pressable flex h-8 items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium hover:bg-[var(--omp-selected-bg)]",
 					menuItem && "w-full",
 					enabled ? "text-[var(--omp-accent)]" : "text-[var(--omp-muted)]",
 				)}
 			>
-				<Zap size={14} fill={active ? "currentColor" : "none"} />
+				<Zap aria-hidden size={14} fill={active ? "currentColor" : "none"} />
 				<span className="omp-composer-control-label">
-					{chatGpt ? t(`input.speed.${selected}`) : t("input.fast.label")}
+					{speedMenu ? t(`input.speed.${selected}`) : t("input.fast.label")}
 				</span>
-				{chatGpt && <ChevronDown aria-hidden size={11} />}
+				{speedMenu && <ChevronDown aria-hidden size={11} />}
 			</button>
-			{chatGpt && menu && (
+			{speedMenu && menu && (
 				<ContextMenu x={menu.x} y={menu.y} placement="above" items={options} onClose={() => setMenu(null)} />
 			)}
 		</>

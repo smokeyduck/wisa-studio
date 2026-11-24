@@ -9,6 +9,7 @@ import { useMessagesStore } from "../../stores/messages";
 import { useSessionStore } from "../../stores/session";
 import { useToolsStore } from "../../stores/tools";
 
+import { buildHistoryRows, locateEntryRow } from "./chat-stream-utils";
 import { MessageBubble } from "./MessageBubble";
 
 const { document, window, Event, HTMLElement, Element, Node } = parseHTML("<html><body></body></html>");
@@ -45,6 +46,64 @@ const toolResultMessage: AgentMessage = {
 
 afterEach(() => {
 	useToolsStore.getState().reset();
+});
+
+describe("MessageBubble todo reminder", () => {
+	it("localizes Core's developer reminder while preserving task text and model context", () => {
+		const source =
+			"<system-reminder>\nYou stopped with 1 incomplete todo item(s):\n- Release\n  - Check CHANGELOG.md\n\nPlease continue working on these tasks or mark them complete if finished.\n(Reminder 1/3)\n</system-reminder>";
+		const message: AgentMessage = {
+			role: "developer",
+			attribution: "agent",
+			content: [{ type: "text", text: source }],
+		};
+		const bridge = window as unknown as { omp?: { initialLanguage: "vi" } };
+		const before = bridge.omp;
+		try {
+			bridge.omp = { initialLanguage: "vi" };
+			const html = renderToStaticMarkup(
+				<I18nProvider>
+					<MessageBubble message={message} />
+				</I18nProvider>,
+			);
+			expect(html).toContain("Nhắc nhở 1/3");
+			expect(html).toContain("Hãy tiếp tục thực hiện các tác vụ này");
+			expect(html).toContain("Check CHANGELOG.md");
+			expect(html).not.toContain("You stopped with");
+			expect(message.content).toEqual([{ type: "text", text: source }]);
+		} finally {
+			bridge.omp = before;
+		}
+	});
+
+	it.each(["full", "compact"] as const)("fits reply actions on the reminder's last line in %s mode", detail => {
+		const reply: AgentMessage = {
+			role: "assistant",
+			entryId: "reply",
+			content: [{ type: "text", text: "Mark the task complete." }],
+		};
+		const notice: AgentMessage = {
+			role: "developer",
+			attribution: "agent",
+			entryId: "notice",
+			content:
+				"<system-reminder>\nYou stopped with 1 incomplete todo item(s):\n- Check CHANGELOG.md\n\nPlease continue working on these tasks or mark them complete if finished.\n(Reminder 1/3)\n</system-reminder>",
+		};
+		const rows = buildHistoryRows([reply, notice], detail);
+		expect(rows).toHaveLength(1);
+		expect(locateEntryRow(rows, "notice")).toEqual({ index: 0, kind: "message" });
+		const row = rows[0];
+		if (row?.kind !== "message") throw new Error("Expected a reply row");
+		const html = renderToStaticMarkup(
+			<I18nProvider>
+				<MessageBubble message={row.message} todoReminders={row.todoReminders} />
+			</I18nProvider>,
+		);
+		const rendered = parseHTML(html).document;
+		const attempt = [...rendered.querySelectorAll("p")].find(p => p.textContent === "Reminder 1/3");
+		expect(attempt?.parentElement?.querySelector('button[title="Copy message text"]')).toBeTruthy();
+		expect(buildHistoryRows([reply, { role: "user", content: "Next turn" }, notice], detail)).toHaveLength(3);
+	});
 });
 
 describe("MessageBubble tool messages", () => {
@@ -274,6 +333,43 @@ describe("MessageBubble compaction summaries", () => {
 		expect(html).not.toContain("Long archived context details.");
 	});
 
+	it.each([
+		[
+			"Archived 79,899 chars of history onto 5 snapcompact frames (+27,833 chars as text)",
+			"Đã lưu trữ 79.899 ký tự lịch sử (5 khung ảnh snapcompact, 27.833 ký tự ở dạng văn bản).",
+		],
+		[
+			"Archived 1\u202f234 chars of history onto 1 snapcompact frame",
+			"Đã lưu trữ 1.234 ký tự lịch sử (1 khung ảnh snapcompact).",
+		],
+		["Custom snapcompact summary.", "Custom snapcompact summary."],
+	])("renders the Vietnamese snapcompact card for %s", (shortSummary, expected) => {
+		const message: AgentMessage = {
+			role: "compactionSummary",
+			method: "snapcompact",
+			tokensBefore: 212_000,
+			tokensAfter: 53_000,
+			shortSummary,
+			summary: "Archive details remain unchanged.",
+		};
+		const bridge = window as unknown as { omp?: { initialLanguage: "vi" } };
+		const before = bridge.omp;
+		try {
+			bridge.omp = { initialLanguage: "vi" };
+			const html = renderToStaticMarkup(
+				<I18nProvider>
+					<MessageBubble message={message} />
+				</I18nProvider>,
+			);
+			expect(html).toContain("Nén snapcompact - 212.0k → 53.0k");
+			expect(html).toContain(expected);
+			expect(html).toContain("Xem chi tiết ngữ cảnh");
+			expect(html).not.toContain("chars of history onto");
+		} finally {
+			bridge.omp = before;
+		}
+	});
+
 	it("preserves an unknown maintenance method and a zero-token starting point", () => {
 		const html = renderToStaticMarkup(
 			<I18nProvider>
@@ -319,6 +415,33 @@ describe("MessageBubble completion events", () => {
 		expect(html).not.toContain("omp-custom-turn");
 	});
 
+	it("shows one disclosure for a batch of background log matches without mounting the wire text", () => {
+		const html = renderToStaticMarkup(
+			<I18nProvider>
+				<MessageBubble
+					message={{
+						role: "custom",
+						customType: "async-notify",
+						content:
+							"<system-notice>Background job bg_92 (npm ci) is still running.\nMATCHED_OUTPUT</system-notice>",
+						details: {
+							reports: [
+								{ id: "bg_92", type: "bash" },
+								{ id: "bg_96", type: "bash" },
+							],
+						},
+						display: true,
+						timestamp: 1,
+					}}
+				/>
+			</I18nProvider>,
+		);
+		expect(html.match(/<details\b/g)).toHaveLength(1);
+		expect(html).toContain("Background log update");
+		expect(html).toContain("bg_92 · bg_96");
+		expect(html).not.toMatch(/async-notify|system-notice|npm ci|MATCHED_OUTPUT/);
+	});
+
 	it("keeps background output behind one native disclosure row", () => {
 		const html = renderToStaticMarkup(
 			<I18nProvider>
@@ -334,11 +457,11 @@ describe("MessageBubble completion events", () => {
 				/>
 			</I18nProvider>,
 		);
-		expect(html).toContain("bun run build");
+		expect(html).toContain("bg-7");
 		expect(html).toContain("Background job completed");
 		expect(html).toContain("<details");
 		expect(html).not.toContain("<details open");
-		expect(html).toContain("BUILD_OUTPUT");
+		expect(html).not.toMatch(/bun run build|BUILD_OUTPUT/);
 	});
 });
 
@@ -385,7 +508,6 @@ describe("MessageBubble noise filtering", () => {
 		// The timestamp/copy/branch footer is message-level chrome a tool card
 		// doesn't need (copy would copy an empty string).
 		expect(html).not.toContain("Copy message text");
-		expect(html).toContain("py-1.5");
 	});
 
 	it("keeps the footer on text-bearing messages", () => {
@@ -404,7 +526,6 @@ describe("MessageBubble noise filtering", () => {
 		);
 		expect(html).toContain("Fixed.");
 		expect(html).toContain("Copy message text");
-		expect(html).toContain("py-3");
 	});
 
 	it("offers branch-to-new-tab on user and assistant messages even before legacy ids are resolved", () => {
@@ -448,7 +569,6 @@ describe("MessageBubble noise filtering", () => {
 		);
 		expect(html).toContain("read");
 		expect(html).not.toContain("Copy message text");
-		expect(html).toContain("py-1.5");
 		expect(html).toContain("omp-assistant-turn--compact");
 	});
 

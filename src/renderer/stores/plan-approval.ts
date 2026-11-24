@@ -7,6 +7,7 @@
  */
 
 import { createStore } from "zustand/vanilla";
+import { toBlockquote } from "../lib/quote-selection";
 import { createScopedStoreApi, useScopedStore } from "./session-runtime-context";
 
 export interface PendingPlanProposal {
@@ -21,11 +22,21 @@ export interface PendingPlanProposal {
 export type PlanApprovalOption = "execute" | "compact" | "keep_context" | "save";
 export type PlanApprovalSubmitState = { kind: "approve"; option?: PlanApprovalOption } | { kind: "refine" | "dismiss" };
 
+export interface PlanComment {
+	id: string;
+	quote: string;
+	feedback: string;
+}
+
+export function planFeedbackText(comments: readonly PlanComment[]): string {
+	return comments.map(comment => `${toBlockquote(comment.quote)}\n\n${comment.feedback}`).join("\n\n---\n\n");
+}
+
 export interface PlanApprovalSnapshot {
 	/** The proposal awaiting a host decision; null when answered. */
 	pending: PendingPlanProposal | null;
-	/** Refine feedback sent back to the agent when the host asks for changes. */
-	feedback: string;
+	/** Feedback drafts keyed independently, even when two excerpts have the same text. */
+	comments: PlanComment[];
 	/** A successful approval that could not dispatch remains actionable. */
 	notice: string | null;
 	/** Submission state follows its owning tab so switching away cannot re-submit it. */
@@ -35,7 +46,7 @@ export interface PlanApprovalSnapshot {
 export interface PlanApprovalStore extends PlanApprovalSnapshot {
 	/** Show a proposal, replacing any previous one (latest wins). */
 	showProposal: (proposal: PendingPlanProposal) => void;
-	setFeedback: (feedback: string) => void;
+	setComments: (comments: PlanComment[]) => void;
 	setNotice: (notice: string | null) => void;
 	setSubmitting: (submitting: PlanApprovalSubmitState | null) => void;
 	/** Drop the pending proposal once it has been answered or dismissed. */
@@ -45,14 +56,14 @@ export interface PlanApprovalStore extends PlanApprovalSnapshot {
 export const createPlanApprovalStore = () =>
 	createStore<PlanApprovalStore>()(set => ({
 		pending: null,
-		feedback: "",
+		comments: [],
 		notice: null,
 		submitting: null,
-		showProposal: proposal => set({ pending: proposal, feedback: "", notice: null, submitting: null }),
-		setFeedback: feedback => set({ feedback }),
+		showProposal: proposal => set({ pending: proposal, comments: [], notice: null, submitting: null }),
+		setComments: comments => set({ comments }),
 		setNotice: notice => set({ notice }),
 		setSubmitting: submitting => set({ submitting }),
-		clearProposal: () => set({ pending: null, feedback: "", notice: null, submitting: null }),
+		clearProposal: () => set({ pending: null, comments: [], notice: null, submitting: null }),
 	}));
 
 const defaultPlanApprovalStore = createPlanApprovalStore();

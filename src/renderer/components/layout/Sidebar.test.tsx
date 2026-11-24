@@ -78,6 +78,7 @@ interface MockOmp {
 }
 
 function installMockOmp(sessionList: SessionInfo[]): MockOmp {
+	const prefs = new Map<string, unknown>();
 	const omp: MockOmp = {
 		sidecar: {
 			defaultWorkspace: vi.fn(async () => "/default/work"),
@@ -107,8 +108,10 @@ function installMockOmp(sessionList: SessionInfo[]): MockOmp {
 			getSessionOwner: vi.fn(async () => null),
 		},
 		prefs: {
-			get: vi.fn(async () => null),
-			set: vi.fn(async () => {}),
+			get: vi.fn(async (key: string) => prefs.get(key) ?? null),
+			set: vi.fn(async (key: string, value: unknown) => {
+				prefs.set(key, value);
+			}),
 		},
 		rpc: new Proxy({} as MockOmp["rpc"], {
 			get: (target, prop) => {
@@ -165,11 +168,16 @@ async function mount(element: ReactElement): Promise<void> {
 	await flush();
 }
 
-/** Drive a React onClick/onContextMenu prop on an element; `modifiers` carries ⌘/⇧ state. */
+/** Drive a React event prop directly in the linkedom harness. */
 async function fire(
 	element: Element | TestElement | null,
-	prop: "onClick" | "onContextMenu",
-	modifiers: { metaKey?: boolean; shiftKey?: boolean } = {},
+	prop: "onClick" | "onContextMenu" | "onDragStart" | "onDragOver" | "onDrop" | "onDragEnd",
+	modifiers: {
+		metaKey?: boolean;
+		shiftKey?: boolean;
+		clientY?: number;
+		dataTransfer?: { setData: (type: string, value: string) => void; effectAllowed: string; dropEffect: string };
+	} = {},
 ): Promise<void> {
 	if (!element) throw new Error("fire: element is null");
 	const record = element as unknown as Record<string, unknown>;
@@ -239,80 +247,98 @@ function SidebarWithRecency() {
 	return <Sidebar />;
 }
 
+async function reloadSidebar(): Promise<void> {
+	await act(async () => root.unmount());
+	container.remove();
+	useSidebarPrefs.getState().reset();
+	await useSidebarPrefs.getState().hydrate();
+	await mount(<Sidebar />);
+}
+
 describe("Sidebar menus and pinned ordering", () => {
-	it("promotes a More-menu entry into the main list when pinned and sends it back", async () => {
+	it("unpins a promoted tool without reopening the index", async () => {
 		installMockOmp(LIST);
 		seedStores();
 		await mount(<Sidebar />);
 
 		const navigation = () => container.querySelector("[data-sidebar-navigation]");
-		expect(navigation()?.textContent).not.toContain("Agent Hub");
+		expect(navigation()?.textContent).not.toContain("Plugins");
 
-		await fire(navigation()!.querySelector('[aria-label="Show more navigation"]'), "onClick");
-		const pin = document.body.querySelector('[role="menu"] [aria-label="Pin to top"]');
-		expect(pin).not.toBeNull();
-		await fire(pin as Element, "onClick");
+		const index = () => navigation()?.querySelector('button[aria-controls="sidebar-tool-index"]');
+		await fire(index() ?? null, "onClick");
+		const pin = navigation()?.querySelector('[aria-label="Pin to top: Plugins"]');
+		await fire(pin ?? null, "onClick");
 
-		expect(useSidebarPrefs.getState().pinnedNav).toEqual(["agents"]);
-		// The promoted entry keeps its own button, so its shortcut and badge work
-		// from the main list exactly as they did from the menu.
+		expect(useSidebarPrefs.getState().pinnedNav).toEqual(["plugins"]);
+		// Collapse the index so only the promoted shortcut can open the page.
+		await fire(index() ?? null, "onClick");
 		const promoted = [...(navigation()!.querySelectorAll("button") as unknown as Element[])].find(button =>
-			(button.textContent ?? "").includes("Agent Hub"),
+			(button.textContent ?? "").includes("Plugins"),
 		);
 		expect(promoted).not.toBeUndefined();
 		await fire(promoted as Element, "onClick");
-		expect(useUiStore.getState().agentHubOpen).toBe(true);
+		expect(useUiStore.getState().workspacePage).toBe("pluginsOpen");
 
-		await fire(navigation()!.querySelector('[aria-label="Show more navigation"]'), "onClick");
-		const unpin = document.body.querySelector('[role="menu"] [aria-label="Unpin"]');
-		await fire(unpin as Element, "onClick");
+		const unpin = navigation()?.querySelector('[aria-label="Unpin: Plugins"]');
+		await fire(unpin ?? null, "onClick");
 		expect(useSidebarPrefs.getState().pinnedNav).toEqual([]);
+		expect(navigation()?.textContent).not.toContain("Plugins");
+		expect(index()?.getAttribute("aria-expanded")).toBe("false");
+		await fire(index() ?? null, "onClick");
+		expect(navigation()?.querySelector('[aria-label="Pin to top: Plugins"]')).toBeTruthy();
 	});
 
-	it("keeps session tools visible and opens app-wide tools from the More menu", async () => {
+	it("keeps session tools visible and opens app-wide tools from a grouped index", async () => {
 		installMockOmp(LIST);
 		seedStores();
 		await mount(<Sidebar />);
 
 		const navigation = container.querySelector("[data-sidebar-navigation]");
-		for (const label of ["New session", "Commands", "Skills", "Plugins", "More"]) {
+		for (const label of ["New session", "Commands", "Tool index"]) {
 			expect(navigation?.textContent).toContain(label);
 		}
 		// App-wide tools do not compete with the task list until asked for.
 		expect(navigation?.textContent).not.toContain("Providers & login");
-		// Agent Hub and PR Center live in More until they are pinned.
+		// Agent Hub and PR Center live in the tool index until they are pinned.
 		expect(navigation?.textContent).not.toContain("Agent Hub");
 		expect(navigation?.textContent).not.toContain("PR Center");
 		expect(document.body.querySelector('[role="menu"]')).toBeNull();
 
-		const more = navigation!.querySelector('[aria-label="Show more navigation"]');
-		await fire(more, "onClick");
-		expect(more?.getAttribute("aria-expanded")).toBe("true");
-		const labels = menuItemLabels();
-		for (const label of [
-			"Agent Hub",
-			"PR Center",
-			"OMP capabilities",
-			"Providers & login",
-			"Usage & quotas",
-			"Session stats",
-			"Keyboard shortcuts",
-		]) {
-			expect(labels.some(item => item.includes(label))).toBe(true);
-		}
-		const capabilities = [...document.body.querySelectorAll('[role="menu"] button')].find(button =>
-			(button.textContent ?? "").includes("OMP capabilities"),
-		);
-		await fire(capabilities as Element, "onClick");
-		expect(useUiStore.getState().settingsOpen).toBe(true);
-		expect(useUiStore.getState().settingsTab).toBe("capabilities");
-		expect(document.body.querySelector('[role="menu"]')).toBeNull();
+		const indexToggle = navigation?.querySelector('button[aria-controls="sidebar-tool-index"]');
+		await fire(indexToggle ?? null, "onClick");
+		expect(indexToggle?.getAttribute("aria-expanded")).toBe("true");
+		const index = navigation?.querySelector("#sidebar-tool-index");
+		const security = index?.querySelector('[data-sidebar-index-item="security"] button');
+		expect(index?.querySelector("[data-sidebar-index-item] button")).toBe(security);
+		await fire(security ?? null, "onClick");
+		expect(useUiStore.getState().workspacePage).toBe("security");
+		expect(useUiStore.getState().settingsOpen).toBe(false);
+		expect(security?.getAttribute("aria-current")).toBe("page");
+		const audit = index?.querySelector('[data-sidebar-index-item="project-audit"] button');
+		await fire(audit ?? null, "onClick");
+		expect(useUiStore.getState().workspacePage).toBe("projectAudit");
+		expect(useUiStore.getState().settingsOpen).toBe(false);
+		expect(audit?.getAttribute("aria-current")).toBe("page");
+		const workspace = index?.querySelector('section[aria-labelledby="sidebar-tools-workspace"]');
+		expect(workspace?.textContent).toContain("Agent Hub");
+		expect(workspace?.textContent).toContain("PR Center");
+		const library = index?.querySelector('section[aria-labelledby="sidebar-tools-library"]');
+		expect(library?.textContent).toContain("Skills");
+		expect(library?.textContent).toContain("Plugins");
+		const insights = index?.querySelector('section[aria-labelledby="sidebar-tools-insights"]');
+		expect(insights?.textContent).toContain("Usage & quotas");
+		expect(insights?.textContent).toContain("Session stats");
+		const app = index?.querySelector('section[aria-labelledby="sidebar-tools-app"]');
+		expect(app?.textContent).toContain("Providers & login");
+		const capabilities = index?.querySelector('[data-sidebar-index-item="capabilities"] button');
+		await fire(capabilities ?? null, "onClick");
+		expect(useUiStore.getState().settingsOpen).toBe(false);
+		expect(useUiStore.getState().workspacePage).toBe("capabilities");
+		expect(capabilities?.getAttribute("aria-current")).toBe("page");
+		expect(indexToggle?.getAttribute("aria-expanded")).toBe("true");
 
-		await fire(more, "onClick");
-		const hotkeys = [...document.body.querySelectorAll('[role="menu"] button')].find(button =>
-			(button.textContent ?? "").includes("Keyboard shortcuts"),
-		);
-		await fire(hotkeys as Element, "onClick");
+		const hotkeys = index?.querySelector('[data-sidebar-index-item="hotkeys"] button');
+		await fire(hotkeys ?? null, "onClick");
 		expect(useUiStore.getState().hotkeysOpen).toBe(true);
 
 		const commandCenter = navigation?.querySelector('button[data-command-center-entry="true"]');
@@ -385,7 +411,7 @@ describe("Sidebar menus and pinned ordering", () => {
 		);
 	});
 
-	it("sorted by name, workspaces keep their order when a session is opened, and the choice persists (#55)", async () => {
+	it("drags workspaces to a stable order that survives a reload and later activity", async () => {
 		const omp = installMockOmp(LIST);
 		useSessionStore.setState({ sessionId: "", cwd: "/neutral", isStreaming: false });
 		useTabsStore.setState({
@@ -399,12 +425,23 @@ describe("Sidebar menus and pinned ordering", () => {
 			[...container.querySelectorAll("[data-workspace-group]")].map(element =>
 				(element as unknown as Element).getAttribute("data-workspace-group"),
 			);
-		// Last-used order puts beta (the newest session) first.
+		expect(container.querySelector("[data-workspace-sort]")).toBeNull();
 		expect(workspaceOrder()).toEqual(["/work/beta", "/work/alpha"]);
 
-		await fire(container.querySelector("[data-workspace-sort]"), "onClick");
+		const alpha = container.querySelector('[data-workspace-group="/work/alpha"]');
+		const beta = container.querySelector('[data-workspace-group="/work/beta"]');
+		Object.assign(beta!, { getBoundingClientRect: () => ({ top: 20, height: 30 }) });
+		const dataTransfer = { setData: vi.fn(), effectAllowed: "none", dropEffect: "none" };
+		await fire(alpha, "onDragStart", { dataTransfer });
+		await fire(beta, "onDragOver", { dataTransfer });
+		expect(beta?.getAttribute("data-workspace-drop")).toBe("before");
+		await fire(beta, "onDrop", { dataTransfer });
+		expect(beta?.getAttribute("data-workspace-drop")).toBeNull();
 		expect(workspaceOrder()).toEqual(["/work/alpha", "/work/beta"]);
-		expect(omp.prefs.set).toHaveBeenCalledWith("sidebar", expect.objectContaining({ workspaceSort: "name" }));
+		expect(omp.prefs.set).toHaveBeenCalledWith(
+			"sidebar",
+			expect.objectContaining({ workspaceOrder: ["/work/alpha", "/work/beta"] }),
+		);
 
 		await act(async () => {
 			useTabsStore.setState({
@@ -419,6 +456,28 @@ describe("Sidebar menus and pinned ordering", () => {
 		});
 		await flush();
 		expect(workspaceOrder()).toEqual(["/work/alpha", "/work/beta"]);
+		await reloadSidebar();
+		expect(workspaceOrder()).toEqual(["/work/alpha", "/work/beta"]);
+
+		// The same persisted order can be changed from a keyboard-accessible workspace menu.
+		await fire(container.querySelector('[data-workspace-group="/work/alpha"]'), "onContextMenu");
+		const moveDown = [...document.body.querySelectorAll('[role="menuitem"]')].find(
+			item => item.textContent?.trim() === "Move workspace down",
+		);
+		await fire(moveDown ?? null, "onClick");
+		expect(workspaceOrder()).toEqual(["/work/beta", "/work/alpha"]);
+
+		await act(async () => useSidebarPrefs.getState().toggleGroupPin("/work/beta"));
+		const calls = omp.prefs.set.mock.calls.length;
+		const unpinned = container.querySelector('[data-workspace-group="/work/alpha"]');
+		const pinned = container.querySelector('[data-workspace-group="/work/beta"]');
+		await fire(unpinned, "onDragStart", { dataTransfer });
+		await fire(pinned, "onDragOver", { dataTransfer });
+		expect(pinned?.getAttribute("data-workspace-drop")).toBeNull();
+		await fire(pinned, "onDrop", { dataTransfer });
+		await fire(unpinned, "onDragEnd");
+		expect(workspaceOrder()).toEqual(["/work/beta", "/work/alpha"]);
+		expect(omp.prefs.set).toHaveBeenCalledTimes(calls);
 	});
 
 	it("opens a projectless agent session directly from the Work lane", async () => {
@@ -622,7 +681,7 @@ describe("Sidebar menus and pinned ordering", () => {
 		}
 	});
 
-	it("right-click on a workspace header opens the agent-only 6-item group menu", async () => {
+	it("right-click on a workspace header opens workspace-specific actions, including keyboard reorder", async () => {
 		installMockOmp(LIST);
 		seedStores();
 		await mount(<Sidebar />);
@@ -639,7 +698,9 @@ describe("Sidebar menus and pinned ordering", () => {
 		expect(labels.some(label => label.includes("Select sessions"))).toBe(true);
 		expect(labels.some(label => label.includes("Pin to top"))).toBe(true);
 		expect(labels.some(label => label.includes("Delete"))).toBe(true);
-		expect(labels).toHaveLength(6);
+		expect(labels).toContain("Move workspace up");
+		expect(labels).toContain("Move workspace down");
+		expect(labels).toHaveLength(8);
 	});
 
 	it("right-click on a session row opens the 7-item session menu", async () => {
@@ -1060,6 +1121,71 @@ describe("Sidebar menus and pinned ordering", () => {
 			"/work/alpha/one.jsonl",
 			"/work/alpha/two.jsonl",
 		]);
+	});
+});
+
+describe("Sidebar workspace session preview", () => {
+	const cwd = "/work/alpha";
+	const recentSessions = (count: number) =>
+		Array.from({ length: count }, (_, index) =>
+			session(`${cwd}/${index + 1}.jsonl`, cwd, {
+				title: `Session ${index + 1}`,
+				modified: `2026-01-0${index + 1}T00:00:00Z`,
+			}),
+		);
+	const group = () => container.querySelector(`[data-session-group="${cwd}"]`);
+	const workspaceToggle = () => container.querySelector(`[data-workspace-group="${cwd}"] button[aria-expanded]`);
+	const overflow = () => group()?.querySelector("[data-sidebar-overflow]") ?? null;
+	const titles = () =>
+		group()
+			?.querySelectorAll(".omp-sidebar-session-row .omp-sidebar-title")
+			.map(row => row.textContent);
+
+	it("shows four recent sessions and remembers collapse and overflow through lane changes and reload", async () => {
+		const omp = installMockOmp(recentSessions(6));
+		seedStores();
+		await mount(<Sidebar />);
+
+		expect(titles()).toEqual(["Session 6", "Session 5", "Session 4", "Session 3"]);
+		expect(overflow()?.textContent).toBe("Show 2 more sessions");
+		await fire(overflow(), "onClick");
+		expect(titles()).toEqual(["Session 6", "Session 5", "Session 4", "Session 3", "Session 2", "Session 1"]);
+		expect(overflow()?.getAttribute("aria-expanded")).toBe("true");
+
+		await fire(workspaceToggle(), "onClick");
+		const laneSwitch = container.querySelector('[aria-label="Choose session lane"]')?.querySelectorAll("button");
+		await fire(laneSwitch?.[1] ?? null, "onClick");
+		await fire(laneSwitch?.[0] ?? null, "onClick");
+		expect(group()).toBeNull();
+		expect(omp.prefs.set).toHaveBeenLastCalledWith(
+			"sidebar",
+			expect.objectContaining({ collapsedLists: { [cwd]: true }, expandedLists: [cwd] }),
+		);
+
+		await reloadSidebar();
+		expect(workspaceToggle()?.getAttribute("aria-expanded")).toBe("false");
+		expect(group()).toBeNull();
+		await fire(workspaceToggle(), "onClick");
+		expect(titles()).toHaveLength(6);
+		expect(overflow()?.textContent).toBe("Show fewer sessions");
+		await fire(overflow(), "onClick");
+		expect(titles()).toHaveLength(4);
+		expect(omp.prefs.set).toHaveBeenLastCalledWith(
+			"sidebar",
+			expect.objectContaining({ collapsedLists: { [cwd]: false }, expandedLists: [] }),
+		);
+	});
+
+	it("retains pinned sessions and an older active child's collapsed parent outside the four newest roots", async () => {
+		const child = session(`${cwd}/fork.jsonl`, cwd, { title: "Active fork", parentSessionPath: `${cwd}/2.jsonl` });
+		installMockOmp([...recentSessions(8), child]);
+		seedStores();
+		useSessionStore.setState({ sessionId: child.id });
+		useSidebarPrefs.setState({ pinnedSessions: [`${cwd}/1.jsonl`] });
+		await mount(<Sidebar />);
+
+		expect(titles()).toEqual(["Session 1", "Session 8", "Session 7", "Session 6", "Session 5", "Session 2"]);
+		expect(overflow()?.textContent).toBe("Show 2 more sessions");
 	});
 });
 
@@ -1523,7 +1649,7 @@ describe("Sidebar session hierarchy", () => {
 		expect(useSidebarPrefs.getState().setSessionsArchived).toHaveBeenCalledWith(["/work/alpha/parent.jsonl"], false);
 	});
 
-	it("opens the family that holds the session on screen", async () => {
+	it("keeps the active child's branch collapsed until explicitly opened", async () => {
 		const parent = session("/work/alpha/parent.jsonl", "/work/alpha", { id: "parent-id", title: "Main session" });
 		const child = session("/work/alpha/fork.jsonl", "/work/alpha", {
 			id: "fork-id",
@@ -1535,12 +1661,19 @@ describe("Sidebar session hierarchy", () => {
 		useSessionStore.setState({ sessionId: "fork-id" });
 		await mount(<Sidebar />);
 
-		const rows = [...document.querySelectorAll('[data-session-group="/work/alpha"] .omp-sidebar-session-row')];
-		expect(rows.map(row => row.querySelector(".omp-sidebar-title")?.textContent)).toEqual([
+		const rows = () => [...document.querySelectorAll('[data-session-group="/work/alpha"] .omp-sidebar-session-row')];
+		const parentRow = rows()[0];
+		const pill = parentRow?.querySelector(".omp-sidebar-agent-pill");
+		expect(rows().map(row => row.querySelector(".omp-sidebar-title")?.textContent)).toEqual(["Main session"]);
+		expect(parentRow?.getAttribute("aria-expanded")).toBe("false");
+		expect(pill?.getAttribute("data-holds-active")).toBe("true");
+
+		await fire(pill as unknown as Element, "onClick");
+		expect(rows().map(row => row.querySelector(".omp-sidebar-title")?.textContent)).toEqual([
 			"Main session",
 			"Forked session",
 		]);
-		expect(rows[0]?.getAttribute("aria-expanded")).toBe("true");
-		expect(rows[1]?.getAttribute("data-active")).toBe("true");
+		expect(parentRow?.getAttribute("aria-expanded")).toBe("true");
+		expect(rows()[1]?.getAttribute("data-active")).toBe("true");
 	});
 });

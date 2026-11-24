@@ -14,7 +14,6 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vite
 import { createSessionRpcClient } from "../../../shared/rpc-client";
 import type { ModelInfo, RpcResponse } from "../../../shared/rpc-types";
 import { I18nProvider } from "../../lib/i18n";
-import { providerBrand } from "../../lib/provider-brand";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
 import { useUiStore } from "../../stores/ui";
@@ -186,10 +185,9 @@ function renderedOwnership(): Array<{ key: string; maker: string }> {
 
 /** Which provider a row belongs to, read from the provider label the row shows. */
 function providerOf(row: Element): string {
-	const text = row.textContent ?? "";
-	const match = ["wisa", "anthropic", "xai"].find(provider => text.includes(providerBrand(provider).label));
-	if (!match) throw new Error(`row shows no known provider label: ${text}`);
-	return match;
+	const provider = row.querySelector("[data-model-provider]")?.textContent;
+	if (!provider) throw new Error(`row shows no provider namespace: ${row.textContent}`);
+	return provider;
 }
 
 /** The raw model id a row carries; the name span holds it as its title. */
@@ -302,6 +300,31 @@ describe("ModelPicker full catalog", () => {
 		const ownership = renderedOwnership();
 		expect(ownership.map(entry => entry.key).sort()).toEqual(Object.keys(EXPECTED_MAKER).sort());
 		for (const { key, maker } of ownership) expect(maker).toBe(EXPECTED_MAKER[key]);
+	});
+
+	it("uses manufacturer artwork even when the connection is Wisa", async () => {
+		await openPicker();
+
+		const marks = Object.fromEntries(
+			makerGroups().map(group => [
+				group.getAttribute("aria-label"),
+				group.querySelector("svg[data-brand]")?.getAttribute("data-brand"),
+			]),
+		);
+		expect(marks).toEqual({
+			Anthropic: "anthropic",
+			CapCut: "capcut",
+			DeepSeek: "deepseek",
+			MiniMax: "minimax",
+			Moonshot: "moonshot",
+			NVIDIA: "nvidia",
+			OpenAI: "openai",
+			Qwen: "qwen",
+			StepFun: "stepfun",
+			Wisa: "generic",
+			xAI: "xai",
+			"Z.ai": "zai",
+		});
 	});
 
 	it("keeps every maker group expanded without a click", async () => {

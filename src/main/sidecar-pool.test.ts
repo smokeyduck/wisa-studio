@@ -293,7 +293,7 @@ describe("SidecarPool tabs", () => {
 			{ kind: "agent", tabId: "tab-b", cwd: "/b", status: "running", placeholder: false, sessionPath: null },
 		]);
 
-		// Run settles → ready (the renderer's unreadDone signal for background tabs).
+		// Without a terminal reply, running → ready has no completion outcome.
 		fw.sent.length = 0;
 		b?.emitAgentEvents(["agent_end"]);
 		expect(fw.sentTo(IPC_EVENTS.TAB_STATUS).map(s => s.data)).toEqual([
@@ -324,7 +324,7 @@ describe("SidecarPool tabs", () => {
 		const outcomes = () =>
 			fw.sentTo(IPC_EVENTS.TAB_STATUS).map(s => {
 				const data = s.data as IpcTabStatusPayload;
-				return [data.status, data.attention, data.attentionDetail, data.retry?.attempt ?? data.retry];
+				return [data.status, data.attention, data.attentionDetail, data.retry?.attempt ?? data.retry, data.settledRun];
 			});
 
 		b?.emit("events", [
@@ -346,12 +346,36 @@ describe("SidecarPool tabs", () => {
 		b?.emit("events", [{ type: "agent_end", messages: [{ role: "assistant", content: [], stopReason: "stop" }] }]);
 
 		expect(outcomes()).toEqual([
-			["running", "retrying", undefined, 1],
-			["running", "retrying", undefined, null],
-			["ready", "failed", "overloaded (500)", null],
-			["running", null, undefined, null],
-			["ready", null, undefined, null],
+			["running", "retrying", undefined, 1, undefined],
+			["running", "retrying", undefined, null, undefined],
+			["ready", "failed", "overloaded (500)", null, "failed"],
+			["running", null, undefined, null, undefined],
+			["ready", null, undefined, null, "complete"],
 		]);
+	});
+
+	it("publishes a parked completion once, and only after the session settles", () => {
+		const { pool, sidecars } = fakePool();
+		const fw = fakeWindow(1);
+		pool.acquire("/a", fw.win, "tab-a");
+		pool.acquire("/b", fw.win, "tab-b");
+		const parked = sidecars[1];
+		parked?.emitStatus("ready");
+		const settlements = () =>
+			fw.sentTo(IPC_EVENTS.TAB_STATUS).flatMap(({ data }) => {
+				const outcome = (data as IpcTabStatusPayload).settledRun;
+				return outcome ? [outcome] : [];
+			});
+		parked?.emit("events", [
+			{ type: "agent_start" },
+			{ type: "agent_end", messages: [{ role: "assistant", stopReason: "aborted" }] },
+		]);
+		parked?.emit("promptResult", { type: "prompt_result", agentInvoked: true, sessionSettled: false });
+		parked?.emit("events", [{ type: "agent_end", messages: [{ role: "assistant", stopReason: "stop" }] }]);
+		expect(settlements()).toEqual([]);
+		parked?.emit("sessionSettled", { type: "session_settled" });
+		parked?.emit("sessionInfoUpdate", { type: "session_info_update", title: "Updated title" });
+		expect(settlements()).toEqual(["complete"]);
 	});
 
 	it("keeps a tab running until upstream background work settles", () => {
@@ -411,6 +435,25 @@ describe("SidecarPool tabs", () => {
 		// Foreign/unknown tabs are refused.
 		expect(pool.setActiveTab(fakeWindow(2).win, "tab-a")).toBe(false);
 		expect(pool.setActiveTab(fw.win, "nope")).toBe(false);
+	});
+
+	it("forwards side question frames from the originating tab after it is parked", () => {
+		const { pool, sidecars } = fakePool();
+		const fw = fakeWindow(1);
+		pool.acquire("/a", fw.win, "tab-a");
+		pool.acquire("/b", fw.win, "tab-b");
+		const [a, b] = sidecars;
+		const first = { type: "btw_delta", recordId: "topic-a", delta: "A" };
+		const second = { type: "btw_delta", recordId: "topic-b", delta: "B" };
+		a?.emit("btwFrame", first);
+		expect(pool.setActiveTab(fw.win, "tab-b")).toBe(true);
+		a?.emit("btwFrame", first);
+		b?.emit("btwFrame", second);
+		expect(fw.sentTo(IPC_EVENTS.BTW_FRAME).map(entry => entry.data)).toEqual([
+			{ tabId: "tab-a", payload: first },
+			{ tabId: "tab-a", payload: first },
+			{ tabId: "tab-b", payload: second },
+		]);
 	});
 
 	it("forwards a shown pair's two sessions, keeps pairs in the background, and persists them all", () => {

@@ -51,18 +51,21 @@ export function ExecutionGroup({
 	const state = active ? "running" : failed > 0 ? "failed" : "complete";
 
 	const plural = stepCount === 1 ? "" : "s";
+	const counts = { running: Math.max(1, running), failed, total: stepCount, plural };
 	const summary =
-		failed > 0
-			? t("chat.process.statusFailed", { failed, total: stepCount, plural })
-			: running > 0 || live
-				? t("chat.process.statusRunning", { running: Math.max(1, running), total: stepCount, plural })
-				: t("chat.process.statusComplete", { total: stepCount, plural });
+		active && failed > 0
+			? t("chat.process.statusRunningWithFailures", counts)
+			: active
+				? t("chat.process.statusRunning", counts)
+				: failed > 0
+					? t("chat.process.statusFailed", counts)
+					: t("chat.process.statusComplete", counts);
 
 	return (
 		<section className={cx("omp-execution-group", className)} data-state={state}>
 			<button
 				aria-expanded={expanded}
-				className="omp-execution-group-header omp-pressable flex w-full min-w-0 items-center gap-2 text-left"
+				className="omp-execution-group-header omp-pressable flex w-full min-w-0 items-center gap-1.5 text-left"
 				onClick={() => onExpandedChange(!expanded)}
 				type="button"
 				aria-label={`${t("chat.process.title")}: ${summary}`}
@@ -89,7 +92,7 @@ export function ExecutionGroup({
 				<ChevronRight
 					aria-hidden="true"
 					className={cx("omp-disclosure-chevron shrink-0 text-[var(--omp-dim)]", expanded && "rotate-90")}
-					size={14}
+					size={12}
 				/>
 			</button>
 			<Collapse open={expanded}>

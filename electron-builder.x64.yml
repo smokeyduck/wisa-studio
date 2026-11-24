@@ -10,6 +10,9 @@ files:
 extraResources:
   - from: resources/omp.x64
     to: omp
+  - from: .
+    to: licenses
+    filter: [LICENSE, NOTICE, LICENSE-SCOPE.md, LICENSE-POLYFORM-STRICT]
 # Must match electron-builder.yml: the x64 bundle is a separate config, so the
 # `wisa-studio://` scheme has to be declared here too or Intel Macs get no deep links.
 protocols:

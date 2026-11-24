@@ -1,56 +1,29 @@
 import { createStore } from "zustand/vanilla";
 import {
 	type AvailableModelsResult,
+	deriveThinkingSelectors,
 	type ModelCatalogUpdateFrame,
 	type ModelInfo,
 	type ProviderDiscoveryState,
 	type ProviderInfo,
 	type ProvidersResult,
 	type RpcSessionState,
-	THINKING_LEVEL_VALUES,
 	type ThinkingLevel,
 } from "../../shared/rpc-types";
 import { translate } from "../lib/i18n";
+import { supportsFastMode, supportsPriorityMode, supportsUltrafastMode } from "../lib/service-tier";
 import { activeTabCommand, createScopedStoreApi, type TabCommand, useScopedStore } from "./session-runtime-context";
 import { toast } from "./toast";
 
 export type ModelSpeed = "standard" | "fast" | "ultrafast";
-
-/**
- * The ladder the composer picker may offer for one `get_state` snapshot.
- *
- * `availableThinkingLevels` is the documented carrier, but the sidecar never
- * fills it in (it is `null` for every model), so the real ladder lives in
- * `model.thinking.efforts`. Prefer the explicit field when a sidecar does send
- * one, else derive from the model's efforts — and always intersect with
- * `THINKING_LEVEL_VALUES` in effort order, so an unknown effort string from the
- * wire can never reach the menu. A model that does not reason
- * (`reasoning === false` or no thinking config) yields `[]`.
- */
-export function deriveThinkingLevels(state: {
-	availableThinkingLevels?: readonly string[] | null;
-	model?: ModelInfo | null;
-}): ThinkingLevel[] {
-	/** Effort order, minus the synthetic `off` selector, minus anything the wire invented. */
-	const order = (reported: readonly string[]): ThinkingLevel[] => {
-		const known = new Set<string>(reported);
-		return THINKING_LEVEL_VALUES.filter(level => level !== "off" && known.has(level));
-	};
-	const explicit = state.availableThinkingLevels ?? [];
-	if (explicit.length > 0) return order(explicit);
-	// A non-reasoning model reports `{"reasoning":false,"thinking":null}`: nothing to pick.
-	if (state.model?.reasoning === false) return [];
-	// The real ladder: `{"thinking":{"mode":"effort","efforts":[…]}}`.
-	return order(state.model?.thinking?.efforts ?? []);
-}
 
 export interface ModelStore {
 	model: ModelInfo | null;
 	thinkingLevel: ThinkingLevel | undefined;
 	/** Configured selector ("auto" or a level) — what the composer picker checks, vs the effective `thinkingLevel`. */
 	thinkingConfigured: ThinkingLevel | "auto" | undefined;
-	/** Levels the active model supports; empty = model does not reason. */
-	availableThinkingLevels: ThinkingLevel[];
+	/** Verified selectors for the active model, in menu order. */
+	availableThinkingSelectors: (ThinkingLevel | "auto")[];
 	fastModeEnabled: boolean;
 	fastModeActive: boolean;
 	fastModeUltrafast: boolean;
@@ -100,7 +73,7 @@ const initialState = {
 	model: null as ModelInfo | null,
 	thinkingLevel: undefined as ThinkingLevel | undefined,
 	thinkingConfigured: undefined as ThinkingLevel | "auto" | undefined,
-	availableThinkingLevels: [] as ThinkingLevel[],
+	availableThinkingSelectors: [] as (ThinkingLevel | "auto")[],
 	fastModeEnabled: false,
 	fastModeActive: false,
 	fastModeUltrafast: false,
@@ -118,35 +91,41 @@ const initialState = {
 
 export const createModelStore = (command: TabCommand = activeTabCommand) =>
 	createStore<ModelStore>()((set, get) => {
-		/** Commit one catalog read, dropping anything older than what is already applied. */
+		let catalogEpoch = 0;
 		const applyCatalog = (snapshot: CatalogSnapshot): void => {
-			set(state =>
-				snapshot.generation < state.catalogGeneration
-					? {}
-					: {
-							...(snapshot.models ? { availableModels: snapshot.models } : {}),
-							...(snapshot.providers ? { providers: snapshot.providers } : {}),
-							...(snapshot.discoveryStates ? { discoveryStates: snapshot.discoveryStates } : {}),
-							...(snapshot.refreshPending !== undefined
-								? { catalogRefreshPending: snapshot.refreshPending }
-								: {}),
-							catalogGeneration: snapshot.generation,
-						},
-			);
+			set(state => {
+				if (snapshot.generation < state.catalogGeneration) return state;
+				// Discovery can report a partial list while its provider requests run.
+				// Keep warm rows until a completed read or push replaces them.
+				const keepModels = snapshot.refreshPending && state.availableModels.length > 0;
+				const keepProviders = snapshot.refreshPending && state.providers.length > 0;
+				return {
+					...(!keepModels && snapshot.models ? { availableModels: snapshot.models } : {}),
+					...(!keepProviders && snapshot.providers ? { providers: snapshot.providers } : {}),
+					...(snapshot.discoveryStates ? { discoveryStates: snapshot.discoveryStates } : {}),
+					...(snapshot.refreshPending !== undefined ? { catalogRefreshPending: snapshot.refreshPending } : {}),
+					catalogGeneration: snapshot.generation,
+				};
+			});
 		};
-		const readCatalog = async (
+		const refreshCatalog = async (
 			type: "get_available_models" | "get_providers",
 			forceRefresh: boolean,
-		): Promise<CatalogSnapshot> => {
+		): Promise<ProvidersResult> => {
+			const epoch = catalogEpoch;
 			const response = await command({ type, forceRefresh });
 			if (!response.success) throw new Error(response.error);
-			const data = response.data as Partial<ProvidersResult> | undefined;
+			if (epoch === catalogEpoch) {
+				const data = response.data as Partial<ProvidersResult> | undefined;
+				applyCatalog({ ...data, generation: data?.generation ?? 0 });
+			}
+			const state = get();
 			return {
-				models: data?.models,
-				providers: data?.providers,
-				discoveryStates: data?.discoveryStates,
-				refreshPending: data?.refreshPending,
-				generation: data?.generation ?? 0,
+				models: state.availableModels,
+				providers: state.providers,
+				discoveryStates: state.discoveryStates,
+				refreshPending: state.catalogRefreshPending,
+				generation: state.catalogGeneration,
 			};
 		};
 		return {
@@ -155,8 +134,8 @@ export const createModelStore = (command: TabCommand = activeTabCommand) =>
 				set({
 					model: state.model ?? null,
 					thinkingLevel: state.thinkingLevel,
-					thinkingConfigured: state.thinkingConfigured,
-					availableThinkingLevels: deriveThinkingLevels(state),
+					thinkingConfigured: state.thinkingConfigured ?? state.configuredThinkingLevel,
+					availableThinkingSelectors: deriveThinkingSelectors(state),
 					fastModeEnabled: state.fastModeEnabled,
 					fastModeActive: state.fastModeActive,
 					fastModeUltrafast: state.fastModeUltrafast === true,
@@ -166,30 +145,8 @@ export const createModelStore = (command: TabCommand = activeTabCommand) =>
 					slowModeScope: state.slowModeScope ?? null,
 					tokensPerSecond: state.tokensPerSecond,
 				}),
-			/** Both catalog reads describe the same generation axis, so they commit
-			 * through one path: whatever a response actually carried is applied, and
-			 * anything older than the applied generation is dropped. */
-			refreshAvailableModels: async (forceRefresh = false) => {
-				const snapshot = await readCatalog("get_available_models", forceRefresh);
-				applyCatalog(snapshot);
-				return {
-					models: snapshot.models ?? [],
-					discoveryStates: snapshot.discoveryStates ?? [],
-					refreshPending: snapshot.refreshPending ?? false,
-					generation: snapshot.generation,
-				} satisfies AvailableModelsResult;
-			},
-			refreshProviders: async (forceRefresh = false) => {
-				const snapshot = await readCatalog("get_providers", forceRefresh);
-				applyCatalog(snapshot);
-				return {
-					providers: snapshot.providers ?? [],
-					models: snapshot.models ?? [],
-					discoveryStates: snapshot.discoveryStates ?? [],
-					refreshPending: snapshot.refreshPending ?? false,
-					generation: snapshot.generation,
-				} satisfies ProvidersResult;
-			},
+			refreshAvailableModels: (forceRefresh = false) => refreshCatalog("get_available_models", forceRefresh),
+			refreshProviders: (forceRefresh = false) => refreshCatalog("get_providers", forceRefresh),
 			applyCatalogUpdate: update =>
 				applyCatalog({
 					models: update.models,
@@ -200,8 +157,10 @@ export const createModelStore = (command: TabCommand = activeTabCommand) =>
 				}),
 			toggleFastMode: async () => get().setModelSpeed(get().fastModeEnabled ? "standard" : "fast"),
 			setModelSpeed: async speed => {
-				if (speed === "ultrafast" && !get().fastModeUltrafastSupported) return;
-				const model = get().model;
+				const { model, fastModeUltrafastSupported } = get();
+				if (speed === "ultrafast" && !(fastModeUltrafastSupported && supportsUltrafastMode(model))) return;
+				if (speed === "fast" && !supportsPriorityMode(model)) return;
+				if (speed === "standard" && !supportsFastMode(model)) return;
 				const res = await command({
 					type: "set_fast_mode",
 					enabled: speed !== "standard",
@@ -219,7 +178,10 @@ export const createModelStore = (command: TabCommand = activeTabCommand) =>
 					toast({ variant: "error", title: translate("model.fastMode"), message: res.error });
 				}
 			},
-			reset: () => set(initialState),
+			reset: () => {
+				catalogEpoch++;
+				set(initialState);
+			},
 		};
 	});
 

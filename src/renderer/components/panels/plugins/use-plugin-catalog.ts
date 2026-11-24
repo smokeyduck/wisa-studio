@@ -4,7 +4,17 @@
  * can restart the tab's agent, so two would race).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	createContext,
+	createElement,
+	type ReactNode,
+	useCallback,
+	useContext,
+	useEffect,
+	useEffectEvent,
+	useRef,
+	useState,
+} from "react";
 import type { RpcMarketplaceInfo, RpcMarketplacesResult, RpcResponse } from "../../../../shared/rpc-types";
 import { useActiveTabRouteReady } from "../../../hooks/use-active-tab-route";
 import { describeError } from "../../../lib/errors";
@@ -107,17 +117,18 @@ async function pendingDefaults(catalogs: readonly RpcMarketplaceInfo[]): Promise
 	return unoffered.filter(entry => !isCatalogListed(catalogs, entry));
 }
 
-export function usePluginCatalog(open: boolean): PluginCatalogState {
+function usePluginCatalogState(): PluginCatalogState {
 	const t = useT();
 	const tabRpc = useTabRpc();
 	const sidecarReady = useSessionStore(s => s.status) === "ready";
 	const cwd = useSessionStore(s => s.cwd);
 	const activeTabId = useTabsStore(s => s.activeTabId);
 	const routeReady = useActiveTabRouteReady();
-	const canAct = sidecarReady && routeReady;
+	const connected = sidecarReady && routeReady;
 	const routeKey = `${activeTabId ?? "none"}:${cwd}`;
 
 	const [status, setStatus] = useState<CatalogStatus>("connecting");
+	const [loadedRoute, setLoadedRoute] = useState<string | null>(null);
 	const [error, setError] = useState<PluginCatalogError | null>(null);
 	const [seeding, setSeeding] = useState<PluginCatalogState["seeding"]>(null);
 	const [seedError, setSeedError] = useState<PluginCatalogError | null>(null);
@@ -132,38 +143,60 @@ export function usePluginCatalog(open: boolean): PluginCatalogState {
 
 	// Answers from a tab the person has since left, or a load since replaced, are dropped.
 	const requestRef = useRef(0);
-	const loadedRouteRef = useRef<string | null>(null);
+	const loadingRequestRef = useRef<number | null>(null);
 	const busyRef = useRef(false);
-	const seedingRef = useRef(false);
+	const isCurrent = useCallback(
+		(request: number) =>
+			request === requestRef.current &&
+			routeKey === `${useTabsStore.getState().activeTabId ?? "none"}:${useSessionStore.getState().cwd}`,
+		[routeKey],
+	);
+	useEffect(
+		() => () => {
+			requestRef.current++;
+		},
+		[],
+	);
 
 	const fallbackError = t("marketplace.unknownError");
 
 	const readCatalogs = useCallback(
 		async (request: number): Promise<RpcMarketplaceInfo[] | null> => {
+			if (!isCurrent(request)) return null;
 			const res = await tabRpc.getMarketplaces();
-			if (request !== requestRef.current) return null;
+			if (!isCurrent(request)) return null;
 			if (!res.success) throw new Error(res.error);
 			return (res.data as RpcMarketplacesResult | undefined)?.marketplaces ?? [];
 		},
-		[tabRpc],
+		[isCurrent, tabRpc],
 	);
 
 	const readPlugins = useCallback(
-		async (request: number, catalogs: RpcMarketplaceInfo[]): Promise<void> => {
-			const lists = await Promise.all(
-				catalogs.map(async marketplace => {
-					try {
-						const res = await tabRpc.marketplaceAction({
-							action: "list_available",
-							marketplace: marketplace.name,
-						});
-						return { marketplace, result: listAvailablePlugins(res, fallbackError) };
-					} catch (cause) {
-						return { marketplace, result: { ok: false as const, error: describeError(cause) } };
-					}
-				}),
+		async (
+			request: number,
+			catalogs: RpcMarketplaceInfo[],
+			previous?: readonly RpcMarketplaceInfo[],
+		): Promise<void> => {
+			const current = new Map(catalogs.map(entry => [entry.name, entry.source]));
+			const unchanged = new Set(
+				previous?.filter(entry => current.get(entry.name) === entry.source).map(entry => entry.name),
 			);
-			if (request !== requestRef.current) return;
+			const lists = await Promise.all(
+				catalogs
+					.filter(entry => !unchanged.has(entry.name))
+					.map(async marketplace => {
+						try {
+							const res = await tabRpc.marketplaceAction({
+								action: "list_available",
+								marketplace: marketplace.name,
+							});
+							return { marketplace, result: listAvailablePlugins(res, fallbackError) };
+						} catch (cause) {
+							return { marketplace, result: { ok: false as const, error: describeError(cause) } };
+						}
+					}),
+			);
+			if (!isCurrent(request)) return;
 			const next: CatalogPlugin[] = [];
 			const failures: Array<{ marketplace: string; error: string }> = [];
 			for (const { marketplace, result } of lists) {
@@ -171,31 +204,23 @@ export function usePluginCatalog(open: boolean): PluginCatalogState {
 				else failures.push({ marketplace: marketplace.name, error: result.error });
 			}
 			setMarketplaces(catalogs);
-			setPlugins(next);
-			setListFailures(failures);
+			setPlugins(previous => [...previous.filter(plugin => unchanged.has(plugin.marketplace)), ...next]);
+			setListFailures(previous => [...previous.filter(failure => unchanged.has(failure.marketplace)), ...failures]);
 		},
-		[fallbackError, tabRpc],
+		[fallbackError, isCurrent, tabRpc],
 	);
-
-	const showLatest = useCallback(async (): Promise<RpcMarketplaceInfo[] | null> => {
-		const request = ++requestRef.current;
-		const catalogs = await readCatalogs(request);
-		if (catalogs !== null) await readPlugins(request, catalogs);
-		return catalogs;
-	}, [readCatalogs, readPlugins]);
 
 	/** One at a time, so the order is predictable and the page fills in as each one arrives. */
 	const addDefaults = useCallback(
-		async (pending: readonly DefaultCatalog[]): Promise<void> => {
-			if (seedingRef.current) return;
-			seedingRef.current = true;
+		async (request: number, pending: readonly DefaultCatalog[], catalogs: RpcMarketplaceInfo[]): Promise<void> => {
 			setSeedError(null);
 			setSeeding({ done: 0, total: pending.length });
 			let firstFailure: PluginCatalogError | null = null;
 			let failuresInARow = 0;
-			let latest: RpcMarketplaceInfo[] | null = null;
+			let latest = catalogs;
 			try {
 				for (const [index, entry] of pending.entries()) {
+					if (!isCurrent(request)) return;
 					let failure: PluginCatalogError | null;
 					try {
 						const res = await tabRpc.marketplaceAction({ action: "add", source: entry.source });
@@ -203,9 +228,13 @@ export function usePluginCatalog(open: boolean): PluginCatalogState {
 					} catch (cause) {
 						failure = failureFrom(cause);
 					}
-					latest = await showLatest().catch(() => latest);
+					const updated = await readCatalogs(request).catch(() => null);
+					if (updated !== null) {
+						await readPlugins(request, updated, latest);
+						latest = updated;
+					}
 					// Another window adding it first also reports a failure, so go by what's listed now.
-					if (failure === null || (latest !== null && isCatalogListed(latest, entry))) {
+					if (failure === null || isCatalogListed(latest, entry)) {
 						failuresInARow = 0;
 						await rememberSources(OFFERED_PREF, [entry.source]);
 					} else {
@@ -213,91 +242,106 @@ export function usePluginCatalog(open: boolean): PluginCatalogState {
 						failuresInARow++;
 						if (failuresInARow >= FAILURES_IN_A_ROW_BEFORE_STOPPING) break;
 					}
+					if (!isCurrent(request)) return;
 					setSeeding({ done: index + 1, total: pending.length });
 				}
 			} finally {
-				seedingRef.current = false;
 				setSeeding(null);
 			}
-			if (firstFailure === null) return;
-			if (latest === null || latest.length === 0) {
+			if (firstFailure === null || !isCurrent(request)) return;
+			if (latest.length === 0) {
 				setError(firstFailure);
 				setStatus("error");
 			} else {
 				setSeedError(firstFailure);
 			}
 		},
-		[fallbackError, showLatest, tabRpc],
+		[fallbackError, isCurrent, readCatalogs, readPlugins, tabRpc],
 	);
 
-	const load = useCallback(async (): Promise<void> => {
-		const request = ++requestRef.current;
-		setStatus("loading");
-		setError(null);
-		try {
-			const catalogs = await readCatalogs(request);
-			if (catalogs === null) return;
-			const pending = seedingRef.current ? [] : await pendingDefaults(catalogs);
-			// Before the page counts as ready, so an empty list doesn't flash "no catalogs".
-			if (pending.length > 0) setSeeding({ done: 0, total: pending.length });
-			await readPlugins(request, catalogs);
-			if (request === requestRef.current) setStatus("ready");
-			if (pending.length > 0) void addDefaults(pending);
-		} catch (cause) {
-			if (request !== requestRef.current) return;
-			setError(failureFrom(cause));
-			setStatus("error");
-		}
-	}, [addDefaults, readCatalogs, readPlugins]);
+	const load = useCallback(
+		async (forceDefaults = false): Promise<void> => {
+			if (!connected || refreshing || loadingRequestRef.current === requestRef.current || busyRef.current) return;
+			const request = ++requestRef.current;
+			loadingRequestRef.current = request;
+			setStatus("loading");
+			setError(null);
+			try {
+				const catalogs = await readCatalogs(request);
+				if (catalogs === null) return;
+				const pending = forceDefaults
+					? DEFAULT_CATALOGS.filter(entry => !isCatalogListed(catalogs, entry))
+					: await pendingDefaults(catalogs);
+				if (!isCurrent(request)) return;
+				await readPlugins(request, catalogs);
+				if (!isCurrent(request)) return;
+				setStatus("ready");
+				if (pending.length > 0) await addDefaults(request, pending, catalogs);
+			} catch (cause) {
+				if (!isCurrent(request)) return;
+				setError(failureFrom(cause));
+				setStatus("error");
+			} finally {
+				if (loadingRequestRef.current === request) loadingRequestRef.current = null;
+			}
+		},
+		[addDefaults, connected, isCurrent, readCatalogs, readPlugins, refreshing],
+	);
 
-	useEffect(() => {
-		if (!open) {
-			loadedRouteRef.current = null;
-			return;
-		}
-		// A plugin's activation can restart the agent, so what's on screen stays up
-		// while it reconnects; only a different tab or folder needs a fresh read.
-		if (!canAct) {
-			if (loadedRouteRef.current === null) setStatus("connecting");
-			return;
-		}
-		if (loadedRouteRef.current === routeKey) return;
-		loadedRouteRef.current = routeKey;
+	// Start on the first routed connection, independently of either catalog surface.
+	// A same-route restart keeps the current catalog visible; a new route gets its own list.
+	const loadRoute = useEffectEvent(() => {
+		setLoadedRoute(routeKey);
+		setMarketplaces([]);
+		setPlugins([]);
+		setListFailures([]);
 		setActionErrors({});
+		setSeedError(null);
+		setRefreshError(null);
 		void load();
 		void readSources(TRUSTED_PREF).then(setTrusted, () => {});
-	}, [canAct, load, open, routeKey]);
+	});
+	useEffect(() => {
+		if (loadedRoute !== null && loadedRoute !== routeKey) {
+			// Invalidate even when the destination isn't connected. Returning to the
+			// old tab before that connection settles must restart any interrupted load.
+			requestRef.current++;
+			setLoadedRoute(null);
+			return;
+		}
+		if (!connected || loadedRoute !== null || seeding !== null || busy !== null || refreshing) return;
+		loadRoute();
+	}, [busy, connected, loadedRoute, refreshing, routeKey, seeding]);
 
-	const addDefaultCatalogs = useCallback(async (): Promise<void> => {
-		setError(null);
-		setStatus("ready");
-		await addDefaults(DEFAULT_CATALOGS.filter(entry => !isCatalogListed(marketplaces, entry)));
-	}, [addDefaults, marketplaces]);
+	const activeRoute = loadedRoute === routeKey;
+	const canAct = connected && activeRoute && status === "ready";
+	const reload = useCallback(() => load(), [load]);
+	const addDefaultCatalogs = useCallback(() => load(true), [load]);
 
 	const refresh = useCallback(async (): Promise<void> => {
-		if (!canAct || busyRef.current || seedingRef.current) return;
+		if (!canAct || refreshing || busyRef.current || loadingRequestRef.current === requestRef.current) return;
 		const request = ++requestRef.current;
 		setRefreshing(true);
 		setRefreshError(null);
 		try {
 			for (const marketplace of marketplaces) {
 				const res = await tabRpc.marketplaceAction({ action: "update", marketplace: marketplace.name });
-				if (request !== requestRef.current) return;
+				if (!isCurrent(request)) return;
 				const failure = mutationError(res, fallbackError);
 				if (failure !== null) setRefreshError(failure);
 			}
 			const catalogs = await readCatalogs(request);
 			if (catalogs !== null) await readPlugins(request, catalogs);
 		} catch (cause) {
-			if (request === requestRef.current) setRefreshError(describeError(cause));
+			if (isCurrent(request)) setRefreshError(describeError(cause));
 		} finally {
 			setRefreshing(false);
 		}
-	}, [canAct, fallbackError, marketplaces, readCatalogs, readPlugins, tabRpc]);
+	}, [canAct, fallbackError, isCurrent, marketplaces, readCatalogs, readPlugins, refreshing, tabRpc]);
 
 	const runAction = useCallback(
 		async (plugin: CatalogPlugin, action: PluginAction): Promise<void> => {
-			if (!canAct || busyRef.current) return;
+			if (!canAct || busyRef.current || loadingRequestRef.current === requestRef.current || refreshing) return;
 			const fail = (failure: PluginCatalogError): void =>
 				setActionErrors(prev => ({ ...prev, [plugin.id]: failure }));
 			const origin = capturePluginActivationOrigin();
@@ -341,7 +385,7 @@ export function usePluginCatalog(open: boolean): PluginCatalogState {
 				setBusy(null);
 			}
 		},
-		[canAct, fallbackError, readCatalogs, readPlugins, t, tabRpc],
+		[canAct, fallbackError, readCatalogs, readPlugins, refreshing, t, tabRpc],
 	);
 
 	const isCatalogTrusted = useCallback((source: string) => trusted.includes(source), [trusted]);
@@ -352,7 +396,7 @@ export function usePluginCatalog(open: boolean): PluginCatalogState {
 	}, []);
 
 	return {
-		status,
+		status: activeRoute ? status : "connecting",
 		error,
 		seeding,
 		seedError,
@@ -364,11 +408,31 @@ export function usePluginCatalog(open: boolean): PluginCatalogState {
 		busy,
 		canAct,
 		actionErrors,
-		reload: load,
+		reload,
 		refresh,
 		addDefaultCatalogs,
 		runAction,
 		isCatalogTrusted,
 		trustCatalog,
 	};
+}
+
+const PluginCatalogContext = createContext<PluginCatalogState | null>(null);
+
+export function PluginCatalogProvider({ children }: { children: ReactNode }) {
+	return createElement(PluginCatalogContext.Provider, { value: usePluginCatalogState() }, children);
+}
+
+export function usePluginCatalog(open: boolean): PluginCatalogState {
+	const catalog = useContext(PluginCatalogContext);
+	if (!catalog) throw new Error("Missing PluginCatalogProvider");
+	const revalidate = useEffectEvent(() => {
+		// Preserve cached cards when reopening after edits elsewhere. If startup is
+		// still loading, opening a surface joins that load instead of replacing it.
+		if (catalog.status === "ready" || catalog.status === "error") void catalog.reload();
+	});
+	useEffect(() => {
+		if (open) revalidate();
+	}, [open]);
+	return catalog;
 }

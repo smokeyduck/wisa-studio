@@ -305,6 +305,25 @@ describe("TabBar", () => {
 		expect(chips()[0]?.querySelector(".truncate")).not.toBeNull();
 	});
 
+	it("keeps indexed subagent sessions out of the tab strip while retaining their runtime", async () => {
+		omp.sessions.list.mockResolvedValue([
+			listedSession("parent", { title: "Main conversation" }),
+			listedSession("child", { title: "Agent transcript", subagent: true }),
+		]);
+		useTabsStore.setState({
+			tabs: [
+				{ kind: "agent", id: "parent-tab", sessionId: "parent", cwd: "/work/infron", status: "ready", unreadDone: false },
+				{ kind: "agent", id: "child-tab", sessionPath: "/sessions/child.jsonl", cwd: "/work/infron", status: "ready", unreadDone: false },
+			],
+			activeTabId: "parent-tab",
+		});
+
+		await mount(<TabBar />);
+
+		expect(tabTitles()).toEqual(["Main conversation"]);
+		expect(omp.tabs.close).not.toHaveBeenCalledWith("child-tab");
+	});
+
 	it("removes a truly empty startup placeholder after a real session tab exists", async () => {
 		omp.sessions.list.mockResolvedValue([
 			listedSession("s-empty"),

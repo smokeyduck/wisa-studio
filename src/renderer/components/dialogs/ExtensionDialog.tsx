@@ -14,7 +14,7 @@
 import { json } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
 import { ExternalLink, Eye, EyeOff } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { isApprovalRequest } from "../../../shared/approval-prompt";
 import type { ExtensionAskDialogResult, ExtensionUIRequest } from "../../../shared/rpc-types";
 import { AnsiText } from "../../lib/ansi";
@@ -795,12 +795,24 @@ export function isInlineQuestion(request: ExtensionUIRequest): boolean {
 		(request.method === "input" && !request.authCodeFor && !request.loginPromptFor);
 }
 
-/** Only the owning transcript renders its pending question, without moving focus. */
-export function InlineExtensionQuestions() {
-	const pending = useExtensionUiStore(state => state.pendingRequests);
-	const request = pending.find(isInlineQuestion) ?? null;
+/** Render a pending question instead of the owning tab's composer without unmounting its draft. */
+export function ComposerQuestions({ children }: { children: ReactNode }) {
+	const request = useExtensionUiStore(state => state.pendingRequests.find(isInlineQuestion)) ?? null;
 	const remaining = useCountdown(request);
-	return request ? <ActiveDialog inline key={request.id} remaining={remaining} request={request} /> : null;
+	return (
+		<>
+			<div className={request ? "hidden" : "shrink-0"} hidden={request !== null}>
+				{children}
+			</div>
+			{request && (
+				<div className="omp-composer-shell min-h-0 w-full shrink-0">
+					<div className="max-h-[40dvh] overflow-y-auto overscroll-contain px-2 py-2">
+						<ActiveDialog inline key={request.id} remaining={remaining} request={request} />
+					</div>
+				</div>
+			)}
+		</>
+	);
 }
 
 export function ExtensionDialog() {

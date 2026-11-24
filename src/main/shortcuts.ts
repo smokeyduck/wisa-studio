@@ -75,9 +75,8 @@ export function windowToggleStatus(): IpcWindowToggleStatus {
 }
 
 /**
- * The keyboard layout a window read (`navigator.keyboard.getLayoutMap()`): the
- * main process reads built-in browser keystrokes and places the system-wide
- * shortcut by it. Re-registers only when the layout changed.
+ * Re-register the system-wide shortcut only when the window reports a changed
+ * keyboard layout (`navigator.keyboard.getLayoutMap()`).
  */
 export function updateKeyboardLayout(raw: unknown): void {
 	if (!raw || typeof raw !== "object") return;

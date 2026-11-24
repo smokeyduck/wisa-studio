@@ -58,6 +58,8 @@ interface MarkdownRendererProps {
 	 * re-tokenize the whole fence on every frame.
 	 */
 	streaming?: boolean;
+	/** Do not load images embedded in an untrusted standalone report. */
+	omitImages?: boolean;
 }
 
 // Hoisted to module scope: stable plugin arrays and component maps keep
@@ -693,6 +695,8 @@ const COMPONENTS: Components = {
 	img: MarkdownImage,
 };
 
+const IMAGE_ELEMENTS = ["img"];
+
 /**
  * Renders markdown content with GFM, a sanitized raw-HTML subset, KaTeX math,
  * and syntax highlighting. Memoized: re-parses only when `content` changes.
@@ -703,6 +707,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 	codeLineNumbers,
 	singleDollarTextMath = true,
 	streaming = false,
+	omitImages = false,
 }: MarkdownRendererProps) {
 	return (
 		<div className="markdown-body text-[1em] leading-[1.5]">
@@ -713,6 +718,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 							remarkPlugins={singleDollarTextMath ? REMARK_PLUGINS : REMARK_PLUGINS_LITERAL_SINGLE_DOLLAR}
 							rehypePlugins={REHYPE_PLUGINS}
 							components={COMPONENTS}
+							disallowedElements={omitImages ? IMAGE_ELEMENTS : undefined}
 							urlTransform={URL_TRANSFORM}
 						>
 							{content}

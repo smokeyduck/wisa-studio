@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createSessionRpcClient } from "./rpc-client";
-import type { RpcResponse } from "./rpc-types";
+import { createSessionRpcClient, fetchTranscript } from "./rpc-client";
+import type { RpcCommand, RpcResponse, RpcSessionState } from "./rpc-types";
 
 describe("model RPC timeouts", () => {
 	it("gives model switches enough time for provider/session reconfiguration", async () => {
@@ -64,5 +64,62 @@ describe("model RPC timeouts", () => {
 			data: { messages },
 		});
 		expect(calls).toEqual(["get_transcript", "get_transcript_page", "get_transcript_page"]);
+	});
+
+	it("keeps the folded live projection across transport-limited transcript pages", async () => {
+		const calls: RpcCommand[] = [];
+		const message = { role: "user", content: "after compaction", timestamp: 1 };
+		const result = await fetchTranscript(async command => {
+			calls.push(command);
+			return command.type === "get_transcript_page"
+				? {
+						type: "response",
+						command: command.type,
+						success: true,
+						data: { messages: [message], totalMessages: 1 },
+					}
+				: { type: "response", command: command.type, success: false, error: "transport limit" };
+		}, true);
+		expect(result).toMatchObject({ success: true, data: { messages: [message] } });
+		expect(calls).toEqual([
+			{ type: "get_transcript", folded: true },
+			{ type: "get_transcript_page", limit: 256, folded: true },
+		]);
+	});
+});
+
+describe("thinking shortcut", () => {
+	it.each([
+		{ mode: undefined, level: "high" },
+		{ mode: "provider", level: "auto" },
+	] as const)("uses $level only after checking the live sidecar semantics", async ({ mode, level }) => {
+		const calls: RpcCommand[] = [];
+		const rpc = createSessionRpcClient(async command => {
+			calls.push(command);
+			const state: Partial<RpcSessionState> = {
+				model: { provider: "p", id: "m", reasoning: true },
+				thinkingLevels: ["off", "auto", "high"],
+				thinkingConfigured: "off",
+				thinkingAutoMode: mode,
+			};
+			return { type: "response", command: command.type, success: true, data: state };
+		});
+		await rpc.cycleThinkingLevel();
+		expect(calls).toEqual([{ type: "get_state" }, { type: "set_thinking_level", level }]);
+	});
+
+	it("does not issue a reasoning mutation for a provisional ladder", async () => {
+		const calls: RpcCommand[] = [];
+		const rpc = createSessionRpcClient(async command => {
+			calls.push(command);
+			const state: Partial<RpcSessionState> = {
+				model: { provider: "p", id: "m", reasoning: true, thinking: { unverified: true } },
+				thinkingLevels: ["off", "auto", "high"],
+				thinkingConfigured: "auto",
+			};
+			return { type: "response", command: command.type, success: true, data: state };
+		});
+		await rpc.cycleThinkingLevel();
+		expect(calls).toEqual([{ type: "get_state" }]);
 	});
 });

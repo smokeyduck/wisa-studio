@@ -13,7 +13,7 @@ import {
 	sessionRuntime,
 } from "../../stores/session-runtime-context";
 import { createTabRuntime } from "../../stores/tab-runtime";
-import { ExtensionDialog, InlineExtensionQuestions } from "./ExtensionDialog";
+import { ComposerQuestions, ExtensionDialog } from "./ExtensionDialog";
 
 const { document, window, Event, CustomEvent, HTMLElement, Node } = parseHTML("<html><body></body></html>");
 const globals = globalThis as Record<string, unknown>;
@@ -75,7 +75,9 @@ async function mount(): Promise<void> {
 		root.render(
 			<I18nProvider>
 				<ExtensionDialog />
-				<InlineExtensionQuestions />
+				<ComposerQuestions>
+					<textarea data-composer-draft defaultValue="Existing draft" />
+				</ComposerQuestions>
 			</I18nProvider>,
 		);
 	});
@@ -306,6 +308,26 @@ describe("ExtensionDialog form", () => {
 });
 
 describe("ExtensionDialog askDialog", () => {
+	it("replaces the composer without unmounting or clearing its draft", async () => {
+		await mount();
+		const draft = document.querySelector<HTMLTextAreaElement>("[data-composer-draft]");
+		if (!draft) throw new Error("missing composer draft");
+		draft.value = "Unsent message";
+		expect(draft.parentElement?.hasAttribute("hidden")).toBe(false);
+
+		await act(async () => showAskDialog());
+		expect(document.querySelector("[data-inline-question]")).not.toBeNull();
+		expect(draft.parentElement?.hasAttribute("hidden")).toBe(true);
+		expect(document.querySelector("[data-composer-draft]")).toBe(draft);
+
+		const chat = buttonWithText("Chat about this");
+		if (!chat) throw new Error("missing Chat about this button");
+		await click(chat);
+		expect(document.querySelector("[data-inline-question]")).toBeNull();
+		expect(draft.parentElement?.hasAttribute("hidden")).toBe(false);
+		expect(draft.value).toBe("Unsent message");
+	});
+
 	it("returns the wire submit discriminator and renders the selected option preview", async () => {
 		await mount();
 		await act(async () => showAskDialog());
@@ -430,12 +452,22 @@ describe("ExtensionDialog cross-tab requests", () => {
 		expect(document.body.textContent).not.toContain("Owning question");
 		const runtime = sessionRuntime("tab-bg");
 		if (!runtime) throw new Error("missing runtime");
-		await act(async () => { setFocusedSessionRuntime("tab-bg"); root.render(<I18nProvider><ExtensionDialog /><SessionRuntimeProvider runtime={runtime}><InlineExtensionQuestions /></SessionRuntimeProvider></I18nProvider>); });
+		const owningPane = (
+			<I18nProvider>
+				<ExtensionDialog />
+				<SessionRuntimeProvider runtime={runtime}>
+					<ComposerQuestions>
+						<textarea aria-label="Composer" />
+					</ComposerQuestions>
+				</SessionRuntimeProvider>
+			</I18nProvider>
+		);
+		await act(async () => { setFocusedSessionRuntime("tab-bg"); root.render(owningPane); });
 		expect(document.querySelector("[data-inline-question]")).not.toBeNull();
 		expect(document.querySelector('[role="dialog"]')).toBeNull();
 		await typeInto(document.querySelector("input") as unknown as TestElement, "keep draft");
 		await act(async () => { root.render(<I18nProvider><ExtensionDialog /></I18nProvider>); });
-		await act(async () => { root.render(<I18nProvider><ExtensionDialog /><SessionRuntimeProvider runtime={runtime}><InlineExtensionQuestions /></SessionRuntimeProvider></I18nProvider>); });
+		await act(async () => { root.render(owningPane); });
 		expect(document.querySelector("input")?.getAttribute("value")).toBe("keep draft");
 		await submit(document.querySelector("form") as unknown as TestElement);
 		expect(respondExtensionUi).toHaveBeenCalledWith({ type: "extension_ui_response", id: "bg-question", value: "keep draft" });

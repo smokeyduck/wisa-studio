@@ -2,10 +2,17 @@ import { parseHTML } from "linkedom";
 import { act, type ReactElement } from "react";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
-import type { RpcResponse } from "../../../../shared/rpc-types";
+import type { RpcCommand, RpcResponse } from "../../../../shared/rpc-types";
 import { I18nProvider, translate } from "../../../lib/i18n";
+import {
+	deleteSessionRuntime,
+	SessionRuntimeProvider,
+	sessionRuntimeStore,
+	setFocusedSessionRuntime,
+} from "../../../stores/session-runtime-context";
+import { createTabRuntime } from "../../../stores/tab-runtime";
 import { useToastStore } from "../../../stores/toast";
-import { useTodoStore } from "../../../stores/todo";
+import { type TodoStore, useTodoStore } from "../../../stores/todo";
 import { useUiStore } from "../../../stores/ui";
 
 const { document, window, Event, HTMLElement, Element, Node } = parseHTML("<html><body></body></html>");
@@ -27,23 +34,34 @@ const setTodos: Mock<() => Promise<RpcResponse>> = vi.fn(async () => ({
 	success: true,
 	data: {},
 }));
-(window as unknown as { omp: { rpc: { setTodos: typeof setTodos } } }).omp = { rpc: { setTodos } };
+type RoutedCommand = (tabId: string, command: RpcCommand, timeoutMs?: number) => Promise<RpcResponse>;
+const bridge: { setTodos: typeof setTodos; commandForTab?: RoutedCommand } = { setTodos };
+const ompWindow = window as unknown as { omp: { rpc: typeof bridge } };
+ompWindow.omp = { rpc: bridge };
 
 const { createRoot } = await import("react-dom/client");
-const { TodoDockCard } = await import("./TodoDockCard");
-const { WorkspaceDock } = await import("./WorkspaceDock");
-const { WorkspaceDockFocusProvider } = await import("./WorkspaceDockFocus");
+const { TodoRibbon } = await import("./TodoDockCard");
 
 let container: HTMLElement;
 let root: Root;
 
-async function mount(element: ReactElement = <TodoDockCard />): Promise<void> {
+async function mount(element: ReactElement = <TodoRibbon />): Promise<void> {
 	container = document.createElement("div") as unknown as HTMLElement;
 	document.body.appendChild(container as never);
 	root = createRoot(container as unknown as Element);
 	await act(async () => {
 		root.render(<I18nProvider>{element}</I18nProvider>);
 	});
+}
+
+function ribbonTrigger(): HTMLButtonElement {
+	const trigger = container.querySelector<HTMLButtonElement>("[data-todo-ribbon] > button");
+	if (!trigger) throw new Error("missing todo ribbon trigger");
+	return trigger;
+}
+
+async function openRibbon(): Promise<void> {
+	await act(async () => ribbonTrigger().click());
 }
 
 function statusCycleButton(): { click(): void; dispatchEvent(event: Event): void } {
@@ -57,14 +75,18 @@ function statusCycleButton(): { click(): void; dispatchEvent(event: Event): void
 afterEach(async () => {
 	await act(async () => root?.unmount());
 	container?.remove();
+	deleteSessionRuntime("other-tab");
+	deleteSessionRuntime("ribbon-tab");
+	setFocusedSessionRuntime(null);
+	delete bridge.commandForTab;
 	setTodos.mockClear();
 	useToastStore.setState({ toasts: [] });
 	useTodoStore.getState().reset();
-	useUiStore.setState({ dockCollapsed: {}, dockFocus: null });
+	useUiStore.setState({ todoRibbonRequest: 0 });
 });
 
-describe("TodoDockCard", () => {
-	it("renders a single phase as a flat compact task list with live counts", async () => {
+describe("TodoRibbon", () => {
+	it("shows the current task on the closed ribbon and the remaining tasks on hover", async () => {
 		useTodoStore.getState().setPhases([
 			{
 				name: "Implementation",
@@ -76,32 +98,51 @@ describe("TodoDockCard", () => {
 		]);
 		await mount();
 
-		expect(container.textContent).toContain("Tasks1 running - 1 pending");
+		expect(ribbonTrigger().textContent).toContain("Refine compact renderer");
+		expect(ribbonTrigger().parentElement?.dataset.state).toBe("running");
+		expect(ribbonTrigger().textContent).toContain("1 running - 1 pending");
+		expect(container.textContent).not.toContain("Run visual QA");
+		expect(ribbonTrigger().getAttribute("aria-expanded")).toBe("false");
+		await act(async () => ribbonTrigger().dispatchEvent(new Event("mouseover", { bubbles: true })));
+		expect(ribbonTrigger().getAttribute("aria-expanded")).toBe("true");
 		expect(container.textContent).toContain("Refine compact renderer");
 		expect(container.textContent).toContain("Run visual QA");
 		expect(container.textContent).not.toContain("Implementation");
 	});
 
-	it("collapses when the task header row is clicked", async () => {
+	it("shows abandoned work as failed even if some tasks are complete", async () => {
 		useTodoStore.getState().setPhases([
 			{
-				name: "Compatibility",
-				tasks: [{ content: "Update model compatibility", status: "completed" }],
+				name: "Release",
+				tasks: [{ content: "Verify", status: "completed" }, { content: "Ship", status: "abandoned" }],
 			},
 		]);
 		await mount();
-
-		const header = container.querySelector('section[aria-label="Tasks"] button[aria-label="Collapse"]');
-		const title = [...(header?.querySelectorAll("span") ?? [])].find(node => node.textContent === "Tasks");
-		await act(async () => {
-			title?.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
-		});
-
-		expect(container.textContent).not.toContain("Update model compatibility");
-		expect(useUiStore.getState().dockCollapsed.todo).toBe(true);
+		expect(ribbonTrigger().parentElement?.dataset.state).toBe("failed");
+		expect(ribbonTrigger().textContent).toContain("1 abandoned");
 	});
 
-	it("reveals every restored task when view all is clicked", async () => {
+	it("shows a success state only when all tasks are complete", async () => {
+		useTodoStore.getState().setPhases([
+			{ name: "Release", tasks: [{ content: "Verify", status: "completed" }] },
+		]);
+		await mount();
+		expect(ribbonTrigger().parentElement?.dataset.state).toBe("complete");
+		expect(ribbonTrigger().textContent).toContain("1 complete");
+	});
+
+	it("opens from keyboard focus and closes when focus leaves", async () => {
+		useTodoStore.getState().setPhases([
+			{ name: "Compatibility", tasks: [{ content: "Update model compatibility", status: "completed" }] },
+		]);
+		await mount();
+		await act(async () => ribbonTrigger().dispatchEvent(new Event("focusin", { bubbles: true })));
+		expect(container.textContent).toContain("Update model compatibility");
+		await act(async () => ribbonTrigger().dispatchEvent(new Event("focusout", { bubbles: true })));
+		expect(container.textContent).not.toContain("Update model compatibility");
+	});
+
+	it("reveals every restored task when opened from the todo edit command", async () => {
 		useTodoStore.getState().setPhases([
 			{
 				name: "Restored",
@@ -111,48 +152,55 @@ describe("TodoDockCard", () => {
 				})),
 			},
 		]);
-		await mount(
-			<WorkspaceDockFocusProvider>
-				<TodoDockCard />
-			</WorkspaceDockFocusProvider>,
-		);
-
+		await mount();
 		expect(container.querySelector('[title="Restored task 1"]')).toBeNull();
-		const viewAll = [...container.querySelectorAll("button")].find(button =>
-			button.textContent?.includes("View all 12 todos"),
-		);
-		await act(async () => {
-			(viewAll as unknown as { click: () => void }).click();
-		});
+		await act(async () => useUiStore.getState().focusTodoRibbon());
 
 		expect(container.querySelector('[title="Restored task 1"]')).not.toBeNull();
 		expect(container.querySelector('[title="Restored task 12"]')).not.toBeNull();
 	});
 
-	it("keeps every task available in focus mode and restores the compact summary", async () => {
+	it("removes a deleted task from the list and persists the remaining phases", async () => {
 		useTodoStore.getState().setPhases([
-			{
-				name: "Live",
-				tasks: Array.from({ length: 30 }, (_, index) => ({
-					content: `Task ${index + 1}`,
-					status: "completed" as const,
-				})),
-			},
+			{ name: "Live", tasks: [{ content: "Delete me", status: "pending" }, { content: "Keep me", status: "pending" }] },
 		]);
-		await mount(<WorkspaceDock />);
+		await mount();
+		await openRibbon();
+		const remove = container.querySelector<HTMLButtonElement>('button[aria-label="Delete"]');
+		if (!remove) throw new Error("missing task delete control");
+		await act(async () => remove.click());
+		expect(container.textContent).not.toContain("Delete me");
+		expect(container.textContent).toContain("Keep me");
+		expect(setTodos).toHaveBeenCalledWith([{ name: "Live", tasks: [{ content: "Keep me", status: "pending" }] }]);
+	});
 
-		const viewAll = [...container.querySelectorAll("button")].find(button =>
-			button.textContent?.includes("View all 30"),
+	it("reads and updates only the ribbon's owning session", async () => {
+		const other = createTabRuntime("other-tab");
+		const owner = createTabRuntime("ribbon-tab");
+		setFocusedSessionRuntime(other.tabId);
+		const otherStore = sessionRuntimeStore<TodoStore>(other.tabId, "todo");
+		const ownerStore = sessionRuntimeStore<TodoStore>(owner.tabId, "todo");
+		if (!otherStore || !ownerStore) throw new Error("missing test runtime stores");
+		otherStore.getState().setPhases([{ name: "Other", tasks: [{ content: "Other session task", status: "pending" }] }]);
+		ownerStore.getState().setPhases([{ name: "Owner", tasks: [{ content: "Owning session task", status: "pending" }] }]);
+		const commandForTab = vi.fn(async (_tabId: string, command: RpcCommand): Promise<RpcResponse> => ({
+			type: "response",
+			command: command.type,
+			success: true,
+			data: {},
+		}));
+		bridge.commandForTab = commandForTab;
+		await mount(<SessionRuntimeProvider runtime={owner}><TodoRibbon /></SessionRuntimeProvider>);
+		await openRibbon();
+		expect(container.textContent).toContain("Owning session task");
+		expect(container.textContent).not.toContain("Other session task");
+		await act(async () => statusCycleButton().click());
+		expect(commandForTab).toHaveBeenCalledWith(
+			owner.tabId,
+			{ type: "set_todos", phases: [{ name: "Owner", tasks: [{ content: "Owning session task", status: "in_progress" }] }] },
+			undefined,
 		);
-		await act(async () => (viewAll as unknown as { click: () => void }).click());
-
-		expect(container.querySelectorAll('[title^="Task "]')).toHaveLength(30);
-		const card = container.querySelector("[data-dock-focused]") as unknown as HTMLElement;
-		expect(card).not.toBeNull();
-		const back = [...container.querySelectorAll("button")].find(button => button.textContent === "Back to summary");
-		await act(async () => (back as unknown as { click: () => void }).click());
-		expect(container.querySelector("[data-dock-focused]")).toBeNull();
-		expect(container.querySelectorAll('[title^="Task "]')).toHaveLength(3);
+		expect(otherStore.getState().phases[0]?.tasks[0]?.status).toBe("pending");
 	});
 
 	it("unwinds a status cycle the sidecar refused, even though the store re-normalised it", async () => {
@@ -167,6 +215,7 @@ describe("TodoDockCard", () => {
 			},
 		]);
 		await mount();
+		await openRibbon();
 
 		const cycle = [...container.querySelectorAll("button")].find(button =>
 			button.getAttribute("aria-label")?.startsWith("Status:"),
@@ -208,6 +257,7 @@ describe("TodoDockCard", () => {
 			},
 		]);
 		await mount();
+		await openRibbon();
 
 		const cycle = [...container.querySelectorAll("button")].find(button =>
 			button.getAttribute("aria-label")?.startsWith("Status:"),
@@ -235,6 +285,7 @@ describe("TodoDockCard", () => {
 			},
 		]);
 		await mount();
+		await openRibbon();
 
 		await act(async () => statusCycleButton().click());
 
@@ -252,6 +303,7 @@ describe("TodoDockCard", () => {
 			},
 		]);
 		await mount();
+		await openRibbon();
 
 		const event = Object.assign(new Event("contextmenu", { bubbles: true, cancelable: true }), {
 			clientX: 24,

@@ -97,10 +97,16 @@ afterEach(async () => {
 });
 
 describe("SessionAgentsScope", () => {
-	it("lists this turn's agents open while they work and folds them when they finish", async () => {
+	it("keeps running agents collapsed until opened and leaves them open when they finish", async () => {
 		seed("t1", [user("write essays"), task("c1")], [{ id: "Rain", callId: "c1", status: "running" }]);
 		await mount("t1", "/sessions/open.jsonl");
 
+		expect(info).toMatchObject({ count: 1, expanded: false, working: true });
+		expect(agentRows()).toEqual([]);
+
+		await act(async () => {
+			info?.toggle();
+		});
 		expect(info).toMatchObject({ count: 1, expanded: true });
 		expect(agentRows()).toEqual(["Essay Rain"]);
 
@@ -108,8 +114,8 @@ describe("SessionAgentsScope", () => {
 			setAgents("t1", [{ id: "Rain", callId: "c1" }]);
 		});
 
-		expect(info).toMatchObject({ count: 1, expanded: false });
-		expect(agentRows()).toEqual([]);
+		expect(info).toMatchObject({ count: 1, expanded: true, working: false });
+		expect(agentRows()).toEqual(["Essay Rain"]);
 	});
 
 	it("keeps finished agents open once the arrow opened them", async () => {

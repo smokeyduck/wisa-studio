@@ -2,8 +2,8 @@
  * Contracts for bare web addresses in replies written in Chinese, where no
  * space follows the address. GFM ran the link to
  * the next space: `http://127.0.0.1:18091，仅` linked the comma and the next
- * word, the browser panel refused the mangled address, and a `**…**` around
- * the address rendered as literal asterisks.
+ * word, giving an invalid URL, and a `**…**` around the address rendered as
+ * literal asterisks.
  */
 import { parseHTML } from "linkedom";
 import { renderToStaticMarkup } from "react-dom/server";

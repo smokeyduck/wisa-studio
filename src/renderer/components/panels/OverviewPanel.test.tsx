@@ -118,7 +118,7 @@ afterEach(async () => {
 	useSubagentsStore.getState().reset();
 	useTodoStore.getState().reset();
 	useBtwStore.getState().reset();
-	useUiStore.setState({ panelTab: "overview", panelVisible: false });
+	useUiStore.setState({ panelTab: "overview", panelVisible: false, settingsOpen: false, settingsTab: "gui" });
 });
 
 describe("OverviewPanel", () => {
@@ -138,6 +138,22 @@ describe("OverviewPanel", () => {
 		const review = [...(card("Changes")?.querySelectorAll("button") ?? [])].find(b => b.textContent === "Review");
 		await act(async () => review?.click());
 		expect(useUiStore.getState()).toMatchObject({ panelTab: "diff", panelVisible: true });
+	});
+
+	it("opens separate Settings targets for Plugins and MCP", async () => {
+		await mount("agent");
+		const managePlugins = [...(card("Plugins")?.querySelectorAll("button") ?? [])].find(
+			button => button.textContent === "Manage Plugins",
+		);
+		const manageMcp = [...(card("MCP servers")?.querySelectorAll("button") ?? [])].find(
+			button => button.textContent === "Manage MCP",
+		);
+		expect(managePlugins).toBeDefined();
+		expect(manageMcp).toBeDefined();
+		await act(async () => managePlugins?.click());
+		expect(useUiStore.getState()).toMatchObject({ settingsOpen: true, settingsTab: "resources:catalog" });
+		await act(async () => manageMcp?.click());
+		expect(useUiStore.getState()).toMatchObject({ settingsOpen: true, settingsTab: "mcp" });
 	});
 
 	it("leaves the git and MCP cards out of a tool-free chat tab without reading them", async () => {

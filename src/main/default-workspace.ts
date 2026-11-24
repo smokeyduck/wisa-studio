@@ -19,8 +19,9 @@ This folder is WISA STUDIO's own workspace for Work sessions, not a project.
 
 - There is no repository here and nothing to clone: do not look for git history,
   a build, tests or a lint setup, and do not try to create them.
-- Do the task itself - drafting, planning, research, writing, analysis - and
-  write the files the task needs into this folder.
+- Do the task itself - drafting, planning, research, writing, analysis. If file
+  writing is available and necessary, keep the results here; otherwise answer
+  in the conversation.
 - A request that needs a codebase (reading, changing or running someone's
   project) belongs in a Code session with that project's folder open. Say so
   instead of working around it.
@@ -28,9 +29,13 @@ This folder is WISA STUDIO's own workspace for Work sessions, not a project.
 Files you create here persist; the folder is yours.
 `;
 
-/** GUI-owned workspace for Work mode. It runs the full agent, never --chat. */
+export function defaultWorkspacePath(): string {
+	return path.resolve(agentDir(), "..", "work");
+}
+
+/** GUI-owned workspace for the Work tool profile. Sessions here keep their agent kind. */
 export function ensureDefaultWorkspace(): string {
-	const cwd = path.resolve(agentDir(), "..", "work");
+	const cwd = defaultWorkspacePath();
 	fs.mkdirSync(cwd, { recursive: true });
 	const agentsMd = path.join(cwd, "AGENTS.md");
 	try {

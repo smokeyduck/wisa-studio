@@ -41,6 +41,11 @@ Object.assign(env, {
 	TEMP: temporary,
 	WISA_PROFILE_ROOT: root,
 });
+// CI runners may not allow FUSE mounts. The AppImage itself still starts
+// and extracts the shipped payload, rather than exercising linux-unpacked.
+if (process.platform === "linux" && executablePath.endsWith(".AppImage")) {
+	env.APPIMAGE_EXTRACT_AND_RUN = "1";
+}
 
 async function bounded(operation, milliseconds) {
 	const deadline = Promise.withResolvers();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionInfo } from "../../shared/ipc-types";
-import { browsableSessions, buildSessionTree, listedSessions, orderSessionForest } from "./session-tree";
+import { browsableSessions, buildSessionTree, listedSessions, previewSessionForest } from "./session-tree";
 
 function session(path: string, overrides: Partial<SessionInfo> = {}): SessionInfo {
 	return {
@@ -77,7 +77,7 @@ describe("buildSessionTree", () => {
 	});
 });
 
-describe("orderSessionForest", () => {
+describe("previewSessionForest", () => {
 	it("lifts a parent to its newest child's place and keeps a pinned family first", () => {
 		const parent = session("/s/parent.jsonl", { modified: "2026-01-01T00:00:00Z" });
 		const child = session("/s/child.jsonl", {
@@ -85,15 +85,45 @@ describe("orderSessionForest", () => {
 			parentSessionPath: "/s/parent.jsonl",
 		});
 		const pinned = session("/s/pinned.jsonl", { modified: "2026-01-02T00:00:00Z" });
-		const nodes = buildSessionTree([child, pinned, parent]);
+		const peer = session("/s/peer.jsonl", { modified: "2026-01-02T00:00:00Z" });
+		const nodes = buildSessionTree([child, pinned, peer, parent]);
 
-		const ordered = orderSessionForest(nodes, {
+		const preview = previewSessionForest(nodes, {
 			pinned: session => session.path === "/s/pinned.jsonl",
 			recency: session => Date.parse(session.modified),
+			essential: () => false,
+			partnerPath: () => undefined,
+			limit: 4,
+			expanded: false,
 		});
 
-		expect(ordered.map(node => node.session.path)).toEqual(["/s/pinned.jsonl", "/s/parent.jsonl"]);
-		expect(ordered[1]?.children.map(node => node.session.path)).toEqual(["/s/child.jsonl"]);
+		expect(preview.roots.map(node => node.session.path)).toEqual([pinned.path, parent.path, peer.path]);
+		expect(preview.roots[1]?.children.map(node => node.session.path)).toEqual([child.path]);
+		expect(preview.hidden).toBe(0);
+	});
+
+	it("keeps both sides of a visible pair and the family of an essential descendant", () => {
+		const partner = session("/s/partner.jsonl", { size: 1 });
+		const parent = session("/s/parent.jsonl", { size: 2 });
+		const child = session("/s/child.jsonl", { size: 2, parentSessionPath: parent.path });
+		const older = session("/s/older.jsonl", { size: 3 });
+		const recent = session("/s/recent.jsonl", { size: 4 });
+		const nodes = buildSessionTree([older, child, recent, parent, partner]);
+		const options = {
+			pinned: () => false,
+			recency: (item: SessionInfo) => item.size,
+			essential: (item: SessionInfo) => item.path === child.path,
+			partnerPath: (path: string) => (path === recent.path ? partner.path : undefined),
+			limit: 1,
+		};
+
+		const preview = previewSessionForest(nodes, { ...options, expanded: false });
+		expect(preview.roots.map(node => node.session.path)).toEqual([recent.path, parent.path, partner.path]);
+		expect(preview.hidden).toBe(1);
+
+		const full = previewSessionForest(nodes, { ...options, expanded: true });
+		expect(full.roots.map(node => node.session.path)).toEqual([recent.path, older.path, parent.path, partner.path]);
+		expect(full.hidden).toBe(1);
 	});
 });
 

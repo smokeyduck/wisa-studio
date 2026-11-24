@@ -1,4 +1,3 @@
-import { useTabRpc } from "../../lib/tab-rpc";
 /** Structured plan approval lives exclusively in the owning session's inspector. */
 
 import { ClipboardList, History, ListCollapse, Play, Save, Send } from "lucide-react";
@@ -6,15 +5,21 @@ import type { ReactNode } from "react";
 import { basename } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
+import { acceptsActiveTabEvents } from "../../lib/tab-routing";
+import { useTabRpc } from "../../lib/tab-rpc";
 import {
 	type PlanApprovalOption,
+	type PlanApprovalStore,
 	type PlanApprovalSubmitState,
+	planFeedbackText,
 	usePlanApprovalStore,
 } from "../../stores/plan-approval";
-import { useSessionStore } from "../../stores/session";
+import { type SessionStore, useSessionStore } from "../../stores/session";
+import { sessionRuntime, sessionRuntimeStore, useSessionRuntime } from "../../stores/session-runtime-context";
 import { settleTabPlanApproval, useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
-import { Button, LongTaskStatus, TextArea } from "../common";
+import { Button, LongTaskStatus } from "../common";
+import { PlanFeedback, usePlanFeedbackEditor } from "../panels/PlanFeedback";
 
 type SubmitKind = PlanApprovalSubmitState["kind"];
 
@@ -63,32 +68,48 @@ export function PlanApprovalPanel() {
 	const tabRpc = useTabRpc();
 	const t = useT();
 	const pending = usePlanApprovalStore(state => state.pending);
-	const feedback = usePlanApprovalStore(state => state.feedback);
-	const setFeedback = usePlanApprovalStore(state => state.setFeedback);
+	const editor = usePlanFeedbackEditor(pending);
+	const runtime = useSessionRuntime();
+	const comments = usePlanApprovalStore(state => state.comments);
+	const setComments = usePlanApprovalStore(state => state.setComments);
 	const notice = usePlanApprovalStore(state => state.notice);
 	const submitting = usePlanApprovalStore(state => state.submitting);
-	const setSubmitting = usePlanApprovalStore(state => state.setSubmitting);
 	const sidecarReady = useSessionStore(state => state.status) === "ready";
 	const maintenance = useSessionStore(state => state.manualMaintenance);
 
 	if (!pending) return null;
 
 	const respond = async (kind: SubmitKind, option?: PlanApprovalOption) => {
-		if (!sidecarReady || submitting !== null) return;
 		const target = pending;
-		const originTabId = useTabsStore.getState().activeTabId;
-		const originSessionId = useSessionStore.getState().sessionId;
-		const trimmed = feedback.trim();
-		const savePath =
-			kind === "approve" && option === "save"
-				? await window.omp.system.showSaveDialog(
-						`${useSessionStore.getState().cwd}/${target.suggestedFileName ?? basename(target.planFilePath)}`,
-						[{ name: "Markdown", extensions: ["md"] }],
-					)
-				: undefined;
-		if (option === "save" && !savePath) return;
-		setSubmitting(kind === "approve" ? { kind, option } : { kind });
+		const originTabId = runtime?.tabId ?? useTabsStore.getState().activeTabId;
+		const generation = runtime?.sessionGeneration;
+		const session = sessionRuntimeStore<SessionStore>(originTabId, "session") ?? useSessionStore;
+		const store = sessionRuntimeStore<PlanApprovalStore>(originTabId, "planApproval") ?? usePlanApprovalStore;
+		const { sessionId: originSessionId, cwd } = session.getState();
+		const ownsDecision = () =>
+			(runtime
+				? sessionRuntime(originTabId) === runtime && runtime.sessionGeneration === generation
+				: useTabsStore.getState().activeTabId === originTabId && acceptsActiveTabEvents()) &&
+			!session.getState().switchPending &&
+			session.getState().status === "ready" &&
+			session.getState().sessionId === originSessionId &&
+			store.getState().pending === target;
+		if (!ownsDecision() || store.getState().submitting !== null) return;
+		const trimmed = kind === "refine" ? planFeedbackText(store.getState().comments) : "";
+		if (kind === "refine" && !trimmed) return;
+		store.getState().setSubmitting(kind === "approve" ? { kind, option } : { kind });
 		try {
+			let savePath: string | null | undefined;
+			if (kind === "approve" && option === "save") {
+				savePath = await window.omp.system.showSaveDialog(
+					`${cwd}/${target.suggestedFileName ?? basename(target.planFilePath)}`,
+					[{ name: "Markdown", extensions: ["md"] }],
+				);
+				if (!savePath || !ownsDecision()) {
+					settleTabPlanApproval(originTabId, originSessionId, target, { submitting: null });
+					return;
+				}
+			}
 			const response =
 				kind === "approve"
 					? option === "save"
@@ -160,42 +181,40 @@ export function PlanApprovalPanel() {
 	const approveOptions = approveOptionsOf(pending.options);
 	const showRefine = pending.options.length === 0 || pending.options.includes("refine");
 	const busy = submitting !== null;
+	const hasContent = pending.planContent.trim().length > 0;
 
 	return (
-		<section aria-label={pending.title ?? t("planApproval.reviewFallback")} className="h-full overflow-y-auto">
-			<h2 className="flex items-center gap-2 px-4 pt-4 text-omp-sm font-semibold"><ClipboardList size={14} />{pending.title ?? t("planApproval.reviewFallback")}</h2>
-			<div className="flex flex-col gap-3 p-4">
+		<section aria-label={pending.title ?? t("planApproval.reviewFallback")} className="flex h-full min-h-0 flex-col">
+			<h2 className="flex shrink-0 items-center gap-2 border-b border-(--omp-border-muted) px-4 py-3 text-omp-sm font-semibold">
+				<ClipboardList size={14} />
+				{pending.title ?? t("planApproval.reviewFallback")}
+			</h2>
+			<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4">
 				<div className="flex items-center gap-2 text-omp-xs text-(--omp-dim)">
 					<span className="shrink-0">{t("planApproval.planFile")}</span>
 					<span className="truncate font-mono" title={pending.planFilePath}>
 						{basename(pending.planFilePath)}
 					</span>
 				</div>
-				<div className="max-h-[52vh] overflow-y-auto rounded-md border border-(--omp-border-muted) px-4 py-3">
-					{pending.planContent.trim().length > 0 ? (
+				<PlanFeedback
+					comments={comments}
+					controller={editor}
+					disabled={busy || !sidecarReady || !showRefine || !hasContent}
+					onCommentsChange={setComments}
+				>
+					{hasContent ? (
 						<MarkdownRenderer content={pending.planContent} />
 					) : (
 						<p className="text-omp-xs text-(--omp-dim)">{t("planApproval.emptyPlan")}</p>
 					)}
-				</div>
+				</PlanFeedback>
 				{notice !== null && (
 					<div className="rounded-md border border-[color-mix(in_srgb,var(--omp-warning)_35%,transparent)] bg-transparent px-3 py-2 text-omp-sm text-(--omp-warning)">
 						{notice}
 					</div>
 				)}
-				{showRefine && (
-					<TextArea
-						autoGrow
-						disabled={busy}
-						hint={t("planApproval.refineHint")}
-						label={t("planApproval.refineLabel")}
-						maxLength={8000}
-						onChange={event => setFeedback(event.target.value)}
-						placeholder={t("planApproval.refinePlaceholder")}
-						rows={2}
-						value={feedback}
-					/>
-				)}
+			</div>
+			<div className="shrink-0 border-t border-(--omp-border-muted) p-3">
 				{/* Approve-and-compact runs a whole compaction first: minutes on a long session. */}
 				{submitting?.kind === "approve" && submitting.option === "compact" && maintenance && (
 					<LongTaskStatus
@@ -207,7 +226,7 @@ export function PlanApprovalPanel() {
 				)}
 				<div className="flex flex-wrap items-center justify-end gap-2">
 					<Button
-						disabled={!sidecarReady}
+						disabled={!sidecarReady || busy || editor.editor !== null}
 						onClick={requestDismiss}
 						size="sm"
 						title={!sidecarReady ? t("sidecar.notResponding") : undefined}
@@ -217,7 +236,7 @@ export function PlanApprovalPanel() {
 					</Button>
 					{showRefine && (
 						<Button
-							disabled={!sidecarReady || busy || feedback.trim().length === 0}
+							disabled={!sidecarReady || busy || editor.editor !== null || comments.length === 0}
 							icon={<Send size={12} />}
 							loading={submitting?.kind === "refine"}
 							onClick={() => void respond("refine")}
@@ -232,7 +251,7 @@ export function PlanApprovalPanel() {
 						const choice = APPROVE_CHOICES[option];
 						return (
 							<Button
-								disabled={!sidecarReady || busy}
+								disabled={!hasContent || !sidecarReady || busy || editor.editor !== null}
 								icon={choice.icon}
 								key={option}
 								loading={submitting?.kind === "approve" && submitting.option === option}

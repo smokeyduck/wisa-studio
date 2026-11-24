@@ -28,26 +28,22 @@ async function recorded(type: string) {
 test.beforeAll(async () => {
 	profile = await fs.mkdtemp(path.join(os.tmpdir(), "omp-gui-audit-"));
 	const project = path.join(profile, "project");
-	const userData = path.join(profile, "desktop");
-	const agent = path.join(profile, "agent");
-	await Promise.all([fs.mkdir(project), fs.mkdir(userData), fs.mkdir(agent)]);
+	const userData = path.join(profile, "appData", "wisa-studio-dev");
+	await Promise.all([fs.mkdir(project), fs.mkdir(userData, { recursive: true })]);
 	record = path.join(profile, "rpc.jsonl");
 	await fs.writeFile(path.join(userData, "prefs.json"), JSON.stringify({ language: "en", firstRunComplete: true }));
 	const fixture = path.resolve("e2e/sidecar-fixture.ts");
-	await fs.chmod(fixture, 0o755);
 	const env = {
 		...process.env,
-		PI_CODING_AGENT_DIR: agent,
-		PI_CONFIG_DIR: path.relative(os.homedir(), profile),
-		OMP_PROFILE: "",
-		PI_PROFILE: "",
-		OMP_BUNDLED_OMP: fixture,
+		WISA_PROFILE_ROOT: profile,
+		OMP_SIDECAR: "source",
+		OMP_SIDECAR_CLI: fixture,
+		OMP_BUNDLED_OMP: path.resolve(process.platform === "win32" ? "resources/omp.exe" : "resources/omp"),
 		OMP_GUI_TEST_RECORD: record,
-		OMP_GUI_TEST_STATS_BINARY: path.resolve("resources/omp"),
 	};
 	Reflect.deleteProperty(env, "ELECTRON_RUN_AS_NODE");
 	app = await electron.launch({
-		args: [path.resolve("out/main/index.js"), project, `--user-data-dir=${userData}`],
+		args: [path.resolve("out/main/index.js"), project],
 		env,
 	});
 	page = await app.firstWindow();
@@ -62,6 +58,12 @@ test.afterAll(async () => {
 	if (app) await app.evaluate(({ app }) => app.exit(0));
 	if (record) await fs.copyFile(record, "test-results/desktop-rpc.jsonl").catch(() => {});
 	if (profile) await fs.rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+});
+
+test("the desktop does not start or expose an embedded agent browser", async () => {
+	expect(await page.evaluate(() => "browser" in window.omp)).toBe(false);
+	expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+	expect(await recorded("browser_host_start")).toHaveLength(0);
 });
 
 test("the Jobs panel receives focus and Escape closes it", async () => {

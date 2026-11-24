@@ -44,6 +44,7 @@ import { basename, cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { actionChords, KEYMAP_ACTION_BY_ID, onEscape } from "../../lib/keymap";
 import { sessionHasContent } from "../../lib/session-title";
+import { isSubagentSession } from "../../lib/session-tree";
 import { scrollStripOnWheel } from "../../lib/strip-scroll";
 import { type LiveTabRuntime, performTabClose, tabNeedsCloseConfirm } from "../../lib/tab-close";
 import { tabSignalPresentation } from "../../lib/tab-signal";
@@ -70,7 +71,6 @@ import {
 	visibleTabIds,
 } from "../../stores/tabs";
 import { type TabWidth, useEffectiveKeymapOverrides, useUiStore } from "../../stores/ui";
-import { AgentPageChips } from "../agents/AgentPageChips";
 import { anchorFromEvent, ContextMenu, type ContextMenuAnchor, type ContextMenuItem } from "../common/ContextMenu";
 import { type TabSearchEntry, TabSearchMenu } from "./TabSearchMenu";
 
@@ -141,11 +141,9 @@ function TabChip({
 	);
 	const signal = tabSignalPresentation(tab, activeRuntime);
 	const signalLabel = t(signal.labelKey);
-	// A shown subagent page takes the selection; its session keeps the visible ring.
-	const pageShown = useAgentPagesStore(s => (s.shown[tab.id] ?? null) !== null);
-	const selected = active && !pageShown;
+	const selected = active;
 	const select = () => {
-		if (pageShown) useAgentPagesStore.getState().show(tab.id, null);
+		if (useAgentPagesStore.getState().shown[tab.id]) useAgentPagesStore.getState().show(tab.id, null);
 		void switchTab(tab.id);
 	};
 
@@ -342,6 +340,25 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 	const stripRef = useRef<HTMLDivElement>(null);
 	const sessionsById = useMemo(() => new Map(sessions.map(session => [session.id, session])), [sessions]);
 	const sessionsByPath = useMemo(() => new Map(sessions.map(session => [session.path, session])), [sessions]);
+	const indexedSessions = useMemo(
+		() =>
+			new Map(
+				tabs.map(tab => [
+					tab.id,
+					(tab.sessionPath ? sessionsByPath.get(tab.sessionPath) : undefined) ??
+						(tab.sessionId ? sessionsById.get(tab.sessionId) : undefined),
+				]),
+			),
+		[tabs, sessionsById, sessionsByPath],
+	);
+	const stripTabs = useMemo(
+		() =>
+			tabs.filter(tab => {
+				const session = indexedSessions.get(tab.id);
+				return !session || !isSubagentSession(session);
+			}),
+		[tabs, indexedSessions],
+	);
 	// Inline close confirm for live tabs (AgentHub abort parity): the first action
 	// arms, the ✓ executes, ✕ or the timeout cancels. The arm lives in the ui
 	// store because × , ⌘W and File → Close Tab all share it.
@@ -354,16 +371,12 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 	const [dragTabId, setDragTabId] = useState<string | null>(null);
 	const [dropMark, setDropMark] = useState<{ tabId: string; side: TabDropSide } | null>(null);
 	const [overflow, setOverflow] = useState({ hidden: 0, start: false, end: false });
-	const tabOrder = useMemo(() => tabs.map(tab => tab.id), [tabs]);
-	const units = useMemo(() => tabUnits(tabs, groups), [tabs, groups]);
+	const tabOrder = useMemo(() => stripTabs.map(tab => tab.id), [stripTabs]);
+	const units = useMemo(() => tabUnits(stripTabs, groups), [stripTabs, groups]);
 	const multiRow = tabRows === "multi";
 
-	const labelOf = (tab: SessionTab) => {
-		const indexedSession =
-			(tab.sessionPath ? sessionsByPath.get(tab.sessionPath) : undefined) ??
-			(tab.sessionId ? sessionsById.get(tab.sessionId) : undefined);
-		return tabDisplayTitle(tab, tabs, indexedSession, t("sidebar.untitled"));
-	};
+	const labelOf = (tab: SessionTab) =>
+		tabDisplayTitle(tab, stripTabs, indexedSessions.get(tab.id), t("sidebar.untitled"));
 	const workspaceOf = (tab: SessionTab) =>
 		tab.kind === "chat" ? t("sidebar.chats") : (groupAliases[tab.cwd] ?? basename(tab.cwd) ?? tab.cwd);
 
@@ -409,19 +422,12 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 		return () => observer.disconnect();
 	}, [measure]);
 
-	// Keep the selected chip in view when it changes or the strip grows past the
-	// window (a new tab lands at the end). A shown agent page selects its own
-	// chip; its session's chip comes in first, so the page never shows without
-	// the session it belongs to.
-	const shownPage = useAgentPagesStore(s => (activeTabId ? (s.shown[activeTabId] ?? null) : null));
-	const pageCount = useAgentPagesStore(s => (activeTabId ? (s.pages[activeTabId]?.length ?? 0) : 0));
-	// biome-ignore lint/correctness/useExhaustiveDependencies: tab and page counts change the strip's scroll extent.
+	// Keep the selected top-level tab in view as the strip changes.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: strip length changes its scroll extent.
 	useEffect(() => {
 		if (!activeTabId) return;
-		const nearest = { block: "nearest", inline: "nearest" } as const;
-		document.getElementById(`omp-tab-${activeTabId}`)?.scrollIntoView?.(nearest);
-		if (shownPage) document.getElementById(`omp-tab-${activeTabId}-agent-${shownPage}`)?.scrollIntoView?.(nearest);
-	}, [activeTabId, shownPage, tabs.length, pageCount]);
+		document.getElementById(`omp-tab-${activeTabId}`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+	}, [activeTabId, stripTabs.length]);
 
 	useEffect(() => {
 		if (!armedCloseTab) return;
@@ -446,9 +452,7 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 	useEffect(() => {
 		if (tabs.length <= 1 || pruningPlaceholderRef.current) return;
 		const candidate = tabs.find((tab, index) => {
-			const indexedSession =
-				(tab.sessionPath ? sessionsByPath.get(tab.sessionPath) : undefined) ??
-				(tab.sessionId ? sessionsById.get(tab.sessionId) : undefined);
+			const indexedSession = indexedSessions.get(tab.id);
 			const legacyEmptyStartupChat =
 				index === 0 &&
 				tab.placeholder === undefined &&
@@ -512,8 +516,7 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 		liveQueuedMessages,
 		liveRenderedMessages,
 		liveStreaming,
-		sessionsById,
-		sessionsByPath,
+		indexedSessions,
 		tabs,
 	]);
 
@@ -544,7 +547,7 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 		compacting: liveCompacting,
 	};
 	const protectedFromBatchClose = (tab: SessionTab) => tab.worktree != null || tabNeedsCloseConfirm(tab, liveRuntime);
-	const actionTabId = activeTabId ?? tabs[0]?.id;
+	const actionTabId = stripTabs.some(tab => tab.id === activeTabId) ? activeTabId : stripTabs[0]?.id;
 
 	/** Reorder drop wiring for one chip (a pair's frame): drop before or after it. */
 	const unitDropProps = (unit: TabUnit): ChipDropProps => {
@@ -631,7 +634,7 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 
 	const searchEntries = (excludeTabId: string | null): TabSearchEntry[] =>
 		excludeTabId
-			? tabs
+			? stripTabs
 					.filter(tab => tab.id !== excludeTabId)
 					.map(tab => ({
 						tabId: tab.id,
@@ -691,44 +694,25 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 					{units.map(unit => {
 						const first = unit.tabs[0];
 						if (!first) return null;
-						const pageChips = unit.tabs.map(tab => (
-							<AgentPageChips
-								key={`${tab.id}-pages`}
-								parentLabel={labelOf(tab)}
-								tabActive={tab.id === activeTabId}
-								tabId={tab.id}
-							/>
-						));
-						if (!unit.group) {
-							return (
-								<Fragment key={first.id}>
-									{renderChip(first, false, unitDropProps(unit))}
-									{pageChips}
-								</Fragment>
-							);
-						}
+						if (!unit.group) return renderChip(first, false, unitDropProps(unit));
 						return (
-							<Fragment key={`${unit.group.firstTabId}|${unit.group.secondTabId}`}>
-								<PairChip
-									unit={unit}
-									onScreen={unit.tabs.some(tab => visible.includes(tab.id))}
-									dropProps={unitDropProps(unit)}
-								>
-									{unit.tabs.map((tab, index) => (
-										<Fragment key={tab.id}>
-											{index > 0 && (
-												<span aria-hidden className="h-4 w-px shrink-0 bg-[var(--omp-border)]" />
-											)}
-											{renderChip(tab, true)}
-										</Fragment>
-									))}
-								</PairChip>
-								{pageChips}
-							</Fragment>
+							<PairChip
+								key={`${unit.group.firstTabId}|${unit.group.secondTabId}`}
+								unit={unit}
+								onScreen={unit.tabs.some(tab => visible.includes(tab.id))}
+								dropProps={unitDropProps(unit)}
+							>
+								{unit.tabs.map((tab, index) => (
+									<Fragment key={tab.id}>
+										{index > 0 && <span aria-hidden className="h-4 w-px shrink-0 bg-[var(--omp-border)]" />}
+										{renderChip(tab, true)}
+									</Fragment>
+								))}
+							</PairChip>
 						);
 					})}
 				</div>
-				{tabs.length > 1 && (
+				{stripTabs.length > 1 && (
 					<button
 						type="button"
 						aria-label={
@@ -815,7 +799,7 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 						id: "split-with",
 						label: t("tabs.menu.splitWith"),
 						icon: SplitSquareHorizontal,
-						disabled: tabs.length < 2,
+						disabled: stripTabs.length < 2,
 						onSelect: () => {
 							setTabMenu(null);
 							setSearchMenu({ anchor: tabMenu.anchor, pairWith: target.id });

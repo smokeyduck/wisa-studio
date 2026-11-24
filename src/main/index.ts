@@ -11,7 +11,6 @@ import { app, BrowserWindow, desktopCapturer, nativeImage, session, webContents 
 import Store from "electron-store";
 import type { SessionKind } from "../shared/ipc-types";
 import { installQuitGuard, requestQuit } from "./app-quit";
-import { BrowserHost } from "./browser-host";
 import { resolveBundledOmp } from "./bundled-omp-path";
 import { CollabPhoneHost } from "./collab-phone";
 import { type ConversationIndex, openConversationIndex } from "./conversation-index";
@@ -29,6 +28,7 @@ import { PhoneHub } from "./phone-hub";
 import { dropUnsupportedProxies, type ProxyResolution, resolveProxyForSpawn } from "./proxy-env";
 import { writeRuntimeLog } from "./runtime-log";
 import { SchedulerHost } from "./scheduler/host";
+import type { RunnerDeps } from "./scheduler/runner";
 import { SessionIndex } from "./session-index";
 import { shellSpawnEnv } from "./shell-env";
 import { bindWindowToggle } from "./shortcuts";
@@ -138,7 +138,6 @@ const WARM_SPARE_DELAY_MS = 3_000;
 // Module-level instances (alive for app lifetime)
 let windowManager: WindowManager;
 let sidecarPool: SidecarPool;
-let browserHost: BrowserHost | null = null;
 let statsServer: StatsServerManager | null = null;
 let sessionIndex: SessionIndex;
 let statsClient: StatsClient;
@@ -323,10 +322,6 @@ app.whenReady().then(() => {
 	// Keep one idle agent warm in the workspace being used, so the next tab
 	// opened there switches onto its session instead of cold-starting (gui#29).
 	sidecarPool.warmSpareDelayMs = WARM_SPARE_DELAY_MS;
-	// Agent tabs browse in their own side panel: each sidecar that comes up
-	// serves a relay for it, and its pages outlive sidecar restarts.
-	const host = new BrowserHost();
-	browserHost = host;
 	sidecarPool.uiResponder = (sidecar, request) => schedulerHost?.answerToolPrompt(sidecar, request) ?? false;
 	// Phone access: honor `collab.autoStart` for GUI tabs (the agent only applies
 	// it in TUI mode) and answer the phone dialog's per-tab snapshot.
@@ -359,38 +354,34 @@ app.whenReady().then(() => {
 	});
 	sidecarPool.sidecarLifecycle = {
 		ready: tab => {
-			if (tab.kind === "agent") void host.link(tab);
 			schedulerHost?.tabReady(tab);
 			void collabPhone?.ready(tab.tabId, tab.sidecar);
 		},
-		down: tabId => {
-			host.unlink(tabId);
-			collabPhone?.down(tabId);
-		},
-		released: tabId => host.release(tabId),
+		down: tabId => collabPhone?.down(tabId),
 	};
 	// A closed window's tabs have to leave the saved session with it, or the next
 	// launch resurrects a window the user deliberately shut.
 	windowManager.subscribeWindowClosed(() => persistTabLayouts());
 	sessionIndex = new SessionIndex(undefined, initialCwd);
+	const createRunSidecar: RunnerDeps["createSidecar"] = spec =>
+		new SidecarManager({
+			binaryPath: bundledOmp ?? "",
+			packaged: app.isPackaged,
+			sourceCli: sourceCli ?? undefined,
+			cwd: spec.cwd,
+			kind: "agent",
+			fresh: true,
+			runPolicy: spec,
+			proxyEnv: resolveProxyEnvForSpawn,
+			shellEnv: shellSpawnEnv,
+			reportFailure: reportSidecarFailure,
+		});
 	// Scheduled tasks run in their own sidecars, outside the tab pool: no window,
 	// a fresh session, and argv the task's tool policy fixes (plan/23 §3).
 	try {
 		schedulerHost = new SchedulerHost({
 			dbPath: join(app.getPath("userData"), "scheduler.db"),
-			createRunSidecar: spec =>
-				new SidecarManager({
-					binaryPath: bundledOmp ?? "",
-					packaged: app.isPackaged,
-					sourceCli: sourceCli ?? undefined,
-					cwd: spec.cwd,
-					kind: "agent",
-					fresh: true,
-					runPolicy: { flags: spec.flags, deny: spec.deny },
-					proxyEnv: resolveProxyEnvForSpawn,
-					shellEnv: shellSpawnEnv,
-					reportFailure: reportSidecarFailure,
-				}),
+			createRunSidecar,
 			deleteSession: sessionPath => sessionIndex.deleteSession(sessionPath),
 			windowManager,
 			spawnWindow,
@@ -426,7 +417,6 @@ app.whenReady().then(() => {
 	// Register all handlers and sidecar listeners before loading the renderer.
 	registerIpcHandlers({
 		sidecarPool,
-		browserHost: host,
 		sessionIndex,
 		statsClient,
 		statsRestart: () => statsServer?.ensureRunning() ?? "exhausted",
@@ -444,6 +434,7 @@ app.whenReady().then(() => {
 		spawnWindow,
 		initialCwd: resolveInitialCwd,
 		schedulerHost,
+		createRunSidecar,
 		collabPhone,
 		phoneHub,
 	});
@@ -504,7 +495,7 @@ app.whenReady().then(() => {
 
 	// Tray, menu, deep links, updater
 	createTray(windowManager, spawnWindow);
-	createMenu(windowManager, spawnWindow, host);
+	createMenu(windowManager, spawnWindow);
 	setupDeepLinks(windowManager, spawnWindow);
 	setupUpdater();
 
@@ -534,7 +525,6 @@ installQuitGuard(
 		schedulerHost?.dispose();
 		statsServer?.kill();
 		sidecarPool?.disposeAll();
-		browserHost?.disposeAll();
 		sessionIndex?.stop();
 		logWatcher?.stop();
 		memoryWatcher?.stop();

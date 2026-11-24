@@ -10,7 +10,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { IpcResolvedPath } from "../../../shared/ipc-types";
 import { I18nProvider } from "../../lib/i18n";
-import { useTabsStore } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
 import type { ContextMenuItem } from "./ContextMenu";
 import { LinkMenuHost, linkMenuItems } from "./LinkMenu";
@@ -42,14 +41,6 @@ function rightClick(): Event {
 	return event;
 }
 
-function seedActiveTab(kind: "agent" | "chat"): void {
-	useTabsStore.setState({
-		tabs: [{ id: "t0", cwd: "/work", status: "ready", kind, unreadDone: false }],
-		activeTabId: "t0",
-		bundles: new Map(),
-	});
-}
-
 function select(items: ContextMenuItem[], id: string): void {
 	const item = items.find(entry => entry.id === id);
 	if (!item) throw new Error(`no menu item ${id}`);
@@ -70,10 +61,8 @@ beforeEach(() => {
 	writeText = vi.fn(async () => {});
 	ompWindow.omp = {
 		system: { openExternal, openPath, revealPath: vi.fn(async () => ({ ok: true })) },
-		browser: { open: vi.fn(async () => ({})), detach: vi.fn(async () => {}) },
 	};
 	vi.stubGlobal("navigator", { platform: "MacIntel", clipboard: { writeText } });
-	seedActiveTab("agent");
 });
 
 afterEach(async () => {
@@ -85,23 +74,19 @@ afterEach(async () => {
 	vi.unstubAllGlobals();
 	delete ompWindow.omp;
 	delete ompWindow.getSelection;
-	useTabsStore.getState().reset();
 	useUiStore.setState({ filePreviewPath: null, filePreviewLine: null });
 });
 
 describe("linkMenuItems for web links", () => {
-	it("offers the browser panel only where the tab has one, and copy for every link", () => {
+	it("offers system browser for HTTP(S) links and copy for every link", () => {
 		const url = { target: { kind: "url" as const, url: "https://example.com/docs" }, selection: "" };
-		expect(linkMenuItems(url, t).map(item => item.id)).toEqual(["open-panel", "open-external", "copy-link"]);
-
-		seedActiveTab("chat");
 		expect(linkMenuItems(url, t).map(item => item.id)).toEqual(["open-external", "copy-link"]);
 
 		const mail = { target: { kind: "url" as const, url: "mailto:team@example.com" }, selection: "" };
 		expect(linkMenuItems(mail, t).map(item => item.id)).toEqual(["copy-link"]);
 	});
 
-	it("sends the link to the system browser even from an agent tab, and copies it", async () => {
+	it("sends the link to the system browser and copies it", async () => {
 		const items = linkMenuItems({ target: { kind: "url", url: "https://example.com/docs" }, selection: "" }, t);
 		select(items, "open-external");
 		select(items, "copy-link");

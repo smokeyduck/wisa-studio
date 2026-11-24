@@ -165,6 +165,17 @@ export function McpServerCard({
 				<Badge dot pulse={server.status === "connecting"} variant={MCP_STATUS_VARIANT[server.status]}>
 					{t(`extPanel.status.${server.status}`)}
 				</Badge>
+				{server.scope && !confirmingRemove && (
+					<Button
+						aria-label={t("mcp.registry.removeConfigured", { name: server.name })}
+						disabled={disabled}
+						icon={<Trash2 size={13} />}
+						onClick={() => onMenuAction("remove")}
+						size="sm"
+						title={t("extPanel.action.remove")}
+						variant="ghost"
+					/>
+				)}
 				<div className="relative flex shrink-0 items-center" ref={menuRef}>
 					<button
 						aria-expanded={menuOpen}
@@ -257,7 +268,10 @@ export function McpServerCard({
 			{confirmingRemove && (
 				<div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-[color-mix(in_srgb,var(--omp-error)_35%,transparent)] bg-transparent px-2.5 py-1.5">
 					<span className="min-w-0 flex-1 text-omp-sm text-(--omp-error)">
-						{t("extPanel.mcp.removeConfirm", { name: server.name })}
+						{t("extPanel.mcp.removeConfirm", {
+							name: server.name,
+							scope: server.scope ? t(`mcp.card.scope.${server.scope}`) : "",
+						})}
 					</span>
 					<Button disabled={busy || disabled} onClick={onConfirmRemove} size="sm" variant="danger">
 						{t("extPanel.action.remove")}

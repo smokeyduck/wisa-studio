@@ -37,6 +37,7 @@ import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
 import { describeError } from "../../lib/errors";
 import { cx, shortenPath } from "../../lib/format";
 import { useT } from "../../lib/i18n";
+import { acceptsActiveTabEvents } from "../../lib/tab-routing";
 import { useSessionStore } from "../../stores/session";
 import { useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
@@ -44,6 +45,7 @@ import { Badge, type BadgeVariant, Button, Modal, Spinner, type TabItem, Tabs } 
 import { SwitchTrack } from "../common/SwitchTrack";
 import { SettingsPageIntro } from "../settings/SettingsPageIntro";
 import { type McpTestView, summarizeMcpTestData } from "./mcp/McpFeedback";
+import { McpRegistry } from "./mcp/McpRegistry";
 import { type McpCardAction, type McpReauthPhase, McpServerCard } from "./mcp/McpServerCard";
 import { McpServerWizard } from "./mcp/McpServerWizard";
 
@@ -65,6 +67,8 @@ interface TabRpc<T> {
 	error: string | null;
 	loading: boolean;
 	ready: boolean;
+	routeKey: string;
+	workspace: string;
 	/** Re-fetch; awaited by row mutations so fresh state replaces optimistic overlays. */
 	refresh: () => Promise<void>;
 }
@@ -141,7 +145,7 @@ function useTabRpc<T>(
 		await load();
 	}, [load]);
 
-	return { data, error, loading, ready: sidecarReady && routeReady, refresh };
+	return { data, error, loading, ready: sidecarReady && routeReady, routeKey, workspace: cwd, refresh };
 }
 
 // ---------------------------------------------------------------------------
@@ -556,12 +560,14 @@ function McpTab({
 	onQueryChange,
 	showSearch,
 	embedded,
+	showRegistry = true,
 }: {
 	rpc: TabRpc<RpcMcpServerInfo[]>;
 	query: string;
 	onQueryChange: (q: string) => void;
 	showSearch?: boolean;
 	embedded?: boolean;
+	showRegistry?: boolean;
 }) {
 	const tabRpc = useSessionRpc();
 	const t = useT();
@@ -721,7 +727,7 @@ function McpTab({
 	};
 
 	const handleConfirmRemove = (server: RpcMcpServerInfo): void => {
-		if (!rpc.ready) return;
+		if (!rpc.ready || !server.scope) return;
 		setConfirmRemoveFor(null);
 		// Drop any inline test/reauth state so nothing survives onto a re-add.
 		setTests(prev => {
@@ -741,57 +747,90 @@ function McpTab({
 
 	return (
 		<>
-			<TabFrame
-				embedded={embedded}
-				actions={
-					<Button
-						disabled={!rpc.ready}
-						icon={<Plus size={12} />}
-						onClick={() => setWizardOpen(true)}
-						size="sm"
-						title={!rpc.ready ? t("extPanel.notConnected") : undefined}
-						variant="secondary"
+			<div className={cx(!embedded && "min-h-0 flex-1 overflow-y-auto")}>
+				<section aria-label={t("mcp.registry.installedTitle")} className={cx(!embedded && "px-4")}>
+					<h3 className={cx("pt-3 font-medium text-(--omp-text)", embedded && "px-4")}>
+						{t("mcp.registry.installedTitle")}
+					</h3>
+					<TabFrame
+						embedded
+						actions={
+							<Button
+								disabled={!rpc.ready || mutation.busyKey !== null}
+								icon={<Plus size={12} />}
+								onClick={() => setWizardOpen(true)}
+								size="sm"
+								title={!rpc.ready ? t("extPanel.notConnected") : undefined}
+								variant="secondary"
+							>
+								{t("mcp.add")}
+							</Button>
+						}
+						error={rpc.error}
+						loaded={rpc.data !== null}
+						loading={rpc.loading}
+						ready={rpc.ready}
+						onQueryChange={onQueryChange}
+						onRefresh={rpc.refresh}
+						query={query}
+						showSearch={showSearch}
+						tabId="mcp"
+						total={rpc.data?.length ?? 0}
+						visible={visible.length}
 					>
-						{t("mcp.add")}
-					</Button>
-				}
-				error={rpc.error}
-				loaded={rpc.data !== null}
-				loading={rpc.loading}
-				ready={rpc.ready}
-				onQueryChange={onQueryChange}
-				onRefresh={rpc.refresh}
-				query={query}
-				showSearch={showSearch}
-				tabId="mcp"
-				total={rpc.data?.length ?? 0}
-				visible={visible.length}
-			>
-				<div className="flex flex-col gap-2">
-					{visible.map(server => (
-						<McpServerCard
-							busy={mutation.busyKey === server.name}
-							confirmingRemove={confirmRemoveFor === server.name}
-							disabled={mutation.busyKey !== null || !rpc.ready}
-							disabledReason={!rpc.ready ? t("extPanel.notConnected") : undefined}
-							enabled={mutation.effective(server.name, server.enabled)}
-							key={server.name}
-							menuOpen={menuFor === server.name}
-							onCancelRemove={() => setConfirmRemoveFor(null)}
-							onConfirmRemove={() => handleConfirmRemove(server)}
-							onDismissTest={() => dismissTest(server.name)}
-							onMenuAction={action => handleMenuAction(server, action)}
-							onMenuClose={closeMenu}
-							onMenuToggle={() => setMenuFor(prev => (prev === server.name ? null : server.name))}
-							onReauthCancel={() => void runReauthCancel(server)}
-							reauth={reauths[server.name] ?? null}
-							server={server}
-							testing={tests[server.name]?.testing ?? false}
-							testView={tests[server.name]?.view ?? null}
-						/>
-					))}
-				</div>
-			</TabFrame>
+						<div className="flex flex-col gap-2">
+							{visible.map(server => (
+								<McpServerCard
+									busy={mutation.busyKey === server.name}
+									confirmingRemove={confirmRemoveFor === server.name}
+									disabled={mutation.busyKey !== null || !rpc.ready}
+									disabledReason={!rpc.ready ? t("extPanel.notConnected") : undefined}
+									enabled={mutation.effective(server.name, server.enabled)}
+									key={server.name}
+									menuOpen={menuFor === server.name}
+									onCancelRemove={() => setConfirmRemoveFor(null)}
+									onConfirmRemove={() => handleConfirmRemove(server)}
+									onDismissTest={() => dismissTest(server.name)}
+									onMenuAction={action => handleMenuAction(server, action)}
+									onMenuClose={closeMenu}
+									onMenuToggle={() => setMenuFor(prev => (prev === server.name ? null : server.name))}
+									onReauthCancel={() => void runReauthCancel(server)}
+									reauth={reauths[server.name] ?? null}
+									server={server}
+									testing={tests[server.name]?.testing ?? false}
+									testView={tests[server.name]?.view ?? null}
+								/>
+							))}
+						</div>
+					</TabFrame>
+				</section>
+				{showRegistry && (
+					<McpRegistry
+						busyKey={mutation.busyKey}
+						canInstall={rpc.ready && rpc.data !== null && rpc.error === null && mutation.busyKey === null}
+						onInstall={(name, remote) => {
+							const { cwd, status } = useSessionStore.getState();
+							const { activeTabId } = useTabsStore.getState();
+							if (
+								status !== "ready" ||
+								!acceptsActiveTabEvents() ||
+								`${activeTabId ?? "none"}:${cwd}` !== rpc.routeKey
+							) {
+								return;
+							}
+							void mutation.run(
+								name,
+								null,
+								() => tabRpc.mcpAdd(name, { transport: remote.transport, url: remote.url }, "project"),
+								t("mcp.wizard.addFailed"),
+							);
+						}}
+						routeKey={rpc.routeKey}
+						servers={rpc.data ?? []}
+						workspace={rpc.workspace}
+					/>
+				)}
+			</div>
 			<McpServerWizard
 				onAdded={() => {
 					setWizardOpen(false);
@@ -966,7 +1005,7 @@ export function ExtensionsPanel({ open, onClose, initialTab = "hooks" }: Extensi
 					tabs={tabs}
 				/>
 				{tab === "hooks" && <HooksTab onQueryChange={setQuery} query={query} rpc={hooks} />}
-				{tab === "mcp" && <McpTab onQueryChange={setQuery} query={query} rpc={mcp} />}
+				{tab === "mcp" && <McpTab onQueryChange={setQuery} query={query} rpc={mcp} showRegistry={open} />}
 				{tab === "commands" && <CommandsTab onQueryChange={setQuery} query={query} rpc={commands} />}
 				<div className="shrink-0 border-t border-(--omp-border-muted) px-4 py-2 text-omp-xs text-(--omp-dim)">
 					{t(`extPanel.footer.${tab}`)}

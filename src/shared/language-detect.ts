@@ -1,14 +1,8 @@
 /**
- * Language detection used by both processes. The renderer passes
- * `navigator.languages` + the resolved IANA time zone; the main process passes
- * `app.getLocale()` + the same `Intl` zone. Kept dependency-free (no Electron,
- * no `navigator`) so both callers and the tests can run it anywhere.
- *
- * Order: the first preferred locale the UI ships → time zone → English. The
- * zone fallback exists because a Vietnamese or Thai user's browser is often set
- * to `en-US`, and an unsupported preference list says nothing about what they
- * read. Only the principal zones per shipped language are listed; everything
- * else falls through to English.
+ * Language detection shared by native menus and the renderer. Supported
+ * non-English language preferences beat location hints. The native region or
+ * time zone can disambiguate the generic English defaults shipped by Electron.
+ * A manually chosen app language is handled by the caller and always wins.
  */
 import { isLanguage, type Language } from "./languages";
 
@@ -27,22 +21,33 @@ const TIME_ZONE_LANGUAGES: Record<string, Language> = {
 	"asia/vladivostok": "ru",
 };
 
+const REGION_LANGUAGES: Record<string, Language> = { VN: "vi", TH: "th", CN: "zh", TW: "zh", RU: "ru" };
+
 export interface LanguageDetectionInput {
 	/** Primary locale, e.g. `navigator.language` or `app.getLocale()`. */
 	locale?: string;
 	/** Full preference list, most preferred first. Falls back to `[locale]`. */
 	locales?: readonly string[];
+	/** Native ISO country code; independent of the display language. */
+	region?: string;
 	/** IANA zone, e.g. `Intl.DateTimeFormat().resolvedOptions().timeZone`. */
 	timeZone?: string;
+	/** Windows maps its shared Bangkok/Hanoi/Jakarta zone to Asia/Bangkok. */
+	windows?: boolean;
 }
 
-export function detectLanguage({ locale, locales, timeZone }: LanguageDetectionInput = {}): Language {
+export function detectLanguage({ locale, locales, region, timeZone, windows }: LanguageDetectionInput = {}): Language {
 	const preferred = locales?.length ? locales : locale ? [locale] : [];
+	let localeRegion: string | undefined;
 	for (const candidate of preferred) {
-		const base = candidate.toLowerCase().split(/[-_]/)[0];
-		if (isLanguage(base)) return base;
+		const [base, ...parts] = candidate.trim().split(/[-_]/);
+		const language = base?.toLowerCase();
+		if (isLanguage(language) && language !== "en") return language;
+		localeRegion ??= parts.find(part => /^[A-Za-z]{2}$/.test(part))?.toUpperCase();
 	}
-	const byZone = TIME_ZONE_LANGUAGES[timeZone?.trim().toLowerCase() ?? ""];
-	if (byZone && isLanguage(byZone)) return byZone;
-	return "en";
+	const zone = timeZone?.trim().toLowerCase() ?? "";
+	// The shared Windows zone is not evidence of Thailand. Prefer the product's
+	// Vietnamese default if no supported language or region disambiguates it.
+	const zoneLanguage = windows && zone === "asia/bangkok" ? "vi" : TIME_ZONE_LANGUAGES[zone];
+	return REGION_LANGUAGES[region?.trim().toUpperCase() ?? localeRegion ?? ""] ?? zoneLanguage ?? "en";
 }

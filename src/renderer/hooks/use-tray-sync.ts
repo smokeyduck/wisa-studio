@@ -14,6 +14,7 @@ import { contextUsageView } from "../lib/context-usage";
 import { basename } from "../lib/format";
 import { useLang } from "../lib/i18n";
 import { providerQuotas } from "../lib/quota-rows";
+import { supportsPriorityMode } from "../lib/service-tier";
 import { isSubagentSession } from "../lib/session-tree";
 import { useModelStore } from "../stores/model";
 import { useQuotaStore } from "../stores/quotas";
@@ -26,7 +27,7 @@ export function useTraySync(): void {
 	const { lang } = useLang();
 	const model = useModelStore(s => s.model);
 	const thinkingLevel = useModelStore(s => s.thinkingLevel);
-	const fastMode = useModelStore(s => s.fastModeEnabled);
+	const fastMode = useModelStore(s => (supportsPriorityMode(s.model) ? s.fastModeEnabled : null));
 	const approvalMode = useSettingsStore(s => s.approvalMode);
 	const cwd = useSessionStore(s => s.cwd);
 	const isStreaming = useSessionStore(s => s.isStreaming);

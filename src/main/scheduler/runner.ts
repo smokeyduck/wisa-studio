@@ -14,6 +14,7 @@ import {
 	type ExtensionUIRequest,
 	type HostToolCallRequest,
 	type HostToolDefinition,
+	type RpcActiveToolsResult,
 	type RpcCommand,
 	type RpcGitChanges,
 	type RpcResponse,
@@ -85,6 +86,8 @@ export interface RunSidecarSpec {
 	cwd: string;
 	flags: string[];
 	deny: FlagDenylist;
+	/** Allow only this run's RPC host tools; do not load a workspace launch profile. */
+	hostToolsOnly?: true;
 }
 
 export interface RunnerDeps {
@@ -95,12 +98,16 @@ export interface RunnerDeps {
 
 export interface RunInput {
 	runId: string;
-	config: TaskConfig;
+	config: Pick<TaskConfig, "title" | "prompt" | "cwd" | "model" | "tools" | "depth" | "timeoutMs" | "verify">;
 	previous: { summary: string; next?: string; rejectionNote?: string } | null;
 	signal: AbortSignal;
 	onProgress(progress: RunProgress): void;
 	/** The run's session file, as soon as the sidecar names it. */
 	onSession?(sessionPath: string): void;
+	readTools?: readonly {
+		definition: HostToolDefinition;
+		read(args: Record<string, unknown>): Promise<string>;
+	}[];
 }
 
 export type RunEndState = "succeeded" | "failed" | "cancelled" | "timed_out" | "blocked_config";
@@ -197,7 +204,7 @@ export function parseTaskReport(args: Record<string, unknown>): RunReport | null
 }
 
 export function renderRunPrompt(
-	config: TaskConfig,
+	config: Pick<TaskConfig, "title" | "prompt" | "tools" | "depth">,
 	previous: RunInput["previous"],
 	worktree: { branch: string } | null,
 ): string {
@@ -216,7 +223,7 @@ export function renderRunPrompt(
 }
 
 /** The message that starts round `round` (from 2) of a run, and why it runs. */
-export function renderRoundPrompt(config: TaskConfig, round: number, why: NextRound): string {
+export function renderRoundPrompt(config: Pick<TaskConfig, "depth">, round: number, why: NextRound): string {
 	const minRounds = config.depth.kind === "research" && round <= config.depth.rounds ? config.depth.rounds : null;
 	return renderTemplate(runRoundTemplate, {
 		round: String(round),
@@ -237,6 +244,7 @@ class RunStop extends Error {
 }
 
 function waitForReady(sidecar: RunSidecar, signal: AbortSignal): Promise<void> {
+	if (signal.aborted) return Promise.reject(new RunStop("cancelled", "Cancelled"));
 	const { promise, resolve, reject } = Promise.withResolvers<void>();
 	const timer = setTimeout(
 		() => finish(new RunStop("failed", "The agent did not start in time", "transient")),
@@ -350,8 +358,12 @@ export async function executeRun(input: RunInput, deps: RunnerDeps): Promise<Run
 		if (!target) return;
 		if (isApprovalRequest(request)) {
 			const { toolName, body } = parseApprovalTitle(request.title);
-			// The run's own report tool only records what the run found.
-			if (toolName === TASK_REPORT_TOOL) {
+			// Starting a project review authorizes its scoped read tools. Core cannot widen
+			// those grants: the host independently checks the input path for every call.
+			if (
+				!input.signal.aborted &&
+				(toolName === TASK_REPORT_TOOL || input.readTools?.some(tool => tool.definition.name === toolName))
+			) {
 				target.sendSideChannel({ type: "extension_ui_response", id: request.id, value: APPROVAL_APPROVE });
 				return;
 			}
@@ -376,6 +388,14 @@ export async function executeRun(input: RunInput, deps: RunnerDeps): Promise<Run
 				...(isError ? { isError: true } : {}),
 			});
 		if (request.toolName !== TASK_REPORT_TOOL) {
+			const tool = input.readTools?.find(tool => tool.definition.name === request.toolName);
+			if (tool) {
+				void tool.read(request.arguments).then(
+					text => reply(text),
+					cause => reply(cause instanceof Error ? cause.message : "Could not read project input", true),
+				);
+				return;
+			}
 			reply(`Unknown tool: ${request.toolName}`, true);
 			return;
 		}
@@ -410,14 +430,31 @@ export async function executeRun(input: RunInput, deps: RunnerDeps): Promise<Run
 	});
 
 	try {
+		if (input.signal.aborted) throw new RunStop("cancelled", "Cancelled");
 		if (!(await deps.cwdExists(config.cwd))) {
 			throw new RunStop("blocked_config", `The workspace folder no longer exists: ${config.cwd}`, "config");
 		}
-		sidecar = deps.createSidecar({
-			cwd: config.cwd,
-			flags: runPolicyFlags(config.tools, config.model),
-			deny: { names: RUN_DENIED_FLAGS, withValue: RUN_DENIED_FLAGS_WITH_VALUE },
-		});
+		const deny = { names: RUN_DENIED_FLAGS, withValue: RUN_DENIED_FLAGS_WITH_VALUE };
+		sidecar = deps.createSidecar(
+			input.readTools
+				? {
+						cwd: config.cwd,
+						flags: [
+							"--approval-mode",
+							"always-ask",
+							"--no-tools",
+							"--no-session",
+							"--no-extensions",
+							"--no-skills",
+							"--no-rules",
+							"--no-context-files",
+							"--no-lsp",
+						],
+						deny,
+						hostToolsOnly: true,
+					}
+				: { cwd: config.cwd, flags: runPolicyFlags(config.tools, config.model), deny },
+		);
 		sidecar.on("events", onEvents);
 		sidecar.on("extensionUi", onUi);
 		sidecar.on("hostToolCall", onHostTool);
@@ -442,7 +479,15 @@ export async function executeRun(input: RunInput, deps: RunnerDeps): Promise<Run
 			await waitForReady(sidecar, input.signal);
 		}
 
-		await command(sidecar, { type: "set_host_tools", tools: [TASK_REPORT_TOOL_DEFINITION] });
+		const tools = [TASK_REPORT_TOOL_DEFINITION, ...(input.readTools?.map(tool => tool.definition) ?? [])];
+		await command(sidecar, { type: "set_host_tools", tools });
+		if (input.readTools) {
+			const allowed = new Set(tools.map(tool => tool.name));
+			const active = await command<RpcActiveToolsResult>(sidecar, { type: "get_active_tools" });
+			if (active.tools.length !== allowed.size || active.tools.some(tool => !allowed.delete(tool.name))) {
+				throw new RunStop("blocked_config", "Core did not apply the project review tool allowlist", "config");
+			}
+		}
 		const state = await command<{ sessionFile?: string | null; model?: { provider: string; id: string } | null }>(
 			sidecar,
 			{ type: "get_state" },
@@ -608,6 +653,7 @@ function promptAndWait(
 	timeoutMs: number,
 	signal: AbortSignal,
 ): Promise<PromptEnd> {
+	if (signal.aborted) return Promise.reject(new RunStop("cancelled", "Cancelled"));
 	const client = sidecar.rpcClient;
 	if (!client) return Promise.reject(new RunStop("failed", "The agent is not connected", "transient"));
 	const { promise, resolve, reject } = Promise.withResolvers<PromptEnd>();

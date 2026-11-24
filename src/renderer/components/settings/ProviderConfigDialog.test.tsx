@@ -167,6 +167,7 @@ afterEach(async () => {
 	useUiStore.getState().closeProviders();
 	useModelStore.getState().reset();
 	upsertProvider.mockClear();
+	getProviders.mockClear();
 	getAvailableModels.mockReset();
 	getAvailableModels.mockResolvedValue({
 		type: "response",
@@ -203,6 +204,7 @@ describe("ProviderConfigDialog", () => {
 
 		await click(translate("providerCfg.form.add"));
 		expect(upsertProvider).toHaveBeenCalledOnce();
+		expect(getProviders).toHaveBeenCalledWith(true);
 		expect(upsertProvider.mock.calls[0]?.[0]).toMatchObject({
 			id: "local-llm",
 			auth: "none",
@@ -254,6 +256,7 @@ describe("ProviderConfigDialog", () => {
 		useUiStore.getState().openProviderConfig(saved);
 		await mountDialog();
 		await click(translate("providerCfg.form.save"));
+		expect(getProviders).toHaveBeenCalledWith(true);
 		expect(upsertProvider.mock.calls[0]?.[0]?.models).toMatchObject([
 			{ id: "responses", api: "openai-responses" },
 			{ id: "messages", api: "anthropic-messages" },
@@ -594,6 +597,7 @@ describe("ProviderConfigDialog", () => {
 		await click(translate("providerCfg.list.delete"));
 		await click(translate("providerCfg.delete.confirm"));
 		expect(deleteProvider).toHaveBeenCalledWith("mock");
+		expect(getProviders).toHaveBeenCalledWith(true);
 		expect(useUiStore.getState().providerConfigOpen).toBe(false);
 		expect(useUiStore.getState().providersOpen).toBe(true);
 	});

@@ -17,8 +17,9 @@ import {
 	Sparkles,
 	X,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { RpcQueuedMessage } from "../../../shared/rpc-types";
+import { type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { AgentMessage, RpcQueuedMessage } from "../../../shared/rpc-types";
+import { hydrateTabSession, readOlderTranscript } from "../../hooks/session-hydration";
 import { useDisplayPreference } from "../../lib/display-preferences";
 import { describeError, describeProviderError } from "../../lib/errors";
 import { cx, formatClock } from "../../lib/format";
@@ -40,7 +41,6 @@ import { TRANSCRIPT_FOCUS_TTL_MS, useTranscriptFocusStore } from "../../stores/t
 import { useUiStore } from "../../stores/ui";
 import { useTabIsWork } from "../../stores/workspace-mode";
 import { Button, LongTaskStatus, Modal, TextArea, WisaLogo } from "../common";
-import { InlineExtensionQuestions } from "../dialogs/ExtensionDialog";
 import { buildEditCandidates } from "../panels/DiffPanel";
 import { DiffStat } from "../panels/workspace-ui";
 import { ReadGroupCard } from "../tools/ReadGroupCard";
@@ -74,7 +74,7 @@ import { TranscriptFindBar } from "./TranscriptFindBar";
 import { TranscriptLoading } from "./TranscriptLoading";
 import { TranscriptQuoteAction } from "./TranscriptQuoteAction";
 import { findRangesInRow, findTranscriptMatches, paintFindHighlights } from "./transcript-find";
-import { useReadOnlyTranscript } from "./transcript-mode";
+import { ReadOnlyTranscriptContext, useReadOnlyTranscript } from "./transcript-mode";
 
 // TanStack's end check needs one CSS pixel for fractional scrollTop rounding.
 // User intent is enforced separately by switching away from end anchoring.
@@ -87,6 +87,16 @@ const REVEAL_TOP_INSET_PX = 96;
 const REVEAL_MAX_FRAMES = 90;
 /** Consecutive frames without movement that count as settled. */
 const REVEAL_STILL_FRAMES = 3;
+
+const MAX_OLDER_BOUNDARIES = 3;
+const EMPTY_OLDER_HISTORY = {
+	boundaryId: undefined as string | undefined,
+	depth: 0,
+	messages: [] as AgentMessage[],
+	searchMessages: [] as AgentMessage[],
+	hasOlder: true,
+	omitted: 0,
+};
 
 function estimateRowSize(row: Row | undefined): number {
 	const kind = row?.kind;
@@ -150,6 +160,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 		return false;
 	});
 	const isStreaming = useSessionStore(s => s.isStreaming);
+	const isCompacting = useSessionStore(s => s.isCompacting || s.isBackgroundCompacting);
 	const awaitingModelSince = useSessionStore(s => s.awaitingModelSince);
 	const retryInfo = useSessionStore(s => s.retryInfo);
 	const compactionInfo = useSessionStore(s => s.compactionInfo);
@@ -167,6 +178,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	const [expandedProcessKeys, setExpandedProcessKeys] = useState<Set<string>>(
 		() => restoreView?.expandedProcessKeys ?? new Set(),
 	);
+	const [expandedUserKeys, setExpandedUserKeys] = useState<Set<string>>(() => new Set());
 	const [pinned, setPinned] = useState(restoreView?.pinned ?? true);
 	const [visibleRowIndex, setVisibleRowIndex] = useState(Number.MAX_SAFE_INTEGER);
 	// Virtualizer measurements and programmatic scrollToIndex both emit scroll
@@ -184,6 +196,56 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 
 	const lastCompactionIndex = displayMessages.findLastIndex(message => message.role === "compactionSummary");
 	const hiddenCount = collapseCompacted && !preCompactionOpen && lastCompactionIndex > 0 ? lastCompactionIndex : 0;
+	const lastBoundary =
+		lastCompactionIndex >= 0
+			? displayMessages[lastCompactionIndex]
+			: displayMessages.find(message => message.role === "custom" && message.customType === "handoff");
+	const archiveBoundaryId =
+		readOnly === null && collapseCompacted && status === "ready" && !switchPending && tabId && sessionId
+			? lastBoundary?.entryId
+			: undefined;
+	const [archiveState, setArchiveState] = useState(EMPTY_OLDER_HISTORY);
+	const archive = archiveState.boundaryId === archiveBoundaryId ? archiveState : EMPTY_OLDER_HISTORY;
+	const archiveTicket = useRef<object | null>(null);
+	const [archiveLoading, setArchiveLoading] = useState(false);
+	const [archiveFailed, setArchiveFailed] = useState(false);
+	const archiveBusy = isStreaming || isCompacting || compactionInfo !== null || manualMaintenance !== null;
+	const canvasId = useId();
+	const archiveAuthorLabel = t("live.you");
+	const archivedReadOnly = useMemo(() => ({ authorLabel: archiveAuthorLabel }), [archiveAuthorLabel]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new compaction divider invalidates the previous page and request
+	useLayoutEffect(() => {
+		setArchiveState(EMPTY_OLDER_HISTORY);
+		setArchiveLoading(false);
+		setArchiveFailed(false);
+		return () => {
+			archiveTicket.current = null;
+		};
+	}, [archiveBoundaryId]);
+	const transcriptFolded = useSessionStore(s => s.transcriptFolded);
+	useEffect(() => {
+		if (
+			transcriptFolded === null ||
+			transcriptFolded === collapseCompacted ||
+			status !== "ready" ||
+			readOnly !== null ||
+			!tabId ||
+			switchPending
+		)
+			return;
+		void hydrateTabSession(tabId);
+	}, [collapseCompacted, readOnly, status, switchPending, tabId, transcriptFolded]);
+	const olderRows = useMemo(() => {
+		if (!archive.messages.length && !archive.searchMessages.length) return [];
+		const ids = new Set(archive.messages.map(message => message.entryId));
+		const liveIds = new Set(displayMessages.slice(hiddenCount).map(message => message.entryId));
+		const historical = [
+			...archive.searchMessages.filter(message => !ids.has(message.entryId)),
+			...archive.messages,
+		].filter(message => !liveIds.has(message.entryId));
+		const built = buildHistoryRows(historical, transcriptDetail, expandedProcessKeys);
+		return transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
+	}, [archive.messages, archive.searchMessages, displayMessages, hiddenCount, transcriptDetail, expandedProcessKeys]);
 	const todoHistory = useTodoStore(s => s.history);
 	// Folded history hides the todo snapshots archived before the compaction
 	// point too: they belong to the turns the divider replaced, and interleaving
@@ -255,8 +317,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	// change finalized history. Keep the O(history) row/key projection stable so
 	// a long transcript does not get rebuilt for every token.
 	const { rows, rowKeys } = useMemo(() => {
-		const nextRows: Row[] = [];
-		nextRows.push(...historyRows);
+		const nextRows: Row[] = [...olderRows, ...historyRows];
 		if (turnChanges && lastPromptAt !== null && !isStreaming && !showStatusRow) {
 			nextRows.push({ kind: "turnChanges", since: lastPromptAt, summary: turnChanges });
 		}
@@ -277,6 +338,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 			rowKeys: buildTranscriptRowKeys(nextRows),
 		};
 	}, [
+		olderRows,
 		historyRows,
 		turnChanges,
 		lastPromptAt,
@@ -291,7 +353,6 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	const parentRef = useRef<HTMLDivElement>(null);
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const footerRef = useRef<HTMLDivElement>(null);
-	const questionsRef = useRef<HTMLDivElement>(null);
 	const conversationAnchors = useMemo(() => buildConversationAnchors(rows, rowKeys), [rows, rowKeys]);
 	const tailRowKey = rowKeys.at(-1);
 	const activeConversationIndex = useMemo(
@@ -459,7 +520,6 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 		});
 		observer.observe(canvas);
 		observer.observe(el);
-		if (questionsRef.current) observer.observe(questionsRef.current);
 		if (footerRef.current) observer.observe(footerRef.current);
 		return () => observer.disconnect();
 	}, [scrollToTail, followsTail]);
@@ -676,6 +736,59 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 			return next;
 		});
 	}, []);
+	const requestOlder = useCallback(
+		async (targetEntryId?: string) => {
+			if (!tabId || !archiveBoundaryId || archiveBusy || archiveTicket.current) return;
+			if (!targetEntryId && (!archive.hasOlder || archive.depth >= MAX_OLDER_BOUNDARIES)) return;
+			const ticket = {};
+			archiveTicket.current = ticket;
+			setArchiveLoading(true);
+			setArchiveFailed(false);
+			try {
+				const page = await readOlderTranscript(tabId, {
+					sessionId,
+					boundaryId: archiveBoundaryId,
+					depth: targetEntryId ? 0 : archive.depth,
+					targetEntryId,
+				});
+				if (!page || archiveTicket.current !== ticket) return;
+				setArchiveState(
+					targetEntryId
+						? { ...archive, boundaryId: archiveBoundaryId, searchMessages: page.messages }
+						: {
+								...archive,
+								boundaryId: archiveBoundaryId,
+								depth: archive.depth + 1,
+								messages: [...page.messages, ...archive.messages],
+								hasOlder: page.hasOlder,
+								omitted: archive.omitted + page.totalMessages - page.messages.length,
+							},
+				);
+			} catch {
+				if (archiveTicket.current === ticket) setArchiveFailed(true);
+			} finally {
+				if (archiveTicket.current === ticket) {
+					archiveTicket.current = null;
+					setArchiveLoading(false);
+				}
+			}
+		},
+		[archive, archiveBoundaryId, archiveBusy, sessionId, tabId],
+	);
+	const revealedDepth = useRef(0);
+	useLayoutEffect(() => {
+		if (archive.depth > revealedDepth.current && olderRows.length) revealRow(0);
+		revealedDepth.current = archive.depth;
+	}, [archive.depth, olderRows.length, revealRow]);
+	const updateUserTextExpanded = useCallback((key: string, expanded: boolean) => {
+		setExpandedUserKeys(current => {
+			if (current.has(key) === expanded) return current;
+			const next = new Set(current);
+			if (expanded) next.add(key);
+			else next.delete(key);
+			return next;
+		});
+	}, []);
 
 	// Open at a message (conversation search): once this tab shows the requested
 	// session file with its history loaded, bring the message near the top of the
@@ -685,6 +798,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 	const focusTarget = useTranscriptFocusStore(s => s.target);
 	const settleFocus = useTranscriptFocusStore(s => s.settle);
 	const [foundKey, setFoundKey] = useState<string | null>(null);
+	const requestedFocus = useRef<typeof focusTarget>(null);
 	useEffect(() => {
 		const target = focusTarget;
 		if (!target || target.sessionPath !== sessionFile) return;
@@ -697,14 +811,24 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 			setPreCompactionOpen(true);
 			return;
 		}
-		settleFocus(target.nonce);
 		const found = locateEntryRow(rows, target.entryId);
+		if (!found && archiveBoundaryId) {
+			if (archiveBusy || archiveLoading) return;
+			if (requestedFocus.current !== target) {
+				requestedFocus.current = target;
+				void requestOlder(target.entryId);
+				return;
+			}
+		}
+		settleFocus(target.nonce);
 		if (!found) {
 			toast({ variant: "info", message: t("search.notOnBranch") });
 			return;
 		}
 		const key = rowKeys[found.index] ?? null;
 		if (found.kind === "process" && key) updateProcessExpanded(key, true);
+		const row = rows[found.index];
+		if (row?.kind === "message" && row.message.role === "user" && key) updateUserTextExpanded(key, true);
 		// Hold the view on the message: no tail following until the reader heads back down.
 		revealRow(found.index);
 		setFoundKey(key);
@@ -715,12 +839,17 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 		switchPending,
 		messages.length,
 		hiddenCount,
+		archiveBoundaryId,
+		archiveBusy,
+		archiveLoading,
+		requestOlder,
 		displayMessages,
 		rows,
 		rowKeys,
 		settleFocus,
 		t,
 		updateProcessExpanded,
+		updateUserTextExpanded,
 		revealRow,
 	]);
 	useEffect(() => {
@@ -766,12 +895,13 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 			const row = rows[match.rowIndex];
 			const key = rowKeys[match.rowIndex];
 			if (row?.kind === "process" && key) updateProcessExpanded(key, true);
+			if (row?.kind === "message" && row.message.role === "user" && key) updateUserTextExpanded(key, true);
 			revealRow(match.rowIndex, element => {
 				const ranges = findRangesInRow(element, query);
 				return ranges[Math.min(match.occurrence, ranges.length - 1)]?.getBoundingClientRect().top ?? null;
 			});
 		},
-		[rows, rowKeys, revealRow, updateProcessExpanded],
+		[rows, rowKeys, revealRow, updateProcessExpanded, updateUserTextExpanded],
 	);
 	const changeFindQuery = (query: string) => {
 		setFindQuery(query);
@@ -825,7 +955,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 
 	return (
 		<>
-			<div className="omp-transcript-editorial relative min-h-0 flex-1 bg-transparent">
+			<div className="omp-transcript-editorial relative flex min-h-0 flex-1 flex-col bg-transparent">
 				{findOpen && (
 					<TranscriptFindBar
 						current={findCurrent}
@@ -836,6 +966,33 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 						query={findQuery}
 						total={findMatches.length}
 					/>
+				)}
+				{archiveBoundaryId && (
+					<div className="omp-transcript-row flex flex-wrap items-center gap-2 py-1">
+						<button
+							type="button"
+							aria-controls={canvasId}
+							aria-expanded={olderRows.length > 0}
+							aria-disabled={
+								archiveBusy || archiveLoading || !archive.hasOlder || archive.depth >= MAX_OLDER_BOUNDARIES
+							}
+							onClick={() => void requestOlder()}
+							className="rounded-md px-2 py-1 text-omp-md font-medium text-[var(--omp-accent)] hover:bg-[var(--omp-selected-bg)] aria-disabled:opacity-50"
+						>
+							{t(archive.depth ? "chat.olderHistory.more" : "chat.olderHistory.open")}
+						</button>
+						<span role="status" className="text-omp-sm text-[var(--omp-muted)]">
+							{archiveLoading
+								? t("chat.olderHistory.loading")
+								: archiveFailed
+									? t("chat.olderHistory.failed")
+									: archive.omitted > 0
+										? t("chat.olderHistory.omitted", { count: archive.omitted })
+										: archive.depth > 0
+											? t("chat.olderHistory.loaded", { count: archive.messages.length })
+											: null}
+						</span>
+					</div>
 				)}
 				<div
 					ref={parentRef}
@@ -849,7 +1006,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 					onPointerCancel={endScrollGesture}
 					onKeyDown={handleScrollKeyDown}
 					tabIndex={0}
-					className="omp-transcript-scroll h-full overflow-y-auto overscroll-contain"
+					className="omp-transcript-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
 				>
 					{readOnly === null && <TranscriptQuoteAction tabId={tabId} transcriptRef={parentRef} />}
 					{switchPending && (
@@ -903,6 +1060,7 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 						</div>
 					)}
 					<div
+						id={canvasId}
 						ref={canvasRef}
 						className="omp-transcript-canvas"
 						style={{ height: totalSize, position: "relative", width: "100%" }}
@@ -911,9 +1069,15 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 							const row = rows[item.index];
 							if (!row) return null;
 							const rowKey = rowKeys[item.index] ?? String(item.key);
+							const previous = rows[item.index - 1];
 							return (
 								<div
 									key={item.key}
+									data-after-process={previous?.kind === "process" || undefined}
+									data-after-reminder={
+										(previous?.kind === "message" && Boolean(previous.todoReminders?.length)) || undefined
+									}
+									data-before-process={rows[item.index + 1]?.kind === "process" || undefined}
 									data-index={item.index}
 									data-row-key={rowKey}
 									data-transcript-kind={row.kind}
@@ -928,47 +1092,54 @@ function SessionTranscript({ footer }: { footer?: ReactNode }) {
 									}}
 								>
 									<div className="omp-transcript-row w-full">
-										{row.kind === "message" ? (
-											<MessageBubble
-												message={row.message}
-												reaction={row.reaction}
-												repeats={row.repeats}
-												runningIndicator="dot"
-											/>
-										) : row.kind === "readGroup" ? (
-											<ReadGroupCard entries={row.entries} runningIndicator="dot" usage={row.usage} />
-										) : row.kind === "process" ? (
-											<ProcessGroup
-												expanded={expandedProcessKeys.has(rowKey)}
-												onExpandedChange={expanded => updateProcessExpanded(rowKey, expanded)}
-												row={row}
-											/>
-										) : row.kind === "streaming" ? (
-											<StreamingRows
-												expanded={expandedProcessKeys.has(rowKey)}
-												onExpandedChange={expanded => updateProcessExpanded(rowKey, expanded)}
-											/>
-										) : row.kind === "queued" ? (
-											<QueuedMessageBubble item={row.item} lane={row.lane} />
-										) : row.kind === "todoSnapshot" ? (
-											<TodoSnapshotCard entry={row.entry} />
-										) : row.kind === "turnChanges" ? (
-											<TurnChangesRow summary={row.summary} />
-										) : (
-											<TurnStatusRow />
-										)}
+										<ReadOnlyTranscriptContext.Provider
+											value={item.index < olderRows.length ? archivedReadOnly : readOnly}
+										>
+											{row.kind === "message" ? (
+												<MessageBubble
+													message={row.message}
+													onUserTextExpandedChange={
+														row.message.role === "user" ? updateUserTextExpanded : undefined
+													}
+													reaction={row.reaction}
+													repeats={row.repeats}
+													rowKey={row.message.role === "user" ? rowKey : undefined}
+													runningIndicator="dot"
+													todoReminders={row.todoReminders}
+													userTextExpanded={
+														row.message.role === "user" ? expandedUserKeys.has(rowKey) : undefined
+													}
+												/>
+											) : row.kind === "readGroup" ? (
+												<ReadGroupCard entries={row.entries} runningIndicator="dot" usage={row.usage} />
+											) : row.kind === "process" ? (
+												<ProcessGroup
+													expanded={expandedProcessKeys.has(rowKey)}
+													onExpandedChange={expanded => updateProcessExpanded(rowKey, expanded)}
+													row={row}
+												/>
+											) : row.kind === "streaming" ? (
+												<StreamingRows
+													expanded={expandedProcessKeys.has(rowKey)}
+													onExpandedChange={expanded => updateProcessExpanded(rowKey, expanded)}
+												/>
+											) : row.kind === "queued" ? (
+												<QueuedMessageBubble item={row.item} lane={row.lane} />
+											) : row.kind === "todoSnapshot" ? (
+												<TodoSnapshotCard entry={row.entry} />
+											) : row.kind === "turnChanges" ? (
+												<TurnChangesRow summary={row.summary} />
+											) : (
+												<TurnStatusRow />
+											)}
+										</ReadOnlyTranscriptContext.Provider>
 									</div>
 								</div>
 							);
 						})}
 					</div>
-					{readOnly === null && (
-						<div ref={questionsRef} className="omp-transcript-row">
-							<InlineExtensionQuestions />
-						</div>
-					)}
 					{footer && (
-						<div className="omp-composer-shell" ref={footerRef}>
+						<div className="omp-transcript-row w-full" ref={footerRef}>
 							{footer}
 						</div>
 					)}
@@ -1032,7 +1203,7 @@ function ProcessGroup({
 	row: Extract<HistoryRow, { kind: "process" }>;
 }) {
 	return (
-		<div className="ps-(--omp-editorial-inset) pe-(--omp-editorial-edge) py-1">
+		<div className="ps-(--omp-editorial-inset) pe-(--omp-editorial-edge)">
 			<ExecutionGroup
 				expanded={expanded}
 				failureCount={row.failedEvents}
@@ -1219,7 +1390,7 @@ export function StreamingRows({
 						</div>
 					</ExecutionGroup>
 				) : null}
-				<div className={hasProcess ? "mt-1" : undefined}>
+				<div className={hasProcess ? "mt-0.5" : undefined}>
 					<StreamingText />
 				</div>
 			</div>

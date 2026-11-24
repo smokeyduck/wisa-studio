@@ -13,8 +13,7 @@ name: Release Windows builds
 # macOS artifacts are built separately by release-macos.yml.
 
 on:
-  release:
-    types: [published]
+  # Build against a draft; publishing must not enqueue another upload.
   workflow_dispatch:
     inputs:
       tag:
@@ -40,14 +39,11 @@ jobs:
       - name: Resolve release tag
         id: refs
         shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+          GUI_REF: ${{ inputs.gui_ref || inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-            echo "gui_ref=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-            echo "gui_ref=${{ inputs.gui_ref || inputs.tag }}" >> "$GITHUB_OUTPUT"
-          fi
+          printf 'tag=%s\ngui_ref=%s\n' "$TAG" "$GUI_REF" >> "$GITHUB_OUTPUT"
 
       - name: Read the Core pin from the selected GUI commit
         uses: actions/checkout@v6
@@ -141,7 +137,8 @@ jobs:
 
       - name: Smoke-test the sidecar (RPC handshake + settings round-trip)
         working-directory: oh-my-pi/packages/gui
-        run: bun scripts/smoke-sidecar.mjs resources/omp.exe
+        # Exercise Windows pipe handling through Node, as Electron does.
+        run: node scripts/smoke-sidecar.mjs resources/omp.exe
 
       - name: Verify ru + vi cover every bundled setting
         working-directory: oh-my-pi/packages/gui
@@ -284,8 +281,9 @@ jobs:
           compgen -G '*-setup.exe' >/dev/null
           compgen -G '*-portable.exe' >/dev/null
           printf 'uploading: %s\n' "${files[@]}"
+          sha256sum "${files[@]}"
           gh release upload "${{ steps.refs.outputs.tag }}" \
-            "${files[@]}" --repo "$GUI_REPO" --clobber
+            "${files[@]}" --repo "$GUI_REPO"
 
       - name: Retain failed Windows runtime binaries
         if: failure()

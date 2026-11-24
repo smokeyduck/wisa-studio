@@ -1,4 +1,3 @@
-import { useTabRpc } from "../../lib/tab-rpc";
 /**
  * Agent Hub window: TUI parity for the Agent Control Center (agent-dashboard.ts)
  * and the multi-agent hub table (agent-hub.ts).
@@ -36,13 +35,16 @@ import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
 import { abortActiveTurn } from "../../lib/messages";
 import { useNowTick } from "../../lib/now-tick";
+import { providerLabel } from "../../lib/provider-brand";
+import { useTabRpc } from "../../lib/tab-rpc";
 import { useSessionStore } from "../../stores/session";
+import { useRuntimeTabId } from "../../stores/session-runtime-context";
 import { useSubagentsStore } from "../../stores/subagents";
 import { toast } from "../../stores/toast";
 import { subagentActivity } from "../agents/agent-activity";
 import { Badge, Button, Input, Modal, Spinner, type TabItem, Tabs } from "../common";
 import { SwitchTrack } from "../common/SwitchTrack";
-import { type AgentSettingsRpc, type AgentSettingsState, useAgentSettings } from "./agent-hub-settings";
+import { type AgentSettingsState, useAgentSettings } from "./agent-hub-settings";
 import { SubagentTranscript } from "./SubagentTranscript";
 import {
 	formatElapsed,
@@ -125,6 +127,14 @@ const PREWALK_TONE: Record<PrewalkState, string> = {
 /** Known definition sources; anything else renders raw (e.g. future extension sources). */
 const KNOWN_SOURCES: Record<string, true> = { project: true, user: true, bundled: true };
 
+const BUNDLED_DESCRIPTIONS: Record<string, string> = {
+	reviewer: "agentHub.bundled.reviewer",
+	scout: "agentHub.bundled.scout",
+	"security-reviewer": "agentHub.bundled.securityReviewer",
+	sonic: "agentHub.bundled.sonic",
+	task: "agentHub.bundled.task",
+};
+
 function sourceLabel(t: (key: string) => string, source: string): string {
 	return KNOWN_SOURCES[source] ? t(`agentHub.source.${source}`) : source;
 }
@@ -138,16 +148,20 @@ function formatAgentOutput(value: unknown): string | undefined {
 	}
 }
 
-function DefinitionDetails({
-	entry,
-	override,
-	prewalk,
-}: {
-	entry: DefinitionEntry;
-	override: string | undefined;
-	prewalk: PrewalkState;
-}) {
+function DefinitionDetails({ entry, prewalk }: { entry: DefinitionEntry; prewalk: PrewalkState }) {
 	const t = useT();
+	const selection = entry.modelSelection;
+	const provider =
+		selection?.provider ??
+		(entry.effectiveResolved?.includes("/") ? entry.effectiveResolved.split("/", 1)[0] : undefined);
+	const sourceKey = `agentHub.defs.selection.${selection?.source ?? "unknown"}`;
+	const reason = t(selection?.usesParentFallback ? "agentHub.defs.selection.parentFallback" : sourceKey);
+	const thinking = (level?: string) => {
+		if (!level) return undefined;
+		const key = `input.thinking.name.${level}`;
+		const label = t(key);
+		return label === key ? level : label;
+	};
 	const prewalkProjection = [
 		t(`agentHub.defs.prewalk.${prewalk}`),
 		entry.prewalkPattern,
@@ -157,18 +171,15 @@ function DefinitionDetails({
 		.join(" ");
 	const details = [
 		[t("agentHub.defs.detail.path"), entry.filePath],
-		[t("agentHub.defs.detail.defaultPattern"), entry.defaultPatterns?.join(", ") || t("agentHub.defs.modelSession")],
+		[t("agentHub.defs.detail.defaultPattern"), entry.defaultPatterns?.join(", ")],
 		[t("agentHub.defs.detail.defaultResolved"), entry.defaultResolved],
-		[
-			t("agentHub.defs.detail.effectivePattern"),
-			override || entry.effectivePatterns?.join(", ") || t("agentHub.defs.modelSession"),
-		],
-		[
-			t("agentHub.defs.detail.effectiveResolved"),
-			[entry.effectiveResolved, entry.effectiveThinkingLevel].filter(Boolean).join(" - ") || undefined,
-		],
+		[t("agentHub.defs.detail.effectivePattern"), entry.effectivePatterns?.join(", ")],
+		[t("agentHub.defs.detail.provider"), provider && providerLabel(provider)],
+		[t("agentHub.defs.detail.role"), selection?.role ? `@${selection.role}` : undefined],
+		[t("agentHub.defs.detail.selection"), reason === sourceKey ? t("agentHub.defs.selection.unknown") : reason],
+		[t("agentHub.defs.detail.effectiveThinking"), thinking(entry.effectiveThinkingLevel)],
 		[t("agentHub.defs.detail.prewalk"), prewalkProjection],
-		[t("agentHub.defs.detail.thinking"), entry.thinkingLevel],
+		[t("agentHub.defs.detail.thinking"), thinking(entry.thinkingLevel)],
 		[t("agentHub.defs.detail.tools"), entry.tools?.join(", ")],
 		[
 			t("agentHub.defs.detail.spawns"),
@@ -193,7 +204,7 @@ function DefinitionDetails({
 				{details.map(([label, value]) => (
 					<div className="contents" key={label}>
 						<span className="text-(--omp-dim)">{label}</span>
-						<span className="break-all font-mono text-(--omp-muted)">{value}</span>
+						<span className="break-words text-(--omp-muted)">{value}</span>
 					</div>
 				))}
 			</div>
@@ -225,7 +236,9 @@ const DefinitionRow = memo(function DefinitionRow({
 	const t = useT();
 	const [draft, setDraft] = useState("");
 	const disabled = state.disabledAgents.includes(entry.name);
-	const override = state.modelOverrides[entry.name]?.trim() || undefined;
+	const overrideValue = state.modelOverrides[entry.name];
+	const override = (Array.isArray(overrideValue) ? overrideValue.join(", ") : overrideValue)?.trim() || undefined;
+	const modelSetting = override ?? t("agentHub.defs.modelDefault");
 	const prewalk = prewalkStateOf(state.prewalkOverrides, entry.name);
 
 	// Seed the draft when this row enters edit mode.
@@ -256,12 +269,19 @@ const DefinitionRow = memo(function DefinitionRow({
 				/>
 			</div>
 			{entry.description && <p className="mt-1 text-omp-xs leading-relaxed text-(--omp-dim)">{entry.description}</p>}
+			<p className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-omp-xs text-(--omp-muted)">
+				<span>{t("agentHub.defs.modelPreview")}:</span>
+				<span className={entry.effectiveResolved ? "break-all font-mono text-(--omp-text)" : "text-(--omp-dim)"}>
+					{entry.effectiveResolved ?? t("agentHub.defs.modelUnresolved")}
+				</span>
+			</p>
 			<div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
 				<span className="flex items-center gap-1.5 text-omp-sm">
 					<span className="text-(--omp-dim)">{t("agentHub.defs.modelLabel")}</span>
 					{editing ? (
-						<span className="flex items-center gap-1">
+						<span className="flex flex-wrap items-center gap-1">
 							<Input
+								aria-label={t("agentHub.defs.modelLabel")}
 								autoFocus
 								className="h-6 w-52 text-omp-sm"
 								disabled={busy}
@@ -279,6 +299,11 @@ const DefinitionRow = memo(function DefinitionRow({
 							<Button disabled={busy} onClick={submit} size="sm" variant="secondary">
 								{t("common.save")}
 							</Button>
+							{override && (
+								<Button disabled={busy} onClick={() => onSaveModel(entry.name, "")} size="sm" variant="ghost">
+									{t("agentHub.defs.clearOverride")}
+								</Button>
+							)}
 							<Button disabled={busy} onClick={onCancelModelEdit} size="sm" variant="ghost">
 								{t("common.cancel")}
 							</Button>
@@ -287,7 +312,7 @@ const DefinitionRow = memo(function DefinitionRow({
 						<>
 							{/* One field-like control: the value is what you click to change it. */}
 							<button
-								aria-label={`${t("agentHub.defs.modelLabel")}: ${override ?? t("agentHub.defs.modelSession")} - ${t("agentHub.defs.modelEdit")}`}
+								aria-label={`${t("agentHub.defs.modelLabel")}: ${modelSetting} - ${t("agentHub.defs.modelEdit")}`}
 								className={cx(
 									AGENT_FIELD_BUTTON,
 									override ? "font-mono text-(--omp-text)" : "text-(--omp-muted)",
@@ -297,7 +322,7 @@ const DefinitionRow = memo(function DefinitionRow({
 								title={t("agentHub.defs.modelEdit")}
 								type="button"
 							>
-								<span className="truncate">{override ?? t("agentHub.defs.modelSession")}</span>
+								<span className="truncate">{modelSetting}</span>
 								<Pencil aria-hidden className="shrink-0 text-(--omp-dim)" size={11} />
 							</button>
 						</>
@@ -317,7 +342,7 @@ const DefinitionRow = memo(function DefinitionRow({
 					</button>
 				</span>
 			</div>
-			<DefinitionDetails entry={entry} override={override} prewalk={prewalk} />
+			<DefinitionDetails entry={entry} prewalk={prewalk} />
 		</div>
 	);
 });
@@ -325,8 +350,8 @@ const DefinitionRow = memo(function DefinitionRow({
 type DefinitionSourceFilter = "all" | RpcAgentDefinitionInfo["source"];
 const DEFINITION_SOURCE_FILTERS: readonly DefinitionSourceFilter[] = ["all", "project", "user", "bundled"];
 
-function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
-	const tabRpc = useTabRpc();
+function DefinitionsTab() {
+	const rpc = useAgentSettings();
 	const t = useT();
 	const subagents = useSubagentsStore(s => s.subagents);
 	const [query, setQuery] = useState("");
@@ -339,7 +364,14 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
 		const state = rpc.state;
 		const byName = new Map<string, DefinitionEntry>();
 		if (state) {
-			for (const definition of state.definitions) byName.set(definition.name, definition);
+			for (const definition of state.definitions) {
+				const name = definition.name;
+				const key =
+					definition.source === "bundled" && Object.hasOwn(BUNDLED_DESCRIPTIONS, name)
+						? BUNDLED_DESCRIPTIONS[name]
+						: undefined;
+				byName.set(name, key ? { ...definition, description: t(key) } : definition);
+			}
 			for (const name of state.disabledAgents) {
 				if (!byName.has(name)) byName.set(name, { name });
 			}
@@ -353,13 +385,13 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
 		for (const sub of subagents.values()) {
 			const existing = byName.get(sub.agent);
 			if (existing) {
-				if (!existing.source) existing.source = sub.agentSource;
+				if (!existing.source) byName.set(sub.agent, { ...existing, source: sub.agentSource });
 			} else {
 				byName.set(sub.agent, { name: sub.agent, source: sub.agentSource });
 			}
 		}
 		return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
-	}, [rpc.state, subagents]);
+	}, [rpc.state, subagents, t]);
 	const sourceCounts = useMemo(() => {
 		const counts: Record<DefinitionSourceFilter, number> = { all: entries.length, project: 0, user: 0, bundled: 0 };
 		for (const entry of entries) {
@@ -384,9 +416,9 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
 			if (disabled) next.add(name);
 			else next.delete(name);
 			const disabledAgents = [...next].sort((a, b) => a.localeCompare(b));
-			void rpc.mutate({ ...state, disabledAgents }, () => tabRpc.setSetting("task.disabledAgents", disabledAgents));
+			void rpc.mutate("task.disabledAgents", disabledAgents);
 		},
-		[rpc, tabRpc.setSetting],
+		[rpc],
 	);
 
 	const saveModel = useCallback(
@@ -398,11 +430,9 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
 			if (value) modelOverrides[name] = value;
 			else delete modelOverrides[name];
 			setEditingName(null);
-			void rpc.mutate({ ...state, modelOverrides }, () =>
-				tabRpc.setSetting("task.agentModelOverrides", modelOverrides),
-			);
+			void rpc.mutate("task.agentModelOverrides", modelOverrides);
 		},
-		[rpc, tabRpc.setSetting],
+		[rpc],
 	);
 
 	const cyclePrewalk = useCallback(
@@ -414,17 +444,15 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
 			const prewalkOverrides = { ...state.prewalkOverrides };
 			if (next) prewalkOverrides[name] = next;
 			else delete prewalkOverrides[name];
-			void rpc.mutate({ ...state, prewalkOverrides }, () =>
-				tabRpc.setSetting("task.agentPrewalk", prewalkOverrides),
-			);
+			void rpc.mutate("task.agentPrewalk", prewalkOverrides);
 		},
-		[rpc, tabRpc.setSetting],
+		[rpc],
 	);
 
 	const loadedState = rpc.state;
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+		<div aria-busy={rpc.loading || rpc.busy} className="flex min-h-0 flex-1 flex-col gap-3 p-4">
 			<div className="flex shrink-0 items-center gap-2">
 				<Input
 					className="h-7 flex-1 text-omp-sm"
@@ -433,7 +461,7 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
 					value={query}
 				/>
 				<Button
-					disabled={!rpc.ready}
+					disabled={!rpc.ready || rpc.busy || rpc.loading}
 					icon={<RefreshCw size={12} />}
 					loading={rpc.loading}
 					onClick={rpc.refresh}
@@ -495,7 +523,7 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
 						) : (
 							filtered.map(entry => (
 								<DefinitionRow
-									busy={rpc.busy || !rpc.ready}
+									busy={rpc.busy || rpc.loading || !rpc.ready}
 									editing={editingName === entry.name}
 									entry={entry}
 									key={entry.name}
@@ -513,6 +541,7 @@ function DefinitionsTab({ rpc }: { rpc: AgentSettingsRpc }) {
 			</div>
 			<div className="shrink-0 border-t border-(--omp-border-muted) pt-2 text-omp-xs text-(--omp-dim)">
 				{t("agentHub.defs.footerNote")}
+				<p className="mt-1">{t("agentHub.defs.previewNote")}</p>
 			</div>
 		</div>
 	);
@@ -987,7 +1016,8 @@ function HubTab() {
 export function AgentHubWindow({ open, onClose, initialTab = "definitions" }: AgentHubWindowProps) {
 	const t = useT();
 	const [tab, setTab] = useState<AgentHubTabId>(initialTab);
-	const settings = useAgentSettings(open, tab === "definitions");
+	const runtimeTabId = useRuntimeTabId();
+	const sessionId = useSessionStore(s => s.sessionId);
 	const runningCount = useSubagentsStore(s => {
 		let count = 0;
 		for (const agent of s.subagents.values()) if (subagentActivity(agent) === "working") count += 1;
@@ -1021,7 +1051,7 @@ export function AgentHubWindow({ open, onClose, initialTab = "definitions" }: Ag
 					onChange={handleTabChange}
 					tabs={tabs}
 				/>
-				{tab === "definitions" && <DefinitionsTab rpc={settings} />}
+				{open && tab === "definitions" && <DefinitionsTab key={`${runtimeTabId ?? ""}:${sessionId}`} />}
 				{tab === "hub" && <HubTab />}
 			</div>
 		</Modal>

@@ -92,6 +92,7 @@
 	"plugins.title",
 	"prCenter.branches",
 	"prCenter.title",
+	"projectAudit.shortTitle",
 	"providerCfg.form.apiKey",
 	"providerCfg.form.apiKeyPlaceholder",
 	"providerCfg.form.authApiKey",

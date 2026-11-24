@@ -1,10 +1,8 @@
 /**
- * Sidebar presentation prefs: pinned workspaces/sessions, archived sessions,
- * explicit MRU access times, and workspace display aliases (rename). Persisted as one JSON blob
- * under the "sidebar" prefs key via window.omp.prefs (electron-store in main);
- * hydrate once at App mount. Recency bookkeeping writes fire-and-forget; the
- * pins, archive and aliases the user can SEE are optimistic writes that roll back when
- * the persist rejects, so a row never stays pinned across a restart.
+ * Sidebar presentation prefs: pins, archive, aliases, navigation, workspace order,
+ * list disclosure and explicit MRU access times. Hydrated once at App mount from
+ * one JSON blob under "sidebar". User changes roll back if persistence fails;
+ * recency hints write fire-and-forget.
  */
 import { create } from "zustand";
 import { describeError } from "../lib/errors";
@@ -18,13 +16,15 @@ interface SidebarPrefsBlob {
 	registeredWorkspaces?: string[];
 	pinnedGroups?: string[];
 	pinnedSessions?: string[];
-	/** Navigation entries the user promoted out of the More menu, in pin order. */
+	/** Navigation entries the user promoted out of the tool index, in pin order. */
 	pinnedNav?: string[];
 	archivedSessions?: string[];
 	groupAliases?: Record<string, string>;
 	workspaceLastUsed?: Record<string, number>;
 	sessionLastUsed?: Record<string, number>;
-	workspaceSort?: WorkspaceSort;
+	workspaceOrder?: string[];
+	collapsedLists?: Record<string, boolean>;
+	expandedLists?: string[];
 	/** Which lane the sidebar lists: code sessions or work sessions. */
 	lane?: SidebarLane;
 }
@@ -32,21 +32,20 @@ interface SidebarPrefsBlob {
 /** The sidebar's two lists: project code sessions, or default-workspace work sessions. */
 export type SidebarLane = "code" | "work";
 
-/** How the Recent section orders workspace groups; pinned groups stay first either way (#55). */
-export type WorkspaceSort = "recent" | "name";
-
 interface SidebarPrefsStore {
 	registeredWorkspaces: string[];
 	pinnedGroups: string[];
 	pinnedSessions: string[];
-	/** Navigation entries promoted out of the More menu into the main list. */
+	/** Tool index entries promoted into the main navigation list. */
 	pinnedNav: string[];
 	/** Session files hidden from the lanes and listed under "Archived". */
 	archivedSessions: string[];
 	groupAliases: Record<string, string>;
 	workspaceLastUsed: Record<string, number>;
 	sessionLastUsed: Record<string, number>;
-	workspaceSort: WorkspaceSort;
+	workspaceOrder: string[];
+	collapsedLists: Record<string, boolean>;
+	expandedLists: string[];
 	/** Sidebar lane: "code" lists project sessions, "work" the default workspace's. */
 	lane: SidebarLane;
 	hydrated: boolean;
@@ -54,7 +53,7 @@ interface SidebarPrefsStore {
 	addWorkspace: (cwd: string) => Promise<void>;
 	toggleGroupPin: (cwd: string) => Promise<void>;
 	toggleSessionPin: (path: string) => Promise<void>;
-	/** Promote a More-menu entry into the main navigation list, or send it back. */
+	/** Promote a tool index entry into the main navigation list, or send it back. */
 	toggleNavPin: (id: string) => Promise<void>;
 	setSessionsArchived: (paths: readonly string[], archived: boolean) => Promise<void>;
 	/** Drop deleted session files from the pinned and archived lists. */
@@ -62,7 +61,9 @@ interface SidebarPrefsStore {
 	/** Move pins and archive marks from files no longer listed to the sessions that carry them on. */
 	inheritSessions: (heirs: ReadonlyMap<string, string>) => void;
 	setGroupAlias: (cwd: string, alias: string | null) => Promise<void>;
-	setWorkspaceSort: (sort: WorkspaceSort) => Promise<void>;
+	setWorkspaceOrder: (order: string[]) => Promise<void>;
+	setListCollapsed: (id: string, collapsed: boolean) => Promise<void>;
+	toggleListExpanded: (id: string) => Promise<void>;
 	setLane: (lane: SidebarLane) => Promise<void>;
 	touchWorkspace: (cwd: string) => void;
 	touchSession: (path: string, cwd?: string) => void;
@@ -71,6 +72,15 @@ interface SidebarPrefsStore {
 
 const MAX_RECENT_WORKSPACES = 100;
 const MAX_RECENT_SESSIONS = 500;
+
+function validIds(value: unknown): string[] {
+	return Array.isArray(value) ? [...new Set(value.filter(id => typeof id === "string" && id.length > 0))] : [];
+}
+
+function validCollapseMap(value: unknown): Record<string, boolean> {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+	return Object.fromEntries(Object.entries(value).filter(([id, collapsed]) => id && typeof collapsed === "boolean"));
+}
 
 function validRecencyMap(value: unknown): Record<string, number> {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -111,7 +121,9 @@ function prefsBlob(state: SidebarPrefsStore): SidebarPrefsBlob {
 		groupAliases: state.groupAliases,
 		workspaceLastUsed: state.workspaceLastUsed,
 		sessionLastUsed: state.sessionLastUsed,
-		workspaceSort: state.workspaceSort,
+		workspaceOrder: state.workspaceOrder,
+		collapsedLists: state.collapsedLists,
+		expandedLists: state.expandedLists,
 		lane: state.lane,
 	};
 }
@@ -140,7 +152,9 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 	groupAliases: {},
 	workspaceLastUsed: {},
 	sessionLastUsed: {},
-	workspaceSort: "recent",
+	workspaceOrder: [],
+	collapsedLists: {},
+	expandedLists: [],
 	lane: "code",
 	hydrated: false,
 
@@ -149,19 +163,17 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 		try {
 			const blob = (await window.omp.prefs.get(PREFS_KEY)) as SidebarPrefsBlob | null | undefined;
 			set({
-				registeredWorkspaces: Array.isArray(blob?.registeredWorkspaces)
-					? [...new Set(blob.registeredWorkspaces.filter(path => typeof path === "string" && path.length > 0))]
-					: [],
+				registeredWorkspaces: validIds(blob?.registeredWorkspaces),
 				pinnedGroups: Array.isArray(blob?.pinnedGroups) ? blob.pinnedGroups : [],
 				pinnedSessions: Array.isArray(blob?.pinnedSessions) ? blob.pinnedSessions : [],
-				pinnedNav: Array.isArray(blob?.pinnedNav)
-					? blob.pinnedNav.filter(id => typeof id === "string" && id.length > 0)
-					: [],
+				pinnedNav: validIds(blob?.pinnedNav),
 				archivedSessions: Array.isArray(blob?.archivedSessions) ? blob.archivedSessions : [],
 				groupAliases: blob?.groupAliases && typeof blob.groupAliases === "object" ? blob.groupAliases : {},
 				workspaceLastUsed: validRecencyMap(blob?.workspaceLastUsed),
 				sessionLastUsed: validRecencyMap(blob?.sessionLastUsed),
-				workspaceSort: blob?.workspaceSort === "name" ? "name" : "recent",
+				workspaceOrder: validIds(blob?.workspaceOrder),
+				collapsedLists: validCollapseMap(blob?.collapsedLists),
+				expandedLists: validIds(blob?.expandedLists),
 				lane: blob?.lane === "work" ? "work" : "code",
 				hydrated: true,
 			});
@@ -270,12 +282,32 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 			onFailure: message => toast({ variant: "error", title: translate("sidebar.renameFailed"), message }),
 		}),
 
-	setWorkspaceSort: sort =>
+	setWorkspaceOrder: order =>
 		optimisticWrite({
 			store: { getState: get, setState: set },
-			mutate: () => ({ workspaceSort: sort }),
+			mutate: () => ({ workspaceOrder: order }),
 			persist: () => writePrefs(get),
-			onFailure: message => toast({ variant: "error", title: translate("sidebar.sort.failed"), message }),
+			onFailure: message => toast({ variant: "error", title: translate("sidebar.preferences.saveFailed"), message }),
+		}),
+
+	setListCollapsed: (id, collapsed) =>
+		optimisticWrite({
+			store: { getState: get, setState: set },
+			mutate: state => ({ collapsedLists: { ...state.collapsedLists, [id]: collapsed } }),
+			persist: () => writePrefs(get),
+			onFailure: message => toast({ variant: "error", title: translate("sidebar.preferences.saveFailed"), message }),
+		}),
+
+	toggleListExpanded: id =>
+		optimisticWrite({
+			store: { getState: get, setState: set },
+			mutate: state => ({
+				expandedLists: state.expandedLists.includes(id)
+					? state.expandedLists.filter(expanded => expanded !== id)
+					: [...state.expandedLists, id],
+			}),
+			persist: () => writePrefs(get),
+			onFailure: message => toast({ variant: "error", title: translate("sidebar.preferences.saveFailed"), message }),
 		}),
 
 	setLane: lane =>
@@ -283,7 +315,7 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 			store: { getState: get, setState: set },
 			mutate: () => ({ lane }),
 			persist: () => writePrefs(get),
-			onFailure: message => toast({ variant: "error", title: translate("sidebar.sort.failed"), message }),
+			onFailure: message => toast({ variant: "error", title: translate("sidebar.preferences.saveFailed"), message }),
 		}),
 
 	touchWorkspace: cwd => {
@@ -317,7 +349,9 @@ export const useSidebarPrefs = create<SidebarPrefsStore>()((set, get) => ({
 			groupAliases: {},
 			workspaceLastUsed: {},
 			sessionLastUsed: {},
-			workspaceSort: "recent",
+			workspaceOrder: [],
+			collapsedLists: {},
+			expandedLists: [],
 			lane: "code",
 			hydrated: false,
 		}),

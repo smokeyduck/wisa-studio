@@ -21,7 +21,9 @@ import { type SplitAxis, type SplitPlacement, tabDisplayTitle, useTabsStore } fr
 import { AgentBeside } from "../agents/AgentBeside";
 import { AgentPage } from "../agents/AgentPage";
 import { ChatStream } from "../chat/ChatStream";
+import { SubagentTranscriptBlock } from "../chat/dock/AgentsDockCard";
 import { WorkspaceDock } from "../chat/dock/WorkspaceDock";
+import { ComposerQuestions } from "../dialogs/ExtensionDialog";
 import { InputArea } from "./InputArea";
 import { useComposerFiles } from "./use-composer-files";
 
@@ -192,6 +194,7 @@ function SessionPaneBody({ tabId, label }: { tabId: string; label: string }) {
 function SessionConversation() {
 	const { attachFiles, readOnly } = useComposerFiles();
 	const [draggingFiles, setDraggingFiles] = useState(false);
+	const [chatHost, setChatHost] = useState<HTMLDivElement | null>(null);
 	return (
 		<div
 			className={cx(
@@ -223,8 +226,19 @@ function SessionConversation() {
 				requestAnimationFrame(() => composer?.focus());
 			}}
 		>
-			<ChatStream footer={<WorkspaceDock />} />
-			<InputArea />
+			<div ref={setChatHost} className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col">
+				<ChatStream
+					footer={
+						<>
+							<SubagentTranscriptBlock dialogHost={chatHost} />
+							<WorkspaceDock />
+						</>
+					}
+				/>
+			</div>
+			<ComposerQuestions>
+				<InputArea />
+			</ComposerQuestions>
 		</div>
 	);
 }

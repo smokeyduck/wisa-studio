@@ -37,6 +37,7 @@ import { toast } from "../stores/toast";
 import { useTodoStore } from "../stores/todo";
 import { useToolsStore } from "../stores/tools";
 import { useUiStore } from "../stores/ui";
+import { isWorkCwd, useWorkspaceMode } from "../stores/workspace-mode";
 import { hydrateSession, hydrateTabSession } from "./use-rpc-events";
 
 /** Clear every renderer slice owned by one session before a replacement hydrates. */
@@ -164,18 +165,21 @@ export async function switchSessionNow(session: SessionInfo, model?: SessionMode
 		// Pre-check best-effort — the main-process refusal is the backstop.
 	}
 	if (!stillCurrent()) return false;
-	// Cross-kind pre-check: agent and chat sessions never convert (I2). A
-	// mismatch opens the file in a NEW tab of its own kind instead of
-	// switching the current tab onto it — more intuitive than an error, and
-	// main's spawn-tab guard is the backstop.
+	// Process-scoped registrations cannot be swapped in place: Chat differs
+	// by kind, while Work and Coding differ by workspace even as agent tabs.
 	const fileKind = session.kind === "chat" ? "chat" : "agent";
 	const tabsState = useTabsStore.getState();
 	const activeTab = tabsState.tabs.find(tab => tab.id === originTabId);
-	if (activeTab && activeTab.kind !== fileKind) {
-		const tabId = await tabsState.openTab({ sessionPath: session.path, kind: fileKind });
+	let crossesWorkProfile = false;
+	if (activeTab?.kind === "agent" && fileKind === "agent" && activeTab.cwd !== session.cwd) {
+		await useWorkspaceMode.getState().load();
+		if (!stillCurrent()) return false;
+		const { defaultWorkspace } = useWorkspaceMode.getState();
+		crossesWorkProfile = isWorkCwd(activeTab.cwd, defaultWorkspace) !== isWorkCwd(session.cwd, defaultWorkspace);
+	}
+	if (activeTab && (activeTab.kind !== fileKind || crossesWorkProfile)) {
+		const tabId = await tabsState.openTab({ cwd: session.cwd, sessionPath: session.path, kind: fileKind });
 		if (tabId !== null) {
-			// Explain the surprise: the user clicked expecting an in-place switch,
-			// but kinds never convert — the file opened in its own tab instead.
 			toast({ variant: "info", message: translate("sidebar.openedInNewTab") });
 		}
 		return tabId !== null;

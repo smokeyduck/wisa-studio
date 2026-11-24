@@ -2,7 +2,6 @@ import { CircleDot, ExternalLink, GitPullRequest } from "lucide-react";
 import { OutputText } from "../../lib/ansi";
 import { resultText } from "../../lib/format";
 import { useT } from "../../lib/i18n";
-import { openLink } from "../../lib/open-link";
 import { resultDetails } from "./result";
 import type { ToolRendererProps } from "./ToolCard";
 
@@ -249,7 +248,7 @@ export function GithubRenderer({ args, result, isPartial, partialResult }: ToolR
 					<button
 						type="button"
 						title={t("tools.github.openInBrowser")}
-						onClick={event => openLink(externalUrl, event)}
+						onClick={() => void window.omp.system.openExternal(externalUrl)}
 						className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--omp-dim)] transition-colors hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-md-link)]"
 					>
 						<ExternalLink size={11} />
@@ -285,7 +284,7 @@ export function GithubRenderer({ args, result, isPartial, partialResult }: ToolR
 						<button
 							type="button"
 							title={t("tools.github.openInBrowser")}
-							onClick={event => openLink(externalUrl, event)}
+							onClick={() => void window.omp.system.openExternal(externalUrl)}
 							className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--omp-dim)] transition-colors hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-md-link)]"
 						>
 							<ExternalLink size={11} />

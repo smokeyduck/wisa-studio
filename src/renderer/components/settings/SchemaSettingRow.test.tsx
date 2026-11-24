@@ -93,6 +93,25 @@ afterEach(async () => {
 	useSettingsRestartStore.setState({ byTab: {} });
 });
 
+describe("external browser relay settings", () => {
+	it("describes per-task opt-in without enabling the relay", async () => {
+		await mount(entry({ path: "browser.relay", label: "Browser Relay" }), false);
+
+		expect(container.textContent).toContain('app: "relay"');
+		expect(setSetting).not.toHaveBeenCalled();
+	});
+
+	it("asks for a loopback URL without discovering another profile", async () => {
+		await mount(entry({ path: "browser.relayUrl", label: "Browser Relay URL", type: "string" }), undefined);
+
+		expect(container.textContent).toContain("http://127.0.0.1:<port>");
+		expect(
+			container.querySelector('a[href$="#use-your-own-chrome-session-optional"]')?.textContent,
+		).toBe("Browser relay setup");
+		expect(setSetting).not.toHaveBeenCalled();
+	});
+});
+
 describe("SchemaSettingRow save outcome", () => {
 	it("says a save outranked by the project's settings is not in effect, instead of Saved", async () => {
 		setSetting.mockResolvedValue({

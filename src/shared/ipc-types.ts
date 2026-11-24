@@ -3,13 +3,14 @@
  * Type-safe contract for the contextBridge API.
  */
 
-import type { KeyEventLike } from "./chord";
 import type { CollabAutoStartMode, CollabPhoneEntry, CollabPhoneSnapshot } from "./collab-phone";
 import type { DocumentPreviewResult } from "./document-preview";
 import type { Language } from "./languages";
 import type { LaunchProfile } from "./launch-profile";
+import type { McpCatalogPage, McpCatalogRequest } from "./mcp-catalog";
 import type { SessionModelOverride } from "./model-restore";
 import type { PluginEffects } from "./plugin-effects";
+import type { RunReport } from "./scheduler-types";
 import type {
 	IpcSkillsCommunityCatalogResult,
 	IpcSkillsCommunityCatalogUpdate,
@@ -19,6 +20,10 @@ import type {
 	IpcSkillsCommunityPreviewResult,
 } from "./skills-community";
 import type { IpcTemplateInstallPayload, IpcTemplateInstallResult, IpcTemplatesCatalogResult } from "./templates";
+
+export type IpcProjectAuditResponse =
+	| { report: RunReport }
+	| { error: "noProject" | "timeout" | "cancelled" | "busy" | "failed"; detail?: string };
 
 export type {
 	CommunityBoard,
@@ -168,10 +173,6 @@ export const IPC_EVENTS = {
 	UPDATER_STATUS: "updater:status",
 	/** Sidecar terminal frame for any tab of the window, visible or not (IpcTerminalFramePayload). */
 	TERMINAL_FRAME: "terminal:frame",
-	/** A tab's built-in browser changed: pages, navigation, agent link (IpcBrowserState). */
-	BROWSER_STATE: "browser:state",
-	/** A key the focused built-in browser page handed to the app (IpcBrowserKeyPayload). */
-	BROWSER_KEY: "browser:key",
 } as const;
 
 // ============================================================================
@@ -288,6 +289,7 @@ export const IPC_COMMANDS = {
 	PREFS_GET: "prefs:get",
 	/** Set GUI preferences */
 	PREFS_SET: "prefs:set",
+	PREFS_RESET_SETTINGS: "prefs:reset-settings",
 	PREFS_UPDATE_LAUNCH_PROFILE: "prefs:update-launch-profile",
 	/** Whether the system-wide show/hide shortcut is registered (→ IpcWindowToggleStatus) */
 	PREFS_WINDOW_TOGGLE_STATUS: "prefs:window-toggle-status",
@@ -328,6 +330,10 @@ export const IPC_COMMANDS = {
 	PLUGIN_LOGO: "plugin-catalog:logo",
 	/** Preview what installing a plugin would add, from its GitHub repository */
 	PLUGIN_INSPECT: "plugin-catalog:inspect",
+	/** Browse the official MCP registry without opening renderer network access. */
+	MCP_CATALOG_LIST: "mcp-catalog:list",
+	PROJECT_AUDIT_RUN: "project-audit:run",
+	PROJECT_AUDIT_CANCEL: "project-audit:cancel",
 	/** The web-template catalog (remote, cached, or bundled snapshot) */
 	TEMPLATES_CATALOG: "templates:catalog",
 	/** Download and unpack one template into the Work workspace */
@@ -370,20 +376,6 @@ export const IPC_COMMANDS = {
 	UPDATER_GET_STATUS: "updater:getStatus",
 	/** Current app version (settings → updates row) */
 	UPDATER_VERSION: "updater:version",
-	/** A tab's built-in browser state (IpcBrowserState). */
-	BROWSER_GET_STATE: "browser:get-state",
-	/** Open a page the user asked for in a tab's built-in browser. */
-	BROWSER_OPEN: "browser:open",
-	/** Navigate, go back/forward, reload/stop, inspect, or open externally (IpcBrowserActionPayload). */
-	BROWSER_ACTION: "browser:action",
-	/** Place (or hide, with null bounds) a tab's active page over the panel's viewport. */
-	BROWSER_SET_VIEWPORT: "browser:set-viewport",
-	/** Still image of a tab's active page, shown while a dialog covers the live view. */
-	BROWSER_CAPTURE: "browser:capture",
-	/** The app keymap's chords, so a focused page hands them to the app instead of keeping them. */
-	BROWSER_SET_SHORTCUTS: "browser:set-shortcuts",
-	/** Move a page into a window of its own (or focus the one it already has). */
-	BROWSER_DETACH: "browser:detach",
 } as const;
 
 export type RuntimeErrorSource =
@@ -438,7 +430,7 @@ export type UpdateStatus =
 	| { state: "error"; message: string; showInBanner?: boolean };
 
 export type MenuAction =
-	/** Edit → Find / Find Next / Find Previous with no browser page focused: the window picks what to search. */
+	/** Edit → Find / Find Next / Find Previous in the conversation. */
 	| "find"
 	| "find-next"
 	| "find-previous"
@@ -588,7 +580,8 @@ export interface TrayState {
 	projectName: string;
 	modelId: string | null;
 	thinkingLevel: string;
-	fastMode: boolean;
+	/** null when the active model cannot toggle priority service. */
+	fastMode: boolean | null;
 	approvalMode: "always-ask" | "always-ask-cached" | "write" | "yolo";
 	contextPercent: number | null;
 	contextTokens: number | null;
@@ -1122,75 +1115,15 @@ export interface IpcTabRetry {
 }
 
 /** TAB_STATUS push payload — a full tab snapshot from any tab, active or background. */
-export type IpcTabStatusPayload = IpcTabInfo;
+export type IpcTabStatusPayload = IpcTabInfo & {
+	/** One-shot outcome from a parked turn whose terminal reply the renderer does not receive. */
+	settledRun?: "complete" | "failed";
+};
 
 /** TERMINAL_FRAME push: one sidecar terminal frame and the tab it belongs to. */
 export interface IpcTerminalFramePayload {
 	tabId: string;
 	frame: RpcTerminalFrame;
-}
-
-/** One page in a tab's built-in browser. */
-export interface IpcBrowserPage {
-	/** Stable for the page's life (its webContents id). */
-	pageId: number;
-	url: string;
-	title: string;
-	loading: boolean;
-	canGoBack: boolean;
-	canGoForward: boolean;
-	/** Who opened it: the agent's browser tool, or the user. */
-	openedBy: "agent" | "user";
-	/** The agent is driving the page right now: it opened it, or adopted one the user opened. */
-	agentDriving: boolean;
-	/** The last main-frame load failure, cleared by the next navigation. */
-	error?: string;
-	/** Find in page: the current match (1-based; 0 while none is selected) and the total. */
-	find?: { active: number; matches: number };
-}
-
-/** A tab's built-in browser: its pages and the active one. */
-export interface IpcBrowserState {
-	tabId: string;
-	pages: IpcBrowserPage[];
-	activePageId: number | null;
-	/** The agent can reach this browser (its sidecar serves the relay and the GUI is linked). */
-	agentLinked: boolean;
-}
-
-export type IpcBrowserAction =
-	| { action: "navigate"; url: string }
-	| { action: "back" }
-	| { action: "forward" }
-	| { action: "reload" }
-	| { action: "stop" }
-	| { action: "select" }
-	| { action: "close" }
-	| { action: "devtools" }
-	| { action: "external" }
-	/** Search the page: a new search, or with `next` the following match of the current one. Empty text clears it. */
-	| { action: "find"; text: string; backward?: boolean; next?: boolean }
-	/** End the search, keeping the current match selected; `focusPage` gives the page the keyboard back. */
-	| { action: "stopFind"; focusPage?: boolean };
-
-export type IpcBrowserActionPayload = { tabId: string; pageId: number } & IpcBrowserAction;
-
-/**
- * BROWSER_KEY push. Keystrokes in a focused page go to the page, not the app's
- * window, so the host hands back the ones that belong to the app: a chord of
- * the app keymap (replayed as a keydown), ⌘L/Ctrl+L for the address bar, and
- * the Edit menu's Find commands for the page on screen.
- */
-export type IpcBrowserKeyPayload =
-	| { tabId: string; kind: "shortcut"; key: KeyEventLike }
-	| { tabId: string; kind: "focusAddress" }
-	| { tabId: string; kind: "find" }
-	| { tabId: string; kind: "findNext"; backward: boolean };
-
-/** Where the active page sits, in the window's CSS pixels; null hides it (panel closed, dialog open). */
-export interface IpcBrowserViewportPayload {
-	tabId: string;
-	bounds: { x: number; y: number; width: number; height: number } | null;
 }
 
 /** Full sidecar event tagged with the tab that emitted it. The preload drops
@@ -1403,6 +1336,8 @@ export interface CaptionColors {
 export interface OmpApi {
 	/** `process.platform`: which window controls sit over the header. */
 	platform: string;
+	/** Native startup language, resolved before the first renderer paint. */
+	initialLanguage?: Language;
 	windowChrome: {
 		isFullScreen(): Promise<boolean>;
 		onFullScreenChange(callback: (fullScreen: boolean) => void): () => void;
@@ -1664,7 +1599,6 @@ export interface OmpApi {
 		onHostToolCall(callback: (request: HostToolCallRequest) => void): () => void;
 		onHostUriRequest(callback: (request: HostUriRequest) => void): () => void;
 		onLiveFrame(callback: (frame: RpcLiveFrame) => void): () => void;
-		onBtwFrame(callback: (frame: RpcBtwFrame) => void): () => void;
 		onModelCatalogUpdate(callback: (frame: ModelCatalogUpdateFrame) => void): () => void;
 		onSubagentFrame(callback: (frame: SubagentFrame) => void): () => void;
 		onCommandsUpdate(callback: (commands: AvailableCommand[]) => void): () => void;
@@ -1678,6 +1612,8 @@ export interface OmpApi {
 		onTabSidecarStatus(callback: (status: IpcSidecarStatusPayload, tabId: string) => void): () => void;
 		onTabSubagentFrame(callback: (frame: SubagentFrame, tabId: string) => void): () => void;
 		onTabDictationFrame(callback: (frame: RpcDictationFrame, tabId: string) => void): () => void;
+		/** Side questions retain their originating tab even when it is parked. */
+		onTabBtwFrame(callback: (frame: RpcBtwFrame, tabId: string) => void): () => void;
 		onTabModelCatalogUpdate(callback: (frame: ModelCatalogUpdateFrame, tabId: string) => void): () => void;
 		onTabCommandsUpdate(callback: (commands: AvailableCommand[], tabId: string) => void): () => void;
 		onTabConfigUpdate(callback: (payload: ConfigUpdateFrame, tabId: string) => void): () => void;
@@ -1693,19 +1629,6 @@ export interface OmpApi {
 		onDeepLink(callback: (link: DeepLinkPayload) => void): () => void;
 		onUpdaterStatus(callback: (status: UpdateStatus) => void): () => void;
 		onTerminalFrame(callback: (payload: IpcTerminalFramePayload) => void): () => void;
-		onBrowserState(callback: (state: IpcBrowserState) => void): () => void;
-		onBrowserKey(callback: (payload: IpcBrowserKeyPayload) => void): () => void;
-	};
-	browser: {
-		getState(tabId: string): Promise<IpcBrowserState | null>;
-		open(tabId: string, url: string): Promise<IpcBrowserState | null>;
-		action(payload: IpcBrowserActionPayload): Promise<IpcBrowserState | null>;
-		setViewport(payload: IpcBrowserViewportPayload): void;
-		capture(tabId: string): Promise<string | null>;
-		/** Pull the browser out of the app window into one of its own. */
-		detach(tabId: string): Promise<boolean>;
-		/** Fire-and-forget: the chords the app keymap dispatches. */
-		setShortcuts(chords: string[]): void;
 	};
 	updater: {
 		check(): Promise<UpdateStatus>;
@@ -1861,6 +1784,7 @@ export interface OmpApi {
 	prefs: {
 		get(key?: string): Promise<unknown>;
 		set(key: string, value: unknown): Promise<void>;
+		resetSettings(): Promise<"restarting" | "busy" | "offline" | "saved">;
 		onLanguageChanged(callback: (language: Language) => void): () => void;
 		/** Fires in every window after any window saves shortcut changes. */
 		onKeymapChanged(callback: () => void): () => void;
@@ -1902,6 +1826,13 @@ export interface OmpApi {
 	pluginCatalog: {
 		logo(owner: string): Promise<string | null>;
 		inspect(payload: IpcPluginInspectPayload): Promise<IpcPluginInspection>;
+	};
+	mcpCatalog: {
+		list(payload: McpCatalogRequest): Promise<McpCatalogPage>;
+	};
+	projectAudit: {
+		run(id: string, tabId: string): Promise<IpcProjectAuditResponse>;
+		cancel(id: string): Promise<void>;
 	};
 	templates: {
 		catalog(): Promise<IpcTemplatesCatalogResult>;

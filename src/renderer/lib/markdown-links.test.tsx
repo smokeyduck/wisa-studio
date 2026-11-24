@@ -1,8 +1,8 @@
 /**
  * Contracts for links inside rendered replies. Inline code that names a file
  * on disk becomes a link that previews the file at the named line; inline code
- * that names nothing stays code; a web address in inline code opens beside the
- * work. Before this, all three rendered as dead text the user had to retype.
+ * that names nothing stays code; a web address in inline code opens in the
+ * system browser. Before this, all three rendered as dead text.
  */
 import * as path from "node:path";
 import { parseHTML } from "linkedom";
@@ -37,7 +37,7 @@ const ON_DISK: Record<string, IpcResolvedPath> = {
 
 let resolvePaths: Mock;
 let openPath: Mock;
-let browserOpen: Mock;
+let openExternal: Mock;
 let host: globalThis.Element;
 let root: Root;
 
@@ -72,11 +72,8 @@ function click(element: globalThis.Element | null, modifiers: { metaKey?: boolea
 beforeEach(() => {
 	resolvePaths = vi.fn(async (paths: string[]) => paths.map(path => ON_DISK[path] ?? null));
 	openPath = vi.fn(async () => ({ ok: true }));
-	browserOpen = vi.fn(async () => ({}));
-	ompWindow.omp = {
-		system: { resolvePaths, openPath, openExternal: vi.fn(async () => {}) },
-		browser: { open: browserOpen, detach: vi.fn(async () => {}) },
-	};
+	openExternal = vi.fn(async () => {});
+	ompWindow.omp = { system: { resolvePaths, openPath, openExternal } };
 	useTabsStore.setState({
 		tabs: [{ id: "t0", cwd: "/work", status: "ready", kind: "agent", unreadDone: false }],
 		activeTabId: "t0",
@@ -194,13 +191,13 @@ describe("links to Windows paths", () => {
 });
 
 describe("inline code web addresses", () => {
-	it("opens the address in the tab's browser panel", async () => {
+	it.each([false, true])("opens the address in the system browser (modifier: %s)", async metaKey => {
 		await render("The dev server is at `http://localhost:5173/`.");
 		const anchor = host.querySelector("a");
 		expect(anchor?.getAttribute("href")).toBe("http://localhost:5173/");
 
-		await act(async () => click(anchor));
-		expect(browserOpen).toHaveBeenCalledWith("t0", "http://localhost:5173/");
+		await act(async () => click(anchor, { metaKey }));
+		expect(openExternal).toHaveBeenCalledExactlyOnceWith("http://localhost:5173/");
 	});
 
 	it("keeps code inside a markdown link part of that one link", async () => {
@@ -231,7 +228,7 @@ describe("session output links", () => {
 		await act(async () => click(link, { metaKey: true }));
 		expect(useUiStore.getState().filePreviewPath).toBe(uri);
 		expect(openPath).not.toHaveBeenCalled();
-		expect(browserOpen).not.toHaveBeenCalled();
+		expect(openExternal).not.toHaveBeenCalled();
 	});
 	it.each(["local://missing.log", "local:/missing.log", "artifact:42"])(
 		"does not dispatch an unresolved %s reference to an OS handler",
@@ -240,6 +237,7 @@ describe("session output links", () => {
 			await act(async () => click(host.querySelector('[role="link"]'), { metaKey: true }));
 			expect(useUiStore.getState().filePreviewPath).toBeNull();
 			expect(openPath).not.toHaveBeenCalled();
+			expect(openExternal).not.toHaveBeenCalled();
 		},
 	);
 });

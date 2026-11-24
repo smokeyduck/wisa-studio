@@ -1,6 +1,6 @@
 # WISA STUDIO
 
-**Fork of oh-my-pi (MIT). UI rebrand by WISA.**
+**Bản desktop dựa trên oh-my-pi (MIT), do WISA phát triển.**
 
 GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một lần là chạy, nhiều phiên làm việc song song trong một cửa sổ, có sẵn cổng WISA để một API key dùng được mọi mô hình. Electron, cho macOS, Windows và Linux.
 
@@ -39,7 +39,7 @@ Không bắt buộc: bạn vẫn có thể dùng Anthropic, OpenAI, DeepSeek, Op
 
 [![Release](https://img.shields.io/github/v/release/smokeyduck/wisa-studio?style=flat&colorA=222222&colorB=3FB950)](https://github.com/smokeyduck/wisa-studio/releases)
 [![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fsmokeyduck.github.io%2Fwisa-studio%2Fdownloads.json&style=flat&cacheSeconds=3600)](https://github.com/smokeyduck/wisa-studio/releases)
-[![License: MIT](https://img.shields.io/badge/license-MIT-BE185D?style=flat)](./LICENSE)
+[![Phạm vi giấy phép](https://img.shields.io/badge/gi%E1%BA%A5y%20ph%C3%A9p-ph%E1%BA%A1m%20vi-BE185D?style=flat)](./LICENSE-SCOPE.md)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-222222?style=flat)
 ![Electron](https://img.shields.io/badge/Electron-35-47848F?style=flat&logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=white)
@@ -52,7 +52,7 @@ Không bắt buộc: bạn vẫn có thể dùng Anthropic, OpenAI, DeepSeek, Op
 
 ## WISA STUDIO khác omp ở đâu
 
-Agent không đổi. Toàn bộ phần "làm việc" — đọc file, chạy lệnh, sửa mã, gọi tool, MCP, Skills — là binary của oh-my-pi, biên dịch nguyên bản từ commit ghi trong [`sidecar-source.json`](sidecar-source.json) và đóng gói kèm ứng dụng. WISA chỉ thay lớp hiển thị và cách đóng gói:
+Phần đọc file, chạy lệnh, sửa mã, gọi tool, MCP và Skills do agent oh-my-pi đảm nhiệm. WISA STUDIO đóng gói agent từ commit của fork WISA ghi trong [`sidecar-source.json`](sidecar-source.json); fork có các thay đổi dành cho ứng dụng. Bản desktop còn có:
 
 - **Tên và nhận diện:** WISA STUDIO thay cho tên cũ trong tiêu đề cửa sổ, tray, hộp thoại cấp quyền của macOS, tên file cài đặt.
 - **Tiếng Việt mặc định:** giao diện có 5 ngôn ngữ (Tiếng Việt, English, 中文, Русский, ไทย), bản này mở ra là tiếng Việt.
@@ -72,6 +72,16 @@ Dữ liệu của WISA STUDIO nằm riêng ở `~/.wisa-studio/agent` (không ph
 - **SSH host, theme tuỳ chỉnh, command palette, chế độ giọng nói, cộng tác qua relay.**
 
 Giới hạn cần biết: các tab không phải ranh giới bảo mật của hệ điều hành; chia đôi là hai khung, không phải lưới vô hạn; phê duyệt và quét bảo mật không thay cho sandbox. Request mô hình vẫn đi tới nhà cung cấp bạn cấu hình.
+
+### Dùng phiên Chrome của bạn (không bắt buộc)
+
+Liên kết web và bản xem thử mẫu mở trong trình duyệt mặc định của hệ thống. WISA STUDIO không chạy trình duyệt nhúng, bật gỡ lỗi từ xa của Chrome, cài máy chủ MCP hoặc sao chép hồ sơ trình duyệt.
+
+Để cho agent dùng một thẻ đã đăng nhập, bạn có thể chủ động bật [relay trình duyệt omp](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). Nếu chưa có relay, chạy `omp browser-relay install --no-chrome` bằng omp CLI tương thích. Trong hồ sơ Chrome muốn dùng, mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển** rồi chọn thư mục đã in ra bằng **Tải tiện ích đã giải nén**. Relay có thể thao tác với quyền của bạn trong hồ sơ đó; nên dùng hồ sơ công việc riêng và chỉ phê duyệt những tác vụ bạn muốn chạy tại đó. Không mở relay ra ngoài máy của bạn.
+
+Trong WISA STUDIO, vào **Cài đặt → Công cụ** và nhập địa chỉ `http://127.0.0.1:<cổng>` của relay vào **URL relay trình duyệt**. Với bản cài omp thông thường, tiến trình relay đang chạy tạo tệp tên `<pid>-<cổng>` trong `~/.omp/browser-relay/endpoints/`. WISA không đọc hồ sơ riêng đó; bạn tự nhập URL và cập nhật nếu cổng thay đổi. Để **Relay trình duyệt** ở trạng thái tắt nếu chỉ muốn bật theo từng tác vụ: yêu cầu agent dùng `app: "relay"` cho công việc đã phê duyệt. Chỉ bật **Relay trình duyệt** nếu muốn dùng làm mặc định cho các phiên dùng cấu hình này.
+
+Khi cài tiện ích, các tiến trình có thể kết nối cổng relay cục bộ sẽ có quyền truy cập trình duyệt; tiện ích không hỏi lại cho từng thao tác. Bật relay làm mặc định cũng có thể cấp quyền truy cập hồ sơ Chrome cho các lượt chạy agent ở chế độ nền. Hãy để mặc định tắt nếu chỉ dùng thỉnh thoảng, và tắt tiện ích trong Chrome khi muốn thu hồi quyền truy cập.
 
 ## Cài đặt
 
@@ -114,7 +124,8 @@ bun run build:omp          # → resources/omp (arm64)
 bun run build:omp:x64      # → resources/omp.x64 (Intel)
 bun run build:omp:win      # → resources/omp.exe
 bun run build              # → out/
-bun run dev                # HMR; cần resources/omp (thiếu thì build từ monorepo kế bên; không có monorepo thì báo lỗi)
+bun run dev                # HMR; dùng resources/omp[.exe], OMP_BUNDLED_OMP hoặc build từ mã nguồn
+bun run dev --stop         # từ terminal khác: dừng GUI dev, Vite và sidecar của phiên đó
 ```
 
 Kiểm tra trước khi gửi PR:
@@ -128,6 +139,8 @@ bun run build
 ```
 
 `bun run dev` chạy tách biệt với bản đã cài: userData `wisa-studio-dev`, profile agent `~/.wisa-studio-dev/agent`, không đăng ký URL scheme với hệ điều hành, không chiếm phím tắt toàn cục.
+
+`bun run dev --stop` chỉ dừng tiến trình do `bun run dev` của checkout và profile hiện tại khởi động, không tắt bản đã cài. Nếu lúc khởi động có đặt `WISA_PROFILE_ROOT`, dùng cùng giá trị khi dừng. Lệnh này ngắt cả tác vụ dev đang chạy.
 
 Ghi đè chỉ dành cho phát triển, chỉ với bản chưa đóng gói: `OMP_BUNDLED_OMP=<path>` chạy binary đó thay cho `resources/omp`, và `OMP_SIDECAR=source` chạy mã nguồn coding-agent của monorepo qua bun. Bản đóng gói bỏ qua cả hai. App không kiểm tra rằng bản ghi đè hiểu `PI_CONFIG_SOURCES` / `PI_PROJECT_CONFIG_DIR` hay profile cách ly; dùng chúng là trách nhiệm của bạn.
 
@@ -144,9 +157,10 @@ Quy trình phát hành đầy đủ, gồm thứ tự build sidecar và kiểm t
 
 ## Giấy phép và ghi công
 
-MIT — xem [LICENSE](LICENSE). Bản quyền gốc của oh-my-pi được giữ nguyên văn.
+Từ v0.9.55, phần đóng góp của WinSell trong đúng hai tệp SEO Audit được cấp theo PolyForm Strict 1.0.0; xem [phạm vi giấy phép](LICENSE-SCOPE.md). [Giấy phép MIT](LICENSE), thông báo bản quyền gốc và các quyền đã được cấp theo MIT vẫn được giữ.
 
 - oh-my-pi (upstream): https://github.com/can1357/oh-my-pi
 - Lớp GUI gốc mà bản này dựa trên (MIT), cùng bản quyền gốc: xem [NOTICE](NOTICE).
+- Những người đóng góp cho WISA STUDIO: [lịch sử ghi công trên GitHub](https://github.com/smokeyduck/wisa-studio/graphs/contributors). Bạn có thể [báo lỗi hoặc đề xuất cải tiến](https://github.com/smokeyduck/wisa-studio/issues) và [gửi pull request](https://github.com/smokeyduck/wisa-studio/pulls).
 
 WISA STUDIO không liên kết, không được bảo trợ bởi Anthropic, OpenAI, Google hay bất kỳ nhà cung cấp mô hình nào. Xem [NOTICE](NOTICE).

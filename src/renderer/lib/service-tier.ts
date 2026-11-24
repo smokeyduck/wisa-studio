@@ -1,43 +1,82 @@
 import type { ModelInfo } from "../../shared/rpc-types";
 
-/** Provider families with their own serving-priority knob (see pi-ai's `serviceTierFamily`). */
-export type ServiceTierFamily = "openai" | "anthropic" | "google";
+const OPENAI_HOST = /^https:\/\/api\.openai\.com(?:\/|$)/i;
+const CODEX_HOST = /^https:\/\/chatgpt\.com(?:\/|$)/i;
+const ANTHROPIC_HOST = /^https:\/\/api\.anthropic\.com(?:\/|$)/i;
+const GOOGLE_HOST = /^https:\/\/generativelanguage\.googleapis\.com(?:\/|$)/i;
+const VERTEX_HOST = /^https:\/\/(?:[a-z0-9-]+-)?aiplatform\.googleapis\.com(?:\/|$)/i;
 
-const OPENAI_ID = /^(gpt-|o[1-9]|chatgpt-|codex-|computer-use-)/;
-const OPENROUTER_PREFIX: Readonly<Record<string, ServiceTierFamily>> = {
-	anthropic: "anthropic",
-	google: "google",
-	openai: "openai",
-};
+// https://platform.claude.com/docs/en/build-with-claude/fast-mode#feature-availability
+const ANTHROPIC_FAST_MODELS = ["claude-fable-5-2", "claude-mythos-5-2", "claude-opus-5-5", "claude-opus-5"];
 
-/**
- * Which family's service tier governs this model, or `undefined` when it has
- * none — the same classification pi-ai applies on the wire, mirrored here
- * because the wire carries `serviceTiers` but not `identity.class`.
- *
- * `undefined` is the answer that matters: the composer hides the speed control
- * rather than offering a knob the request will silently drop. Custom
- * OpenAI-compatible relays serving OpenAI model ids are the OpenAI family
- * unless the provider owns its own tier control (Fireworks) or rejects the
- * field outright (GitHub Copilot).
- */
-export function serviceTierFamily(model: ModelInfo | null | undefined): ServiceTierFamily | undefined {
-	if (!model) return undefined;
-	const provider = model.provider;
-	if (provider === "openrouter") return OPENROUTER_PREFIX[model.id.split("/", 1)[0] ?? ""];
-	if (provider === "openai" || provider === "openai-codex") return "openai";
-	// `anthropic` always speaks anthropic-messages; the api check also catches
-	// Claude on Bedrock/Vertex, whose provider is not the family.
-	if (provider === "anthropic" || model.api === "anthropic-messages") return "anthropic";
-	if (provider === "google" || provider === "google-vertex") return "google";
-	if (provider === "fireworks" || provider === "github-copilot") return undefined;
-	const openAiApi =
-		model.api === "openai-completions" || model.api === "openai-responses" || model.api === "openai-codex-responses";
-	if (!openAiApi) return undefined;
-	return OPENAI_ID.test(model.id) ? "openai" : undefined;
+function isDirect(model: ModelInfo, host: RegExp): boolean {
+	return model.baseUrl === undefined || host.test(model.baseUrl);
 }
 
-/** The composer's speed control has something to act on for this model. */
+function usesApi(model: ModelInfo, api: string): boolean {
+	return model.api === undefined || model.api === api;
+}
+
+function isOpenAiCompatible(model: ModelInfo): boolean {
+	return (
+		(model.api === "openai-completions" || model.api === "openai-responses" || model.api === "openai-codex-responses") &&
+		(model.identity?.class === undefined || model.identity.class === "openai") &&
+		model.provider !== "fireworks" &&
+		model.provider !== "github-copilot"
+	);
+}
+
+/**
+ * Metadata is authoritative when supplied. Without it, only known first-party
+ * routes qualify: a compatible request schema or familiar model name alone
+ * does not mean a relay realizes priority service.
+ *
+ * Protocol checks also exclude routes the bundled agent does not wire up
+ * (notably compatible Anthropic endpoints and OpenRouter's Anthropic route).
+ */
+export function supportsPriorityMode(model: ModelInfo | null | undefined): boolean {
+	if (!model) return false;
+	const advertised = model.serviceTiers?.includes("priority");
+	if (advertised === false) return false;
+	switch (model.provider) {
+		case "openai":
+			return (
+				((model.api === undefined || isOpenAiCompatible(model)) && isDirect(model, OPENAI_HOST)) ||
+				(advertised === true && isOpenAiCompatible(model))
+			);
+		case "openai-codex":
+			return (
+				(usesApi(model, "openai-codex-responses") && isDirect(model, CODEX_HOST)) ||
+				(advertised === true && isOpenAiCompatible(model))
+			);
+		case "anthropic":
+			return (
+				usesApi(model, "anthropic-messages") &&
+				isDirect(model, ANTHROPIC_HOST) &&
+				(advertised === true || ANTHROPIC_FAST_MODELS.includes(model.id))
+			);
+		case "google":
+			return usesApi(model, "google-generative-ai") && (advertised === true || isDirect(model, GOOGLE_HOST));
+		case "google-vertex":
+			return usesApi(model, "google-vertex") && (advertised === true || isDirect(model, VERTEX_HOST));
+		case "openrouter":
+			if (!advertised) return false;
+			if (model.identity?.class) return model.identity.class === "openai" || model.identity.class === "gemini";
+			return model.id.startsWith("openai/") || model.id.startsWith("google/");
+		default:
+			return advertised === true && isOpenAiCompatible(model);
+	}
+}
+
+/** Ultrafast is a separate premium tier, requiring its own exact advertisement. */
+export function supportsUltrafastMode(model: ModelInfo | null | undefined): boolean {
+	if (!model?.serviceTiers?.includes("ultrafast") || model.provider === "openrouter") return false;
+	return (
+		isOpenAiCompatible(model) ||
+		(model.api === undefined && (model.provider === "openai" || model.provider === "openai-codex"))
+	);
+}
+
 export function supportsFastMode(model: ModelInfo | null | undefined): boolean {
-	return serviceTierFamily(model) !== undefined;
+	return supportsPriorityMode(model) || supportsUltrafastMode(model);
 }

@@ -11,7 +11,9 @@ import { describeError } from "../../lib/errors";
 import { getFormattingLocale, useT } from "../../lib/i18n";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { useSessionStore } from "../../stores/session";
-import { Button, ConfirmDialog, Input, Spinner } from "../common";
+import { useTabsStore } from "../../stores/tabs";
+import { useUiStore } from "../../stores/ui";
+import { Button, ConfirmDialog, Input, Modal, Spinner } from "../common";
 import { SettingsPageIntro } from "./SettingsPageIntro";
 
 const ACTIVE_PHASES = new Set(["queued", "preparing", "reviewing", "publishing"]);
@@ -50,6 +52,19 @@ function severityCounts(findings: RpcSecurityFindingInfo[]): Record<(typeof SEVE
 	const counts = { critical: 0, high: 0, medium: 0, low: 0, informational: 0 };
 	for (const finding of findings) counts[finding.severity]++;
 	return counts;
+}
+
+export function SecurityCenter() {
+	const t = useT();
+	const tabId = useTabsStore(state => state.activeTabId);
+	const close = useUiStore(state => state.returnToConversation);
+	return (
+		<Modal bodyClassName="p-0" dockable onClose={close} open title={t("security.title")}>
+			<div className="settings-page-frame settings-content py-6">
+				<SecuritySettingsPage key={tabId} />
+			</div>
+		</Modal>
+	);
 }
 
 export function SecuritySettingsPage() {
@@ -418,8 +433,8 @@ export function SecuritySettingsPage() {
 				</div>
 			)}
 
-			<div className="security-master-detail overflow-hidden rounded-lg border border-(--omp-border-muted)">
-				<section className="security-findings-pane min-w-0">
+			<div className="review-master-detail overflow-hidden rounded-lg border border-(--omp-border-muted)">
+				<section className="review-findings-pane min-w-0">
 					<div className="border-b border-(--omp-border-muted) px-3 py-3">
 						<div className="mb-2 flex items-center justify-between gap-3">
 							<h3 className="text-omp-md font-semibold text-(--omp-text)">{t("security.currentRisk")}</h3>
@@ -517,7 +532,7 @@ export function SecuritySettingsPage() {
 					)}
 				</section>
 
-				<aside className="security-insights-pane min-w-0 p-3">
+				<aside className="review-insights-pane min-w-0 p-3">
 					<h3 className="text-omp-sm font-semibold text-(--omp-text)">{t("security.why")}</h3>
 					<p className="mt-1.5 text-omp-xs leading-relaxed text-(--omp-muted)">
 						{selectedFinding?.summary ?? t("security.whyDefault")}

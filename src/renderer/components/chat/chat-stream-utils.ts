@@ -146,7 +146,12 @@ export function locateEntryRow(
 	entryId: string,
 ): { index: number; kind: "message" | "process" } | null {
 	for (const [index, row] of rows.entries()) {
-		if (row.kind === "message" && row.message.entryId === entryId) return { index, kind: "message" };
+		if (
+			row.kind === "message" &&
+			(row.message.entryId === entryId || row.todoReminders?.some(notice => notice.entryId === entryId))
+		) {
+			return { index, kind: "message" };
+		}
 		if (row.kind === "process" && row.messages.some(message => message.entryId === entryId)) {
 			return { index, kind: "process" };
 		}
@@ -155,7 +160,7 @@ export function locateEntryRow(
 }
 
 export type HistoryRow =
-	| { kind: "message"; message: AgentMessage; reaction?: string; repeats?: number }
+	| { kind: "message"; message: AgentMessage; reaction?: string; repeats?: number; todoReminders?: AgentMessage[] }
 	| { kind: "readGroup"; entries: ReadGroupEntry[]; usage?: ReadGroupUsage[] }
 	| ({ kind: "process"; messages: AgentMessage[] } & ProcessMeta)
 	| { kind: "todoSnapshot"; entry: TodoSnapshot };
@@ -410,6 +415,18 @@ function summarizeProcess(messages: AgentMessage[]): ProcessMeta {
 	return { stepCount: thinkingCount + toolCallIds.length, failedEvents, toolCallIds, toolNames };
 }
 
+// Core persists these stop-time notices as developer messages for the model.
+const CORE_TODO_REMINDER =
+	/^<system-reminder>\nYou stopped with (\d+) incomplete todo item\(s\):\n([\s\S]+)\n\nPlease continue working on these tasks or mark them complete if finished\.\n\(Reminder (\d+)\/(\d+)\)\n<\/system-reminder>$/;
+
+export function matchTodoReminder(message: AgentMessage): RegExpExecArray | null {
+	if (message.role !== "developer" || message.attribution !== "agent") return null;
+	const { content } = message;
+	if (typeof content === "string") return CORE_TODO_REMINDER.exec(content);
+	const block = content?.length === 1 ? content[0] : undefined;
+	return block?.type === "text" ? CORE_TODO_REMINDER.exec(block.text) : null;
+}
+
 /**
  * Build finalized transcript rows. Tool calls fold into one process row per
  * phase in both details, because a command is the model's work, not its answer:
@@ -450,14 +467,31 @@ export function buildHistoryRows(
 		// toolResult/display:false/empty-filler messages must not split a process
 		// run — they are invisible transport records, not transcript boundaries.
 		if (!isVisibleTranscriptMessage(message)) continue;
-		// Completion notifications are transport events inside the current run,
+		// Background notifications are transport events inside the current run,
 		// not semantic phase boundaries. Keep them with the tools they report on;
 		// an out-of-band completion with no active run remains a standalone row.
-		if (detail === "compact" && processMessages.length > 0 && isCompletionMessage(message)) {
+		if (
+			detail === "compact" &&
+			processMessages.length > 0 &&
+			(isCompletionMessage(message) || message.customType === "async-notify")
+		) {
 			processMessages.push(message);
 			continue;
 		}
 		if (message.role !== "assistant" || message.errorMessage || message.steering || !Array.isArray(message.content)) {
+			const reply = rows.at(-1);
+			if (
+				processMessages.length === 0 &&
+				reply?.kind === "message" &&
+				reply.message.role === "assistant" &&
+				!reply.message.errorMessage &&
+				!reply.message.steering &&
+				matchTodoReminder(message)
+			) {
+				reply.todoReminders ??= [];
+				reply.todoReminders.push(message);
+				continue;
+			}
 			flushProcess();
 			// Auto-retry leaves one failed reply per attempt. The same bare error
 			// back to back reads as one card with an attempt count, not a stack.

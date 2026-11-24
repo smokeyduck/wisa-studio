@@ -1,6 +1,3 @@
-import { useOverlayPresence } from "../../hooks/use-overlay-presence";
-import { useDisplayPreference } from "../../lib/display-preferences";
-import { onEscape } from "../../lib/keymap";
 /**
  * Compact composer entry for session modes and lower-frequency coding
  * toggles. The trigger surfaces active mode count; the menu keeps every
@@ -9,12 +6,15 @@ import { onEscape } from "../../lib/keymap";
  */
 
 import { Check, ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { RpcResponse, RpcSessionState } from "../../../shared/rpc-types";
+import { useOverlayPresence } from "../../hooks/use-overlay-presence";
+import { useDisplayPreference } from "../../lib/display-preferences";
 import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
+import { onEscape } from "../../lib/keymap";
 import { loopLimitText, parseLoopLimit } from "../../lib/loop-mode";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { type SessionStore, useSessionStore } from "../../stores/session";
@@ -22,6 +22,7 @@ import { sessionRuntimeStore, useRuntimeTabId } from "../../stores/session-runti
 import { type SettingsStore, useSettingsStore } from "../../stores/settings";
 import { toast } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
+import { useComposerMenuPosition } from "./use-composer-menu-position";
 
 const triggerClass = (active: boolean) =>
 	cx(
@@ -55,7 +56,8 @@ export function ComposerModes() {
 	const { mounted: menuMounted, closing: menuClosing } = useOverlayPresence(menuOpen);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
-	const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
+	const menuStyle = useComposerMenuPosition(menuOpen, triggerRef, menuRef, 288);
+	const menuReady = menuStyle.visibility !== "hidden";
 
 	const loopLimit = loopMode ? parseLoopLimit(loopMode.limit) : null;
 	const loopArgs = loopLimit ? loopLimitText(t, loopLimit) : t("modesPanel.loop.noLimit");
@@ -71,16 +73,9 @@ export function ComposerModes() {
 			? t("input.modes.activeTitle", { modes: activeModeLabels.join(" - ") })
 			: t("input.modes.title");
 
-	useLayoutEffect(() => {
-		if (!menuOpen || !triggerRef.current) return;
-		const rect = triggerRef.current.getBoundingClientRect();
-		const viewportWidth = Number.isFinite(window.innerWidth) ? window.innerWidth : rect.left + 264;
-		const viewportHeight = Number.isFinite(window.innerHeight) ? window.innerHeight : rect.top;
-		setPos({
-			left: Math.max(8, Math.min(rect.left, viewportWidth - 264)),
-			bottom: viewportHeight - rect.top + 6,
-		});
-	}, [menuOpen]);
+	useEffect(() => {
+		if (menuOpen && menuReady) menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+	}, [menuOpen, menuReady]);
 
 	useEffect(() => {
 		if (!menuOpen) return;
@@ -91,15 +86,37 @@ export function ComposerModes() {
 			setMenuOpen(false);
 		};
 		const onKeyDown = (event: KeyboardEvent) => {
-			onEscape(event, () => setMenuOpen(false));
+			if (
+				onEscape(event, () => {
+					setMenuOpen(false);
+					triggerRef.current?.focus();
+				})
+			) {
+				event.stopImmediatePropagation();
+			}
 		};
 		document.addEventListener("pointerdown", onDown);
-		document.addEventListener("keydown", onKeyDown);
+		document.addEventListener("keydown", onKeyDown, true);
 		return () => {
 			document.removeEventListener("pointerdown", onDown);
-			document.removeEventListener("keydown", onKeyDown);
+			document.removeEventListener("keydown", onKeyDown, true);
 		};
 	}, [menuOpen]);
+
+	const moveMenuFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+		const items = Array.from(event.currentTarget.querySelectorAll("button"));
+		if (items.length === 0) return;
+		event.preventDefault();
+		const current = items.indexOf(document.activeElement as HTMLButtonElement);
+		const next =
+			event.key === "Home"
+				? 0
+				: event.key === "End" || (event.key === "ArrowUp" && current < 0)
+					? items.length - 1
+					: (current + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
+		items[next]?.focus();
+	};
 
 	const update = async (action: () => Promise<RpcResponse>, mode: "settings" | "plan" | "prewalk" = "settings") => {
 		if (pending) return;
@@ -136,6 +153,7 @@ export function ComposerModes() {
 
 	const select = (action: () => void) => {
 		setMenuOpen(false);
+		triggerRef.current?.focus();
 		action();
 	};
 
@@ -147,6 +165,7 @@ export function ComposerModes() {
 				aria-expanded={menuOpen}
 				aria-haspopup="menu"
 				onClick={() => setMenuOpen(value => !value)}
+				aria-label={triggerTitle}
 				title={triggerTitle}
 				className={triggerClass(activeModeLabels.length > 0)}
 			>
@@ -160,14 +179,16 @@ export function ComposerModes() {
 				<ChevronDown size={12} className="shrink-0 text-[var(--omp-dim)]" />
 			</button>
 
-			{menuMounted && pos
+			{menuMounted
 				? createPortal(
 						<div
 							ref={menuRef}
-							style={{ left: pos.left, bottom: pos.bottom }}
+							style={menuStyle}
+							onKeyDown={moveMenuFocus}
+							data-composer-modes-menu
 							aria-hidden={menuClosing || undefined}
 							className={cx(
-								"fixed z-[100] w-72 overflow-hidden rounded-xl border border-[var(--omp-border)] bg-[var(--omp-panel-bg)] p-1 shadow-[var(--omp-shadow-md)]",
+								"omp-composer-menu fixed z-[110] overflow-y-auto rounded-xl border border-[var(--omp-border)] bg-[var(--omp-panel-bg)] p-1 shadow-[var(--omp-shadow-md)]",
 								menuClosing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
 							)}
 							role="menu"
@@ -287,10 +308,10 @@ function ModeRow({
 			role="menuitem"
 		>
 			<span className="min-w-0 flex-1">
-				<span className="block truncate text-omp-md font-medium text-[var(--omp-text-secondary)] group-hover:text-[var(--omp-text)]">
+				<span className="block break-words text-omp-md font-medium text-[var(--omp-text-secondary)] group-hover:text-[var(--omp-text)]">
 					{label}
 				</span>
-				<span className="block truncate text-omp-xs text-[var(--omp-dim)]">{description}</span>
+				<span className="block break-words text-omp-xs text-[var(--omp-dim)]">{description}</span>
 			</span>
 			{checked && <Check size={13} className="shrink-0 text-[var(--omp-accent)]" strokeWidth={3} />}
 			{navigates && <ChevronRight size={13} className="shrink-0 text-[var(--omp-dim)]" />}
@@ -307,7 +328,7 @@ function MoreRow({ label, checked, onToggle }: { label: string; checked: boolean
 			aria-checked={checked}
 			className="omp-pressable flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
 		>
-			<span className="truncate">{label}</span>
+			<span className="min-w-0 break-words">{label}</span>
 			<span
 				className={cx(
 					"relative h-4 w-7 shrink-0 rounded-full transition-colors",

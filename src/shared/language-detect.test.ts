@@ -10,9 +10,8 @@ describe("language detection", () => {
 		expect(detectLanguage({ locale: "th-TH" })).toBe("th");
 	});
 
-	it("takes the first supported entry of a preference list", () => {
-		// en-US leads, but the UI ships no `fr`, so `vi` is the first real match.
-		expect(detectLanguage({ locales: ["en-US", "fr-FR", "vi-VN"], locale: "en-US" })).toBe("en");
+	it("skips generic English defaults when another supported language is preferred", () => {
+		expect(detectLanguage({ locales: ["en-US", "fr-FR", "vi-VN"], locale: "en-US" })).toBe("vi");
 		expect(detectLanguage({ locales: ["fr-FR", "vi-VN"] })).toBe("vi");
 	});
 
@@ -21,6 +20,18 @@ describe("language detection", () => {
 		expect(detectLanguage({ timeZone: "Asia/Bangkok" })).toBe("th");
 		expect(detectLanguage({ timeZone: "Europe/Moscow" })).toBe("ru");
 		expect(detectLanguage({ timeZone: "Asia/Shanghai" })).toBe("zh");
+	});
+
+	it("detects Vietnam despite an English display language and Windows' shared time zone", () => {
+		expect(detectLanguage({ locale: "en-US", timeZone: "Asia/Saigon" })).toBe("vi");
+		expect(detectLanguage({ locale: "en-US", region: "VN", timeZone: "Asia/Bangkok" })).toBe("vi");
+		expect(detectLanguage({ locale: "en-VN" })).toBe("vi");
+	});
+
+	it("uses the Vietnamese product default for an ambiguous Windows zone, but honors the Thai region", () => {
+		const windows = { locale: "en-US", timeZone: "Asia/Bangkok", windows: true };
+		expect(detectLanguage({ ...windows, region: "US" })).toBe("vi");
+		expect(detectLanguage({ ...windows, region: "TH" })).toBe("th");
 	});
 
 	it("prefers an explicit preference over the zone", () => {

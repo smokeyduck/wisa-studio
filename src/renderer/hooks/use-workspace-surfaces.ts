@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { applyBrowserState, forgetTabBrowser, useBrowserStore } from "../stores/browser";
 import { useTabsStore } from "../stores/tabs";
 import {
 	applyTerminalTheme,
@@ -9,46 +8,29 @@ import {
 	useTerminalsStore,
 } from "../stores/terminals";
 import { useUiStore } from "../stores/ui";
-import { showBrowserWindow } from "../lib/browser-window";
 
 /**
- * Feeds the Terminal and Browser drawer views for every tab, mounted once at
- * the app root: terminal output and browser state arrive for background tabs
- * too, and the drawer comes forward when the agent needs the user there — a
- * `pty: true` command waiting for input, or a page it just opened.
+ * Feeds the Terminal drawer for every tab. The active tab can reveal a terminal
+ * that needs the user, such as a `pty: true` command waiting for input.
  */
 export function useWorkspaceSurfaces(): void {
 	useEffect(() => {
 		const events = window.omp?.events;
-		if (typeof events?.onTerminalFrame !== "function" || typeof events.onBrowserState !== "function") return;
-		const offTerminal = events.onTerminalFrame(({ tabId, frame }) => handleTerminalFrame(tabId, frame));
-		const offBrowser = events.onBrowserState(state => applyBrowserState(state, { reveal: true }));
-		return () => {
-			offTerminal();
-			offBrowser();
-		};
+		if (typeof events?.onTerminalFrame !== "function") return;
+		return events.onTerminalFrame(({ tabId, frame }) => handleTerminalFrame(tabId, frame));
 	}, []);
 
 	// Reveals only follow the tab the user is looking at.
 	useEffect(() => {
-		const offTerminal = useTerminalsStore.subscribe((state, previous) => {
+		return useTerminalsStore.subscribe((state, previous) => {
 			const reveal = state.reveal;
 			if (!reveal || reveal === previous.reveal || reveal.tabId !== useTabsStore.getState().activeTabId) return;
 			setActiveTerminal(reveal.tabId, reveal.terminalId);
 			useUiStore.getState().setPanelTab("terminal");
 		});
-		const offBrowser = useBrowserStore.subscribe((state, previous) => {
-			const reveal = state.reveal;
-			if (!reveal || reveal === previous.reveal || reveal.tabId !== useTabsStore.getState().activeTabId) return;
-			showBrowserWindow(reveal.tabId);
-		});
-		return () => {
-			offTerminal();
-			offBrowser();
-		};
 	}, []);
 
-	// A closed tab took its sidecar, terminals, and pages with it.
+	// A closed tab took its sidecar and terminals with it.
 	useEffect(
 		() =>
 			useTabsStore.subscribe((state, previous) => {
@@ -57,7 +39,6 @@ export function useWorkspaceSurfaces(): void {
 				for (const tab of previous.tabs) {
 					if (open.has(tab.id)) continue;
 					forgetTabTerminals(tab.id);
-					forgetTabBrowser(tab.id);
 				}
 			}),
 		[],

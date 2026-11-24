@@ -9,9 +9,8 @@ import { useTabRpc } from "../../lib/tab-rpc";
  * Settings window (Cmd+,): schema-driven editor for the agent settings
  * schema. Tabs, groups, labels, and control types all come from the
  * sidecar (get_settings_schema / get_settings RPC); writes go through
- * set_setting and apply immediately. Product pages sit beside the schema
- * tabs: "OMP Capabilities" surfaces differentiating workflows first, the
- * management pages (Skills, MCP, Resources, Hooks, Commands, Security, SSH,
+ * set_setting and apply immediately. The management pages (Skills, MCP,
+ * Resources, Hooks, Commands, SSH,
  * Updates) own their own data, and "Interface" and "Shortcuts" hold
  * renderer-local preferences persisted via prefs IPC. Entries without UI
  * metadata land in "Advanced".
@@ -36,9 +35,7 @@ import {
 	RotateCw,
 	Search,
 	Server,
-	ShieldCheck,
 	SlidersHorizontal,
-	Sparkles,
 	SquareTerminal,
 	Webhook,
 } from "lucide-react";
@@ -52,20 +49,15 @@ import {
 } from "../../../shared/launch-profile";
 import { isUnsupportedProxyUrl } from "../../../shared/proxy";
 import type { SettingEntry, SettingsSchemaResult, SidecarStatus } from "../../../shared/rpc-types";
-import { forkSessionFromGui, prefillComposer, retryFailedTurn } from "../../lib/command-registry";
 import { describeError } from "../../lib/errors";
-import { exportSessionHtml } from "../../lib/export-session";
 import { cx } from "../../lib/format";
 import { useLang, useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
 import { platformChord } from "../../lib/keymap";
 import { setCodeLineNumbersPref } from "../../lib/markdown";
-import { clearSessionContext, retryLastTurn as retryLastTurnShared } from "../../lib/messages";
-import { dumpTranscriptToClipboard } from "../../lib/transcript-copy";
 import { en } from "../../locales/en";
 import { ru } from "../../locales/ru";
 import { zh } from "../../locales/zh";
-import { openHandoffDialog } from "../../stores/fork-handoff";
 import { useMessagesStore } from "../../stores/messages";
 import { useSessionStore } from "../../stores/session";
 import {
@@ -78,7 +70,7 @@ import { type PendingRestart, usePendingRestarts } from "../../stores/settings-r
 import { toast } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
 import { CodeBlock } from "../chat/CodeBlock";
-import { Button, Input, Spinner, type TabItem, TextArea } from "../common";
+import { Button, ConfirmDialog, Input, Spinner, type TabItem, TextArea } from "../common";
 import { isTopmostDialog, registerDialogLayer } from "../common/dialog-layer";
 import { ExtensionSettingsPage } from "../panels/ExtensionsPanel";
 import { InventorySettingsPage, type TabId as InventoryTabId } from "../panels/InventoryPanel";
@@ -88,9 +80,7 @@ import { RadioGroup } from "./editors/RadioGroup";
 import { Section } from "./editors/Section";
 import { Toggle } from "./editors/Toggle";
 import { AdvancedTab } from "./pages/AdvancedTab";
-import { CapabilitiesHome, type CapabilityTarget } from "./pages/CapabilitiesHome";
 import { SchemaTabContent } from "./pages/SchemaTabContent";
-import { SecuritySettingsPage } from "./SecuritySettingsPage";
 import { ShortcutsSettingsPage } from "./ShortcutsSettingsPage";
 import { SkillsSettingsPage } from "./SkillsSettingsPage";
 import { SshSettingsPage } from "./SshSettingsPage";
@@ -104,7 +94,6 @@ import {
 import {
 	ADVANCED_TAB_ID,
 	buildSettingsNavGroups,
-	CAPABILITIES_TAB_ID,
 	COMMANDS_TAB_ID,
 	FILL_HEIGHT_TAB_IDS,
 	GUI_SETTING_SEARCH_ITEMS,
@@ -118,23 +107,21 @@ import {
 	MANAGEMENT_TAB_IDS,
 	MCP_TAB_ID,
 	RESOURCES_TAB_ID,
-	SECURITY_TAB_ID,
 	type SettingsResponseData,
 	SHORTCUTS_TAB_ID,
 	SKILLS_TAB_ID,
 	SSH_TAB_ID,
 	UPDATES_TAB_ID,
 } from "./settings-window-model";
+import { ToolProfilesSetting } from "./ToolProfilesSetting";
 import { UpdatesSettingsPage } from "./UpdatesSettingsPage";
 
 const SETTINGS_NAV_ICONS: Record<string, typeof SlidersHorizontal> = {
-	[CAPABILITIES_TAB_ID]: Sparkles,
 	[SKILLS_TAB_ID]: BookOpen,
 	[MCP_TAB_ID]: Network,
 	[RESOURCES_TAB_ID]: Blocks,
 	[HOOKS_TAB_ID]: Webhook,
 	[COMMANDS_TAB_ID]: Braces,
-	[SECURITY_TAB_ID]: ShieldCheck,
 	[SSH_TAB_ID]: Server,
 	[UPDATES_TAB_ID]: HardDriveDownload,
 	[SHORTCUTS_TAB_ID]: Keyboard,
@@ -293,6 +280,7 @@ export function SettingsWindow() {
 	const [focusedSetting, setFocusedSetting] = useState<string | null>(null);
 	const open = useUiStore(state => state.settingsOpen);
 	const requestedTab = useUiStore(state => state.settingsTab);
+	const requestedQuery = useUiStore(state => state.settingsQuery);
 	const close = useUiStore(state => state.closeSettings);
 	const setFontSize = useUiStore(state => state.setFontSize);
 	const pasteMenuThreshold = useDisplayPreference("pasteMenuThreshold");
@@ -316,20 +304,21 @@ export function SettingsWindow() {
 	const transcriptDetail = useUiStore(state => state.transcriptDetail);
 	const tabWidth = useUiStore(state => state.tabWidth);
 	const tabRows = useUiStore(state => state.tabRows);
-	const linkOpenMode = useUiStore(state => state.linkOpenMode);
 	const collapseLargePastes = useUiStore(state => state.collapseLargePastes);
 	const sidecarStatus = useSessionStore(state => state.status);
 	const sidecarReady = sidecarStatus === "ready";
 	const sidecarError = useUiStore(state => state.sidecarError);
 	const clearSidecarError = useUiStore(state => state.clearSidecarError);
 
-	const [tab, setTab] = useState(CAPABILITIES_TAB_ID);
-	const [resourceTab, setResourceTab] = useState<InventoryTabId>("plugins");
+	const [tab, setTab] = useState(GUI_TAB_ID);
+	const [resourceTab, setResourceTab] = useState<InventoryTabId>("catalog");
 	const [query, setQuery] = useState("");
 	const [loadState, setLoadState] = useState<LoadState>("loading");
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [schema, setSchema] = useState<SettingsSchemaResult | null>(null);
 	const [values, setValues] = useState<Record<string, unknown>>({});
+	const [confirmReset, setConfirmReset] = useState(false);
+	const [resetting, setResetting] = useState(false);
 	const [fontSizeDraft, setFontSizeDraft] = useState<string | null>(null);
 	const [proxyDraft, setProxyDraft] = useState<string | null>(null);
 	const [savedProxy, setSavedProxy] = useState("");
@@ -367,7 +356,6 @@ export function SettingsWindow() {
 		}
 	};
 	const [reloadToken, setReloadToken] = useState(0);
-	const [advisorActive, setAdvisorActive] = useState<boolean>();
 	const retrySettingsConnection = useCallback(() => {
 		clearSidecarError();
 		setReloadToken(token => token + 1);
@@ -382,13 +370,31 @@ export function SettingsWindow() {
 			);
 	}, [clearSidecarError, sidecarBusy, sidecarStatus, t]);
 
+	const resetSettings = async () => {
+		setResetting(true);
+		try {
+			const result = await window.omp.prefs.resetSettings();
+			if (result === "restarting") return;
+			if (result === "saved") {
+				setConfirmReset(false);
+				setReloadToken(token => token + 1);
+			}
+			toast({ variant: result === "saved" ? "info" : "warning", message: t(`settings.reset.${result}`) });
+		} catch (error) {
+			toast({ variant: "error", title: t("settings.reset.failed"), message: describeError(error) });
+		} finally {
+			setResetting(false);
+		}
+	};
+
 	useEffect(() => {
 		if (!open) return;
 		const target = resolveSettingsTarget(requestedTab);
 		if (target.resourceTab) setResourceTab(target.resourceTab);
 		setTab(target.tab);
-		setQuery("");
-	}, [open, requestedTab]);
+		setQuery(requestedQuery);
+		setFocusedSetting(null);
+	}, [open, requestedTab, requestedQuery]);
 
 	// Hydrate the schema, current values, and GUI prefs each time the window
 	// opens or the sidecar reconnects.
@@ -422,7 +428,6 @@ export function SettingsWindow() {
 					const data = settingsRes.data as SettingsResponseData | undefined;
 					if (data?.values) Object.assign(nextValues, data.values);
 					if (typeof data?.advisorEnabled === "boolean") nextValues["advisor.enabled"] = data.advisorEnabled;
-					setAdvisorActive(data?.advisorActive);
 				}
 				setFontSizeDraft(null);
 				setSchema(result);
@@ -484,7 +489,6 @@ export function SettingsWindow() {
 									}
 								: previous,
 						);
-					setAdvisorActive(data.advisorActive);
 				})
 				.catch(() => {});
 		});
@@ -558,9 +562,6 @@ export function SettingsWindow() {
 	const applyTabRows = (multi: boolean) => {
 		const next = multi ? "multi" : "single";
 		return saveGuiPreference("tabRows", next, () => useUiStore.getState().setTabRows(next));
-	};
-	const applyLinkOpenMode = (next: typeof linkOpenMode) => {
-		void saveGuiPreference("linkOpenMode", next, () => useUiStore.getState().setLinkOpenMode(next));
 	};
 	const applyCollapseLargePastes = (next: boolean) => {
 		return saveGuiPreference("collapseLargePastes", next, () => useUiStore.getState().setCollapseLargePastes(next));
@@ -741,7 +742,7 @@ export function SettingsWindow() {
 	);
 	const showsSchemaSettings = general || isAgentSchemaTab(tab, schema);
 	const managementTab = MANAGEMENT_TAB_IDS.has(tab);
-	const wideTab = managementTab || tab === CAPABILITIES_TAB_ID;
+	const wideTab = managementTab;
 	const showGlobalSearch = true;
 
 	// The search field advertises Cmd/Ctrl+K. Capture it while Settings is open
@@ -869,200 +870,6 @@ export function SettingsWindow() {
 		return () => document.removeEventListener("keydown", onKey, true);
 	}, [open, close]);
 
-	const openCapabilityTarget = useCallback(
-		(target: CapabilityTarget) => {
-			const external = (openWindow: () => void) => {
-				close();
-				openWindow();
-			};
-			const settingsPage = (nextTab: string) => {
-				setTab(nextTab);
-				setQuery("");
-				setFocusedSetting(null);
-			};
-			const runAsync = (action: () => Promise<unknown>) => {
-				close();
-				void action().catch(error =>
-					toast({ variant: "error", title: t("palette.failed"), message: String(error) }),
-				);
-			};
-			const prefill = (text: string) => {
-				close();
-				prefillComposer(text);
-			};
-			switch (target) {
-				case "model":
-					external(() => useUiStore.getState().openModelPicker());
-					return;
-				case "modelRoles":
-					external(() => useUiStore.getState().openModelRoles());
-					return;
-				case "modelCompare":
-					external(() => useUiStore.getState().openModelCompare());
-					return;
-				case "benchmark":
-					external(() => useUiStore.getState().openBenchmark());
-					return;
-				case "providers":
-					external(() => useUiStore.getState().openProviders());
-					return;
-				case "providerConfig":
-					external(() => useUiStore.getState().openProviderConfig());
-					return;
-				case "usage":
-					external(() => useUiStore.getState().openUsage());
-					return;
-				case "agents":
-					external(() => useUiStore.getState().openAgentHub());
-					return;
-				case "skills":
-					settingsPage(SKILLS_TAB_ID);
-					return;
-				case "mcp":
-					settingsPage(MCP_TAB_ID);
-					return;
-				case "resources":
-					setResourceTab("plugins");
-					settingsPage(RESOURCES_TAB_ID);
-					return;
-				case "marketplaces":
-					setResourceTab("marketplaces");
-					settingsPage(RESOURCES_TAB_ID);
-					return;
-				case "templates":
-					setResourceTab("templates");
-					settingsPage(RESOURCES_TAB_ID);
-					return;
-				case "memoryResources":
-					setResourceTab("memory");
-					settingsPage(RESOURCES_TAB_ID);
-					return;
-				case "hooks":
-					settingsPage(HOOKS_TAB_ID);
-					return;
-				case "commands":
-					settingsPage(COMMANDS_TAB_ID);
-					return;
-				case "security":
-					settingsPage(SECURITY_TAB_ID);
-					return;
-				case "ssh":
-					settingsPage(SSH_TAB_ID);
-					return;
-				case "updates":
-					settingsPage(UPDATES_TAB_ID);
-					return;
-				case "modes":
-					external(() => useUiStore.getState().openModes());
-					return;
-				case "vibe":
-					external(() => useUiStore.getState().openModes("vibe"));
-					return;
-				case "collab":
-					external(() => useUiStore.getState().openCollab());
-					return;
-				case "live":
-					external(() => useUiStore.getState().openLive());
-					return;
-				case "debug":
-					external(() => useUiStore.getState().openDebug());
-					return;
-				case "clear":
-					runAsync(() => clearSessionContext());
-					return;
-				case "import":
-					external(() => useUiStore.getState().openImportDialog());
-					return;
-				case "sessionInfo":
-					external(() => useUiStore.getState().openSessionInfo());
-					return;
-				case "sessionTree":
-					external(() => useUiStore.getState().openSessionTree());
-					return;
-				case "share":
-					external(() => useUiStore.getState().openShareSession());
-					return;
-				case "handoff":
-					external(() => openHandoffDialog());
-					return;
-				case "export":
-					runAsync(() => exportSessionHtml());
-					return;
-				case "dump":
-					runAsync(() => dumpTranscriptToClipboard());
-					return;
-				case "fork":
-					runAsync(() => forkSessionFromGui());
-					return;
-				case "retry":
-					runAsync(() => retryFailedTurn());
-					return;
-				case "resend":
-					runAsync(() =>
-						retryLastTurnShared(() =>
-							toast({
-								variant: "warning",
-								title: t("palette.retryNothing"),
-								message: t("palette.retryNothingDesc"),
-							}),
-						),
-					);
-					return;
-				case "btw":
-					prefill("/btw ");
-					return;
-				case "tan":
-					prefill("/tan ");
-					return;
-				case "omfg":
-					prefill("/omfg ");
-					return;
-				case "guidedGoal":
-					prefill("/guided-goal ");
-					return;
-				case "queue":
-					prefill("-> ");
-					return;
-				case "workspaceDirs":
-					external(() => useUiStore.getState().openWorkspaceDirs());
-					return;
-				case "prCenter":
-					external(() => useUiStore.getState().openPrCenter());
-					return;
-				case "context":
-					external(() => useUiStore.getState().openContextReport());
-					return;
-				case "tools":
-					external(() => useUiStore.getState().openActiveTools());
-					return;
-				case "stats":
-					external(() => useUiStore.getState().openStatsDashboard());
-					return;
-				case "jobs":
-					external(() => useUiStore.getState().openJobs());
-					return;
-				case "hotkeys":
-					external(() => useUiStore.getState().openHotkeys());
-					return;
-				case "theme":
-					external(() => useUiStore.getState().openThemePicker());
-					return;
-				case "settings":
-					settingsPage(GUI_TAB_ID);
-					return;
-				case "changelog":
-					external(() => useUiStore.getState().openChangelog());
-					return;
-				case "copy":
-					external(() => useUiStore.getState().openCopySelector());
-					return;
-				case "force":
-					external(() => useUiStore.getState().openForceTool());
-			}
-		},
-		[close, t],
-	);
-
 	if (!open) return null;
 
 	const tabTitle = (tb: TabItem): string => {
@@ -1140,6 +947,16 @@ export function SettingsWindow() {
 							);
 						})}
 					</div>
+					<div className="shrink-0 border-t border-(--omp-border-muted) px-3 py-2">
+						<button
+							className="omp-pressable flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-omp-sm text-(--omp-muted) hover:bg-(--omp-selected-bg) hover:text-(--omp-text)"
+							onClick={() => setConfirmReset(true)}
+							type="button"
+						>
+							<RotateCcw aria-hidden="true" size={14} />
+							{t("settings.reset.title")}
+						</button>
+					</div>
 				</nav>
 				<main className="settings-main-canvas flex min-w-0 flex-1 flex-col overflow-hidden">
 					<header
@@ -1190,6 +1007,7 @@ export function SettingsWindow() {
 								/>
 								{searchGroups === null ? (
 									<>
+										{tab === "tools" && <ToolProfilesSetting key={reloadToken} />}
 										{tab === SKILLS_TAB_ID && <SkillsSettingsPage query={query} />}
 										{tab === MCP_TAB_ID && <ExtensionSettingsPage query={query} tabId="mcp" />}
 										{tab === RESOURCES_TAB_ID && (
@@ -1197,59 +1015,9 @@ export function SettingsWindow() {
 										)}
 										{tab === HOOKS_TAB_ID && <ExtensionSettingsPage query={query} tabId="hooks" />}
 										{tab === COMMANDS_TAB_ID && <ExtensionSettingsPage query={query} tabId="commands" />}
-										{tab === SECURITY_TAB_ID && <SecuritySettingsPage />}
 										{tab === SSH_TAB_ID && <SshSettingsPage />}
 										{tab === UPDATES_TAB_ID && <UpdatesSettingsPage />}
 										{tab === SHORTCUTS_TAB_ID && <ShortcutsSettingsPage />}
-										{tab === CAPABILITIES_TAB_ID && (
-											<CapabilitiesHome
-												advisorActive={advisorActive}
-												advisorEnabled={values["advisor.enabled"] === true}
-												memoryBackend={
-													typeof values["memory.backend"] === "string" ? values["memory.backend"] : ""
-												}
-												onConfigureAdvisor={() => {
-													setTab("model");
-													setQuery("advisor");
-												}}
-												onConfigureTtsr={() => {
-													setTab("context");
-													setQuery("ttsr");
-												}}
-												onOpenAgents={() => {
-													close();
-													useUiStore.getState().openAgentHub("definitions");
-												}}
-												onOpenGoal={() => {
-													close();
-													useUiStore.getState().openModes("goal");
-												}}
-												onOpenLoop={() => {
-													close();
-													useUiStore.getState().openModes("loop");
-												}}
-												onOpenMemory={() => {
-													setTab("memory");
-													setQuery("");
-												}}
-												onOpenTools={() => {
-													setTab("tools");
-													setQuery("");
-												}}
-												onOpenCommandCenter={() => {
-													close();
-													useUiStore.getState().openCommandPalette();
-												}}
-												onOpenTarget={openCapabilityTarget}
-												onOpenModelRoles={() => {
-													close();
-													useUiStore.getState().openModelRoles();
-												}}
-												ready={loadState === "ready" && sidecarReady}
-												ttsrEnabled={values["ttsr.enabled"] === true}
-											/>
-										)}
-
 										{tab === GUI_TAB_ID && (
 											<>
 												<Section id="setting-gui-theme" title={t("settings.gui.themeSection")}>
@@ -1404,25 +1172,6 @@ export function SettingsWindow() {
 														description={t("settings.gui.tabRowsDesc")}
 														label={t("settings.gui.tabRows")}
 														onChange={applyTabRows}
-													/>
-												</Section>
-												<Section id="setting-gui-linkOpenMode" title={t("settings.gui.linkOpenMode")}>
-													<RadioGroup
-														name="linkOpenMode"
-														onChange={applyLinkOpenMode}
-														options={[
-															{
-																value: "panel",
-																label: t("settings.gui.linkOpenMode.panel"),
-																description: t("settings.gui.linkOpenMode.panelDesc"),
-															},
-															{
-																value: "external",
-																label: t("settings.gui.linkOpenMode.external"),
-																description: t("settings.gui.linkOpenMode.externalDesc"),
-															},
-														]}
-														value={linkOpenMode}
 													/>
 												</Section>
 												<Section id="setting-gui-sidebarQuotas" title={t("settings.gui.sidebarQuotas")}>
@@ -1814,6 +1563,17 @@ export function SettingsWindow() {
 					</div>
 				</main>
 			</div>
+			<ConfirmDialog
+				busy={resetting}
+				confirmLabel={t("settings.reset.confirm")}
+				message={t("settings.reset.description")}
+				onCancel={() => {
+					if (!resetting) setConfirmReset(false);
+				}}
+				onConfirm={() => void resetSettings()}
+				open={confirmReset}
+				title={t("settings.reset.title")}
+			/>
 		</div>,
 		document.body,
 	);

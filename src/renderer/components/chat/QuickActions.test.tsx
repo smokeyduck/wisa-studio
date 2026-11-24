@@ -1,16 +1,23 @@
 import { parseHTML } from "linkedom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AgentMessage, RpcCommand, RpcResponse } from "../../../shared/rpc-types";
 import { I18nProvider, translate } from "../../lib/i18n";
-import { useMessagesStore } from "../../stores/messages";
-import { useSessionStore } from "../../stores/session";
-import { setFocusedSessionRuntime } from "../../stores/session-runtime-context";
+import { type MessagesStore, useMessagesStore } from "../../stores/messages";
+import { type SessionStore, useSessionStore } from "../../stores/session";
+import {
+	SessionRuntimeProvider,
+	sessionRuntimeStore,
+	setFocusedSessionRuntime,
+} from "../../stores/session-runtime-context";
+import { createTabRuntime } from "../../stores/tab-runtime";
 import { useTabsStore } from "../../stores/tabs";
 import { activeWorkspacePage, useUiStore } from "../../stores/ui";
 import { useWorkspaceMode } from "../../stores/workspace-mode";
 import { ModesPanel } from "../panels/ModesPanel";
 import { ChatStream } from "./ChatStream";
+import { ReadOnlyTranscriptContext } from "./transcript-mode";
 
 const {
 	document,
@@ -178,5 +185,145 @@ describe("compact quick setup surfaces", () => {
 		await mount(<ModesPanel open onClose={() => {}} initialTab={tab} />);
 		expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
 		expect(document.querySelector(".omp-dialog-size-md")).not.toBeNull();
+	});
+});
+
+describe("older transcript history", () => {
+	it("requests one boundary per click at most three times, without replacing the live transcript", async () => {
+		const runtime = createTabRuntime("older-history");
+		const session = sessionRuntimeStore<SessionStore>(runtime.tabId, "session")!;
+		const messages = sessionRuntimeStore<MessagesStore>(runtime.tabId, "messages")!;
+		const late = Promise.withResolvers<RpcResponse>();
+		const commandForTab = vi.fn(async (_tabId: string, command: RpcCommand): Promise<RpcResponse> => {
+			if (command.type !== "get_transcript_page" || !command.archive) throw new Error("Unexpected archive command");
+			if (command.archive.boundaryId === "second-boundary") return late.promise;
+			const depth = command.archive.depth;
+			return {
+				type: "response",
+				command: command.type,
+				success: true,
+				data: {
+					messages: [{ role: "user", entryId: `older-${depth}`, content: `Old ${depth}`, timestamp: depth }],
+					totalMessages: 1,
+					hasOlder: true,
+				},
+			};
+		});
+		const savedBridge = bridge.omp;
+		bridge.omp = {
+			...(savedBridge as object),
+			rpc: {
+				commandForTab: (tabId: string, command: RpcCommand) =>
+					command.type === "get_queue"
+						? Promise.resolve({
+								type: "response",
+								command: command.type,
+								success: true,
+								data: { steering: [], followUp: [] },
+							})
+						: commandForTab(tabId, command),
+			},
+		};
+		useTabsStore.setState({
+			tabs: [{ id: runtime.tabId, cwd: "/project", status: "ready", kind: "agent", unreadDone: false }],
+			activeTabId: runtime.tabId,
+		});
+		session.setState({ status: "ready", sessionId: "session-with-archive" });
+		const live: AgentMessage[] = [
+			{
+				role: "compactionSummary",
+				entryId: "handoff-boundary",
+				summary: "Handoff",
+				method: "handoff",
+				tokensBefore: 10,
+				timestamp: 5,
+			},
+			{ role: "user", entryId: "live-user", content: "Latest", timestamp: 6 },
+		];
+		messages.setState({ messages: live });
+		const action = (key: string) =>
+			[...document.querySelectorAll<HTMLButtonElement>("button")].find(
+				button => button.textContent?.trim() === translate(key),
+			);
+		const click = async (key: string) => {
+			const button = action(key);
+			expect(button).toBeDefined();
+			await act(async () => {
+				button?.dispatchEvent(new Event("click", { bubbles: true }));
+			});
+		};
+		try {
+			await mount(
+				<SessionRuntimeProvider runtime={runtime}>
+					<ChatStream />
+				</SessionRuntimeProvider>,
+			);
+			expect(commandForTab).not.toHaveBeenCalled();
+			await click("chat.olderHistory.open");
+			await click("chat.olderHistory.more");
+			await click("chat.olderHistory.more");
+			expect(action("chat.olderHistory.more")?.getAttribute("aria-disabled")).toBe("true");
+			await click("chat.olderHistory.more");
+			expect(
+				commandForTab.mock.calls.map(
+					([, command]) => command.type === "get_transcript_page" && command.archive?.depth,
+				),
+			).toEqual([0, 1, 2]);
+			expect(messages.getState().messages).toBe(live);
+
+			await act(async () => {
+				messages.setState({ messages: [{ ...live[0], entryId: "second-boundary", method: "soft" }, live[1]] });
+			});
+			await click("chat.olderHistory.open");
+			expect(commandForTab).toHaveBeenCalledTimes(4);
+			await act(async () => {
+				session.setState({ switchPending: { fromId: "session-with-archive", toId: "different" } });
+				late.resolve({
+					type: "response",
+					command: "get_transcript_page",
+					success: true,
+					data: {
+						messages: [{ role: "user", content: "Stale archive", timestamp: 1 }],
+						totalMessages: 1,
+						hasOlder: false,
+					},
+				});
+			});
+			expect(action("chat.olderHistory.open")).toBeUndefined();
+			expect(document.body.textContent).not.toContain("Stale archive");
+		} finally {
+			bridge.omp = savedBridge;
+		}
+	});
+
+	it("has no archive control in a read-only subagent transcript", async () => {
+		const runtime = createTabRuntime("readonly-history");
+		useTabsStore.setState({
+			tabs: [{ id: runtime.tabId, cwd: "/project", status: "ready", kind: "agent", unreadDone: false }],
+			activeTabId: runtime.tabId,
+		});
+		sessionRuntimeStore<SessionStore>(runtime.tabId, "session")?.setState({
+			status: "ready",
+			sessionId: "agent-archive",
+		});
+		sessionRuntimeStore<MessagesStore>(runtime.tabId, "messages")?.setState({
+			messages: [
+				{
+					role: "compactionSummary",
+					entryId: "readonly-boundary",
+					summary: "Subagent compaction",
+					tokensBefore: 10,
+					timestamp: 5,
+				},
+			],
+		});
+		await mount(
+			<SessionRuntimeProvider runtime={runtime}>
+				<ReadOnlyTranscriptContext.Provider value={{ authorLabel: "Parent" }}>
+					<ChatStream />
+				</ReadOnlyTranscriptContext.Provider>
+			</SessionRuntimeProvider>,
+		);
+		expect(document.body.textContent).not.toContain(translate("chat.olderHistory.open"));
 	});
 });

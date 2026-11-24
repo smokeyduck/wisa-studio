@@ -1,12 +1,18 @@
 import { Bell } from "lucide-react";
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { TaskNotice } from "../../../shared/scheduler-types";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { isDevOverlayEvent } from "../../lib/dev-overlay";
+import { describeProviderError } from "../../lib/errors";
 import { cx, formatTimeAgo } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { useSchedulerStore } from "../../stores/scheduler";
+import type { SessionStore } from "../../stores/session";
+import { sessionRuntimeStore } from "../../stores/session-runtime-context";
+import { useTabsStore } from "../../stores/tabs";
+import { useTurnNoticesStore } from "../../stores/turn-notices";
+import { useUiStore } from "../../stores/ui";
 
 const PANEL_WIDTH = 360;
 const VIEWPORT_EDGE = 12;
@@ -17,20 +23,53 @@ const TONE_DOT: Record<TaskNotice["tone"], string> = {
 	failed: "bg-(--omp-error)",
 };
 
-/** Unread notices; the list keeps read ones too, newest first. */
+/** Unread scheduled runs, also shown on the Scheduled Tasks navigation item. */
 export function useUnreadNoticeCount(): number {
-	return useSchedulerStore(state => state.notices.reduce((count, notice) => count + (notice.read ? 0 : 1), 0));
+	return useSchedulerStore(state => state.notices.reduce((count, notice) => count + Number(!notice.read), 0));
 }
 
 /**
- * The title bar's notification list: scheduled runs that finished (as each
- * task's notify setting chooses), newest first. A red count marks the unread
- * ones; opening a notice lands on its run and marks it read.
+ * Finished turns and scheduled runs, newest first. Opening a notice marks
+ * it read and returns to its source when that target is still available.
  */
 export function NotificationBell({ className }: { className: string }) {
 	const t = useT();
-	const notices = useSchedulerStore(state => state.notices);
-	const unread = useUnreadNoticeCount();
+	const scheduled = useSchedulerStore(state => state.notices);
+	const turns = useTurnNoticesStore(state => state.notices);
+	const notices = useMemo(
+		() =>
+			[
+				...scheduled.map(notice => ({
+					...notice,
+					id: `task:${notice.id}`,
+					open: () => useSchedulerStore.getState().openNotice(notice),
+				})),
+				...turns.map(notice => ({
+					...notice,
+					id: `turn:${notice.id}`,
+					title: notice.title || t("sessionTree.untitled"),
+					body:
+						notice.tone === "done"
+							? t("events.notificationComplete")
+							: notice.detail
+								? t("events.notificationErrorDetail", { error: describeProviderError(notice.detail) })
+								: t("events.notificationError"),
+					open: () => {
+						useTurnNoticesStore.getState().markRead(notice.id);
+						const tabs = useTabsStore.getState();
+						const target = tabs.tabs.find(tab => tab.id === notice.tabId);
+						if (!target) return;
+						const sessionId =
+							sessionRuntimeStore<SessionStore>(target.id, "session")?.getState().sessionId || target.sessionId;
+						if (notice.sessionId && notice.sessionId !== sessionId) return;
+						useUiStore.getState().returnToConversation();
+						void tabs.switchTab(target.id);
+					},
+				})),
+			].sort((a, b) => b.createdAt - a.createdAt),
+		[scheduled, t, turns],
+	);
+	const unread = useUnreadNoticeCount() + turns.reduce((count, notice) => count + Number(!notice.read), 0);
 	const [open, setOpen] = useState(false);
 	const [style, setStyle] = useState<CSSProperties | null>(null);
 	const { mounted, closing } = useOverlayPresence(open);
@@ -119,7 +158,10 @@ export function NotificationBell({ className }: { className: string }) {
 							<button
 								type="button"
 								disabled={unread === 0}
-								onClick={() => useSchedulerStore.getState().markAllNoticesRead()}
+								onClick={() => {
+									useSchedulerStore.getState().markAllNoticesRead();
+									useTurnNoticesStore.getState().markRead();
+								}}
 								className="omp-pressable rounded-md px-1.5 py-0.5 text-omp-sm text-[var(--omp-link)] hover:bg-[var(--omp-selected-bg)] disabled:pointer-events-none disabled:text-[var(--omp-dim)]"
 							>
 								{t("notices.markAllRead")}
@@ -136,7 +178,7 @@ export function NotificationBell({ className }: { className: string }) {
 											data-notice={notice.read ? "read" : "unread"}
 											onClick={() => {
 												setOpen(false);
-												useSchedulerStore.getState().openNotice(notice);
+												notice.open();
 											}}
 											className="omp-pressable flex w-full items-start gap-2.5 px-4 py-2 text-left hover:bg-[var(--omp-selected-bg)]"
 										>

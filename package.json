@@ -10,10 +10,10 @@
     "type": "git",
     "url": "https://github.com/smokeyduck/wisa-studio.git"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE-SCOPE.md",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "bun scripts/build-dev-sidecar.ts && electron-vite dev",
+    "dev": "bun scripts/dev.ts",
     "build": "electron-vite build && bun scripts/check-main-bundle.ts",
     "preview": "electron-vite preview",
     "package": "bun run build && electron-builder",

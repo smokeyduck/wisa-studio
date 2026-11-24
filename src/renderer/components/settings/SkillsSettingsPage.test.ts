@@ -113,6 +113,13 @@ describe("Skills settings management", () => {
 		});
 		await flush();
 
+		const installedTab = document.querySelector('[data-tab-id="installed"]');
+		if (!installedTab) throw new Error("missing Installed tab");
+		await act(async () => {
+			installedTab.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
+		});
+		await flush();
+
 		const buttons = Array.from(document.querySelectorAll("button")) as unknown as TestElement[];
 		const createButton = buttons.find(button => button.textContent?.includes("New managed skill"));
 		if (!createButton) throw new Error("missing New managed skill button");

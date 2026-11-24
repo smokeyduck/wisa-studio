@@ -76,6 +76,20 @@ describe("dedupeCatalog", () => {
 		).toEqual(["apollo@first"]);
 	});
 
+	it("prefers the higher-ranked default when an upgraded registry lists it later", () => {
+		const earlier = DEFAULT_CATALOGS[0];
+		const later = DEFAULT_CATALOGS.at(-1);
+		if (!earlier || !later || earlier === later) throw new Error("Expected two distinct default catalogs");
+		const info = { description: "Prospect leads" };
+		const firstDefault = from({ ...earlier, source: `https://github.com/${earlier.source}` }, info);
+		const lastDefault = from(later, info);
+		const custom = from(FIRST, info);
+		expect(ids(lastDefault, firstDefault)).toEqual([firstDefault.id]);
+		expect(ids(from(later, { ...info, installed: true }), firstDefault)).toEqual([lastDefault.id]);
+		expect(ids(custom, lastDefault, firstDefault)).toEqual([custom.id]);
+		expect(ids(firstDefault, custom)).toEqual([firstDefault.id]);
+	});
+
 	it("treats a matching description as the same plugin when one catalog carries its own copy", () => {
 		expect(
 			ids(
@@ -130,6 +144,14 @@ describe("DEFAULT_CATALOGS", () => {
 		// The catalog names itself "skills", and the agent keys its registry by that name.
 		expect(names.get("microsoft/skills")).toBe("skills");
 		expect(names.get("openai/codex-plugin-cc")).toBe("openai-codex");
+		expect(names.get("aws/agent-toolkit-for-aws")).toBe("agent-toolkit-for-aws");
+		expect(names.get("dotnet/skills")).toBe("dotnet-agent-skills");
+		expect(names.get("flutter/agent-plugins")).toBe("dart-flutter");
+	});
+
+	it("recognises community catalogs by their declared names", () => {
+		expect(names.get("EveryInc/compound-engineering-plugin")).toBe("compound-engineering-plugin");
+		expect(names.get("anthropics/claude-plugins-community")).toBe("claude-community");
 	});
 
 	it("names every catalog once, and never with an address twice", () => {
@@ -152,12 +174,15 @@ describe("DEFAULT_CATALOGS", () => {
 			position.get("anthropics/claude-plugins-official") ?? Number.POSITIVE_INFINITY,
 			position.get("microsoft/skills") ?? Number.POSITIVE_INFINITY,
 			position.get("openai/codex-plugin-cc") ?? Number.POSITIVE_INFINITY,
+			position.get("workos/skills") ?? Number.POSITIVE_INFINITY,
 		);
 		for (const community of [
 			"wshobson/agents",
 			"trailofbits/skills",
 			"obra/superpowers-marketplace",
 			"phuryn/pm-skills",
+			"EveryInc/compound-engineering-plugin",
+			"anthropics/claude-plugins-community",
 		])
 			expect(position.get(community)).toBeGreaterThan(lastVendor);
 	});

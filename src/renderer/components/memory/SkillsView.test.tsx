@@ -49,6 +49,9 @@ let container: HTMLElement;
 let root: Root;
 let current: { modifiedAt: number; body: string };
 let prefsSet: Mock;
+let effectiveAutolearn: boolean | undefined;
+let configUpdate: (() => void) | undefined;
+const setSetting = vi.fn(async () => ok({ value: effectiveAutolearn }));
 
 async function flush(rounds = 3): Promise<void> {
 	for (let i = 0; i < rounds; i++) {
@@ -69,6 +72,9 @@ function reactProps(element: Element | null): Record<string, ((event: object) =>
 beforeEach(async () => {
 	current = { modifiedAt: 100, body: V1 };
 	prefsSet = vi.fn(async () => {});
+	effectiveAutolearn = true;
+	configUpdate = undefined;
+	setSetting.mockClear();
 	(window as unknown as { omp: unknown }).omp = {
 		prefs: { get: vi.fn(async () => undefined), set: prefsSet },
 		rpc: {
@@ -76,7 +82,16 @@ beforeEach(async () => {
 			getSkillDetail: vi.fn(async () =>
 				ok({ ...info(current.modifiedAt), body: current.body } satisfies RpcSkillDetail),
 			),
-			getSettings: vi.fn(async () => ok({ values: { "autolearn.enabled": true } })),
+			getSettings: vi.fn(async () => ok({ values: { "autolearn.enabled": effectiveAutolearn } })),
+			setSetting,
+		},
+		events: {
+			onConfigUpdate: (callback: () => void) => {
+				configUpdate = callback;
+				return () => {
+					configUpdate = undefined;
+				};
+			},
 		},
 	};
 	useSessionStore.setState({ status: "ready" });
@@ -137,5 +152,27 @@ describe("SkillsView review of a rewritten skill", () => {
 		expect(useSkillReviewStore.getState().reviewed["release-build"]?.modifiedAt).toBe(300);
 		expect(container.textContent).not.toContain("Updated");
 		expect(prefsSet).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("SkillsView Auto-Learn", () => {
+	const toggle = () => container.querySelector('[role="switch"][aria-label="Learn new skills"]');
+
+	it("shows the effective value and refetches it after a settings update", async () => {
+		expect(toggle()?.getAttribute("aria-checked")).toBe("true");
+		effectiveAutolearn = false;
+		await act(async () => configUpdate?.());
+		expect(toggle()?.getAttribute("aria-checked")).toBe("false");
+		effectiveAutolearn = undefined;
+		await act(async () => configUpdate?.());
+		expect(toggle()).toBeNull();
+	});
+
+	it("does not show an override-masked write as enabled", async () => {
+		effectiveAutolearn = false;
+		await act(async () => configUpdate?.());
+		await act(async () => reactProps(toggle()).onClick?.({}));
+		expect(setSetting).toHaveBeenCalledWith("autolearn.enabled", true);
+		expect(toggle()?.getAttribute("aria-checked")).toBe("false");
 	});
 });

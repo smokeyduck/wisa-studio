@@ -1,170 +1,131 @@
-/**
- * Agent Hub definitions tab: settings-backed state (disabled agents, model
- * overrides, prewalk overrides) loaded through get_settings, plus the
- * optimistic-mutation hook. Extracted verbatim from AgentHubWindow.tsx.
- */
+/** Load Agent Hub settings and model projections together for the owning chat. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RpcAgentDefinitionInfo, RpcResponse } from "../../../shared/rpc-types";
+import type { RpcAgentDefinitionInfo } from "../../../shared/rpc-types";
 import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
+import { useTabRpc } from "../../lib/tab-rpc";
 import { useSessionStore } from "../../stores/session";
 import { toast } from "../../stores/toast";
 
 export interface AgentSettingsState {
 	disabledAgents: string[];
-	modelOverrides: Record<string, string>;
+	modelOverrides: Record<string, string | string[]>;
 	prewalkOverrides: Record<string, string>;
 	definitions: RpcAgentDefinitionInfo[];
 }
 
 const SETTINGS_PATHS = ["task.disabledAgents", "task.agentModelOverrides", "task.agentPrewalk"] as const;
 
-interface AgentSettingsLoadResult {
-	settings: RpcResponse;
-	definitions: RpcResponse;
-}
-
-const fetchAgentSettings = async (): Promise<AgentSettingsLoadResult> => {
-	const [settings, definitions] = await Promise.all([
-		window.omp.rpc.getSettings([...SETTINGS_PATHS]),
-		window.omp.rpc.getAgentDefinitions(),
-	]);
-	return { settings, definitions };
-};
+type AgentSettingsPath = (typeof SETTINGS_PATHS)[number];
 
 function isStringRecord(value: unknown): value is Record<string, string> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
 	return Object.values(value).every(entry => typeof entry === "string");
 }
 
+function isModelOverrideRecord(value: unknown): value is AgentSettingsState["modelOverrides"] {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	return Object.values(value).every(
+		entry =>
+			typeof entry === "string" || (Array.isArray(entry) && entry.every(pattern => typeof pattern === "string")),
+	);
+}
+
 function pickAgentDefinitions(data: unknown): RpcAgentDefinitionInfo[] {
-	const agents = (data as { agents?: unknown } | undefined)?.agents;
+	const agents = typeof data === "object" && data !== null && "agents" in data ? data.agents : undefined;
 	if (!Array.isArray(agents)) return [];
 	return agents.filter((agent): agent is RpcAgentDefinitionInfo => {
-		if (typeof agent !== "object" || agent === null || Array.isArray(agent)) return false;
-		const value = agent as Record<string, unknown>;
 		return (
-			typeof value.name === "string" &&
-			typeof value.description === "string" &&
-			(value.source === "bundled" || value.source === "user" || value.source === "project")
+			typeof agent === "object" &&
+			agent !== null &&
+			"name" in agent &&
+			typeof agent.name === "string" &&
+			"description" in agent &&
+			typeof agent.description === "string" &&
+			"source" in agent &&
+			(agent.source === "bundled" || agent.source === "user" || agent.source === "project")
 		);
 	});
 }
 
 function pickAgentSettings(data: unknown, definitions: RpcAgentDefinitionInfo[]): AgentSettingsState {
-	const values = (data as { values?: Record<string, unknown> } | undefined)?.values ?? {};
-	const disabled = values["task.disabledAgents"];
-	const models = values["task.agentModelOverrides"];
-	const prewalk = values["task.agentPrewalk"];
+	const rawValues = typeof data === "object" && data !== null && "values" in data ? data.values : undefined;
+	const values = typeof rawValues === "object" && rawValues !== null ? rawValues : {};
+	const disabled = "task.disabledAgents" in values ? values["task.disabledAgents"] : undefined;
+	const models = "task.agentModelOverrides" in values ? values["task.agentModelOverrides"] : undefined;
+	const prewalk = "task.agentPrewalk" in values ? values["task.agentPrewalk"] : undefined;
 	return {
 		disabledAgents: Array.isArray(disabled) ? disabled.filter((v): v is string => typeof v === "string") : [],
-		modelOverrides: isStringRecord(models) ? models : {},
+		modelOverrides: isModelOverrideRecord(models) ? models : {},
 		prewalkOverrides: isStringRecord(prewalk) ? prewalk : {},
 		definitions,
 	};
 }
 
-export interface AgentSettingsRpc {
-	state: AgentSettingsState | null;
-	error: string | null;
-	loading: boolean;
-	busy: boolean;
-	ready: boolean;
-	refresh: () => void;
-	/** Apply an optimistic settings write; the optimistic value is authoritative on success. */
-	mutate: (optimistic: AgentSettingsState, action: () => Promise<RpcResponse>) => Promise<void>;
-}
-
-/**
- * Lazy settings loader: fires on the tab's first activation, then silently
- * revalidates on re-activation. Mirrors ModesPanel's useModeRpc, except
- * mutations keep the optimistic snapshot — set_setting echoes `{path, value}`,
- * not the composite state, so re-picking the response would clobber it.
- */
-export function useAgentSettings(open: boolean, active: boolean): AgentSettingsRpc {
+export function useAgentSettings() {
 	const t = useT();
-	const sidecarReady = useSessionStore(s => s.status) === "ready";
+	const rpc = useTabRpc();
+	const ready = useSessionStore(s => s.status) === "ready";
 	const [state, setState] = useState<AgentSettingsState | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [busy, setBusy] = useState(false);
-	const attemptedRef = useRef(false);
-	const stateRef = useRef<AgentSettingsState | null>(null);
+	const generation = useRef(0);
 
-	const setBoth = useCallback((next: AgentSettingsState | null) => {
-		stateRef.current = next;
-		setState(next);
-	}, []);
-
-	const load = useCallback(
-		async (silent: boolean) => {
-			if (!sidecarReady) {
-				setError(t("agentHub.notConnected"));
-				setLoading(false);
-				return;
-			}
-			if (!silent) {
-				setLoading(true);
-				setError(null);
-			}
-			try {
-				const { settings, definitions } = await fetchAgentSettings();
-				if (!settings.success) {
-					if (!silent) setError(settings.error);
-				} else if (!definitions.success) {
-					if (!silent) setError(definitions.error);
-				} else {
-					setBoth(pickAgentSettings(settings.data, pickAgentDefinitions(definitions.data)));
-					if (!silent) setError(null);
-				}
-			} catch (cause) {
-				if (!silent) setError(describeError(cause));
-			} finally {
-				if (!silent) setLoading(false);
-			}
-		},
-		[sidecarReady, t, setBoth],
-	);
+	const load = useCallback(async () => {
+		const request = ++generation.current;
+		if (!ready) {
+			setState(null);
+			setError(t("agentHub.notConnected"));
+			setLoading(false);
+			return;
+		}
+		setLoading(true);
+		setError(null);
+		try {
+			const [settings, definitions] = await Promise.all([
+				rpc.getSettings([...SETTINGS_PATHS]),
+				rpc.getAgentDefinitions(),
+			]);
+			if (generation.current !== request) return;
+			if (!settings.success) throw new Error(settings.error);
+			if (!definitions.success) throw new Error(definitions.error);
+			setState(pickAgentSettings(settings.data, pickAgentDefinitions(definitions.data)));
+		} catch (cause) {
+			if (generation.current !== request) return;
+			setState(null);
+			setError(describeError(cause));
+		} finally {
+			if (generation.current === request) setLoading(false);
+		}
+	}, [ready, rpc, t]);
 
 	useEffect(() => {
-		if (!open || !active) return;
-		if (attemptedRef.current) {
-			void load(true);
-		} else {
-			attemptedRef.current = true;
-			void load(false);
-		}
-	}, [open, active, load]);
-
-	const refresh = useCallback(() => void load(false), [load]);
+		void load();
+		return () => {
+			generation.current++;
+		};
+	}, [load]);
 
 	const mutate = useCallback(
-		async (optimistic: AgentSettingsState, action: () => Promise<RpcResponse>) => {
-			if (!sidecarReady) {
-				setError(t("agentHub.notConnected"));
-				return;
-			}
-			const prev = stateRef.current;
-			setBoth(optimistic);
+		async (path: AgentSettingsPath, value: unknown) => {
+			if (!ready || busy || loading) return;
 			setBusy(true);
+			const request = generation.current;
 			try {
-				const res = await action();
-				if (!res.success) {
-					setBoth(prev);
-					toast({ variant: "error", title: t("agentHub.actionFailed"), message: res.error });
-					void load(true);
-				}
+				const result = await rpc.setSetting(path, value);
+				if (!result.success) throw new Error(result.error);
 			} catch (cause) {
-				setBoth(prev);
-				toast({ variant: "error", title: t("agentHub.actionFailed"), message: String(cause) });
-				void load(true);
+				toast({ variant: "error", title: t("agentHub.actionFailed"), message: describeError(cause) });
 			} finally {
+				// A settings echo does not include the newly resolved model or Prewalk target.
+				if (generation.current === request) await load();
 				setBusy(false);
 			}
 		},
-		[sidecarReady, t, load, setBoth],
+		[ready, busy, loading, rpc, load, t],
 	);
 
-	return { state, error, loading, busy, ready: sidecarReady, refresh, mutate };
+	return { state, error, loading, busy, ready, refresh: load, mutate };
 }

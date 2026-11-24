@@ -9,7 +9,8 @@ import { parseHTML } from "linkedom";
 import { act, type ReactElement } from "react";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
-import type { AgentProgress, SubagentSnapshot } from "../../../shared/rpc-types";
+import type { Language } from "../../../shared/languages";
+import type { AgentProgress, RpcAgentDefinitionInfo, SubagentSnapshot } from "../../../shared/rpc-types";
 import { I18nProvider } from "../../lib/i18n";
 import { useSessionStore } from "../../stores/session";
 import { useSubagentsStore } from "../../stores/subagents";
@@ -44,9 +45,12 @@ interface OmpMock {
 	setAgentsPaused: Mock;
 	reviveSubagent: Mock;
 	abort: Mock;
+	getSettings: Mock;
+	getAgentDefinitions: Mock;
+	setSetting: Mock;
 }
 
-function installOmpMock(overrides: Partial<OmpMock> = {}): OmpMock {
+function installOmpMock(overrides: Partial<OmpMock> = {}, initialLanguage: Language = "en"): OmpMock {
 	const mock: OmpMock = {
 		getSubagents: vi.fn(async () => ok({ subagents: [] })),
 		getSubagentMessages: vi.fn(async () => ok({ messages: [], nextByte: 0 })),
@@ -54,9 +58,13 @@ function installOmpMock(overrides: Partial<OmpMock> = {}): OmpMock {
 		reviveSubagent: vi.fn(async () => ok({ ok: true })),
 		setAgentsPaused: vi.fn(async (enabled: boolean) => ok({ paused: enabled, pausedAt: enabled ? 123 : undefined })),
 		abort: vi.fn(async () => ok({})),
+		getSettings: vi.fn(async () => ok({ values: {} })),
+		getAgentDefinitions: vi.fn(async () => ok({ agents: [] })),
+		setSetting: vi.fn(async () => ok({})),
 		...overrides,
 	};
-	(window as unknown as { omp: { rpc: OmpMock } }).omp = { rpc: mock };
+	const host = window as unknown as { omp: { rpc: OmpMock; initialLanguage: Language } };
+	host.omp = { rpc: mock, initialLanguage };
 	return mock;
 }
 
@@ -153,6 +161,85 @@ async function click(element: TestElement): Promise<void> {
 function bodyText(): string {
 	return document.body.textContent ?? "";
 }
+
+const scout: RpcAgentDefinitionInfo = {
+	name: "scout",
+	source: "bundled",
+	description: "Unlocalized builtin description",
+	defaultPatterns: ["haiku"],
+	effectivePatterns: ["haiku"],
+	effectiveResolved: "anthropic/claude-haiku-4-5",
+	modelSelection: { source: "catalogRole", role: "smol", provider: "anthropic", usesParentFallback: false },
+};
+
+describe("AgentHubWindow definitions", () => {
+	it("uses localized bundled labels and Core's provider, role and selection reason", async () => {
+		installOmpMock(
+			{
+				getAgentDefinitions: vi.fn(async () =>
+					ok({
+						agents: [
+							scout,
+							{
+								...scout,
+								name: "reviewer",
+								source: "project",
+								description: "Keep the workspace's own description.",
+							},
+						],
+					}),
+				),
+			},
+			"zh",
+		);
+		useSessionStore.getState().setStatus("ready", "/repo");
+		await mount(<AgentHubWindow onClose={() => {}} open />);
+		const text = bodyText();
+		expect(text).toContain("快速浏览代码、搜索相关模式，并汇总发现以便交接。");
+		expect(text).toContain("Keep the workspace's own description.");
+		expect(text).not.toContain(scout.description);
+		expect(text).toContain("使用代理的默认设置");
+		expect(text).toContain("anthropic/claude-haiku-4-5");
+		expect(text).toContain("选择原因");
+		expect(text).toContain("Anthropic");
+		expect(text).toContain("@smol");
+		expect(text).toContain("符合条件的提供商及模型的已知冷却状态");
+	});
+
+	it("keeps ordered overrides on other agents and re-reads the Core preview after saving", async () => {
+		let overrides: Record<string, string | string[]> = {
+			scout: "openai/old-model",
+			sonic: ["anthropic/one", "openai/two"],
+		};
+		const omp = installOmpMock({
+			getSettings: vi.fn(async () => ok({ values: { "task.agentModelOverrides": overrides } })),
+			getAgentDefinitions: vi.fn(async () =>
+				ok({
+					agents: [
+						overrides.scout
+							? { ...scout, effectiveResolved: "openai/old-model", modelSelection: undefined }
+							: scout,
+					],
+				}),
+			),
+			setSetting: vi.fn(async (_path: string, value: typeof overrides) => {
+				overrides = value;
+				return ok({ value });
+			}),
+		});
+		useSessionStore.getState().setStatus("ready", "/repo");
+		await mount(<AgentHubWindow onClose={() => {}} open />);
+		expect(bodyText()).toContain("This Core version did not report a selection reason.");
+		await click(queryAll('button[aria-label="Model override: openai/old-model - Edit"]')[0]!);
+		await click(queryAll("button").find(button => button.textContent?.trim() === "Clear override")!);
+		expect(omp.setSetting).toHaveBeenCalledWith("task.agentModelOverrides", {
+			sonic: ["anthropic/one", "openai/two"],
+		});
+		expect(omp.getAgentDefinitions).toHaveBeenCalledTimes(2);
+		expect(bodyText()).toContain("anthropic/claude-haiku-4-5");
+		expect(bodyText()).not.toContain("openai/old-model");
+	});
+});
 
 describe("AgentHubWindow hub tab", () => {
 	it("pauses and resumes all agents from the hub header", async () => {

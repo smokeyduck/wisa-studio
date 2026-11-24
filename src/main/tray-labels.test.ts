@@ -79,6 +79,7 @@ describe("menuSignature", () => {
 		expect(menuSignature(state({ modelId: "gpt-y" }))).not.toBe(base);
 		expect(menuSignature(state({ thinkingLevel: "high" }))).not.toBe(base);
 		expect(menuSignature(state({ fastMode: true }))).not.toBe(base);
+		expect(menuSignature(state({ fastMode: null }))).not.toBe(base);
 		expect(menuSignature(state({ approvalMode: "yolo" }))).not.toBe(base);
 		expect(menuSignature(state({ language: "zh" }))).not.toBe(base);
 		expect(menuSignature(state({ projectName: "beta" }))).not.toBe(base);

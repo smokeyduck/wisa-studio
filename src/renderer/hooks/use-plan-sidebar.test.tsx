@@ -9,6 +9,7 @@ import { useUiStore } from "../stores/ui";
 import { useTabsStore } from "../stores/tabs";
 import type { SessionStore } from "../stores/session";
 import type { PlanApprovalStore } from "../stores/plan-approval";
+import type { ToolEntry, ToolsStore } from "../stores/tools";
 import type { StoreApi } from "zustand/vanilla";
 const { document, window, Event, HTMLElement, Node } = parseHTML("<html><body></body></html>");
 Object.assign(globalThis, { document, window, Event, HTMLElement, Node, IS_REACT_ACT_ENVIRONMENT: true });
@@ -16,6 +17,7 @@ function Reveal() { usePlanSidebar(); return null; }
 it("opens only the focused project's plan on transitions and honors close through completion", async () => {
  const a = createTabRuntime("plan-a"); const b = createTabRuntime("plan-b");
  const sa = a.stores.get("session") as StoreApi<SessionStore>; const sb = b.stores.get("session") as StoreApi<SessionStore>; const pb = b.stores.get("planApproval") as StoreApi<PlanApprovalStore>;
+ const tools = b.stores.get("tools") as StoreApi<ToolsStore>;
  sa.setState({ cwd: "/a", sessionId: "a", planModeEnabled: true, isStreaming: true }); sb.setState({ cwd: "/b", sessionId: "b", planModeEnabled: false });
  useTabsStore.setState({ activeTabId: "plan-a", tabs: [{ id: "plan-a", cwd: "/a", status: "ready", kind: "agent", unreadDone: false }, { id: "plan-b", cwd: "/b", status: "ready", kind: "agent", unreadDone: false }] });
  const container = document.createElement("div"); document.body.appendChild(container); const root = createRoot(container as unknown as Element);
@@ -29,6 +31,14 @@ it("opens only the focused project's plan on transitions and honors close throug
   await act(async () => sa.setState({ isStreaming: true })); expect(useUiStore.getState().panelVisible).toBe(false);
   await act(async () => sb.setState({ planModeEnabled: true })); expect(useUiStore.getState().panelVisible).toBe(true);
   await act(async () => useUiStore.getState().togglePanel());
+ const write: ToolEntry = { toolName: "write", args: {}, streamingArgs: '{"path":"local://new-plan.md","content":"# Plan', status: "pending", partialResult: null, result: null, isError: false, startTime: 0, endTime: null };
+ await act(async () => tools.setState({ activeTools: new Map([["write", write]]) }));
+ expect(useUiStore.getState().panelVisible).toBe(true);
+ await act(async () => useUiStore.getState().togglePanel());
+ await act(async () => tools.setState({ activeTools: new Map([["write", { ...write, streamingArgs: `${write.streamingArgs} continues` }]]) }));
+ expect(useUiStore.getState().panelVisible).toBe(false);
+ await act(async () => sb.setState({ isStreaming: true }));
+ expect(useUiStore.getState().panelVisible).toBe(false);
   await act(async () => pb.getState().showProposal({ planFilePath: "/b/plan.md", planContent: "B only", options: [] }));
   expect(useUiStore.getState()).toMatchObject({ panelVisible: true, panelTab: "plan" });
  } finally { await act(async () => root.unmount()); container.remove(); deleteSessionRuntime("plan-a"); deleteSessionRuntime("plan-b"); useTabsStore.getState().reset(); useUiStore.setState({ panelVisible: false }); }

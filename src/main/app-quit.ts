@@ -4,6 +4,7 @@
  * ⌘Q SIGTERMs every in-flight agent run with no word to the user.
  */
 import { app, BrowserWindow, dialog, type MessageBoxOptions, type MessageBoxSyncOptions } from "electron";
+import { DEV_RESTART_ENV, DEV_RESTART_EXIT_CODE } from "../shared/dev-restart";
 import { hasUnsavedFileDrafts } from "./file-draft-guard";
 import { getMainLanguage, mainT } from "./i18n";
 import { assessQuitRisk, type QuitRisk, quitNeedsConfirmation, type WindowTabFact } from "./quit-guard";
@@ -39,6 +40,21 @@ export function requestQuit(beforeQuit?: () => void): void {
 	approved = true;
 	beforeQuit?.();
 	app.quit();
+}
+
+export function requestRestart(): void {
+	requestQuit(() => {
+		if (!app.isPackaged && process.env[DEV_RESTART_ENV] === "1") {
+			// Let the quit guard tear down sidecars and windows before handing the
+			// restart back to the launcher that owns Vite and Electron.
+			app.once("will-quit", event => {
+				event.preventDefault();
+				app.exit(DEV_RESTART_EXIT_CODE);
+			});
+		} else {
+			app.relaunch();
+		}
+	});
 }
 
 /** What a quit right now would cost. The resource-change restart quotes it. */

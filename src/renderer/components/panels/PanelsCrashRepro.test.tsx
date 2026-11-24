@@ -11,7 +11,7 @@ import { I18nProvider } from "../../lib/i18n";
 import { useMessagesStore } from "../../stores/messages";
 import { useSubagentsStore } from "../../stores/subagents";
 import { useToolsStore } from "../../stores/tools";
-import { AgentsDockCard } from "../chat/dock/AgentsDockCard";
+import { SubagentTranscriptBlock } from "../chat/dock/AgentsDockCard";
 import { DiffPanel } from "./DiffPanel";
 
 const { document, window, Event, HTMLElement, Node } = parseHTML("<html><body></body></html>");
@@ -167,7 +167,7 @@ describe("panels under running state", () => {
 		expect(document.body.textContent).toContain("+1");
 	});
 
-	it("AgentsDockCard expands a transcript and switches to graph view", async () => {
+	it("opens a transcript dialog for a running subagent without rendering its assignment", async () => {
 		const snapshot: SubagentSnapshot = {
 			id: "sub-1",
 			agent: "scout",
@@ -187,28 +187,22 @@ describe("panels under running state", () => {
 			},
 		});
 		useSubagentsStore.getState().setSnapshots([snapshot]);
-		await mount(<AgentsDockCard />);
-		expect(document.body.textContent).toContain("Read-only research");
-		expect(document.body.textContent).not.toContain("# Target");
-
-		// The row's chevron folds the transcript open; the row itself opens the page.
-		const chevron = document.querySelector<HTMLButtonElement>('button[aria-label="Show the transcript here"]');
-		expect(chevron).not.toBeNull();
-		if (!chevron) return;
-		await act(async () => {
-			chevron.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
-		});
-		await flush();
-		expect(getSubagentMessages).toHaveBeenCalledWith("sub-1", "/tmp/sub-1.jsonl", 0);
-		expect(document.body.textContent).toContain("Transcript loaded");
-
-		const graphButton = Array.from(document.querySelectorAll('button[aria-pressed="false"]')).at(-1);
-		expect(graphButton).toBeDefined();
-		if (!graphButton) return;
-		await act(async () => {
-			graphButton.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
-		});
-		expect(graphButton.getAttribute("aria-pressed")).toBe("true");
-		expect(document.querySelector('[role="tree"]')).toBeNull();
+		const host = document.createElement("div") as unknown as HTMLDivElement;
+		document.body.appendChild(host as never);
+		try {
+			await mount(<SubagentTranscriptBlock dialogHost={host} />);
+			expect(document.body.textContent).toContain("Read-only research");
+			expect(document.body.textContent).not.toContain("# Target");
+			const row = document.querySelector('button[aria-haspopup="dialog"]');
+			if (!row) throw new Error("missing subagent transcript row");
+			await act(async () => {
+				row.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
+			});
+			await flush();
+			expect(getSubagentMessages).toHaveBeenCalledWith("sub-1", "/tmp/sub-1.jsonl", 0);
+			expect(host.querySelector('[role="dialog"]')?.textContent).toContain("Transcript loaded");
+		} finally {
+			host.remove();
+		}
 	});
 });

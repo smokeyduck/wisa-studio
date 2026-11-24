@@ -10,7 +10,7 @@ import { useTabsStore } from "./tabs";
 
 export type { ThemeMode };
 
-/** The inspector's views. The built-in browser is not one: it lives in its own window. */
+/** The inspector's session views. */
 export type PanelTab = "overview" | "plan" | "agents" | "btw" | "diff" | "files" | "terminal";
 const CLOSED_WORKSPACE_PAGES = {
 	activeToolsOpen: false,
@@ -37,13 +37,18 @@ const CLOSED_WORKSPACE_PAGES = {
 	usageOpen: false,
 	workspaceDirsOpen: false,
 };
-export type WorkspacePageId = keyof typeof CLOSED_WORKSPACE_PAGES | "tasks";
+export type WorkspacePageId =
+	| keyof typeof CLOSED_WORKSPACE_PAGES
+	| "tasks"
+	| "capabilities"
+	| "security"
+	| "projectAudit";
 
 function workspacePagePatch(page: WorkspacePageId | null): Partial<UiStore> {
 	return {
 		...CLOSED_WORKSPACE_PAGES,
 		modesOpen: false,
-		...(page && page !== "tasks" ? { [page]: true } : {}),
+		...(page && page in CLOSED_WORKSPACE_PAGES ? { [page]: true } : {}),
 		...(page ? { settingsOpen: false } : {}),
 		workspacePage: page,
 	};
@@ -51,7 +56,8 @@ function workspacePagePatch(page: WorkspacePageId | null): Partial<UiStore> {
 
 export function activeWorkspacePage(state: UiStore): WorkspacePageId | null {
 	const page = state.workspacePage;
-	return page && (page === "tasks" || state[page]) ? page : null;
+	if (page === null || !(page in CLOSED_WORKSPACE_PAGES)) return page;
+	return state[page as keyof typeof CLOSED_WORKSPACE_PAGES] ? page : null;
 }
 
 /** Edit → Find, Find Next and Find Previous, as the window routes them. */
@@ -67,23 +73,11 @@ export type MemoryTabId = "knowledge" | "skills" | "sources";
 export const CHAT_PANEL_TABS: ReadonlySet<PanelTab> = new Set(["overview", "btw", "files"]);
 /** What the Changes view compares: the checkout, this session's edits, their timeline, or virtual artifacts. */
 export type DiffScope = "repository" | "current" | "timeline" | "artifacts";
-/** Center-dock card identifiers. Plans render exclusively in the inspector. */
-export type DockCardId = "todo" | "agents";
 export type TranscriptDetail = "compact" | "full";
 /** Chip size on the tab strip (Settings → GUI → Tab bar). */
 export type TabWidth = "compact" | "default" | "wide";
 /** One scrolling row of tabs, or up to three wrapped rows. */
 export type TabRows = "single" | "multi";
-/**
- * Where a plain left-click on an http(s) link opens (#65).
- *
- * The identifier `panel` predates the browser window: it now means "the
- * dedicated browser window this app opens", not the side drawer. It stays
- * `panel` because `linkDestination`, `LinkMenu` and the `Links` surfaces
- * compare against it — only the user-facing strings follow the window.
- */
-export type LinkOpenMode = "panel" | "external";
-
 export interface GuiDisplayPreferences {
 	hideThinkingBlock?: boolean | null;
 	proseOnlyThinking?: boolean | null;
@@ -102,6 +96,9 @@ interface UiStore {
 	panelVisible: boolean;
 	panelTab: PanelTab;
 	workspacePage: WorkspacePageId | null;
+	openCapabilitiesPage: () => void;
+	openSecurityPage: () => void;
+	openProjectAuditPage: () => void;
 	openTasksPage: () => void;
 	closeTasksPage: () => void;
 	returnToConversation: () => void;
@@ -118,6 +115,7 @@ interface UiStore {
 	modelPickerOpen: boolean;
 	settingsOpen: boolean;
 	settingsTab: string;
+	settingsQuery: string;
 	usageOpen: boolean;
 	providersOpen: boolean;
 	modelRolesOpen: boolean;
@@ -137,6 +135,7 @@ interface UiStore {
 	agentHubTab: "definitions" | "hub";
 	memoryOpen: boolean;
 	memoryTab: MemoryTabId;
+	memoryCwd: string | null;
 	hotkeysOpen: boolean;
 	importDialogOpen: boolean;
 	copySelectorOpen: boolean;
@@ -181,8 +180,6 @@ interface UiStore {
 	conversationSearchOpen: boolean;
 	/** Edit → Find (⌘F) and Find Next/Previous (⌘G/⇧⌘G) for the focused tab's transcript. */
 	transcriptFindRequest: FindRequest;
-	/** The same commands for the browser panel's page, when it is what the window searches. */
-	browserFindRequest: FindRequest;
 	sessionPickerOpen: boolean;
 	branchPickerOpen: boolean;
 	sessionTreeOpen: boolean;
@@ -226,8 +223,6 @@ interface UiStore {
 	defaultPanelTab: PanelTab;
 	tabWidth: TabWidth;
 	tabRows: TabRows;
-	/** Where plain left-clicks on http(s) links open: the browser window or the system browser (#65). */
-	linkOpenMode: LinkOpenMode;
 	/** Collapse long pasted text (>10 lines or >1000 chars) into `[Paste #N]` markers (#64). */
 	collapseLargePastes: boolean;
 	/** Expand/collapse-all signal for tool cards (⌃O); `seq` bumps per toggle so cards re-sync their local state. */
@@ -244,17 +239,14 @@ interface UiStore {
 	openFilePreview: (path: string, line?: number) => void;
 	openImagePreview: (src: string, label: string) => void;
 	closeFilePreview: () => void;
-	/** Per-card collapse overrides for the center dock (absent = expanded). */
-	dockCollapsed: Partial<Record<DockCardId, boolean>>;
-	toggleDockCard: (id: DockCardId) => void;
-	/** Focus signal: bumps seq so the target card expands and flashes (command-palette deep links). */
-	dockFocus: { id: DockCardId; seq: number } | null;
-	focusDockCard: (id: DockCardId) => void;
+	/** A palette action requests opening and focusing the current tab's todo ribbon. */
+	todoRibbonRequest: number;
+	focusTodoRibbon: () => void;
 	openCommandPalette: () => void;
 	closeCommandPalette: () => void;
 	openModelPicker: () => void;
 	closeModelPicker: () => void;
-	openSettings: (tab?: string) => void;
+	openSettings: (tab?: string, query?: string) => void;
 	closeSettings: () => void;
 	openUsage: () => void;
 	closeUsage: () => void;
@@ -286,8 +278,8 @@ interface UiStore {
 	openModes: (tab?: "vibe" | "goal" | "loop") => void;
 	closeModes: () => void;
 	openAgentHub: (tab?: "definitions" | "hub") => void;
-	/** The Memory window; reopening without a tab keeps the last one. */
-	openMemory: (tab?: MemoryTabId) => void;
+	/** Reopening Memory without a tab or project keeps the last selection. */
+	openMemory: (tab?: MemoryTabId, cwd?: string) => void;
 	closeMemory: () => void;
 	closeAgentHub: () => void;
 	openHotkeys: () => void;
@@ -343,7 +335,6 @@ interface UiStore {
 	openConversationSearch: () => void;
 	closeConversationSearch: () => void;
 	requestTranscriptFind: (command: FindCommand) => void;
-	requestBrowserFind: (command: FindCommand) => void;
 	openSessionPicker: () => void;
 	closeSessionPicker: () => void;
 	openBranchPicker: () => void;
@@ -372,7 +363,6 @@ interface UiStore {
 	setTranscriptDetail: (detail: TranscriptDetail) => void;
 	setTabWidth: (width: TabWidth) => void;
 	setTabRows: (rows: TabRows) => void;
-	setLinkOpenMode: (mode: LinkOpenMode) => void;
 	setCollapseLargePastes: (enabled: boolean) => void;
 	/**
 	 * User keybinding overrides (B3 remap layer): actionId → replacement chord
@@ -410,6 +400,9 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	panelVisible: false,
 	panelTab: "overview",
 	workspacePage: null,
+	openCapabilitiesPage: () => set(workspacePagePatch("capabilities")),
+	openSecurityPage: () => set(workspacePagePatch("security")),
+	openProjectAuditPage: () => set(workspacePagePatch("projectAudit")),
 	openTasksPage: () => set(workspacePagePatch("tasks")),
 	closeTasksPage: () => {
 		if (get().workspacePage === "tasks") set({ workspacePage: null });
@@ -424,7 +417,8 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	commandPaletteOpen: false,
 	modelPickerOpen: false,
 	settingsOpen: false,
-	settingsTab: "capabilities",
+	settingsTab: "gui",
+	settingsQuery: "",
 	theme: readPrepaintThemeMode(),
 	fontSize: 15,
 	compactDensity: false,
@@ -440,7 +434,6 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	defaultPanelTab: "diff",
 	tabWidth: "default",
 	tabRows: "single",
-	linkOpenMode: "panel",
 	collapseLargePastes: true,
 	toggleSidebar: () => set({ sidebarVisible: !get().sidebarVisible }),
 	// The bare toggle (title bar, shortcut) opens on the Panel default; links that
@@ -495,17 +488,8 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 			panelVisible: true,
 		}),
 	closeFilePreview: () => set({ filePreviewPath: null, filePreviewLine: null, filePreviewImage: null }),
-	dockCollapsed: {},
-	toggleDockCard: id =>
-		set({
-			dockCollapsed: { ...get().dockCollapsed, [id]: !(get().dockCollapsed[id] ?? false) },
-		}),
-	dockFocus: null,
-	focusDockCard: id =>
-		set({
-			dockCollapsed: { ...get().dockCollapsed, [id]: false },
-			dockFocus: { id, seq: (get().dockFocus?.seq ?? 0) + 1 },
-		}),
+	todoRibbonRequest: 0,
+	focusTodoRibbon: () => set(state => ({ todoRibbonRequest: state.todoRibbonRequest + 1 })),
 	openCommandPalette: () => set({ commandPaletteOpen: true }),
 	closeCommandPalette: () => set({ commandPaletteOpen: false }),
 	openModelPicker: () => set({ modelPickerOpen: true }),
@@ -514,10 +498,11 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	// page: ⌘, pressed again must not bounce the user back to the first tab (and
 	// wipe the search they typed). A cold open lands on the GUI preferences page
 	// (`GUI_TAB_ID`); the capabilities overview has its own navigation entry.
-	openSettings: tab =>
+	openSettings: (tab, query) =>
 		set(state => ({
 			settingsOpen: true,
 			settingsTab: tab ?? (state.settingsOpen ? state.settingsTab : "gui"),
+			settingsQuery: query ?? (tab === undefined && state.settingsOpen ? state.settingsQuery : ""),
 		})),
 	closeSettings: () => set({ settingsOpen: false }),
 	usageOpen: false,
@@ -566,7 +551,13 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	closeAgentHub: () => set({ agentHubOpen: false }),
 	memoryOpen: false,
 	memoryTab: "knowledge" as MemoryTabId,
-	openMemory: tab => set(state => ({ ...workspacePagePatch("memoryOpen"), memoryTab: tab ?? state.memoryTab })),
+	memoryCwd: null,
+	openMemory: (tab, cwd) =>
+		set(state => ({
+			...workspacePagePatch("memoryOpen"),
+			memoryTab: tab ?? state.memoryTab,
+			memoryCwd: cwd ?? state.memoryCwd,
+		})),
 	closeMemory: () => set({ memoryOpen: false }),
 	hotkeysOpen: false,
 	openHotkeys: () => set(workspacePagePatch("hotkeysOpen")),
@@ -652,9 +643,6 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	transcriptFindRequest: { nonce: 0, command: "find" },
 	requestTranscriptFind: command =>
 		set(state => ({ transcriptFindRequest: { nonce: state.transcriptFindRequest.nonce + 1, command } })),
-	browserFindRequest: { nonce: 0, command: "find" },
-	requestBrowserFind: command =>
-		set(state => ({ browserFindRequest: { nonce: state.browserFindRequest.nonce + 1, command } })),
 	sessionPickerOpen: false,
 	openSessionPicker: () => set({ sessionPickerOpen: true }),
 	closeSessionPicker: () => set({ sessionPickerOpen: false }),
@@ -736,7 +724,6 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	setTranscriptDetail: detail => set({ transcriptDetail: detail }),
 	setTabWidth: width => set({ tabWidth: width }),
 	setTabRows: rows => set({ tabRows: rows }),
-	setLinkOpenMode: mode => set({ linkOpenMode: mode }),
 	setCollapseLargePastes: enabled => set({ collapseLargePastes: enabled }),
 	keymapOverrides: {} as KeymapOverrides,
 	keymapDisabled: [],

@@ -202,6 +202,52 @@ describe("createBtwStore", () => {
 		expect(getBtwLatestTurn(merged).status).toBe("running");
 	});
 
+	it("preserves branch eligibility if the terminal frame beats the ask response", async () => {
+		const admission = Promise.withResolvers<RpcResponse>();
+		const store = createBtwStore(() => admission.promise);
+		const started = store.getState().ask("why?");
+		const completed = record({ status: "complete", answer: "done", updatedAt: 2 });
+		store.getState().applyFrame({ type: "btw_record", record: completed });
+		admission.resolve(ok("btw", { record: record() }));
+
+		await expect(started).resolves.toEqual(completed);
+		expect(store.getState().branchableId).toBe(completed.id);
+	});
+
+	it("ignores an old ask response without clearing the new session's pending ask", async () => {
+		const previous = Promise.withResolvers<RpcResponse>();
+		const next = Promise.withResolvers<RpcResponse>();
+		const command = vi
+			.fn<() => Promise<RpcResponse>>()
+			.mockReturnValueOnce(previous.promise)
+			.mockReturnValueOnce(next.promise);
+		const store = createBtwStore(command);
+		const stale = store.getState().ask("old question");
+		store.getState().reset();
+		const current = store.getState().ask("new question");
+		previous.resolve(ok("btw", { record: record({ question: "old question" }) }));
+
+		await expect(stale).rejects.toThrow("The session changed while starting the side question");
+		expect(store.getState()).toMatchObject({ records: [], pending: true });
+
+		const currentRecord = record({ id: "new-topic", question: "new question" });
+		next.resolve(ok("btw", { record: currentRecord }));
+		await expect(current).resolves.toEqual(currentRecord);
+		expect(store.getState()).toMatchObject({ records: [currentRecord], pending: false });
+	});
+
+	it("does not reload the replacement session in response to an old cancellation", async () => {
+		const response = Promise.withResolvers<RpcResponse>();
+		const command = vi.fn(() => response.promise);
+		const store = createBtwStore(command);
+		const cancel = store.getState().cancel("topic-1");
+		store.getState().reset();
+		response.resolve(ok("btw_cancel", { cancelled: false }));
+
+		await cancel;
+		expect(command.mock.calls).toEqual([[{ type: "btw_cancel", recordId: "topic-1" }]]);
+	});
+
 	it("does not reselect a topic after starting a new question", async () => {
 		const command = transport(cmd => (cmd.type === "btw" ? ok("btw", { record: record() }) : ok(cmd.type)));
 		const store = createBtwStore(command);

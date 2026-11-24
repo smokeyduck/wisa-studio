@@ -4,7 +4,6 @@
 import { app, Menu, type MenuItemConstructorOptions, shell } from "electron";
 import { IPC_EVENTS, type MenuAction } from "../shared/ipc-types";
 import { confirmDiscardFileDrafts } from "./app-quit";
-import type { BrowserHost } from "./browser-host";
 import { getMainLanguage, mainT } from "./i18n";
 import { nativeShortcut } from "./shortcuts";
 import type { SpawnWindow, WindowManager } from "./window";
@@ -23,7 +22,7 @@ function sendMenuAction(windowManager: WindowManager, spawnWindow: SpawnWindow, 
 	});
 }
 
-export function createMenu(windowManager: WindowManager, spawnWindow: SpawnWindow, browserHost: BrowserHost): void {
+export function createMenu(windowManager: WindowManager, spawnWindow: SpawnWindow): void {
 	const language = getMainLanguage();
 	// Find next/previous: ⌘G on macOS; elsewhere F3, since Ctrl+G opens the composer's editor.
 	const mac = process.platform === "darwin";
@@ -123,24 +122,18 @@ export function createMenu(windowManager: WindowManager, spawnWindow: SpawnWindo
 				{ type: "separator" },
 				{
 					label: mainT("menu.find", language),
-					accelerator: nativeShortcut("browser.find"),
-					click: () => {
-						if (!browserHost.find("find")) sendMenuAction(windowManager, spawnWindow, "find");
-					},
+					accelerator: nativeShortcut("transcript.find"),
+					click: () => sendMenuAction(windowManager, spawnWindow, "find"),
 				},
 				{
 					label: mainT("menu.findNext", language),
 					accelerator: mac ? "Cmd+G" : "F3",
-					click: () => {
-						if (!browserHost.find("next")) sendMenuAction(windowManager, spawnWindow, "find-next");
-					},
+					click: () => sendMenuAction(windowManager, spawnWindow, "find-next"),
 				},
 				{
 					label: mainT("menu.findPrevious", language),
 					accelerator: mac ? "Cmd+Shift+G" : "Shift+F3",
-					click: () => {
-						if (!browserHost.find("previous")) sendMenuAction(windowManager, spawnWindow, "find-previous");
-					},
+					click: () => sendMenuAction(windowManager, spawnWindow, "find-previous"),
 				},
 			],
 		},
@@ -180,7 +173,7 @@ export function createMenu(windowManager: WindowManager, spawnWindow: SpawnWindo
 				},
 				{ type: "separator" },
 				{
-					label: mainT("browser.reload", language),
+					label: mainT("menu.reload", language),
 					accelerator: "CmdOrCtrl+R",
 					click: () => {
 						const win = windowManager.getTargetWindow();

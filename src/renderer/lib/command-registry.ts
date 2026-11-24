@@ -43,19 +43,19 @@ import { activeTabKind, useTabsStore } from "../stores/tabs";
 import { toast } from "../stores/toast";
 import { useTodoStore } from "../stores/todo";
 import type { MemoryTabId } from "../stores/ui";
-import { type DockCardId, useUiStore } from "../stores/ui";
+import { useUiStore } from "../stores/ui";
 import { isCommandAvailable } from "./command-availability";
 import { exportSessionHtml } from "./export-session";
 import { copyText } from "./format";
 import { translate } from "./i18n";
 import { clearSessionContext, messageText, retryLastTurn as retryLastTurnShared } from "./messages";
-import { openLink } from "./open-link";
 import {
 	capturePluginActivationOrigin,
 	handlePluginActivation,
 	isPluginActivationOriginActive,
 } from "./plugin-activation";
 import { isRecording, startRecording, stopRecording } from "./recording";
+import { supportsPriorityMode } from "./service-tier";
 import { findTextLinks } from "./terminal-links";
 import { copyTodosToClipboard, dumpTranscriptToClipboard, exportTodos, importTodosFromFile } from "./transcript-copy";
 import { addWorkspaceDirectory, pickAndMoveSession, pickWorkspaceDirectory } from "./workspace-dirs";
@@ -109,7 +109,9 @@ export interface CommandRegistryContext {
 	 */
 	tabKind: SessionKind;
 	isStreaming: boolean;
-	fastModeEnabled: boolean;
+	/** null when the active model cannot toggle priority service. */
+	fastModeEnabled: boolean | null;
+	setFastMode: (enabled: boolean) => Promise<void>;
 	autoCompaction: boolean;
 	autoRetry: boolean;
 	steeringMode: "all" | "one-at-a-time";
@@ -145,8 +147,7 @@ export interface CommandRegistryContext {
 	openHotkeys: () => void;
 	openImportDialog: () => void;
 	openProviderConfig: () => void;
-	/** Deep-link a center-dock card (todo/plan/agents): expand + flash. */
-	focusDockCard: (id: DockCardId) => void;
+	focusTodoRibbon: () => void;
 	/** Retry the last failed turn server-side (retry RPC). */
 	retryTurn: () => Promise<unknown>;
 	/** Re-send the most recent user message (abortAndPrompt while streaming). */
@@ -156,7 +157,6 @@ export interface CommandRegistryContext {
 	/** Refresh session state after a mutation (compact, fork, etc). */
 	hydrateSession: () => Promise<void>;
 	rpc: {
-		setFastMode: (enabled: boolean) => Promise<RpcResponse>;
 		setAutoCompaction: (enabled: boolean) => Promise<RpcResponse>;
 		setAutoRetry: (enabled: boolean) => Promise<RpcResponse>;
 		setSteeringMode: (mode: "all" | "one-at-a-time") => Promise<unknown>;
@@ -375,7 +375,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 			if (message?.role !== "assistant") continue;
 			const url = lastMessageLink(messageText(message));
 			if (url) {
-				openLink(url);
+				void window.omp.system.openExternal(url);
 				return;
 			}
 		}
@@ -397,7 +397,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 			});
 			return;
 		}
-		openLink(`${stats.url}/#/traces?s=${encodeURIComponent(sessionFile)}`);
+		await window.omp.system.openExternal(`${stats.url}/#/traces?s=${encodeURIComponent(sessionFile)}`);
 	};
 
 	/** /mcp enable|disable|remove|reconnect <name>; a bare invocation opens the native MCP tab. */
@@ -772,25 +772,16 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		category: "model",
 		affordance: p("/effort ", "[level]"),
 	});
-	add({
-		name: "fast",
-		label: t("cmd.fast"),
-		description: t("cmd.fast.desc"),
-		category: "model",
-		affordance: {
-			kind: "toggle",
-			get: () => ctx.fastModeEnabled,
-			set: e =>
-				runSessionCommand(ctx.rpc.setFastMode(e), "Fast mode", data => {
-					const d = data as { enabled?: boolean; active?: boolean; ultrafast?: boolean } | undefined;
-					useModelStore.setState({
-						fastModeEnabled: d?.enabled ?? e,
-						fastModeActive: d?.active ?? false,
-						fastModeUltrafast: d?.ultrafast === true,
-					});
-				}),
-		},
-	});
+	if (ctx.fastModeEnabled !== null) {
+		const enabled = ctx.fastModeEnabled;
+		add({
+			name: "fast",
+			label: t("cmd.fast"),
+			description: t("cmd.fast.desc"),
+			category: "model",
+			affordance: { kind: "toggle", get: () => enabled, set: ctx.setFastMode },
+		});
+	}
 	add({
 		name: "slow",
 		label: t("cmd.slow"),
@@ -1054,13 +1045,13 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 			kind: "submenu",
 			items: [
 				subAction("todo edit", () => {
-					// The dock card self-hides with no todos · say so instead of no-oping.
+					// The ribbon self-hides with no todos · say so instead of no-oping.
 					const hasTodos = useTodoStore.getState().phases.some(phase => phase.tasks.length > 0);
 					if (!hasTodos) {
 						toast({ variant: "info", message: translate("todoPanel.empty") });
 						return;
 					}
-					ctx.focusDockCard("todo");
+					ctx.focusTodoRibbon();
 				}),
 				subAction("todo copy", () => copyTodosToClipboard()),
 				subAction("todo export", () => exportTodos()),
@@ -1747,7 +1738,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 	// a native item · as its name OR one of its aliases · is dropped: `/models`
 	// and `/modes` must not appear as dead rows next to the working picker.
 	for (const cmd of ctx.availableCommands) {
-		if (claimed.has(cmd.name)) continue;
+		if (cmd.name === "fast" || claimed.has(cmd.name)) continue;
 		// Keep terminal-only commands visible as disabled rows. The palette is
 		// the GUI's command index; hiding a command makes its client limitation opaque.
 		if (cmd.textModeExecutable === false) {
@@ -2038,7 +2029,8 @@ export function buildCurrentCommandMenu(availableCommands: AvailableCommand[]): 
 		t: translate,
 		tabKind: activeTabKind(),
 		isStreaming: session.isStreaming,
-		fastModeEnabled: model.fastModeEnabled,
+		fastModeEnabled: supportsPriorityMode(model.model) ? model.fastModeEnabled : null,
+		setFastMode: enabled => model.setModelSpeed(enabled ? "fast" : "standard"),
 		autoCompaction: settings.autoCompaction,
 		autoRetry: settings.autoRetry,
 		steeringMode: settings.steeringMode,
@@ -2074,7 +2066,7 @@ export function buildCurrentCommandMenu(availableCommands: AvailableCommand[]): 
 		openHotkeys: ui.openHotkeys,
 		openImportDialog: ui.openImportDialog,
 		openProviderConfig: ui.openProviderConfig,
-		focusDockCard: ui.focusDockCard,
+		focusTodoRibbon: ui.focusTodoRibbon,
 		retryTurn: retryFailedTurn,
 		retryLastTurn: () =>
 			retryLastTurnShared(() =>
@@ -2087,7 +2079,6 @@ export function buildCurrentCommandMenu(availableCommands: AvailableCommand[]): 
 		forkSession: forkSessionFromGui,
 		hydrateSession: () => (runtime ? hydrateTabSession(runtime.tabId) : hydrateSession()),
 		rpc: {
-			setFastMode: enabled => rpc.setFastMode(enabled),
 			setAutoCompaction: enabled => rpc.setAutoCompaction(enabled),
 			setAutoRetry: enabled => rpc.setAutoRetry(enabled),
 			setSteeringMode: mode => rpc.setSteeringMode(mode),

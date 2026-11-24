@@ -122,6 +122,13 @@ describe("ExecutionGroup", () => {
 		expect(container.querySelector('[data-state="failed"]')).not.toBeNull();
 	});
 
+	it("keeps active work and an earlier failure visible in the same compact summary", async () => {
+		useToolsStore.setState({ activeTools: new Map([["tool-1", toolEntry("running")]]) });
+		await mount(["tool-1"], true, undefined, 1);
+		expect(container.querySelector('[data-state="running"]')).not.toBeNull();
+		expect(container.textContent).toContain("1 running, 1 failed - 2 steps");
+	});
+
 	it("never overrides the user's disclosure while execution activity changes", async () => {
 		useToolsStore.setState({ activeTools: new Map([["tool-1", toolEntry("running")]]) });
 		await mount(["tool-1"]);

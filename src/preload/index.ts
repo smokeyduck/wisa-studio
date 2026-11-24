@@ -14,10 +14,6 @@ import type {
 	IpcActiveTabEnvelope,
 	IpcBenchmarkRunOptions,
 	IpcBenchmarkRunResult,
-	IpcBrowserActionPayload,
-	IpcBrowserKeyPayload,
-	IpcBrowserState,
-	IpcBrowserViewportPayload,
 	IpcCollabPhoneAutoStartPayload,
 	IpcCollabPhoneTabPayload,
 	IpcConversationSearchPayload,
@@ -74,7 +70,8 @@ import type {
 	UpdateStatus,
 } from "../shared/ipc-types";
 import { type CaptionColors, IPC_COMMANDS, IPC_EVENTS } from "../shared/ipc-types";
-import type { Language } from "../shared/languages";
+import { isLanguage, type Language } from "../shared/languages";
+import type { McpCatalogPage, McpCatalogRequest } from "../shared/mcp-catalog";
 import { createSessionRpcClient, timeoutForCommand } from "../shared/rpc-client";
 import type {
 	AgentSessionEvent,
@@ -156,7 +153,11 @@ function subscribeTab<T>(channel: string, callback: (data: T, tabId: string) => 
 	return subscribe<IpcActiveTabEnvelope<T>>(channel, envelope => callback(envelope.payload, envelope.tabId));
 }
 
+const languageArgument = "--wisa-initial-language=";
+const initialLanguage = process.argv.find(arg => arg.startsWith(languageArgument))?.slice(languageArgument.length);
+
 const api: OmpApi = {
+	initialLanguage: isLanguage(initialLanguage) ? initialLanguage : undefined,
 	runtime: {
 		report: (error: RuntimeErrorReport) => ipcRenderer.send(IPC_COMMANDS.RUNTIME_ERROR_REPORT, error),
 		logPath: () => ipcRenderer.invoke(IPC_COMMANDS.RUNTIME_LOG_PATH) as Promise<string>,
@@ -202,8 +203,6 @@ const api: OmpApi = {
 			subscribeActiveTab<SubagentFrame>(IPC_EVENTS.SUBAGENT_FRAME, callback),
 		onLiveFrame: (callback: (frame: RpcLiveFrame) => void) =>
 			subscribeActiveTab<RpcLiveFrame>(IPC_EVENTS.LIVE_FRAME, callback),
-		onBtwFrame: (callback: (frame: RpcBtwFrame) => void) =>
-			subscribeActiveTab<RpcBtwFrame>(IPC_EVENTS.BTW_FRAME, callback),
 		onModelCatalogUpdate: (callback: (frame: ModelCatalogUpdateFrame) => void) =>
 			subscribeActiveTab<ModelCatalogUpdateFrame>(IPC_EVENTS.MODEL_CATALOG_UPDATE, callback),
 		onCommandsUpdate: (callback: (commands: AvailableCommand[]) => void) =>
@@ -232,6 +231,8 @@ const api: OmpApi = {
 			subscribeTab<SubagentFrame>(IPC_EVENTS.SUBAGENT_FRAME, callback),
 		onTabDictationFrame: (callback: (frame: RpcDictationFrame, tabId: string) => void) =>
 			subscribeTab<RpcDictationFrame>(IPC_EVENTS.DICTATION_FRAME, callback),
+		onTabBtwFrame: (callback: (frame: RpcBtwFrame, tabId: string) => void) =>
+			subscribeTab<RpcBtwFrame>(IPC_EVENTS.BTW_FRAME, callback),
 		onTabModelCatalogUpdate: (callback: (frame: ModelCatalogUpdateFrame, tabId: string) => void) =>
 			subscribeTab<ModelCatalogUpdateFrame>(IPC_EVENTS.MODEL_CATALOG_UPDATE, callback),
 		onTabCommandsUpdate: (callback: (commands: AvailableCommand[], tabId: string) => void) =>
@@ -256,25 +257,6 @@ const api: OmpApi = {
 			subscribe<UpdateStatus>(IPC_EVENTS.UPDATER_STATUS, callback),
 		onTerminalFrame: (callback: (payload: IpcTerminalFramePayload) => void) =>
 			subscribe<IpcTerminalFramePayload>(IPC_EVENTS.TERMINAL_FRAME, callback),
-		onBrowserState: (callback: (state: IpcBrowserState) => void) =>
-			subscribe<IpcBrowserState>(IPC_EVENTS.BROWSER_STATE, callback),
-		onBrowserKey: (callback: (payload: IpcBrowserKeyPayload) => void) =>
-			subscribe<IpcBrowserKeyPayload>(IPC_EVENTS.BROWSER_KEY, callback),
-	},
-
-	browser: {
-		getState: (tabId: string) => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_GET_STATE, { tabId }),
-		open: (tabId: string, url: string) => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_OPEN, { tabId, url }),
-		action: (payload: IpcBrowserActionPayload) => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_ACTION, payload),
-		// Fire-and-forget: the panel reports its rect on every layout change.
-		setViewport: (payload: IpcBrowserViewportPayload) => {
-			ipcRenderer.send(IPC_COMMANDS.BROWSER_SET_VIEWPORT, payload);
-		},
-		capture: (tabId: string) => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_CAPTURE, { tabId }),
-		detach: (tabId: string) => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_DETACH, { tabId }) as Promise<boolean>,
-		setShortcuts: (chords: string[]) => {
-			ipcRenderer.send(IPC_COMMANDS.BROWSER_SET_SHORTCUTS, { chords });
-		},
 	},
 
 	updater: {
@@ -467,6 +449,7 @@ const api: OmpApi = {
 		setKeyboardLayout: layout => ipcRenderer.invoke(IPC_COMMANDS.PREFS_KEYBOARD_LAYOUT, layout),
 		get: (key?: string) => ipcRenderer.invoke(IPC_COMMANDS.PREFS_GET, { key }),
 		set: (key: string, value: unknown) => ipcRenderer.invoke(IPC_COMMANDS.PREFS_SET, { key, value }),
+		resetSettings: () => ipcRenderer.invoke(IPC_COMMANDS.PREFS_RESET_SETTINGS),
 		updateLaunchProfile: (cwd, patch) => ipcRenderer.invoke(IPC_COMMANDS.PREFS_UPDATE_LAUNCH_PROFILE, { cwd, patch }),
 	},
 
@@ -532,6 +515,16 @@ const api: OmpApi = {
 		logo: (owner: string) => ipcRenderer.invoke(IPC_COMMANDS.PLUGIN_LOGO, owner) as Promise<string | null>,
 		inspect: (payload: IpcPluginInspectPayload) =>
 			ipcRenderer.invoke(IPC_COMMANDS.PLUGIN_INSPECT, payload) as Promise<IpcPluginInspection>,
+	},
+
+	mcpCatalog: {
+		list: (payload: McpCatalogRequest) =>
+			ipcRenderer.invoke(IPC_COMMANDS.MCP_CATALOG_LIST, payload) as Promise<McpCatalogPage>,
+	},
+
+	projectAudit: {
+		run: (id, tabId) => ipcRenderer.invoke(IPC_COMMANDS.PROJECT_AUDIT_RUN, id, tabId),
+		cancel: id => ipcRenderer.invoke(IPC_COMMANDS.PROJECT_AUDIT_CANCEL, id),
 	},
 
 	templates: {

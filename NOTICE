@@ -1,10 +1,9 @@
 WISA STUDIO
 ===========
 
-WISA STUDIO is a **display-layer rebrand of oh-my-pi's desktop GUI**. The
-application code is the oh-my-pi GUI; WISA changes the product name, the
-interface language (Vietnamese), the seeded model gateway, and the packaging
-metadata. The agent that does the work is upstream's.
+WISA STUDIO builds on oh-my-pi's desktop GUI and adds its own desktop
+features, Vietnamese defaults, model gateway configuration, and packaging.
+The app uses an oh-my-pi-based agent from the WISA-maintained fork.
 
 Upstream project
 ----------------
@@ -17,15 +16,20 @@ The GUI this build is based on
 oh-my-pi GUI — https://github.com/nornzach/oh-my-pi-gui
 (MIT, same license.)
 
+WISA-specific license scope
+---------------------------
+Starting with v0.9.55, WinSell's contributions in the two SEO Audit files
+identified in LICENSE-SCOPE.md are offered under LICENSE-POLYFORM-STRICT.
+This does not change the upstream licenses or any rights already granted.
+
 Bundled binaries
 ----------------
 Every installer ships `resources/omp` (macOS arm64), `resources/omp.x64`
 (macOS Intel), `resources/omp.exe` (Windows x64) or the Linux equivalent: a
-**compiled binary of upstream oh-my-pi's coding agent**, built unmodified from
-the monorepo commit recorded in `sidecar-source.json`. WISA does not patch the
-agent. Those binaries are upstream's work under the MIT License above, and they
-are never committed to this repository — they are build artifacts produced by
-`bun run build:omp*`.
+compiled oh-my-pi agent built from the exact fork commit recorded in
+`sidecar-source.json`. The fork carries WISA changes and retains the agent's
+MIT license and notices. These binaries are build artifacts produced by
+`bun run build:omp*`, not committed to this repository.
 
 What WISA adds
 --------------
@@ -43,6 +47,33 @@ Piper (https://github.com/rhasspy/piper, MIT) and the Vietnamese voice model
 vi_VN-vais1000-medium (CC BY 4.0, from rhasspy/piper-voices) are downloaded on
 first use, not shipped in the installer. Neither is committed to this
 repository; both are verified against a pinned SHA-256 before use.
+
+Manufacturer icons
+------------------
+Monochrome manufacturer icons are adapted from Lobe Icons:
+https://github.com/lobehub/lobe-icons/tree/05260484d9f4de68f90cc87a634ae68fa4043efd/packages/static-svg/icons
+
+MIT License
+
+Copyright (c) 2023 LobeHub
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 Trademarks and affiliation
 --------------------------

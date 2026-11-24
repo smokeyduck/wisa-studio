@@ -1,5 +1,6 @@
 import {
 	Archive,
+	Bell,
 	Bot,
 	Check,
 	CircleAlert,
@@ -13,13 +14,14 @@ import {
 	Terminal,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { memo, useLayoutEffect, useRef, useState } from "react";
+import { memo, useId, useLayoutEffect, useRef, useState } from "react";
+import { languageDetails } from "../../../shared/languages";
 import type { AgentMessage, ImageContent, MessageContent, ToolCallContent } from "../../../shared/rpc-types";
 import { OutputText } from "../../lib/ansi";
 import { splitAttachmentMentions } from "../../lib/attachment-mentions";
 import { describeProviderError, isCyberPolicyError } from "../../lib/errors";
 import { copyText, cx, formatClock, formatTokens } from "../../lib/format";
-import { useT } from "../../lib/i18n";
+import { useLang, useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
 import { editFromMessage, forkSessionFromMessageInNewTab, isRenderableMessageText } from "../../lib/messages";
 import { extractModelMentions, type ModelMentionChip } from "../../lib/model-mentions";
@@ -36,6 +38,7 @@ import { ZoomableImage } from "../common/ImageViewer";
 import { TechnicalDetails } from "../common/TechnicalDetails";
 import { type RunningIndicator, ToolCard } from "../tools/ToolCard";
 import { CustomMessageCard, isCustomMessageCardType } from "./CustomMessageCard";
+import { matchTodoReminder } from "./chat-stream-utils";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { useReadOnlyTranscript } from "./transcript-mode";
 import { UsageRow } from "./UsageRow";
@@ -50,6 +53,10 @@ export interface MessageBubbleProps {
 	reaction?: string;
 	/** Identical failed replies collapsed into this one (auto-retry attempts). */
 	repeats?: number;
+	todoReminders?: AgentMessage[];
+	rowKey?: string;
+	userTextExpanded?: boolean;
+	onUserTextExpandedChange?: (rowKey: string, expanded: boolean) => void;
 }
 
 const COMPACTION_METHOD_KEYS: Record<string, string> = {
@@ -59,6 +66,16 @@ const COMPACTION_METHOD_KEYS: Record<string, string> = {
 	snapcompact: "chat.context.compactionMethod.snapcompact",
 	shake: "chat.context.compactionMethod.shake",
 };
+
+// Core persists this diagnostic as prose, with grouping from its own locale.
+// Match only its complete template; preserve other summaries as authored.
+const SNAPCOMPACT_ARCHIVE_SUMMARY =
+	/^Archived (\p{Decimal_Number}+(?:[.,\p{Zs}٬’']\p{Decimal_Number}+)*) chars of history onto (\d+) snapcompact frames?(?: \(\+(\p{Decimal_Number}+(?:[.,\p{Zs}٬’']\p{Decimal_Number}+)*) chars as text\))?$/u;
+
+function formatArchiveCount(value: string, locale: string): string {
+	const count = Number(value.replace(/[.,\p{Zs}٬’']/gu, ""));
+	return Number.isSafeInteger(count) ? count.toLocaleString(locale) : value;
+}
 
 function InlineImage({ image }: { image: ImageContent }) {
 	const t = useT();
@@ -268,6 +285,7 @@ function ExecutionBubble({ message }: { message: AgentMessage }) {
 
 function ContextBubble({ message }: { message: AgentMessage }) {
 	const t = useT();
+	const { lang } = useLang();
 	const [expanded, setExpanded] = useState(false);
 	const isFiles = message.role === "fileMention";
 	const compactionMethodKey = message.method ? COMPACTION_METHOD_KEYS[message.method] : undefined;
@@ -292,6 +310,20 @@ function ContextBubble({ message }: { message: AgentMessage }) {
 			: message.role === "branchSummary"
 				? t("chat.context.branchSummary")
 				: t("chat.context.referencedFiles");
+	const { shortSummary } = message;
+	const archive =
+		message.role === "compactionSummary" && message.method === "snapcompact" && shortSummary
+			? SNAPCOMPACT_ARCHIVE_SUMMARY.exec(shortSummary)
+			: null;
+	let archiveSummary: string | undefined;
+	if (archive) {
+		const [, chars, frames, textChars] = archive;
+		const { locale } = languageDetails(lang);
+		const counts = { chars: formatArchiveCount(chars, locale), frames: formatArchiveCount(frames, locale) };
+		archiveSummary = textChars
+			? t("chat.context.snapcompactArchiveWithText", { ...counts, textChars: formatArchiveCount(textChars, locale) })
+			: t("chat.context.snapcompactArchive", counts);
+	}
 
 	return (
 		<div className="omp-context-turn px-6 py-3">
@@ -325,7 +357,7 @@ function ContextBubble({ message }: { message: AgentMessage }) {
 					</div>
 				) : (
 					<>
-						{message.shortSummary && <MarkdownRenderer content={message.shortSummary} />}
+						{shortSummary && <MarkdownRenderer content={archiveSummary ?? shortSummary} />}
 						{typeof message.warning === "string" && (
 							<p role="status" className="text-omp-md text-(--omp-warning)">
 								{message.warning}
@@ -348,44 +380,98 @@ function ContextBubble({ message }: { message: AgentMessage }) {
 	);
 }
 
-/**
- * A delegated prompt is often long and full of scaffolding: three lines until
- * the reader asks for all of it (plan/24 §5.4).
- */
-function ClampedAssignment({ children }: { children: ReactNode }) {
+function UserMessageText({
+	children,
+	assignment,
+	expanded: controlledExpanded,
+	onExpandedChange,
+}: {
+	children: ReactNode;
+	assignment: boolean;
+	expanded?: boolean;
+	onExpandedChange?: (expanded: boolean) => void;
+}) {
 	const t = useT();
-	const ref = useRef<HTMLDivElement>(null);
-	const [expanded, setExpanded] = useState(false);
+	const id = useId();
+	const viewport = useRef<HTMLDivElement>(null);
+	const body = useRef<HTMLDivElement>(null);
+	const [localExpanded, setLocalExpanded] = useState(false);
+	const expanded = controlledExpanded ?? localExpanded;
+	const setExpanded = onExpandedChange ?? setLocalExpanded;
 	const [overflows, setOverflows] = useState(false);
+	const lines = assignment ? 3 : 8;
 	useLayoutEffect(() => {
-		const element = ref.current;
-		if (!element || expanded) return;
-		const measure = () => setOverflows(element.scrollHeight > element.clientHeight + 1);
+		const clip = viewport.current;
+		const content = body.current;
+		if (!clip || !content || typeof window.getComputedStyle !== "function") return;
+		const measure = () => {
+			const limit = Number.parseFloat(window.getComputedStyle(clip).lineHeight) * lines;
+			setOverflows(content.offsetHeight > limit + 1);
+		};
 		measure();
 		if (typeof ResizeObserver === "undefined") return;
 		const observer = new ResizeObserver(measure);
-		observer.observe(element);
+		observer.observe(clip);
+		observer.observe(content);
 		return () => observer.disconnect();
-	}, [expanded]);
+	}, [lines]);
 	return (
 		<>
 			<div
-				className={cx(!expanded && "omp-assignment-clamp", !expanded && overflows && "omp-assignment-cut")}
-				ref={ref}
+				className={cx(
+					"text-omp-xl leading-[1.55]",
+					!expanded && "overflow-clip",
+					!expanded && overflows && "omp-user-text-cut",
+				)}
+				id={id}
+				onFocusCapture={event => {
+					if (expanded || !overflows) return;
+					if (event.target.getBoundingClientRect().bottom > event.currentTarget.getBoundingClientRect().bottom) {
+						setExpanded(true);
+					}
+				}}
+				ref={viewport}
+				style={expanded ? undefined : { maxHeight: `${lines}lh` }}
 			>
-				{children}
+				<div className="flow-root" ref={body}>
+					{children}
+				</div>
 			</div>
-			{(overflows || expanded) && (
+			{overflows && (
 				<button
+					aria-controls={id}
 					aria-expanded={expanded}
 					className="omp-pressable mt-1 text-omp-sm font-medium text-[var(--omp-link)] hover:underline"
-					onClick={() => setExpanded(value => !value)}
+					onClick={() => setExpanded(!expanded)}
 					type="button"
 				>
-					{expanded ? t("agents.page.showLess") : t("agents.page.showAll")}
+					{assignment
+						? t(expanded ? "agents.page.showLess" : "agents.page.showAll")
+						: t(expanded ? "chat.userMessage.collapse" : "chat.userMessage.expand")}
 				</button>
 			)}
 		</>
+	);
+}
+
+function TodoReminderCard({ reminder, actions }: { reminder: RegExpExecArray; actions?: ReactNode }) {
+	const t = useT();
+	const [, count, tasks, attempt, maxAttempts] = reminder;
+	return (
+		<div className="flex min-w-0 items-start gap-2 rounded-lg border border-(--omp-border-muted) px-2.5 py-1.5 text-omp-sm">
+			<Bell aria-hidden="true" className="mt-0.5 shrink-0 text-(--omp-warning)" size={13} />
+			<div className="min-w-0 flex-1">
+				<p className="font-medium text-(--omp-text)">{t("todoPanel.reminderCount", { count: Number(count) })}</p>
+				<div className="whitespace-pre-wrap wrap-anywhere text-(--omp-text-secondary)">{tasks}</div>
+				<p className="text-(--omp-muted)">{t("chat.todoReminder.instruction")}</p>
+				<div className="flex flex-wrap items-center justify-between gap-x-2">
+					<p className="text-omp-xs text-(--omp-dim)">
+						{t("chat.todoReminder.attempt", { attempt: Number(attempt), maxAttempts: Number(maxAttempts) })}
+					</p>
+					{actions}
+				</div>
+			</div>
+		</div>
 	);
 }
 
@@ -400,6 +486,10 @@ export const MessageBubble = memo(function MessageBubble({
 	reaction,
 	repeats,
 	runningIndicator = "spinner",
+	todoReminders,
+	rowKey,
+	userTextExpanded,
+	onUserTextExpandedChange,
 }: MessageBubbleProps) {
 	const t = useT();
 	const rpc = useTabRpc();
@@ -431,6 +521,14 @@ export const MessageBubble = memo(function MessageBubble({
 		: typeof message.content === "string"
 			? [{ type: "text", text: message.content }]
 			: [];
+	const reminder = matchTodoReminder(message);
+	if (reminder) {
+		return (
+			<div className="omp-assistant-turn--compact px-6 py-1">
+				<TodoReminderCard reminder={reminder} />
+			</div>
+		);
+	}
 	const isUser = message.role === "user";
 	const isAssistant = message.role === "assistant";
 	const isSteering = Boolean(message.steering);
@@ -563,7 +661,19 @@ export const MessageBubble = memo(function MessageBubble({
 									))}
 								</div>
 							)}
-							{readOnly ? <ClampedAssignment>{userBlocks}</ClampedAssignment> : userBlocks}
+							{userBlocks.some(Boolean) && (
+								<UserMessageText
+									assignment={readOnly !== null}
+									expanded={userTextExpanded}
+									onExpandedChange={
+										rowKey && onUserTextExpandedChange
+											? expanded => onUserTextExpandedChange(rowKey, expanded)
+											: undefined
+									}
+								>
+									{userBlocks}
+								</UserMessageText>
+							)}
 						</div>
 					</div>
 				</div>
@@ -657,6 +767,11 @@ export const MessageBubble = memo(function MessageBubble({
 	// don't need the 28px hover footer plus py-3 padding. Tool-only copy would
 	// be empty; the Process disclosure owns the grouped chrome and branch point.
 	const compactChrome = compact || (!sawNonToolBlock && !message.errorMessage && !customLabel && !isSteering);
+	const reminders = todoReminders?.flatMap(notice => {
+		const reminder = matchTodoReminder(notice);
+		return reminder ? [{ key: notice.entryId, reminder }] : [];
+	});
+	const hasReminders = Boolean(reminders?.length);
 	// A lone reasoning disclosure keeps the hover footer (copy / branch still
 	// apply to the step) but gets tight, symmetric chrome so the chips above
 	// and below sit one line away instead of 20/45px away (see components.css).
@@ -665,10 +780,36 @@ export const MessageBubble = memo(function MessageBubble({
 		!compactChrome &&
 		thinkingOnly &&
 		blocks.length > 0 &&
+		!hasReminders &&
 		!customLabel &&
 		!isSteering &&
 		!message.errorMessage &&
 		message.stopReason !== "aborted";
+	const actions = !compactChrome && (
+		<div className="omp-message-actions mt-1 flex h-6 items-center gap-1 text-omp-xs tabular-nums text-[var(--omp-dim)] opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+			{timestamp && <span className="me-1 font-mono">{timestamp}</span>}
+			<button
+				type="button"
+				onClick={handleCopy}
+				title={t("chat.copyMessage")}
+				className="omp-pressable flex h-6 w-6 items-center justify-center rounded-md text-[var(--omp-dim)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
+			>
+				{copied ? <Check size={13} className="text-[var(--omp-success)]" /> : <Copy size={13} />}
+			</button>
+			{isAssistant && !readOnly && (
+				<button
+					type="button"
+					onClick={() => void handleBranch()}
+					disabled={branching || switchPending}
+					aria-label={t("chat.branchFromHere")}
+					title={t("chat.branchFromHere")}
+					className="omp-pressable flex h-6 w-6 items-center justify-center rounded-md text-[var(--omp-dim)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)] disabled:cursor-wait disabled:opacity-50"
+				>
+					<GitBranch size={13} />
+				</button>
+			)}
+		</div>
+	);
 
 	return (
 		<div
@@ -677,7 +818,7 @@ export const MessageBubble = memo(function MessageBubble({
 				reasoningOnly && "omp-assistant-turn--reasoning",
 				!compactChrome && "omp-assistant-turn",
 				compactChrome && "omp-assistant-turn--compact",
-				compactChrome ? "py-1.5" : "py-3",
+				compactChrome ? "py-1" : "py-2",
 			)}
 		>
 			<div className="omp-transcript-content min-w-0">
@@ -695,31 +836,14 @@ export const MessageBubble = memo(function MessageBubble({
 					<MessageError message={message} repeats={repeats} />
 				)}
 				<UsageRow message={message} />
-				{!compactChrome && (
-					<div className="omp-message-actions mt-1 flex h-6 items-center gap-1 text-omp-xs tabular-nums text-[var(--omp-dim)] opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-						{timestamp && <span className="me-1 font-mono">{timestamp}</span>}
-						<button
-							type="button"
-							onClick={handleCopy}
-							title={t("chat.copyMessage")}
-							className="omp-pressable flex h-6 w-6 items-center justify-center rounded-md text-[var(--omp-dim)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
-						>
-							{copied ? <Check size={13} className="text-[var(--omp-success)]" /> : <Copy size={13} />}
-						</button>
-						{isAssistant && !readOnly && (
-							<button
-								type="button"
-								onClick={() => void handleBranch()}
-								disabled={branching || switchPending}
-								aria-label={t("chat.branchFromHere")}
-								title={t("chat.branchFromHere")}
-								className="omp-pressable flex h-6 w-6 items-center justify-center rounded-md text-[var(--omp-dim)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)] disabled:cursor-wait disabled:opacity-50"
-							>
-								<GitBranch size={13} />
-							</button>
-						)}
-					</div>
-				)}
+				{reminders?.map(({ key, reminder }, index) => (
+					<TodoReminderCard
+						actions={index === reminders.length - 1 ? actions : undefined}
+						key={key ?? index}
+						reminder={reminder}
+					/>
+				))}
+				{!hasReminders && actions}
 			</div>
 		</div>
 	);

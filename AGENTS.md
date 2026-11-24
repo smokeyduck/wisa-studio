@@ -137,25 +137,28 @@ Inspect every artifact before publishing:
 - Mount each DMG; verify the seal: `codesign --verify --deep --strict --verbose=2 "<path>/WISA STUDIO.app"`.
 - `file "<path>/WISA STUDIO.app/Contents/Resources/omp"` — the bundled sidecar arch must match the DMG (`wisa-studio-X.Y.Z-arm64.dmg` = arm64; `wisa-studio-X.Y.Z-x64.dmg` = Intel).
 - Launch each package on a compatible host: sidecar reaches `ready`, `get_settings` RPC succeeds, one settings toggle persists. From an agent shell, launch with `env -u ELECTRON_RUN_AS_NODE WISA_PROFILE_ROOT=/tmp/<dir> …/Contents/MacOS/<executable>` (Linux: the same `WISA_PROFILE_ROOT=` prefix on the AppImage or unpacked binary): a leaked `ELECTRON_RUN_AS_NODE=1` makes Electron exit 0 silently, and `WISA_PROFILE_ROOT` moves userData (`appData/wisa-studio`) and the agent dir (`.wisa-studio/agent`) together, so the app never touches the real profile or the single-instance lock of an installed copy. `--user-data-dir` is ignored; do not rely on it.
-- Windows: `file win-unpacked/resources/omp.exe` (arch must be x86-64). Preferred path is CI: `.github/workflows/release-windows.yml` (windows-latest) runs on release publish — or dispatch it for an existing tag — and reproduces the sidecar from `sidecar-source.json`'s monorepo pin (repo + commit; a pin naming any repository other than `smokeyduck/oh-my-pi` fails the build), smoke-tests it (sidecar RPC handshake + packaged-GUI launch with no renderer crash, plus the locale-pak regression guard), then attaches the setup/portable installers + `latest.yml` itself. Local `bun run package:win -- --publish never` remains available on a Windows host.
-- Linux is built by CI, not locally: `.github/workflows/release-linux.yml` (ubuntu-latest) runs on release publish — or dispatch it for an existing tag — and reproduces the sidecar from `sidecar-source.json`'s monorepo pin (repo + commit; a pin naming any repository other than `smokeyduck/oh-my-pi` fails the build), smoke-tests it, then attaches AppImage + deb + `latest-linux.yml` itself.
+- Windows CI (`release-windows.yml`, `windows-latest`) reproduces the pinned fork sidecar, checks the locale paks, and runs the unpacked app, installed NSIS app, and portable installer before stage upload. Local `bun run package:win -- --publish never` is available on Windows.
+- Linux CI (`release-linux.yml`, `ubuntu-latest`) reproduces the pinned fork sidecar and checks settings persistence in the unpacked app, the exact AppImage (extract-and-run, not FUSE), and the installed deb before stage upload.
 
 ### Phase 6 — Publish
 
-Create the GitHub Release on tag `vX.Y.Z` with:
+Create a GitHub Release **draft** for `vX.Y.Z`. Dispatch `release-macos.yml`, `release-windows.yml`, and `release-linux.yml` at that tag, with only the `tag` input. Do not override `gui_ref` or `monorepo_sha` for a new release. The workflows are manual-only and must not replace existing assets. The draft needs:
 
 - `wisa-studio-X.Y.Z-arm64.dmg` and `wisa-studio-X.Y.Z-x64.dmg`, plus both macOS ZIPs
 - `wisa-studio-X.Y.Z-setup.exe` and `wisa-studio-X.Y.Z-portable.exe`
+- `wisa-studio-*.AppImage`, `wisa-studio_*.deb`, `latest.yml`, and `latest-linux.yml`
 - All generated update metadata — critically, a `latest-mac.yml` covering **both** architectures (the built-in updater resolves DMGs from it; a release without it, or with only one architecture's entries, breaks update checks)
 - The changelog as the release body; record the monorepo commit the sidecars were built from, especially when it isn't upstream `main`
+
+Wait for all three workflows, including both native macOS jobs. Check the packaged notices and compare the draft asset SHA-256 digests with the CI upload logs. Verify every updater feed entry against the asset size and SHA-512. Publish only the verified draft; if any asset is missing or differs, stop without deleting or overwriting it.
 
 Never commit sidecar binaries. Never push to `upstream`.
 
 ### Phase 7 — Post-release
 
-- `site/` needs no edit: version strings and DMG links resolve from the GitHub releases API at page load.
+- For a version-only update, `site/` needs no edit: version strings and download links resolve from the GitHub releases API at page load.
 - Verify the release page lists every expected asset and that the updater feed resolves `latest-mac.yml`.
-- Confirm the Linux workflow run attached `wisa-studio-*.AppImage`, `wisa-studio_*.deb`, and `latest-linux.yml` (check the Actions run if they're missing).
+- Confirm Publish did not enqueue another release build; verify the public assets and feeds still match the verified draft.
 
 ## Build, Test, Release
 

@@ -83,12 +83,14 @@ describe("detectStrategy", () => {
 });
 
 describe("compactionThreshold", () => {
-	it("uses the agent's reserve rule by default: the larger of 15% and 16,384 tokens stays free", () => {
-		expect(compactionThreshold(config(), { ...textOnly, windowTokens: 262_144 })).toBe(
+	it("uses 20% by default and the reserve rule only when Auto was selected", () => {
+		expect(compactionThreshold(config(), textOnly)).toBe(52_428);
+		const auto = config({ thresholdPercent: -1 });
+		expect(compactionThreshold(auto, { ...textOnly, windowTokens: 262_144 })).toBe(
 			262_144 - Math.floor(262_144 * 0.15),
 		);
 		// A small window falls back to the fixed reserve instead of the percentage.
-		expect(compactionThreshold(config(), { ...textOnly, windowTokens: 32_000 })).toBe(32_000 - 16_384);
+		expect(compactionThreshold(auto, { ...textOnly, windowTokens: 32_000 })).toBe(32_000 - 16_384);
 	});
 
 	it("honors an explicit percentage and reports an unknown window as unknown", () => {

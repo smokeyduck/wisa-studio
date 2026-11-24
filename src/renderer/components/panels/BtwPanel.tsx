@@ -208,7 +208,7 @@ export function BtwPanel() {
 					<div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
 						<div className="text-omp-lg font-medium text-(--omp-text)">{t("btw.empty")}</div>
 						<div className="max-w-xs text-omp-sm text-(--omp-dim)">{t("btw.emptyHint")}</div>
-						<div className="max-w-xs text-omp-xs text-(--omp-dim)">{t("btw.noToolsHint")}</div>
+						<div className="max-w-xs text-omp-xs text-(--omp-dim)">{t("btw.scopeHint")}</div>
 					</div>
 				) : record ? (
 					<div className="space-y-5">

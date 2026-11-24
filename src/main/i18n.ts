@@ -9,15 +9,6 @@ import { VI_MAIN_TEXT } from "./native-vi";
 export type MainLanguage = Language;
 
 export type MainTextKey =
-	| "browser.back"
-	| "browser.copyImage"
-	| "browser.copyImageAddress"
-	| "browser.copyLink"
-	| "browser.forward"
-	| "browser.inspect"
-	| "browser.openLinkExternally"
-	| "browser.openLinkInNewPage"
-	| "browser.reload"
 	| "crash.body"
 	| "crash.close"
 	| "crash.title"
@@ -58,6 +49,7 @@ export type MainTextKey =
 	| "menu.openProject"
 	| "menu.prCenter"
 	| "menu.providers"
+	| "menu.reload"
 	| "menu.reportIssue"
 	| "menu.restartCore"
 	| "menu.scheduledTasks"
@@ -108,22 +100,13 @@ export type MainTextKey =
 	| "updates.unsupportedArchitecture";
 
 const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "th" | "vi">, string>> = {
-	"browser.back": { en: "Back", zh: "后退" },
-	"browser.copyImage": { en: "Copy Image", zh: "复制图片" },
-	"browser.copyImageAddress": { en: "Copy Image Address", zh: "复制图片地址" },
-	"browser.copyLink": { en: "Copy Link Address", zh: "复制链接地址" },
-	"browser.forward": { en: "Forward", zh: "前进" },
-	"browser.inspect": { en: "Inspect Element", zh: "检查元素" },
-	"browser.openLinkExternally": { en: "Open Link in Default Browser", zh: "在默认浏览器中打开链接" },
-	"browser.openLinkInNewPage": { en: "Open Link in New Page", zh: "在新页面中打开链接" },
-	"browser.reload": { en: "Reload", zh: "重新加载" },
 	"dialog.openProject": { en: "Open project", zh: "打开项目" },
 	"menu.about": { en: "About WISA STUDIO", zh: "关于 WISA STUDIO" },
 	"menu.addToDictionary": { en: "Add to dictionary", zh: "添加到词典" },
 	"menu.closeTab": { en: "Close Tab", zh: "关闭标签页" },
 	"menu.closeWindow": { en: "Close Window", zh: "关闭窗口" },
 	"menu.commandCenter": { en: "Command Center", zh: "命令中心" },
-	"menu.capabilities": { en: "Capabilities", zh: "能力" },
+	"menu.capabilities": { en: "Wisa Capabilities", zh: "Wisa 能力" },
 	"menu.importSession": { en: "Import Session", zh: "导入会话" },
 	"menu.branchPicker": { en: "Branch from Message", zh: "从消息分支" },
 	"menu.sessionTree": { en: "Session Tree", zh: "会话树" },
@@ -163,6 +146,7 @@ const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "th" | "vi">
 	"menu.openProject": { en: "Open Project…", zh: "打开项目…" },
 	"menu.prCenter": { en: "PR Center", zh: "PR 中心" },
 	"menu.providers": { en: "Providers & Login", zh: "提供商与登录" },
+	"menu.reload": { en: "Reload", zh: "重新加载" },
 	"menu.reportIssue": { en: "Report an Issue…", zh: "反馈问题…" },
 	"menu.session": { en: "Session", zh: "会话" },
 	"menu.sessionInfo": { en: "Session Info", zh: "会话信息" },
@@ -260,7 +244,17 @@ const prefs = new Store<{ language?: MainLanguage }>({ name: "prefs" });
 export function getMainLanguage(): MainLanguage {
 	const stored = prefs.get("language");
 	if (isLanguage(stored)) return stored;
-	return detectLanguage({ locale: app.getLocale(), timeZone: resolvedTimeZone() });
+	return detectMainLanguage();
+}
+
+function detectMainLanguage(): MainLanguage {
+	return detectLanguage({
+		locale: app.getLocale(),
+		locales: app.getPreferredSystemLanguages(),
+		region: app.getLocaleCountryCode() || app.getSystemLocale().match(/[-_]([A-Za-z]{2})$/)?.[1],
+		timeZone: resolvedTimeZone(),
+		windows: process.platform === "win32",
+	});
 }
 
 /** IANA zone for detection; empty when `Intl` refuses. */

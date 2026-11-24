@@ -11,8 +11,8 @@
  * live, commands, config, prompt result, command output, session info,
  * extension ui/error, host tool/uri) forward from at most two VISIBLE tabs.
  * One of them is focused for untargeted commands. Every tab (visible or
- * background) additionally pushes the light TAB_STATUS channel, so background
- * tabs report status flips and session title/id changes.
+ * background) additionally pushes TAB_STATUS updates and side-question
+ * frames, so its status, session metadata and BTW history stay current.
  *
  * F-OWN (double-attach guard): `#sessionOwners` maps a session file to the
  * tab/window attached to it, registered at acquire (spawn-with-sessionPath),
@@ -38,7 +38,7 @@ import {
 	type IpcTabWorktree,
 } from "../shared/ipc-types";
 import {
-	type AgentMessage,
+	agentTurnOutcome,
 	type AgentSessionEvent,
 	type AvailableCommand,
 	BLOCKING_UI_METHODS,
@@ -95,6 +95,8 @@ interface PoolEntry {
 	running: boolean;
 	/** Prompt yielded while background work can still wake the session. */
 	awaitingSessionSettled: boolean;
+	/** A terminal reply received while parked, until the session is no longer running. */
+	settledRun?: IpcTabStatusPayload["settledRun"];
 	/** Automatic transcript compaction state once observed — true blocks session mutation. */
 	compacting?: boolean;
 	manualCompaction?: "foreground" | "background" | null;
@@ -200,14 +202,12 @@ export class SidecarPool {
 	/** Main-process persistence hook. The primary window installs this at startup. */
 	onWindowTabsChanged: ((win: BrowserWindow, layout: PersistedTabLayout | null) => void) | null = null;
 	/**
-	 * Main-process services bound to a tab's sidecar process (the browser panel
-	 * host): `ready` on every boot or restart, `down` whenever it stops serving,
-	 * `released` once the tab is gone for good.
+	 * Main-process services bound to a tab's sidecar: `ready` on every boot or
+	 * restart, `down` when the running sidecar stops serving.
 	 */
 	sidecarLifecycle: {
-		ready(tab: { tabId: string; kind: "agent" | "chat"; sidecar: SidecarManager; win: BrowserWindow }): void;
+		ready(tab: { tabId: string; kind: "agent" | "chat"; sidecar: SidecarManager }): void;
 		down(tabId: string): void;
-		released(tabId: string): void;
 	} | null = null;
 
 	constructor(factory: SidecarFactory) {
@@ -390,14 +390,14 @@ export class SidecarPool {
 		if (cwd) this.#scheduleSpare(cwd);
 	}
 
-	/** Per-tab light wiring, attached for the entry's whole life: TAB_STATUS pushes. */
+	/** Light wiring stays attached for the tab's lifetime, including when parked. */
 	#wireLight(entry: PoolEntry): void {
 		const { sidecar, win } = entry;
 		sidecar.on("status", (payload: SidecarStatusPayload) => {
 			const wasReady = entry.status === "ready";
 			entry.status = payload.status;
 			if (payload.status === "ready") {
-				this.sidecarLifecycle?.ready({ tabId: entry.tabId, kind: entry.kind, sidecar, win });
+				this.sidecarLifecycle?.ready({ tabId: entry.tabId, kind: entry.kind, sidecar });
 				if (entry.kind === "agent" && !entry.worktree) this.#scheduleSpare(sidecar.cwd);
 			} else if (wasReady) {
 				this.sidecarLifecycle?.down(entry.tabId);
@@ -406,6 +406,7 @@ export class SidecarPool {
 			if (payload.status !== "ready") {
 				entry.running = false;
 				entry.awaitingSessionSettled = false;
+				entry.settledRun = undefined;
 				entry.compacting = undefined;
 				if (entry.manualCompaction !== undefined) entry.manualCompaction = null;
 				entry.retry = undefined;
@@ -439,17 +440,28 @@ export class SidecarPool {
 				// first attach (previousId undefined) keeps the acquire-time
 				// registration; the renderer's hydrate (get_state) re-registers
 				// the current file after a real change.
-				if (previousId !== undefined && previousId !== frame.sessionId) this.#unregisterSessionFile(entry);
+				if (previousId !== undefined && previousId !== frame.sessionId) {
+					this.#unregisterSessionFile(entry);
+					entry.settledRun = undefined;
+				}
 			}
 			// Session meta changes ride the light channel too, so a background
 			// tab's title/id updates without waiting for a status flip.
 			forwardToWindow(win, IPC_EVENTS.TAB_STATUS, tabStatusPayload(entry));
 		});
+		const publishRunStatus = (): void => {
+			const payload = tabStatusPayload(entry);
+			if (!entry.running && entry.status === "ready" && entry.settledRun) {
+				payload.settledRun = entry.settledRun;
+				entry.settledRun = undefined;
+			}
+			forwardToWindow(win, IPC_EVENTS.TAB_STATUS, payload);
+		};
 		const setRunning = (running: boolean): void => {
 			const wasBusy = entryHasWork(entry);
 			entry.running = running;
 			const busy = entryHasWork(entry);
-			if (busy !== wasBusy) forwardToWindow(win, IPC_EVENTS.TAB_STATUS, tabStatusPayload(entry));
+			if (busy !== wasBusy || (!entry.running && entry.settledRun)) publishRunStatus();
 		};
 		sidecar.on("promptResult", (frame: PromptResultFrame) => {
 			if (typeof frame.sessionSettled !== "boolean") return;
@@ -477,6 +489,7 @@ export class SidecarPool {
 				if (event.type === "agent_start") {
 					entry.running = true;
 					entry.placeholder = false;
+					entry.settledRun = undefined;
 					// An auto-retry re-enters through agent_start; only a run outside a
 					// retry saga starts with a clean slate. The saga ends on auto_retry_end
 					// (the "retrying" mark), but its wait is over: the retry row hands over
@@ -488,7 +501,17 @@ export class SidecarPool {
 					entry.retry = undefined;
 				} else if (event.type === "agent_end") {
 					if (!entry.awaitingSessionSettled) entry.running = false;
-					if (event.isTerminal !== false && entry.attention !== "retrying") settleAttention(entry, event.messages);
+					if (event.isTerminal !== false && entry.attention !== "retrying") {
+						const outcome = agentTurnOutcome(event);
+						if (!entry.detachFull) entry.settledRun = outcome?.tone;
+						if (outcome?.tone === "failed") {
+							entry.attention = "failed";
+							entry.attentionDetail = outcome.detail || entry.attentionDetail;
+						} else if (event.messages?.some(message => message.role === "assistant")) {
+							entry.attention = undefined;
+							entry.attentionDetail = undefined;
+						}
+					}
 				} else if (event.type === "auto_retry_start") {
 					entry.attention = "retrying";
 					entry.retry = {
@@ -526,12 +549,13 @@ export class SidecarPool {
 			const busy = entryHasWork(entry);
 			if (
 				busy !== wasBusy ||
+				(!entry.running && entry.settledRun) ||
 				entry.placeholder !== wasPlaceholder ||
 				entry.attention !== wasAttention ||
 				entry.retry !== wasRetry ||
 				entry.manualCompaction !== wasManualCompaction
 			) {
-				forwardToWindow(win, IPC_EVENTS.TAB_STATUS, tabStatusPayload(entry));
+				publishRunStatus();
 			}
 			if (entry.placeholder !== wasPlaceholder) this.#notifyWindowTabsChanged(win);
 		});
@@ -556,6 +580,11 @@ export class SidecarPool {
 		sidecar.on("hostUriRequest", (request: HostUriRequest) => {
 			this.#requestOwners.set(request.id, entry);
 			forwardToWindow(win, IPC_EVENTS.HOST_URI_REQUEST, { request });
+		});
+		// The side turn runs independently of pane visibility. Keep its records
+		// and deltas with the originating tab even after that tab is parked.
+		sidecar.on("btwFrame", (frame: RpcBtwFrame) => {
+			forwardToWindow(win, IPC_EVENTS.BTW_FRAME, { tabId: entry.tabId, payload: frame });
 		});
 	}
 
@@ -595,9 +624,6 @@ export class SidecarPool {
 		});
 		wire("dictationFrame", (frame: RpcDictationFrame) => {
 			forwardActive(IPC_EVENTS.DICTATION_FRAME, frame);
-		});
-		wire("btwFrame", (frame: RpcBtwFrame) => {
-			forwardActive(IPC_EVENTS.BTW_FRAME, frame);
 		});
 		wire("modelCatalogUpdate", (frame: ModelCatalogUpdateFrame) => {
 			forwardActive(IPC_EVENTS.MODEL_CATALOG_UPDATE, frame);
@@ -653,7 +679,6 @@ export class SidecarPool {
 		}
 		entry.sidecar.removeAllListeners();
 		entry.sidecar.dispose();
-		this.sidecarLifecycle?.released(entry.tabId);
 		const visible = this.#visibleByWindow.get(entry.winId);
 		visible?.delete(entry.tabId);
 		// A closed tab dissolves its pair; the partner stays as a single tab.
@@ -1079,7 +1104,6 @@ export class SidecarPool {
 		for (const entry of this.#entries) {
 			entry.sidecar.removeAllListeners();
 			entry.sidecar.dispose();
-			this.sidecarLifecycle?.released(entry.tabId);
 		}
 		this.#entries.clear();
 		this.#byTabId.clear();
@@ -1094,19 +1118,6 @@ export class SidecarPool {
 
 function groupHas(group: IpcTabGroup, tabId: string): boolean {
 	return group.firstTabId === tabId || group.secondTabId === tabId;
-}
-
-/** A terminal agent_end decides the run's outcome from its final assistant reply. */
-function settleAttention(entry: PoolEntry, messages: AgentMessage[] | undefined): void {
-	const last = messages?.findLast(message => message.role === "assistant");
-	if (last?.stopReason === "error") {
-		entry.attention = "failed";
-		entry.attentionDetail = typeof last.errorMessage === "string" ? last.errorMessage : entry.attentionDetail;
-	} else if (entry.attention === "retrying" || last) {
-		// A settled run that did not fail: any retry saga ended in its favor.
-		entry.attention = undefined;
-		entry.attentionDetail = undefined;
-	}
 }
 
 /** TAB_STATUS push / GET_TABS item: full tab snapshot incl. cached session meta. */

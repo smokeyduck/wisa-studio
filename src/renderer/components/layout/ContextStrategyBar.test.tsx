@@ -2,7 +2,7 @@ import { parseHTML } from "linkedom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ModelInfo, RpcResponse } from "../../../shared/rpc-types";
+import type { ModelInfo, RpcCommand, RpcResponse } from "../../../shared/rpc-types";
 import { OVERLAY_EXIT_MS } from "../../hooks/use-overlay-presence";
 import { I18nProvider } from "../../lib/i18n";
 import { useModelStore } from "../../stores/model";
@@ -26,24 +26,17 @@ Object.assign(globalThis as Record<string, unknown>, {
 let values: Record<string, unknown> = {};
 const ok = (data?: unknown): RpcResponse => ({ type: "response", command: "x", success: true, data });
 const getSettings = vi.fn(async () => ok({ values }));
-const setSetting = vi.fn(async (path: string, value: unknown) => {
-	values = { ...values, [path]: value };
+const command = vi.fn(async (request: RpcCommand) => {
+	if (request.type !== "set_session_compaction") throw new Error(`Unexpected RPC: ${request.type}`);
+	values = { ...values, ...request.values };
 	return ok();
 });
-const setAutoCompaction = vi.fn(async () => ok());
-const getState = vi.fn(async () => ok({}));
-const prefStore = new Map<string, unknown>();
 (window as unknown as { omp: unknown }).omp = {
-	rpc: { getSettings, setSetting, setAutoCompaction, getState },
+	rpc: { command, getSettings },
 	events: { onConfigUpdate: () => () => {} },
-	prefs: {
-		get: async (key: string) => prefStore.get(key),
-		set: async (key: string, value: unknown) => void prefStore.set(key, value),
-	},
 };
 
 const { createRoot } = await import("react-dom/client");
-const { resetCompactionDefaultsCheck } = await import("../../lib/context-defaults");
 const { ContextStrategyBar } = await import("./ContextStrategyBar");
 
 let container: HTMLElement;
@@ -67,9 +60,7 @@ const gpt: ModelInfo = {
 	contextWindow: 400_000,
 };
 
-/** `migrate` lets the one-time 20% default run; every other test pins the threshold. */
-async function mount(model: ModelInfo, options: { migrate?: boolean } = {}): Promise<void> {
-	if (!options.migrate) prefStore.set("compactionDefaults", true);
+async function mount(model: ModelInfo): Promise<void> {
 	useModelStore.setState({ model });
 	useSessionStore.setState({ status: "ready", sessionId: "s1" });
 	container = document.createElement("div") as unknown as HTMLElement;
@@ -99,8 +90,6 @@ afterEach(async () => {
 	container?.remove();
 	for (const node of [...document.querySelectorAll("[role='dialog']")]) node.remove();
 	values = {};
-	prefStore.clear();
-	resetCompactionDefaultsCheck();
 	vi.clearAllMocks();
 	useModelStore.getState().reset();
 	useSessionStore.getState().reset();
@@ -116,8 +105,7 @@ describe("ContextStrategyBar", () => {
 		expect(row).toContain("Balanced");
 		// No server compaction, reads images: the default order lands on the image archive.
 		expect(row).toContain("Image archive");
-		// 262,144 less the 15% reserve.
-		expect(row).toContain("at 222.8k");
+		expect(row).toContain("at 52.4k");
 	});
 
 	it("names the method for a server-compacting model", async () => {
@@ -151,10 +139,18 @@ describe("ContextStrategyBar", () => {
 
 		await act(async () => radio("Preserve detail")?.click());
 
-		expect(setSetting.mock.calls).toEqual([
-			["compaction.methodOrder", ["shake", "handoff", "soft"]],
-			["compaction.keepRecentTokens", 40_000],
-			["compaction.experimentalContextManagement", false],
+		expect(command.mock.calls).toEqual([
+			[
+				{
+					type: "set_session_compaction",
+					sessionId: "s1",
+					values: {
+						"compaction.methodOrder": ["shake", "handoff", "soft"],
+						"compaction.keepRecentTokens": 40_000,
+						"compaction.experimentalContextManagement": false,
+					},
+				},
+			],
 		]);
 		expect(container.textContent).toContain("Preserve detail");
 		expect(container.textContent).toContain("Shake");
@@ -168,7 +164,7 @@ describe("ContextStrategyBar", () => {
 		await openPopover();
 		expect(radio("Custom")?.getAttribute("aria-checked")).toBe("true");
 		// Custom is a description of the current state, not something to click into.
-		expect(setSetting).not.toHaveBeenCalled();
+		expect(command).not.toHaveBeenCalled();
 	});
 
 	it("writes a threshold change on its own, without touching the strategy", async () => {
@@ -177,7 +173,9 @@ describe("ContextStrategyBar", () => {
 
 		await act(async () => radio("80%")?.click());
 
-		expect(setSetting.mock.calls).toEqual([["compaction.thresholdPercent", 80]]);
+		expect(command.mock.calls).toEqual([
+			[{ type: "set_session_compaction", sessionId: "s1", values: { "compaction.thresholdPercent": 80 } }],
+		]);
 		// 80% of 262,144.
 		expect(container.textContent).toContain("at 209.7k");
 	});
@@ -191,18 +189,13 @@ describe("ContextStrategyBar", () => {
 		expect(document.body.textContent).toContain("nothing will compact automatically");
 	});
 
-	it("sets the threshold to 20% once, then leaves the reader's choice alone", async () => {
-		await mount(kimi, { migrate: true });
-		expect(setSetting.mock.calls).toEqual([["compaction.thresholdPercent", 20]]);
-		expect(container.textContent).toContain("at 52.4k");
-
-		await act(async () => root.unmount());
-		container.remove();
+	it("honors an explicitly selected Auto threshold without writing a default", async () => {
 		values = { "compaction.thresholdPercent": -1 };
-		setSetting.mockClear();
-		await mount(kimi, { migrate: true });
-
-		expect(setSetting).not.toHaveBeenCalled();
+		await mount(kimi);
+		await openPopover();
+		expect(radio("Auto")?.getAttribute("aria-checked")).toBe("true");
+		expect(container.textContent).toContain("at 222.8k");
+		expect(command).not.toHaveBeenCalled();
 	});
 
 	it("names the vendor, capitalised, in the popover's model summary", async () => {

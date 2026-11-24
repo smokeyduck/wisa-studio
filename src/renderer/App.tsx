@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo } from "react";
 import type { DeepLinkPayload, MenuAction, MenuActionPayload, RunProgressState } from "../shared/ipc-types";
 import { nextLanguage } from "../shared/languages";
 import { AgentHoverCardLayer } from "./components/agents/AgentHoverCard";
+import { TodoRibbon } from "./components/chat/dock/TodoDockCard";
 import { PanelErrorBoundary, Spinner, ToastStack } from "./components/common";
 import { LinkMenuHost } from "./components/common/LinkMenu";
 import { WorkspacePageContext } from "./components/common/Modal";
@@ -46,6 +47,7 @@ import { SplitWorkspace } from "./components/layout/SplitWorkspace";
 import { TabBar } from "./components/layout/TabBar";
 import { TitleBar } from "./components/layout/TitleBar";
 import { UpdateBanner } from "./components/layout/UpdateBanner";
+import { PluginCatalogProvider } from "./components/panels/plugins/use-plugin-catalog";
 import { connectFileDraftGuard } from "./components/panels/WorkspaceFileEditor";
 import { useAwaitingConfirmation } from "./hooks/use-awaiting-confirmation";
 import { useExtensionUi } from "./hooks/use-extension-ui";
@@ -104,6 +106,15 @@ import { usePlanSidebar } from "./hooks/use-plan-sidebar";
 // only on first open instead of bloating the eager bundle.
 const SettingsWindow = lazy(() =>
 	import("./components/settings/SettingsWindow").then(m => ({ default: m.SettingsWindow })),
+);
+const CapabilitiesPage = lazy(() =>
+	import("./components/settings/CapabilitiesPage").then(m => ({ default: m.CapabilitiesPage })),
+);
+const SecurityCenter = lazy(() =>
+	import("./components/settings/SecuritySettingsPage").then(m => ({ default: m.SecurityCenter })),
+);
+const ProjectAuditPage = lazy(() =>
+	import("./components/panels/ProjectAuditPage").then(m => ({ default: m.ProjectAuditPage })),
 );
 const StatsDashboard = lazy(() =>
 	import("./components/stats/StatsDashboard").then(m => ({ default: m.StatsDashboard })),
@@ -212,7 +223,7 @@ export function App() {
 	// Session tabs: GET_TABS boot reconciliation + TAB_STATUS subscription.
 	usePlanApproval();
 	useSessionTabs();
-	// Terminal output and browser state for every tab, plus drawer reveals.
+	// Terminal output for every tab and scoped inspector reveals.
 	useWorkspaceSurfaces();
 	// Scheduled tasks: the main-process snapshot, live run progress, agent drafts.
 	useEffect(() => useSchedulerStore.getState().connect(), []);
@@ -272,7 +283,6 @@ export function App() {
 				"transcriptDetail",
 				"tabWidth",
 				"tabRows",
-				"linkOpenMode",
 				"collapseLargePastes",
 				"panelTab",
 			] as const) {
@@ -341,12 +351,6 @@ export function App() {
 				}
 				if ((prefs.tabRows === "single" || prefs.tabRows === "multi") && !changedPreferences.has("tabRows")) {
 					useUiStore.setState({ tabRows: prefs.tabRows });
-				}
-				if (
-					(prefs.linkOpenMode === "panel" || prefs.linkOpenMode === "external") &&
-					!changedPreferences.has("linkOpenMode")
-				) {
-					useUiStore.setState({ linkOpenMode: prefs.linkOpenMode });
 				}
 				if (typeof prefs.collapseLargePastes === "boolean" && !changedPreferences.has("collapseLargePastes")) {
 					useUiStore.setState({ collapseLargePastes: prefs.collapseLargePastes });
@@ -668,21 +672,6 @@ export function App() {
 		return () => window.removeEventListener("keydown", onKey);
 	}, [t, keymap]);
 
-	// A focused browser page keeps every keystroke: tell the host which chords
-	// are the app's, and replay the ones it hands back through the same dispatch.
-	useEffect(() => {
-		const browser = window.omp?.browser;
-		if (typeof browser?.setShortcuts === "function") browser.setShortcuts([...keymap.keys()]);
-	}, [keymap]);
-	useEffect(() => {
-		const events = window.omp?.events;
-		if (typeof events?.onBrowserKey !== "function") return;
-		return events.onBrowserKey(payload => {
-			if (payload.kind !== "shortcut") return;
-			window.dispatchEvent(new KeyboardEvent("keydown", { ...payload.key, bubbles: true, cancelable: true }));
-		});
-	}, []);
-
 	// Updater status: main-process push + boot replay, unsubscribed on unmount.
 	useEffect(() => subscribeUpdaterStatus(), []);
 
@@ -701,16 +690,8 @@ export function App() {
 				setLang(nextLanguage(lang));
 				return;
 			}
-			// Edit → Find / Find Next / Find Previous with no browser page focused.
-			// Focus in the browser panel's controls searches its page; otherwise
-			// Find opens the conversation's find bar, and Next/Previous step that bar
-			// while it is open, else the panel's page.
 			if (action === "find" || action === "find-next" || action === "find-previous") {
-				const command = action === "find" ? "find" : action === "find-next" ? "next" : "previous";
-				const inBrowserPanel = document.activeElement?.closest("[data-browser-panel]") != null;
-				const transcriptFindOpen = document.querySelector("[data-transcript-find]") !== null;
-				if (!inBrowserPanel && (command === "find" || transcriptFindOpen)) ui.requestTranscriptFind(command);
-				else ui.requestBrowserFind(command);
+				ui.requestTranscriptFind(action === "find" ? "find" : action === "find-next" ? "next" : "previous");
 				return;
 			}
 			// New tab actions never touch the live run — they must stay OUT of the
@@ -750,7 +731,7 @@ export function App() {
 				return;
 			}
 			if (action === "open-capabilities") {
-				ui.openSettings("capabilities");
+				ui.openCapabilitiesPage();
 				return;
 			}
 			if (action === "open-git") {
@@ -896,6 +877,7 @@ export function App() {
 		? {
 				activeToolsOpen: <ActiveToolsDialog />,
 				agentHubOpen: <AgentHubWindow open={agentHubOpen} onClose={closeAgentHub} initialTab={agentHubTab} />,
+				capabilities: <CapabilitiesPage />,
 				changelogOpen: <ChangelogDialog />,
 				contextReportOpen: <ContextReportDialog />,
 				debugOpen: <DebugConsoleDialog />,
@@ -917,6 +899,8 @@ export function App() {
 				sessionInfoOpen: <SessionInfoDialog />,
 				sessionTreeOpen: <SessionTreeDialog />,
 				statsDashboardOpen: <StatsDashboard open={statsDashboardOpen} onClose={closeStatsDashboard} />,
+				projectAudit: <ProjectAuditPage />,
+				security: <SecurityCenter />,
 				tasks: <TasksWindow />,
 				usageOpen: <UsageWindow />,
 				workspaceDirsOpen: <WorkspaceDirsDialog />,
@@ -935,6 +919,7 @@ export function App() {
 				<div className={workspace ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
 					<TitleBar />
 					<TabBar />
+					{focusedRuntime && <TodoRibbon key={focusedRuntime.tabId} />}
 					<div className="shrink-0" data-toast-clearance>
 						<SidecarBanner />
 						<ConfigWarningsBanner />
@@ -1010,8 +995,10 @@ export function App() {
 		</div>
 	);
 	return focusedRuntime ? (
-		<SessionRuntimeProvider runtime={focusedRuntime}>{surface}</SessionRuntimeProvider>
+		<SessionRuntimeProvider runtime={focusedRuntime}>
+			<PluginCatalogProvider>{surface}</PluginCatalogProvider>
+		</SessionRuntimeProvider>
 	) : (
-		surface
+		<PluginCatalogProvider>{surface}</PluginCatalogProvider>
 	);
 }

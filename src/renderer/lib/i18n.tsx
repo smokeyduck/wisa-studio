@@ -42,6 +42,7 @@ function resolvedTimeZone(): string | undefined {
 export function getCurrentLanguage(): Lang {
 	const stored = readStoredLanguage();
 	if (stored) return stored;
+	if (typeof window !== "undefined" && window.omp?.initialLanguage) return window.omp.initialLanguage;
 	if (typeof navigator === "undefined") return "en";
 	return detectLanguage({
 		locale: navigator.language,
@@ -83,7 +84,9 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-	const [lang, setLangState] = useState<Lang>(getCurrentLanguage);
+	const [lang, setLangState] = useState<Lang>(() =>
+		typeof window === "undefined" ? getCurrentLanguage() : (window.omp?.initialLanguage ?? getCurrentLanguage()),
+	);
 	const userSelected = useRef(false);
 
 	useEffect(() => {
@@ -103,6 +106,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 				if (isLanguage(value)) {
 					storeLanguage(value);
 					setLangState(value);
+				} else if (window.omp.initialLanguage) {
+					storeLanguage(window.omp.initialLanguage);
 				} else if (stored) {
 					void prefs.set("language", stored).catch(() => {});
 				}

@@ -4,8 +4,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../lib/i18n";
 import { useMessagesStore } from "../../stores/messages";
+import { useSchedulerStore } from "../../stores/scheduler";
 import { useSessionStore } from "../../stores/session";
 import { useToolsStore } from "../../stores/tools";
+import { useTurnNoticesStore } from "../../stores/turn-notices";
 import { useUiStore } from "../../stores/ui";
 import { TitleBar } from "./TitleBar";
 
@@ -80,12 +82,32 @@ afterEach(async () => {
 	useSessionStore.getState().reset();
 	useMessagesStore.getState().reset();
 	useToolsStore.getState().reset();
+	useSchedulerStore.setState({ notices: [] });
+	useTurnNoticesStore.setState({ notices: [] });
 	useUiStore.getState().closeSessionOverlays();
 	getSessionStats.mockRestore();
 	vi.clearAllMocks();
 });
 
 describe("TitleBar", () => {
+	it("counts scheduled and interactive unread notices and marks a clicked turn read", async () => {
+		useSchedulerStore.setState({
+			notices: [{ id: "report", title: "Daily report", body: "", tone: "done", target: {}, createdAt: 0, read: false }],
+		});
+		useTurnNoticesStore.getState().push({ tabId: "closed-tab", title: "Fix the UI", tone: "done" });
+		await mount();
+		expect(container.querySelectorAll("[data-notification-count]")[0]).toHaveProperty("textContent", "2");
+		const bell = container.querySelectorAll("[data-notification-bell]")[0];
+		Object.assign(bell!, { getBoundingClientRect: () => ({ right: 960, bottom: 40 }) });
+		await act(async () => bell?.click());
+		const rows = Array.from(document.querySelectorAll("[data-notice]"));
+		expect(rows[0]?.textContent).toContain("Fix the UI");
+		expect(rows[1]?.textContent).toContain("Daily report");
+		await act(async () => (rows[0] as unknown as TestButton | undefined)?.click());
+		expect(container.querySelectorAll("[data-notification-count]")[0]).toHaveProperty("textContent", "1");
+		expect(useTurnNoticesStore.getState().notices[0]?.read).toBe(true);
+	});
+
 	it("shows authoritative session usage and merged execution wall time", async () => {
 		useSessionStore.setState({ status: "ready", sessionId: "session-1", cwd: "/tmp/project" });
 		useMessagesStore.setState({
@@ -161,71 +183,12 @@ describe("TitleBar", () => {
 		expect(getSessionStats).toHaveBeenCalledTimes(2);
 	});
 
-	it("claims the Escape that cancels a rename, so the same keystroke cannot abort the turn", async () => {
-		useSessionStore.setState({
-			status: "ready",
-			sessionId: "session-1",
-			cwd: "/tmp/project",
-			sessionName: "demo-run",
-		});
-		await mount();
-		await act(async () => Promise.resolve());
-
-		const rename = (container.querySelectorAll("button") as unknown as TestButton[]).find(
-			b => b.title === "Rename session",
-		);
-		expect(rename).toBeDefined();
-		// linkedom ships no HTMLInputElement.select(); the field autofocuses through it.
-		const proto = HTMLElement.prototype as unknown as { select: () => void };
-		proto.select = () => {};
-		try {
-			await act(async () => rename?.click());
-			const input = document.querySelector("input") as unknown as { dispatchEvent: (event: Event) => boolean };
-			expect(input).toBeTruthy();
-
-			const escapeKey = new Event("keydown", { bubbles: true, cancelable: true });
-			Object.defineProperty(escapeKey, "key", { value: "Escape" });
-			// App.tsx aborts the active turn on any Escape nobody prevented.
-			let claimed = true;
-			await act(async () => {
-				claimed = !input.dispatchEvent(escapeKey);
-			});
-			expect(claimed).toBe(true);
-			expect(container.textContent).toContain("demo-run");
-		} finally {
-			delete (HTMLElement.prototype as unknown as { select?: () => void }).select;
-		}
-	});
-
 	it("shows no usage figures for a session that has not spent anything yet", async () => {
 		useSessionStore.setState({ status: "ready", sessionId: "", cwd: "/tmp/project" });
 		await mount();
 
 		expect(container.querySelectorAll(".omp-session-metrics")).toHaveLength(0);
 		expect(container.textContent).not.toContain("$0.0000");
-	});
-
-	it("titles an untitled session by its first prompt, like the tab strip", async () => {
-		sessions.list.mockImplementation(async () => [
-			{
-				path: "/tmp/sessions/session-1.jsonl",
-				id: "session-1",
-				title: null,
-				cwd: "/tmp/project",
-				created: "2026-10-01T00:00:00Z",
-				modified: "2026-10-01T00:00:00Z",
-				messageCount: 2,
-				size: 10,
-				status: "complete",
-				firstMessage: "Review the README",
-			} as never,
-		]);
-		useSessionStore.setState({ status: "ready", sessionId: "session-1", cwd: "/tmp/project" });
-		await mount();
-		await act(async () => {});
-
-		expect(container.textContent).toContain("Review the README");
-		expect(container.textContent).not.toContain("New session");
 	});
 
 	it("opens the command center and session actions from visible toolbar buttons", async () => {

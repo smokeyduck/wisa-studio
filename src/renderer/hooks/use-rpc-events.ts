@@ -22,6 +22,7 @@ import { useEffect } from "react";
 import type { IpcSidecarStatusPayload } from "../../shared/ipc-types";
 import {
 	type AgentSessionEvent,
+	agentTurnOutcome,
 	BLOCKING_UI_METHODS,
 	type CommandOutputFrame,
 	type ConfigUpdateFrame,
@@ -37,12 +38,12 @@ import {
 import { describeError, describeProviderError } from "../lib/errors";
 import { formatClock } from "../lib/format";
 import { translate } from "../lib/i18n";
+import { ircNotice } from "../lib/irc-notice";
 import { normalizeLoopUpdate } from "../lib/loop-mode";
 import { applyPreferredModel } from "../lib/model-preference";
 import { playNotificationChime } from "../lib/notify-sound";
 import { acceptsActiveTabEvents } from "../lib/tab-routing";
-import { applyWorkComputerDefault } from "../lib/work-computer";
-import { useBtwStore } from "../stores/btw";
+import { type BtwStore, useBtwStore } from "../stores/btw";
 import { useExtensionUiStore } from "../stores/extension-ui";
 import { useMessagesStore } from "../stores/messages";
 import { useModelStore } from "../stores/model";
@@ -63,6 +64,7 @@ import { isTabClosed, useTabsStore, visibleTabIds } from "../stores/tabs";
 import { useToastStore } from "../stores/toast";
 import { todoPhasesFromToolResult, useTodoStore } from "../stores/todo";
 import { useToolsStore } from "../stores/tools";
+import { useTurnNoticesStore } from "../stores/turn-notices";
 import { useUiStore } from "../stores/ui";
 
 /**
@@ -147,30 +149,37 @@ async function maybeNotify(
  * exclusive for one settled turn.
  */
 function notifyOnAgentEnd(tabId: string, event: Extract<AgentSessionEvent, { type: "agent_end" }>): void {
-	// `isTerminal === false` marks a deferred mid-run settle, not the final one.
-	if (event.isTerminal === false) return;
+	// A live auto-retry has not settled, even if an intermediate loop ended.
 	if (retryPendingTabs.has(tabId)) return;
-	const last = event.messages?.findLast(message => message.role === "assistant");
-	if (last?.stopReason === "aborted") return;
-	// A settle arriving after the tab closed has no runtime to query settings
-	// with — skip rather than resurrect a ghost runtime and notify a dead tab.
+	const outcome = agentTurnOutcome(event);
+	if (!outcome) return;
+	// A late settle after the tab closed has no notification target.
 	const runtime = sessionRuntime(tabId);
 	if (!runtime) return;
-	const sessionName =
-		sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionName ||
-		useSessionStore.getState().sessionName ||
-		"Oh My Pi";
-	if (last?.stopReason === "error") {
-		const message =
-			typeof last.errorMessage === "string" && last.errorMessage
-				? translate("events.notificationErrorDetail", {
-						error: describeProviderError(last.errorMessage).replace(/\s+/g, " ").slice(0, 120),
-					})
+	const session = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState();
+	const tab = useTabsStore.getState().tabs.find(item => item.id === tabId);
+	const title = session?.sessionName || tab?.title;
+	const detail =
+		outcome.tone === "failed" && outcome.detail ? outcome.detail.replace(/\s+/g, " ").slice(0, 200) : undefined;
+	useTurnNoticesStore.getState().push({
+		tabId,
+		sessionId: session?.sessionId || tab?.sessionId,
+		title,
+		tone: outcome.tone === "failed" ? "failed" : "done",
+		detail,
+	});
+	const body =
+		outcome.tone === "complete"
+			? translate("events.notificationComplete")
+			: detail
+				? translate("events.notificationErrorDetail", { error: describeProviderError(detail).slice(0, 120) })
 				: translate("events.notificationError");
-		void maybeNotify("error", sessionName, message, runtime.command);
-		return;
-	}
-	void maybeNotify("completion", sessionName, translate("events.notificationComplete"), runtime.command);
+	void maybeNotify(
+		outcome.tone === "failed" ? "error" : "completion",
+		title || "WISA STUDIO",
+		body,
+		runtime.command,
+	);
 }
 
 /**
@@ -243,8 +252,17 @@ export function notifyBackgroundSettle(
 	detail?: string,
 ): void {
 	const runtime = sessionRuntime(tabId);
+	const sessionId = useTabsStore.getState().tabs.find(tab => tab.id === tabId)?.sessionId;
+	const shortDetail = detail?.replace(/\s+/g, " ").slice(0, 200);
+	useTurnNoticesStore.getState().push({
+		tabId,
+		sessionId,
+		title: label,
+		tone: outcome === "failed" ? "failed" : "done",
+		detail: outcome === "failed" ? shortDetail : undefined,
+	});
 	if (outcome === "failed") {
-		const message = detail ? detail.replace(/\s+/g, " ").slice(0, 200) : translate("events.notificationError");
+		const message = shortDetail || translate("events.notificationError");
 		useToastStore.getState().push({ variant: "error", title: translate("tabs.bg.failed", { tab: label }), message });
 		if (runtime) void maybeNotify("error", label, message, runtime.command);
 		return;
@@ -627,13 +645,9 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							break;
 						}
 						case "irc_message": {
-							// IRC messages are rendered in the subagent/notification feed
 							useToastStore.getState().push({
 								variant: "info",
-								message:
-									typeof event.message === "object" && event.message !== null && "content" in event.message
-										? String((event.message as { content: unknown }).content)
-										: "IRC message received",
+								message: ircNotice(event.message, translate),
 								durationMs: 4000,
 							});
 							break;
@@ -728,9 +742,7 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 
 			if (payload.status === "ready") {
 				if (isFocused()) startHeartbeat();
-				// Frames are active-tab-only; a background tab or a restart can miss
-				// the terminal one. Re-read the shared history whenever the sidecar
-				// becomes ready so no topic is stuck showing "Running".
+				// A restart can interrupt a side answer; load the sidecar's saved history.
 				withSessionRuntime(statusTabId, () => {
 					void useBtwStore.getState().refresh();
 				});
@@ -766,9 +778,6 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							if (isFocused()) useUiStore.getState().clearSidecarError();
 							if (runtime) {
 								void hydrateTabSession(statusTabId);
-								// Work sessions exist to get something done on this machine,
-								// so desktop control starts on. Once per tab, Work only.
-								void applyWorkComputerDefault(statusTabId, payload.cwd);
 								// A brand-new session opens on the model this user actually
 								// reaches for, not on whichever row the catalog lists first.
 								void applyPreferredModel(statusTabId, res.data as RpcSessionState);
@@ -861,6 +870,9 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 			if (closedTabFrame(tabId)) return;
 			withSessionRuntime(tabId, () => {
 				applyModelInfo(frame.model, tabId);
+				if (typeof frame.autoCompactionEnabled === "boolean") {
+					useSettingsStore.setState({ autoCompaction: frame.autoCompactionEnabled });
+				}
 				void useSettingsStore.getState().syncDisplaySettings();
 				void useSettingsStore.getState().syncApproval();
 			});
@@ -941,11 +953,13 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 			void maybeNotify("ask", sessionName, body, sessionRuntime(tabId)?.command ?? activeTabCommand);
 		});
 
-		// Side-question frames carry no tab id: the preload forwards them only for
-		// the active tab, so the focused runtime's store is the target.
 		const unsubBtw =
-			typeof window.omp.events.onBtwFrame === "function"
-				? window.omp.events.onBtwFrame(frame => useBtwStore.getState().applyFrame(frame))
+			typeof window.omp.events.onTabBtwFrame === "function"
+				? window.omp.events.onTabBtwFrame((frame, tabId) => {
+						if (closedTabFrame(tabId)) return;
+						if (sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().switchPending) return;
+						sessionRuntimeStore<BtwStore>(tabId, "btw")?.getState().applyFrame(frame);
+					})
 				: () => {};
 
 		return () => {

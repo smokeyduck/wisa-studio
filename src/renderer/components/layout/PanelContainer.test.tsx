@@ -135,7 +135,6 @@ describe("PanelContainer chat tab filter", () => {
 		for (const visible of ["Plan", "Agents", "Side questions", "Changes", "Files", "Terminal"]) {
 			expect(labels).toContain(visible);
 		}
-		// The built-in browser is a window of its own, not an inspector view.
 		expect(labels).not.toContain("Browser");
 		// Live-execution tabs stay in chat; plans belong exclusively to the inspector.
 		for (const moved of ["Todo", "Queue", "Logs"]) {

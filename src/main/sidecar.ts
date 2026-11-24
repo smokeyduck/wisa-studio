@@ -6,7 +6,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import Store from "electron-store";
 import { type FlagDenylist, parseLaunchProfile, profileToFlags, stripDenylistedFlags } from "../shared/launch-profile";
@@ -37,6 +37,13 @@ import type {
 	SubagentFrame,
 } from "../shared/rpc-types";
 import { BTW_FRAME_TYPES, DICTATION_FRAME_TYPES, LIVE_FRAME_TYPES, TERMINAL_FRAME_TYPES } from "../shared/rpc-types";
+import {
+	CODING_TOOL_PROFILE_PREF,
+	WORK_TOOL_PROFILE_PREF,
+	readCodingToolProfile,
+	readWorkToolProfile,
+} from "../shared/tool-profiles";
+import { defaultWorkspacePath } from "./default-workspace";
 import { agentSpawnEnv } from "./dev-profile";
 import { EventBatcher } from "./event-batcher";
 import { dropUnsupportedProxies } from "./proxy-env";
@@ -45,6 +52,12 @@ import { RpcClient } from "./rpc-client";
 
 const MAX_RESTART_ATTEMPTS = 3;
 const RESTART_DELAYS = [1000, 2000, 4000];
+
+// Work's allowlist is GUI-owned. A workspace launch profile must not replace it.
+const WORK_TOOL_FLAGS: FlagDenylist = {
+	names: { "--tools": true, "--no-tools": true, "--plan-yolo": true, "--plan-yolo-into": true },
+	withValue: { "--tools": true, "--plan-yolo-into": true },
+};
 
 /**
  * Budget for a warm spare's `switch_session` (gui#29). Loading a large
@@ -143,7 +156,7 @@ export interface SidecarOptions {
 	 * Scheduled runs (plan/23): code-controlled policy flags, and the extra
 	 * flags a launch profile may not set because they would widen the policy.
 	 */
-	runPolicy?: { flags: string[]; deny: FlagDenylist };
+	runPolicy?: { flags: string[]; deny: FlagDenylist; hostToolsOnly?: true };
 	/** When set, spawn the workspace source CLI via bun instead of the installed binary. */
 	sourceCli?: string;
 	/**
@@ -184,28 +197,36 @@ export interface SidecarFailureReport {
 	cwd: string;
 }
 
-/**
- * Load the workspace's launch profile from GUI prefs (`launchProfiles.<cwd>`)
- * and map it to agent CLI flags. Prefs access mirrors the 0.3.1 proxy-env
- * pattern (point-of-use electron-store read); any failure — prefs unreadable,
- * non-electron test env, malformed JSON — degrades to no flags, never a
- * spawn block. Profile changes require a sidecar restart: flags are
- * spawn-time argv, there is no live apply.
- */
-function loadLaunchProfileFlags(cwd: string): string[] {
+/** Read preferences at each spawn/restart, not when the tab or spare is created. */
+function loadSpawnPrefs(cwd: string, mode: "coding" | "work" | null) {
+	let flags: string[] = [];
+	let rawProfile: unknown;
 	try {
-		// projectName is only a fallback for electron-less environments (tests):
-		// with the app present, electron-store's own userData cwd wins and the
-		// store matches index.ts/ipc.ts exactly. A pre-typed variable sidesteps
-		// the excess-property check — electron-store's Options type hides
-		// projectName, but its constructor passes it through to conf.
+		// With Electron, its userData path wins, matching the preferences IPC.
 		const storeOptions = { name: "prefs", projectName: "wisa-studio" };
-		const profiles = new Store<{ launchProfiles?: Record<string, unknown> }>(storeOptions).get("launchProfiles");
-		if (typeof profiles !== "object" || profiles === null) return [];
-		return profileToFlags(parseLaunchProfile(profiles[cwd]));
+		const prefs = new Store<Record<string, unknown>>(storeOptions);
+		if (mode) rawProfile = prefs.get(mode === "work" ? WORK_TOOL_PROFILE_PREF : CODING_TOOL_PROFILE_PREF);
+		const profiles = prefs.get("launchProfiles");
+		if (profiles && typeof profiles === "object") {
+			flags = profileToFlags(parseLaunchProfile((profiles as Record<string, unknown>)[cwd]));
+		}
 	} catch {
-		return [];
+		// Missing or unreadable preferences leave the built-in profiles intact.
 	}
+	if (mode === "work") {
+		const { tools } = readWorkToolProfile(rawProfile);
+		return { flags, toolProfile: `work:${tools.join(",")}`, editMode: "", workspaceRead: tools.includes("read") };
+	}
+	if (mode === "coding") {
+		const { disabled, editMode } = readCodingToolProfile(rawProfile);
+		return {
+			flags,
+			toolProfile: disabled.length ? `coding:${disabled.join(",")}` : "",
+			editMode: editMode === "core" ? "" : editMode,
+			workspaceRead: !disabled.includes("read"),
+		};
+	}
+	return { flags, toolProfile: "", editMode: "", workspaceRead: false };
 }
 
 /** Resolve the bun executable for source-sidecar spawns (PATH fallback last). */
@@ -372,13 +393,24 @@ export class SidecarManager extends EventEmitter {
 		if (this.#bootModelFallback) args.push("--model", DEFAULT_ROLE_MODEL_SELECTOR);
 		if (this.#options.kind === "chat") args.push("--chat");
 		const runPolicy = this.#options.runPolicy;
+		const toolMode =
+			runPolicy || this.#options.kind === "chat"
+				? null
+				: relative(defaultWorkspacePath(), cwd) === ""
+					? "work"
+					: "coding";
+		const { flags, toolProfile, editMode, workspaceRead } = runPolicy?.hostToolsOnly
+			? { flags: [], toolProfile: "work:", editMode: "", workspaceRead: false }
+			: loadSpawnPrefs(cwd, toolMode);
 		if (runPolicy) args.push(...runPolicy.flags);
 		// User-controllable flags ride the extraFlags seam + the launch profile.
 		// Strip the code-controlled-flag denylist (pair-aware) over BOTH, then
 		// append: neither can override the code-controlled argv above, while a
 		// profile value that merely looks like a protected flag survives intact.
-		const userFlags = [...(extraFlags ?? []), ...loadLaunchProfileFlags(cwd)];
-		args.push(...stripDenylistedFlags(userFlags, runPolicy?.deny));
+		const userFlags = [...(extraFlags ?? []), ...flags];
+		args.push(
+			...stripDenylistedFlags(userFlags, runPolicy?.deny ?? (toolMode === "work" ? WORK_TOOL_FLAGS : undefined)),
+		);
 
 		// Source sidecar (monorepo dev): run the workspace coding-agent from
 		// source via bun so in-repo RPC fixes are live in the running GUI.
@@ -401,6 +433,13 @@ export class SidecarManager extends EventEmitter {
 						PI_RPC_EMIT_TITLE: "1",
 						PI_NO_PTY: "1",
 						PI_NOTIFICATIONS: "off",
+						PI_GUI_NATIVE_THINKING: "1",
+						// Registry defaults, not argv overrides: global/project/--config settings still win.
+						// Unattended scheduler runs retain the generic RPC defaults.
+						WISA_STUDIO_DEFAULTS: runPolicy ? "0" : "1",
+						WISA_GUI_TOOL_PROFILE: toolProfile,
+						WISA_GUI_EDIT_MODE: editMode,
+						WISA_BTW_WORKSPACE_READ: !runPolicy?.hostToolsOnly && (workspaceRead || runPolicy) ? "1" : "0",
 					}),
 				),
 				cwd,
@@ -637,9 +676,11 @@ export class SidecarManager extends EventEmitter {
 				// `pty: true` bash runs in the terminal panel, where the user can answer it,
 				// and the agent's `terminal` tool reads the panel's terminals and starts
 				// long-lived commands (dev servers) there.
-				void this.#rpcClient
-					.command({ type: "terminal_configure", interactiveCommands: true, agentTools: true })
-					.catch(() => {});
+				if (!this.#options.runPolicy?.hostToolsOnly) {
+					void this.#rpcClient
+						.command({ type: "terminal_configure", interactiveCommands: true, agentTools: true })
+						.catch(() => {});
+				}
 			}
 			announceReady();
 		};

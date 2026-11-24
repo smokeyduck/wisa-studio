@@ -1,14 +1,17 @@
-import { createSessionRpcClient } from "../../shared/rpc-client";
+import { createSessionRpcClient, fetchTranscript } from "../../shared/rpc-client";
 import type {
 	AgentMessage,
+	MessagesPage,
 	ModelInfo,
 	RpcAdvisorStatus,
+	RpcCommand,
 	RpcGoalState,
 	RpcLoopModeState,
 	RpcResponse,
 	RpcSessionState,
 	RpcVibeModeState,
 } from "../../shared/rpc-types";
+import { readDisplayPreference } from "../lib/display-preferences";
 import { type MessagesStore, mergeFetchedTranscript, useMessagesStore } from "../stores/messages";
 import { useModelStore } from "../stores/model";
 import { type QueueStore, useQueueStore } from "../stores/queue";
@@ -260,7 +263,7 @@ export async function syncVibeMode(tabId: string, command: TabCommand, isCurrent
 const hydrationVersions = new WeakMap<SessionRuntime, number>();
 const pendingHydrations = new WeakMap<
 	SessionRuntime,
-	{ generation: number | undefined; eventVersion: number | undefined; promise: Promise<void> }
+	{ generation: number | undefined; eventVersion: number | undefined; folded: boolean; promise: Promise<void> }
 >();
 const hydratedSessions = new WeakMap<SessionRuntime, { generation: number | undefined; sessionId: string }>();
 
@@ -297,9 +300,10 @@ export async function hydrateLegacySession(fallbackName?: string, initialState?:
 	const beforeMessages = useMessagesStore.getState().messages;
 	const beforeLiveMessages = useMessagesStore.getState().liveMessages;
 	const beforeEventVersion = useSessionStore.getState().eventVersion;
+	const folded = readDisplayPreference("collapseCompacted");
 	const core = Promise.allSettled([
 		initialState ? Promise.resolve(initialState) : activeTabCommand({ type: "get_state" }),
-		createSessionRpcClient(activeTabCommand).getTranscript(),
+		fetchTranscript(createSessionRpcClient(activeTabCommand).command, folded),
 	]);
 	const subagents = useSubagentsStore.getState().refresh({ expect: isCurrent });
 	const secondary = Promise.allSettled([
@@ -345,6 +349,7 @@ export async function hydrateLegacySession(fallbackName?: string, initialState?:
 		const fetched = (messagesResult.value.data as { messages?: AgentMessage[] } | undefined)?.messages ?? [];
 		const current = useMessagesStore.getState().messages;
 		useMessagesStore.getState().reconcileFetched(mergeFetchedTranscript(fetched, beforeMessages, current));
+		useSessionStore.setState({ transcriptFolded: folded });
 		if (eventsUnchanged && stateIsIdle && useMessagesStore.getState().liveMessages === beforeLiveMessages) {
 			useMessagesStore.getState().clearDeliveredLiveMessages();
 		}
@@ -398,12 +403,19 @@ export function hydrateTabSession(tabId: string, fallbackName?: string): Promise
 	const runtime = ensureTabRuntime(tabId);
 	const generation = runtime.sessionGeneration;
 	const eventVersion = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion;
+	const folded = withSessionRuntime(tabId, () => readDisplayPreference("collapseCompacted"));
 	const pending = pendingHydrations.get(runtime);
-	if (pending && pending.generation === generation && pending.eventVersion === eventVersion) return pending.promise;
-	const promise = performTabHydration(tabId, runtime, generation, fallbackName).finally(() => {
+	if (
+		pending &&
+		pending.generation === generation &&
+		pending.eventVersion === eventVersion &&
+		pending.folded === folded
+	)
+		return pending.promise;
+	const promise = performTabHydration(tabId, runtime, generation, folded, fallbackName).finally(() => {
 		if (pendingHydrations.get(runtime)?.promise === promise) pendingHydrations.delete(runtime);
 	});
-	pendingHydrations.set(runtime, { generation, eventVersion, promise });
+	pendingHydrations.set(runtime, { generation, eventVersion, folded, promise });
 	return promise;
 }
 
@@ -411,6 +423,7 @@ async function performTabHydration(
 	tabId: string,
 	runtime: SessionRuntime,
 	generation: number | undefined,
+	folded: boolean,
 	fallbackName?: string,
 ): Promise<void> {
 	hydratedSessions.delete(runtime);
@@ -425,13 +438,16 @@ async function performTabHydration(
 	const initialMessagesStore = sessionRuntimeStore<MessagesStore>(tabId, "messages")?.getState();
 	const beforeMessages = initialMessagesStore?.messages ?? [];
 	const beforeLiveMessages = initialMessagesStore?.liveMessages ?? [];
-	const beforeEventVersion = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion;
+	const beforeSession = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState();
+	const beforeEventVersion = beforeSession?.eventVersion;
 	// Captured up front: a pending open clears this path as soon as the sidecar
 	// reports ready, and this is the key the transcript cache files it under.
 	const pendingSessionPath = useTabsStore.getState().tabs.find(tab => tab.id === tabId)?.pendingSessionPath;
 
 	const stateResultPromise = runtime.command({ type: "get_state" });
-	const messagesResultPromise = Promise.allSettled([createSessionRpcClient(runtime.command).getTranscript()]);
+	const messagesResultPromise = Promise.allSettled([
+		fetchTranscript(createSessionRpcClient(runtime.command).command, folded),
+	]);
 	const subagentsResult = sessionRuntimeStore<SubagentsStore>(tabId, "subagents")
 		?.getState()
 		.refresh({ expect: isCurrent });
@@ -464,28 +480,26 @@ async function performTabHydration(
 	]);
 	const [stateResult] = await Promise.allSettled([stateResultPromise]);
 	if (!isCurrent()) return;
+	const wire =
+		stateResult.status === "fulfilled" && stateResult.value.success
+			? (stateResult.value.data as RpcSessionState | undefined)
+			: undefined;
+	// Tab RPCs reject replies after their originating session ID changes. Keep
+	// the outgoing identity until the replacement transcript has finished reading.
+	const transitionTranscript =
+		wire && beforeSession?.sessionId && beforeSession.sessionId !== wire.sessionId
+			? await messagesResultPromise
+			: undefined;
+	if (!isCurrent()) return;
 	const stateEventsUnchanged =
 		sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion === beforeEventVersion;
 	// `get_state` is the only witness to a live turn. A failed read counts as not
 	// live: a card left spinning never resolves, while a wrongly aborted card is
 	// repaired by the next execution event.
-	const stateIsStreaming =
-		stateResult.status === "fulfilled" &&
-		stateResult.value.success &&
-		(stateResult.value.data as RpcSessionState | null)?.isStreaming === true;
-	const stateIsIdle =
-		stateResult.status === "fulfilled" &&
-		stateResult.value.success &&
-		stateResult.value.data != null &&
-		!stateIsStreaming;
+	const stateIsStreaming = wire?.isStreaming === true;
+	const stateIsIdle = wire != null && !stateIsStreaming;
 
-	if (
-		stateEventsUnchanged &&
-		stateResult.status === "fulfilled" &&
-		stateResult.value.success &&
-		stateResult.value.data != null
-	) {
-		const wire = stateResult.value.data as RpcSessionState;
+	if (stateEventsUnchanged && wire) {
 		withSessionRuntime(tabId, () => applySessionState(wire, fallbackName));
 		// Mid-run attach (launch/reconnect/session switch while the agent is
 		// streaming) missed the agent_start that arms the status row — re-arm
@@ -515,8 +529,8 @@ async function performTabHydration(
 		// Idempotent server-side.
 		void runtime.command({ type: "set_subagent_subscription", level: SUBAGENT_SUBSCRIPTION_LEVEL });
 	}
-	// A large transcript must not hold the resumed session state or event subscription hostage.
-	const [messagesResult] = await messagesResultPromise;
+	// For the same session, a large transcript need not delay run state or event subscription.
+	const [messagesResult] = transitionTranscript ?? (await messagesResultPromise);
 	if (!isCurrent()) return;
 	const eventsUnchanged =
 		sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion === beforeEventVersion;
@@ -528,6 +542,7 @@ async function performTabHydration(
 		const tools = sessionRuntimeStore<ToolsStore>(tabId, "tools");
 		const current = messages?.getState().messages ?? [];
 		messages?.getState().reconcileFetched(mergeFetchedTranscript(fetched, beforeMessages, current));
+		sessionRuntimeStore<SessionStore>(tabId, "session")?.setState({ transcriptFolded: folded });
 		if (eventsUnchanged && stateIsIdle && messages?.getState().liveMessages === beforeLiveMessages) {
 			messages.getState().clearDeliveredLiveMessages();
 		}
@@ -544,10 +559,6 @@ async function performTabHydration(
 			sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionFile ?? pendingSessionPath,
 			messages?.getState().messages ?? [],
 		);
-		const wire =
-			stateResult.status === "fulfilled" && stateResult.value.success
-				? (stateResult.value.data as RpcSessionState | undefined)
-				: undefined;
 		if (wire && sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionId === wire.sessionId) {
 			hydratedSessions.set(runtime, { generation, sessionId: wire.sessionId });
 		}
@@ -557,4 +568,47 @@ async function performTabHydration(
 	// requests still begin in parallel, but the core session can paint first.
 	await subagentsResult;
 	await secondaryResult;
+}
+
+type ArchiveQuery = NonNullable<Extract<RpcCommand, { type: "get_transcript_page" }>["archive"]>;
+
+/** Historical rows are local to the reader, never reconciled into the active messages or tool stores. */
+export async function readOlderTranscript(
+	tabId: string,
+	archive: ArchiveQuery,
+): Promise<(MessagesPage & { hasOlder: boolean }) | undefined> {
+	const runtime = sessionRuntime(tabId);
+	if (!runtime) return undefined;
+	const generation = runtime.sessionGeneration;
+	const current = () => {
+		const session = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState();
+		return (
+			sessionRuntime(tabId) === runtime &&
+			runtime.sessionGeneration === generation &&
+			session?.sessionId === archive.sessionId &&
+			session.status === "ready" &&
+			!session.switchPending
+		);
+	};
+	if (!current()) return undefined;
+	let response: RpcResponse;
+	try {
+		response = await createSessionRpcClient(runtime.command).command({ type: "get_transcript_page", archive });
+	} catch (error) {
+		if (!current()) return undefined;
+		throw error;
+	}
+	if (!current()) return undefined;
+	if (!response.success) throw new Error(response.error);
+	const data = response.data as Partial<MessagesPage & { hasOlder: boolean }> | undefined;
+	if (
+		!Array.isArray(data?.messages) ||
+		typeof data.hasOlder !== "boolean" ||
+		typeof data.totalMessages !== "number" ||
+		!Number.isSafeInteger(data.totalMessages) ||
+		data.totalMessages < data.messages.length
+	) {
+		throw new Error("Invalid transcript archive response");
+	}
+	return { messages: data.messages, totalMessages: data.totalMessages, hasOlder: data.hasOlder };
 }

@@ -264,7 +264,7 @@ async function mount(withRuntime = false): Promise<void> {
 	useModelStore.setState({
 		thinkingLevel: "high",
 		thinkingConfigured: "high",
-		availableThinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+		availableThinkingSelectors: ["off", "low", "medium", "high", "xhigh", "max"],
 	});
 	useSessionStore.setState({
 		status: "ready",
@@ -715,6 +715,20 @@ describe("InputArea follow-up send", () => {
 		expect(document.querySelector("[role='status']")).toBeNull();
 	});
 
+	it("keeps a split queue preview and the two send actions in one cluster while holding the modifier", async () => {
+		setWindowWidth(320);
+		await mount();
+		await typeInto(findTextarea(), "->\n1. first\n2. second");
+		await holdModifier(true);
+
+		const cluster = document.querySelector(".omp-composer-send-cluster");
+		const preview = cluster?.querySelector('[role="status"]');
+		expect(preview?.getAttribute("aria-label")).toBe(translate("input.queue.split", { count: 2 }));
+		expect(document.querySelectorAll(".omp-composer-queue")).toHaveLength(1);
+		expect(cluster?.querySelectorAll("button.omp-send-button")).toHaveLength(2);
+		expect(sendButton().getAttribute("aria-label")).toBe(translate("input.sendFollowUp"));
+	});
+
 	it("shows no follow-up preview while idle, where every send starts a turn", async () => {
 		await mount();
 		await act(async () => useSessionStore.setState({ isStreaming: false }));
@@ -896,6 +910,16 @@ describe("InputArea run settings", () => {
 		expect(buttonWithText("Modes")).toBeDefined();
 	});
 
+	it("keeps a long model name whole in its accessible name and tooltip", async () => {
+		const name = "A particularly long model display name from a custom provider, with qualifiers and dates";
+		useModelStore.setState({ model: { ...FAST_MODE_MODEL, name } });
+		await mountCompact();
+		const trigger = document.querySelector("[data-model-picker-trigger]");
+		expect(trigger?.querySelector(".truncate")?.textContent).toBe(name);
+		expect(trigger?.getAttribute("aria-label")).toBe(`${translate("input.model")}: ${name}`);
+		expect(trigger?.getAttribute("title")).toContain(`${name} (${FAST_MODE_MODEL.id})`);
+	});
+
 	it("marks fast mode selected when the active model supports it", async () => {
 		useModelStore.setState({ model: FAST_MODE_MODEL, fastModeEnabled: true, fastModeActive: false });
 		await mount();
@@ -908,10 +932,9 @@ describe("InputArea run settings", () => {
 	});
 
 	it("hides the speed control for a model without a service tier", async () => {
-		// A gateway model (the WISA provider) has no fast/slow knob on the wire,
-		// so the control would be a button that changes nothing.
+		// An OpenAI-shaped model ID is not a capability declaration from a third-party gateway.
 		useModelStore.setState({
-			model: { id: "wisa-gpt", provider: "wisa", api: "openai-completions" },
+			model: { id: "gpt-6.2-sol", provider: "third-party", api: "openai-completions" },
 			fastModeEnabled: true,
 		});
 		await mount();
@@ -973,6 +996,27 @@ describe("InputArea run settings", () => {
 
 		expect(setPlanMode).toHaveBeenCalledWith(true);
 		expect(useSessionStore.getState().planModeEnabled).toBe(true);
+		expect(document.querySelector("[data-run-settings-menu]")?.getAttribute("aria-hidden")).toBeNull();
+	});
+
+	it("clamps the nested Modes portal to the viewport and scrolls when there is not enough height", async () => {
+		await mountCompact();
+		await openRunSettings();
+		const modes = buttonWithText("Modes");
+		if (!modes) throw new Error("modes trigger missing");
+		Object.defineProperty(modes, "getBoundingClientRect", {
+			value: () => ({ left: 440, right: 484, top: 30, bottom: 62 }),
+		});
+		await click(modes);
+		const menu = document.querySelector("[data-composer-modes-menu]") as unknown as HTMLElement | null;
+		if (!menu) throw new Error("modes menu missing");
+		Object.defineProperty(menu, "scrollHeight", { value: 900 });
+		await act(async () => window.dispatchEvent(new Event("resize")));
+
+		expect(menu.style.left).toBe("196px");
+		expect(menu.style.width).toBe("288px");
+		expect(menu.style.top).toBe("68px");
+		expect(menu.style.maxHeight).toBe("724px");
 	});
 });
 

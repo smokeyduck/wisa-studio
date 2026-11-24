@@ -131,6 +131,9 @@ export class WindowManager {
 						displayWorkAreas(),
 					);
 
+		// The Windows dev renderer may not paint while Electron keeps its window
+		// hidden. Show the native shell while Vite loads, independently of first paint.
+		const showOnCreate = process.platform === "win32" && !app.isPackaged;
 		const win = new BrowserWindow({
 			x: geometry.x,
 			y: geometry.y,
@@ -138,7 +141,8 @@ export class WindowManager {
 			height: geometry.height,
 			minWidth: MIN_WIDTH,
 			minHeight: MIN_HEIGHT,
-			show: false,
+			show: showOnCreate,
+			backgroundColor: nativeTheme.shouldUseDarkColors ? "#1f1f1f" : "#ffffff",
 			...this.#captionOptions(),
 			webPreferences: {
 				contextIsolation: true,
@@ -146,6 +150,7 @@ export class WindowManager {
 				sandbox: true,
 				spellcheck: true,
 				preload: join(__dirname, "../preload/index.cjs"),
+				additionalArguments: [`--wisa-initial-language=${getMainLanguage()}`],
 			},
 		});
 
@@ -165,11 +170,8 @@ export class WindowManager {
 		this.#records.set(record.id, record);
 		this.#observeRuntimeFailures(record);
 
+		if (!showOnCreate) win.once("ready-to-show", () => win.show());
 		this.#loadRenderer(win);
-
-		win.once("ready-to-show", () => {
-			win.show();
-		});
 
 		win.on("enter-full-screen", () => win.webContents.send(IPC_EVENTS.WINDOW_FULLSCREEN, true));
 		win.on("leave-full-screen", () => win.webContents.send(IPC_EVENTS.WINDOW_FULLSCREEN, false));

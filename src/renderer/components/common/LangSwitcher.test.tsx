@@ -203,10 +203,12 @@ describe("LangSwitcher", () => {
 		}
 	});
 
-	it("does not persist an inferred language when neither store has an explicit preference", async () => {
+	it("renders the native language before preferences load without saving it as a manual choice", async () => {
 		const writes: Array<{ key: string; value: unknown }> = [];
+		const preference = Promise.withResolvers<unknown>();
 		const bridgeWindow = window as unknown as {
 			omp?: {
+				initialLanguage: Language;
 				prefs: {
 					get: (key: string) => Promise<unknown>;
 					set: (key: string, value: unknown) => Promise<void>;
@@ -214,8 +216,9 @@ describe("LangSwitcher", () => {
 			};
 		};
 		bridgeWindow.omp = {
+			initialLanguage: "vi",
 			prefs: {
-				get: async () => undefined,
+				get: () => preference.promise,
 				set: async (key, value) => {
 					writes.push({ key, value });
 				},
@@ -223,6 +226,8 @@ describe("LangSwitcher", () => {
 		};
 		try {
 			await mountSwitcher();
+			expect(document.querySelector("button")?.textContent).toContain("VI");
+			await act(async () => preference.resolve(undefined));
 			expect(writes).toEqual([]);
 		} finally {
 			delete bridgeWindow.omp;

@@ -5,7 +5,7 @@
  * full view instead of repeating its controls. Chat tabs have no tools, so they
  * show only Context, Workspace and Running.
  */
-import { Activity, FolderGit2, Gauge, GitCompare, type LucideIcon, Server } from "lucide-react";
+import { Activity, FolderGit2, Gauge, GitCompare, type LucideIcon, Puzzle, Server } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { getBtwLatestTurn, type RpcMcpServerInfo, type RpcMcpServersResult } from "../../../shared/rpc-types";
 import { useAutoCompactAt } from "../../hooks/use-compaction-config";
@@ -329,12 +329,26 @@ function serverState(server: RpcMcpServerInfo): { key: string; variant: BadgeVar
 	return { key: "disconnected", variant: "muted" };
 }
 
+function PluginsCard() {
+	const t = useT();
+	const openSettings = useUiStore(state => state.openSettings);
+	return (
+		<Card
+			action={<CardLink label={t("overview.plugins.manage")} onClick={() => openSettings("resources:catalog")} />}
+			icon={Puzzle}
+			title={t("invPanel.tabs.plugins")}
+		>
+			<Muted>{t("settings.resources.description")}</Muted>
+		</Card>
+	);
+}
+
 function ServersCard() {
 	const t = useT();
 	const rpc = useTabRpc();
 	const ready = useSessionStore(state => state.status) === "ready";
 	const sessionId = useSessionStore(state => state.sessionId);
-	const openExtensions = useUiStore(state => state.openExtensions);
+	const openSettings = useUiStore(state => state.openSettings);
 	const [servers, setServers] = useState<RpcMcpServerInfo[] | null>(null);
 	const [failed, setFailed] = useState(false);
 	const [attempt, setAttempt] = useState(0);
@@ -361,7 +375,7 @@ function ServersCard() {
 
 	return (
 		<Card
-			action={<CardLink label={t("overview.servers.manage")} onClick={() => openExtensions("mcp")} />}
+			action={<CardLink label={t("overview.servers.manage")} onClick={() => openSettings("mcp")} />}
 			icon={Server}
 			title={t("overview.servers.title")}
 		>
@@ -417,6 +431,7 @@ export function OverviewPanel() {
 			<WorkspaceCard withGit={!isChat} />
 			{!isChat && <ChangesCard />}
 			<RunningCard />
+			{!isChat && <PluginsCard />}
 			{!isChat && <ServersCard />}
 		</div>
 	);

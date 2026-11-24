@@ -5,7 +5,7 @@
  * fields and terminals) offers Copy, which the window otherwise lacks. One
  * host renders whichever menu is open.
  */
-import { Copy, ExternalLink, Eye, FolderOpen, Link, PanelRight } from "lucide-react";
+import { Copy, ExternalLink, Eye, FolderOpen, Link } from "lucide-react";
 import { useEffect } from "react";
 import { create } from "zustand";
 import type { IpcResolvedPath } from "../../../shared/ipc-types";
@@ -14,7 +14,6 @@ import { openPathExternally, previewFile, revealPath } from "../../lib/file-acti
 import { copyText } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import type { FileTarget } from "../../lib/link-targets";
-import { browserPanelAvailable, openLink } from "../../lib/open-link";
 import { resolvePath } from "../../lib/path-resolver";
 import { toast } from "../../stores/toast";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -88,22 +87,12 @@ export function linkMenuItems(menu: Pick<LinkMenu, "target" | "selection">, t: T
 	}
 	const target = menu.target;
 	if (target?.kind === "url") {
-		const web = /^https?:\/\//i.test(target.url);
-		if (web && browserPanelAvailable()) {
-			items.push({
-				id: "open-panel",
-				label: t("links.openInPanel"),
-				icon: PanelRight,
-				// An explicit pick, so it ignores the saved default and the modifier.
-				onSelect: () => openLink(target.url, undefined, { destination: "panel" }),
-			});
-		}
-		if (web) {
+		if (/^https?:\/\//i.test(target.url)) {
 			items.push({
 				id: "open-external",
 				label: t("links.openExternally"),
 				icon: ExternalLink,
-				onSelect: () => openLink(target.url, undefined, { destination: "external" }),
+				onSelect: () => void window.omp.system.openExternal(target.url),
 			});
 		}
 		items.push({

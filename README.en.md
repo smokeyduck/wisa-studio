@@ -1,6 +1,6 @@
 # WISA STUDIO
 
-**Fork of oh-my-pi (MIT). UI rebrand by WISA.**
+**Desktop application based on oh-my-pi (MIT), developed by WISA.**
 
 Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding agent with parallel sessions in one window and a pre-wired WISA gateway so a single API key reaches every model. Electron, for macOS, Windows and Linux.
 
@@ -39,7 +39,7 @@ Optional: Anthropic, OpenAI, DeepSeek, OpenRouter, Gemini and anything else the 
 
 [![Release](https://img.shields.io/github/v/release/smokeyduck/wisa-studio?style=flat&colorA=222222&colorB=3FB950)](https://github.com/smokeyduck/wisa-studio/releases)
 [![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fsmokeyduck.github.io%2Fwisa-studio%2Fdownloads.json&style=flat&cacheSeconds=3600)](https://github.com/smokeyduck/wisa-studio/releases)
-[![License: MIT](https://img.shields.io/badge/license-MIT-BE185D?style=flat)](./LICENSE)
+[![License scope](https://img.shields.io/badge/license-scope-BE185D?style=flat)](./LICENSE-SCOPE.md)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-222222?style=flat)
 ![Electron](https://img.shields.io/badge/Electron-35-47848F?style=flat&logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=white)
@@ -52,14 +52,14 @@ Optional: Anthropic, OpenAI, DeepSeek, OpenRouter, Gemini and anything else the 
 
 ## How WISA STUDIO differs from omp
 
-The agent is unchanged. All the work — reading files, running commands, editing code, calling tools, MCP, Skills — is oh-my-pi's binary, compiled unmodified from the commit in [`sidecar-source.json`](sidecar-source.json) and shipped inside the app. WISA replaces the presentation layer and the packaging:
+The oh-my-pi agent reads files, runs commands, edits code and calls tools, MCP and Skills. WISA STUDIO bundles the agent from the WISA fork commit pinned in [`sidecar-source.json`](sidecar-source.json); the fork includes changes for the app. The desktop app also adds:
 
 - **Name and identity:** WISA STUDIO in window titles, the tray, macOS permission prompts and installer artifact names.
 - **Vietnamese by default:** five interface languages (Tiếng Việt, English, 中文, Русский, ไทย); this build opens in Vietnamese.
 - **WISA gateway:** the `wisa` provider is pre-seeded and offered first in onboarding.
 - **Releases:** published from this repository.
 
-The agent is the same oh-my-pi engine, but WISA STUDIO keeps its own data under `~/.wisa-studio/agent` (not `~/.omp`), so sessions and settings are not shared with the omp CLI.
+WISA STUDIO keeps its own agent data under `~/.wisa-studio/agent` (not `~/.omp`), so sessions and settings are not shared with the omp CLI.
 
 ## What the interface does
 
@@ -72,6 +72,16 @@ The agent is the same oh-my-pi engine, but WISA STUDIO keeps its own data under 
 - **SSH hosts, custom themes, command palette, voice mode, relay collaboration.**
 
 Known limits: separate tabs are not an OS security boundary; a split holds two panes, not an unlimited grid; approvals and security scans are not a sandbox. Model requests still go to the provider you configure.
+
+### Use your own Chrome session (optional)
+
+Web links and template demos open in your system browser. WISA STUDIO does not run an embedded browser, turn on Chrome remote debugging, install an MCP server, or copy your browser profile.
+
+To let an agent use a signed-in tab, opt in to the [omp browser relay](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). If you don't already have it, run `omp browser-relay install --no-chrome` from a compatible omp CLI, then in the Chrome profile you want to use go to `chrome://extensions`, turn on **Developer mode**, and choose the printed folder with **Load unpacked**. The relay can act as you in that profile; use a separate work profile and approve only tasks you intend to run there. Do not expose the relay beyond your machine.
+
+In WISA STUDIO, set **Browser Relay URL** in **Settings → Tools** to your relay's `http://127.0.0.1:<port>` address. For a standard omp installation, the running native host publishes `<pid>-<port>` in `~/.omp/browser-relay/endpoints/`. WISA does not read that separate profile; enter the URL yourself and update it if the port changes. Leave **Browser Relay** off to opt in per task: ask the agent to use `app: "relay"` for the approved browser work. Enable **Browser Relay** only if you want it to be the default for sessions using these settings.
+
+Installing the extension authorizes browser access for clients that can reach the local relay port. It does not ask anew for each action. Enabling the relay by default can also expose that Chrome profile to background agent runs. Keep the default off if you only want occasional use, and disable the extension in Chrome when you want to revoke that access.
 
 ## Install
 
@@ -114,7 +124,8 @@ bun run build:omp          # → resources/omp (arm64)
 bun run build:omp:x64      # → resources/omp.x64 (Intel)
 bun run build:omp:win      # → resources/omp.exe
 bun run build              # → out/
-bun run dev                # HMR; needs resources/omp (built from the adjacent monorepo if missing; otherwise an error)
+bun run dev                # HMR; uses resources/omp[.exe], OMP_BUNDLED_OMP, or a source build
+bun run dev --stop         # from another terminal: stops the dev GUI, Vite, and sidecars
 ```
 
 Checks before a pull request:
@@ -128,6 +139,8 @@ bun run build
 ```
 
 `bun run dev` is isolated from the installed app: `wisa-studio-dev` userData, `~/.wisa-studio-dev/agent` agent profile, no OS URL-scheme registration, no global shortcut.
+
+`bun run dev --stop` stops only the processes started by `bun run dev` for the current checkout and profile, not the installed app. If you set `WISA_PROFILE_ROOT` at startup, use the same value when stopping. The command interrupts work running in that dev session.
 
 Development-only overrides, unpackaged runs only: `OMP_BUNDLED_OMP=<path>` runs that binary instead of `resources/omp`, and `OMP_SIDECAR=source` runs the coding-agent source from a monorepo checkout through bun. Packaged builds ignore both. The app does not check that an override honors `PI_CONFIG_SOURCES` / `PI_PROJECT_CONFIG_DIR` or the isolated profile; using one is your responsibility.
 
@@ -144,9 +157,10 @@ The full release runbook, including sidecar build order and artifact checks, is 
 
 ## License and credits
 
-MIT — see [LICENSE](LICENSE). The original oh-my-pi copyright lines are kept verbatim.
+Starting with v0.9.55, WinSell's contributions in two SEO Audit files are under PolyForm Strict 1.0.0; see the [license scope](LICENSE-SCOPE.md). The [MIT license](LICENSE), original copyright notices, and rights already granted under MIT remain intact.
 
 - oh-my-pi (upstream): https://github.com/can1357/oh-my-pi
 - The GUI layer this build is based on (MIT), with its original copyright lines: see [NOTICE](NOTICE).
+- WISA STUDIO contributors: [GitHub contribution history](https://github.com/smokeyduck/wisa-studio/graphs/contributors). To help, [report a bug or suggest an improvement](https://github.com/smokeyduck/wisa-studio/issues), or [open a pull request](https://github.com/smokeyduck/wisa-studio/pulls).
 
 WISA STUDIO is not affiliated with, endorsed by or sponsored by Anthropic, OpenAI, Google or any model provider. See [NOTICE](NOTICE).

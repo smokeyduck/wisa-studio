@@ -137,8 +137,66 @@ describe("ModelPicker vendor groups", () => {
 		const marks = panel()?.querySelectorAll("svg[data-brand]") ?? [];
 		const brands = Array.from(marks).map(mark => mark.getAttribute("data-brand"));
 		expect(brands).toContain("minimax");
-		expect(brands).toContain("wisa");
+		expect(brands).toContain("generic");
 		expect(brands).toContain("xai");
+	});
+
+	it("shows the exact provider namespace in high-contrast bold text", async () => {
+		useModelStore.setState({ availableModels: CATALOG });
+		await openPicker();
+
+		const provider = panel()?.querySelector('[data-model-provider="xai"]');
+		expect(provider?.textContent).toBe("xai");
+		expect(provider?.classList.contains("font-bold")).toBe(true);
+		expect(provider?.classList.contains("text-(--omp-text)")).toBe(true);
+	});
+
+	it("shows cached rows immediately and keeps them through a bounded refresh", async () => {
+		const pending = Promise.withResolvers<RpcResponse>();
+		command.mockImplementationOnce(() => pending.promise);
+		useModelStore.setState({ availableModels: CATALOG, catalogGeneration: 1 });
+		await openPicker();
+
+		expect(command).toHaveBeenCalledWith({ type: "get_available_models", forceRefresh: true }, undefined);
+		expect(panel()?.querySelectorAll('[role="option"]').length).toBe(CATALOG.length);
+
+		await act(async () => {
+			pending.resolve({
+				type: "response",
+				command: "get_available_models",
+				success: true,
+				data: { models: [], refreshPending: true, discoveryStates: [], generation: 1 },
+			});
+		});
+		expect(panel()?.querySelectorAll('[role="option"]').length).toBe(CATALOG.length);
+		expect(panel()?.querySelector('[role="listbox"]')?.getAttribute("aria-busy")).toBe("true");
+
+		await act(async () => {
+			useModelStore.getState().applyCatalogUpdate({
+				type: "model_catalog_update",
+				models: [{ provider: "wisa", id: "gpt-5", name: "New model" }],
+				providers: [],
+				discoveryStates: [],
+				generation: 2,
+				refreshPending: false,
+			});
+		});
+		expect(panel()?.querySelector('[role="option"]')?.textContent).toContain("New model");
+		expect(panel()?.querySelectorAll('[role="option"]').length).toBe(1);
+	});
+
+	it("keeps cached rows when background revalidation fails", async () => {
+		command.mockResolvedValueOnce({
+			type: "response",
+			command: "get_available_models",
+			success: false,
+			error: "Offline",
+		});
+		useModelStore.setState({ availableModels: CATALOG });
+		await openPicker();
+
+		expect(panel()?.querySelectorAll('[role="option"]').length).toBe(CATALOG.length);
+		expect(panel()?.textContent).toContain(translate("modelPicker.retry"));
 	});
 
 	it("shows a human model name in the open group", async () => {

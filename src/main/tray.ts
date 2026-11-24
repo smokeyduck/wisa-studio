@@ -146,15 +146,13 @@ function buildContextMenu(windowManager: WindowManager, state: TrayState | null)
 	if (state && state.quotas.length > 0)
 		template.push(...quotaItems(windowManager, state, lang), { type: "separator" });
 
-	// Config info (read-only): model — thinking — fast — approval.
+	// Read-only model, thinking, approval, and Fast when supported.
 	if (state) {
 		const model = state.modelId || t(lang, "noModel");
 		template.push({ label: `${model} - ${t(lang, "thinking")} ${state.thinkingLevel}`, enabled: false });
-		const fastLabel = `${t(lang, "fastMode")}: ${state.fastMode ? "✓" : "-"}`;
-		template.push({
-			label: `${fastLabel} - ${t(lang, "approval")}: ${approvalLabel(lang, state.approvalMode)}`,
-			enabled: false,
-		});
+		const approval = `${t(lang, "approval")}: ${approvalLabel(lang, state.approvalMode)}`;
+		const fast = state.fastMode === null ? "" : `${t(lang, "fastMode")}: ${state.fastMode ? "✓" : "-"} - `;
+		template.push({ label: `${fast}${approval}`, enabled: false });
 		// Usage / token consumption (read-only). The percent is absent — never 0 —
 		// for a model whose context window Core does not know.
 		if (state.contextPercent !== null || state.contextTokens !== null) {
@@ -199,12 +197,16 @@ function buildContextMenu(windowManager: WindowManager, state: TrayState | null)
 	template.push({
 		label: t(lang, "quickConfig"),
 		submenu: [
-			{
-				label: t(lang, "fastMode"),
-				type: "checkbox",
-				checked: state?.fastMode ?? false,
-				click: () => send(windowManager, "toggle-fast"),
-			},
+			...(state && state.fastMode !== null
+				? [
+						{
+							label: t(lang, "fastMode"),
+							type: "checkbox" as const,
+							checked: state.fastMode,
+							click: () => send(windowManager, "toggle-fast"),
+						},
+					]
+				: []),
 			{
 				label: `${t(lang, "thinking")}: ${state?.thinkingLevel ?? "off"}`,
 				click: () => send(windowManager, "cycle-thinking"),

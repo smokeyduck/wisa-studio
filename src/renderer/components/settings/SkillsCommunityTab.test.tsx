@@ -54,6 +54,7 @@ const PDF_TOOLS: CommunitySkill = {
 	name: "pdf-tools",
 	source: "openai/skills",
 	installs: 13937,
+	official: true,
 };
 
 function catalog(
@@ -151,19 +152,20 @@ async function mount(): Promise<void> {
 	});
 }
 
-function buttons(): HTMLButtonElement[] {
-	return Array.from(document.body.querySelectorAll("button")) as HTMLButtonElement[];
+function buttons(scope: ParentNode = document.body): HTMLButtonElement[] {
+	return Array.from(scope.querySelectorAll("button"));
 }
 
 function text(): string {
 	return document.body.textContent ?? "";
 }
 
-/** Click the button whose trimmed label matches. */
-async function click(label: string, index = 0): Promise<void> {
-	const matches = buttons().filter(button => (button.textContent ?? "").trim() === label);
-	const target = matches[index];
-	expect(target, `no button labelled ${label}`).toBeTruthy();
+/** Click the button whose accessible label or text matches. */
+async function click(label: string, scope: ParentNode = document.body): Promise<void> {
+	const target = buttons(scope).find(
+		button => (button.getAttribute("aria-label") ?? button.textContent ?? "").trim() === label,
+	);
+	if (!target) throw new Error(`no button labelled ${label}`);
 	await act(async () => {
 		target.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }) as never);
 	});
@@ -190,10 +192,12 @@ describe("SkillsCommunityTab", () => {
 	it("lists the whole catalogue on open, with provenance, rank, and install counts", async () => {
 		await mount();
 		expect(readCatalog).toHaveBeenCalledTimes(1);
+		expect(document.querySelectorAll("article")).toHaveLength(2);
 		const page = text();
 		expect(page).toContain("anthropics/skills");
 		expect(page).toContain("openai/skills");
 		expect(page).toContain("233,721");
+		expect(page).toContain("Official");
 		// Rank comes from the board, so the first row is #1.
 		expect(page).toContain("#1");
 		// How much of the index is loaded, and where installs land.
@@ -214,8 +218,27 @@ describe("SkillsCommunityTab", () => {
 		await filter("pdf-tools");
 		const page = text();
 		expect(page).toContain("openai/skills");
-		expect(page).not.toContain("anthropics/skills/pdf");
+		expect(page).not.toContain("anthropics/skills");
 		expect(page).toContain("1 of 9,905 loaded skills match");
+		expect(readCatalog).toHaveBeenCalledTimes(1);
+	});
+
+	it("renders a bounded batch but searches the entire loaded catalogue", async () => {
+		const skills = Array.from({ length: 100 }, (_, index) => ({
+			...PDF,
+			id: `owner/repo/skill-${index}`,
+			skillId: `skill-${index}`,
+			name: `skill-${index}`,
+		}));
+		readCatalog.mockResolvedValueOnce(catalog({ "all-time": { skills, total: skills.length, complete: true } }));
+		await mount();
+		expect(document.querySelectorAll("article").length).toBeLessThan(skills.length);
+		expect(document.querySelector('button[aria-label="Preview: skill-99"]')).toBeNull();
+
+		await filter("skill-99");
+		expect(document.querySelectorAll("article")).toHaveLength(1);
+		expect(document.querySelector('button[aria-label="Preview: skill-99"]')).not.toBeNull();
+		expect(text()).toContain("#100");
 		expect(readCatalog).toHaveBeenCalledTimes(1);
 	});
 
@@ -249,9 +272,7 @@ describe("SkillsCommunityTab", () => {
 		readCatalog.mockResolvedValueOnce(catalog({ "all-time": { skills: many, total: 12, complete: true } }));
 		await mount();
 		await filter("skill-1");
-		const rendered = Array.from(document.body.querySelectorAll("[style*='translateY']")).map(
-			node => node.textContent ?? "",
-		);
+		const rendered = Array.from(document.body.querySelectorAll("article")).map(node => node.textContent ?? "");
 		expect(rendered).toHaveLength(3);
 		expect(rendered[0]).toContain("#2");
 		expect(rendered[0]).toContain("Top");
@@ -260,24 +281,50 @@ describe("SkillsCommunityTab", () => {
 		expect(rendered[2]).toContain("#12");
 	});
 
-	it("previews a skill before installing it", async () => {
+	it("opens the card preview without installing until its own Install action is chosen", async () => {
 		await mount();
-		await click("Preview");
+		await click("Preview: pdf");
 		expect(preview).toHaveBeenCalledWith({ id: PDF.id });
+		expect(install).not.toHaveBeenCalled();
 		const page = text();
 		expect(page).toContain("Fill forms");
 		expect(page).toContain("2 files");
+
+		const dialog = document.querySelector('[role="dialog"]');
+		if (!dialog) throw new Error("missing preview dialog");
+		await click("Install", dialog);
+		expect(install).toHaveBeenCalledWith({ id: PDF.id });
+		const installedButton = buttons(dialog).find(button => button.textContent?.trim() === "Installed");
+		expect(installedButton?.hasAttribute("disabled")).toBe(true);
 	});
 
-	it("installs the row that was clicked and locks it as installed", async () => {
+	it("installs directly without opening preview and replaces the card action with installed status", async () => {
 		await mount();
 		const installButtons = buttons().filter(button => (button.textContent ?? "").trim() === "Install");
 		expect(installButtons).toHaveLength(2);
 		await click("Install");
 		expect(install).toHaveBeenCalledWith({ id: PDF.id });
-		const installed = buttons().filter(button => (button.textContent ?? "").trim() === "Installed");
-		expect(installed).toHaveLength(1);
-		expect(installed[0].hasAttribute("disabled")).toBe(true);
+		expect(preview).not.toHaveBeenCalled();
+		const card = document.querySelector('button[aria-label="Preview: pdf"]')?.closest("article");
+		expect(card?.textContent).toContain("Installed");
+		expect(card?.querySelectorAll("button")).toHaveLength(1);
+		expect(buttons().filter(button => (button.textContent ?? "").trim() === "Install")).toHaveLength(1);
+	});
+
+	it("allows preview for a skill already installed on disk but does not offer to reinstall it", async () => {
+		const response = catalog();
+		if (response.status !== "ok") throw new Error(response.error);
+		readCatalog.mockResolvedValueOnce({ ...response, installed: { pdf: `${ROOT}/pdf` } });
+		await mount();
+		const card = document.querySelector('button[aria-label="Preview: pdf"]')?.closest("article");
+		expect(card?.textContent).toContain("Installed");
+		expect(card?.querySelectorAll("button")).toHaveLength(1);
+
+		await click("Preview: pdf");
+		expect(preview).toHaveBeenCalledWith({ id: PDF.id });
+		const installedButton = buttons().find(button => (button.textContent ?? "").trim() === "Installed");
+		expect(installedButton?.hasAttribute("disabled")).toBe(true);
+		expect(install).not.toHaveBeenCalled();
 	});
 
 	it("asks main to re-read the index when refreshed", async () => {

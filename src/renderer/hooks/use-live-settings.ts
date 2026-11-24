@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTabRpc } from "../lib/tab-rpc";
 import { useSessionStore } from "../stores/session";
+import { useRuntimeTabId } from "../stores/session-runtime-context";
 import { toast } from "../stores/toast";
 
 export interface LiveSettingsHandle<T> {
@@ -8,7 +9,7 @@ export interface LiveSettingsHandle<T> {
 	config: T | null;
 	/** True while a write is in flight. */
 	saving: boolean;
-	/** Apply `set_setting` writes in order; resolves true only if every one succeeded. */
+	/** Apply a patch atomically to the current session. */
 	write: (patch: Array<{ path: string; value: unknown }>) => Promise<boolean>;
 }
 
@@ -26,52 +27,65 @@ export function useLiveSettings<T>(
 	const rpc = useTabRpc();
 	const ready = useSessionStore(state => state.status) === "ready";
 	const sessionId = useSessionStore(state => state.sessionId);
-	const [config, setConfig] = useState<T | null>(null);
+	const tabId = useRuntimeTabId();
+	const [snapshot, setSnapshot] = useState<{ sessionId: string; config: T } | null>(null);
 	const [saving, setSaving] = useState(false);
 	const version = useRef(0);
+	const refresh = useRef<(() => Promise<void>) | undefined>(undefined);
 
 	const read = useCallback(async () => {
+		if (!ready || !sessionId) return;
 		const mine = ++version.current;
 		try {
 			const response = await rpc.getSettings(paths);
 			// A newer read, or a write that landed meanwhile, supersedes this one.
 			if (mine !== version.current || !response.success) return;
 			const values = (response.data as { values?: Record<string, unknown> } | undefined)?.values;
-			setConfig(parse(values));
+			setSnapshot({ sessionId, config: parse(values) });
 		} catch {
 			// Unreadable settings leave the last known config in place.
 		}
-	}, [rpc, paths, parse]);
+	}, [ready, rpc, sessionId, paths, parse]);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a new session re-reads even when the sidecar stays ready
 	useEffect(() => {
-		if (!ready) {
-			setConfig(null);
-			return;
-		}
+		refresh.current = read;
 		void read();
-		return window.omp.events.onConfigUpdate(() => void read());
-	}, [ready, sessionId, read]);
+		const events = window.omp.events;
+		const unsubscribe =
+			tabId && events.onTabConfigUpdate
+				? events.onTabConfigUpdate((_, origin) => {
+						if (origin === tabId) void read();
+					})
+				: events.onConfigUpdate(() => void read());
+		return () => {
+			++version.current;
+			refresh.current = undefined;
+			unsubscribe();
+		};
+	}, [read, tabId]);
 
 	const write = useCallback(
 		async (patch: Array<{ path: string; value: unknown }>) => {
+			if (!ready || !sessionId) return false;
 			setSaving(true);
 			try {
-				for (const { path, value } of patch) {
-					const response = await rpc.setSetting(path, value);
-					if (!response.success) throw new Error(response.error);
-				}
+				const response = await rpc.command({
+					type: "set_session_compaction",
+					sessionId,
+					values: Object.fromEntries(patch.map(({ path, value }) => [path, value])),
+				});
+				if (!response.success) throw new Error(response.error);
 				return true;
 			} catch (cause) {
 				toast({ variant: "error", title: saveFailedTitle, message: String(cause) });
 				return false;
 			} finally {
 				setSaving(false);
-				await read();
+				await refresh.current?.();
 			}
 		},
-		[rpc, read, saveFailedTitle],
+		[ready, rpc, sessionId, saveFailedTitle],
 	);
 
-	return { config, saving, write };
+	return { config: ready && snapshot && snapshot.sessionId === sessionId ? snapshot.config : null, saving, write };
 }

@@ -22,15 +22,19 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import type { AgentMessage } from "../../../shared/rpc-types";
-import { cx, formatDuration, formatTimeAgo, headLines, resultDetails, resultText } from "../../lib/format";
+import { AnsiText } from "../../lib/ansi";
+import { cx, formatDuration, resultDetails, resultText, sanitizeToolText } from "../../lib/format";
 import { useT } from "../../lib/i18n";
+import { ircNotice } from "../../lib/irc-notice";
 import { MarkdownRenderer } from "../../lib/markdown";
+import { PREVIEW_SCROLL_MD } from "../../lib/preview";
 import { Badge, type BadgeVariant } from "../common/Badge";
 import { launchCompletionDaemons } from "./completion-events";
 
 /** customTypes with a dedicated card (the TUI dispatch set). */
 const CARD_TYPES: Record<string, true> = {
 	advisor: true,
+	"async-notify": true,
 	"async-result": true,
 	"launch-completion": true,
 	"lsp-late-diagnostic": true,
@@ -51,6 +55,8 @@ export function CustomMessageCard({ message, inProcess = false }: { message: Age
 	switch (message.customType) {
 		case "advisor":
 			return <AdvisorCard message={message} />;
+		case "async-notify":
+			return <AsyncNotifyCard inProcess={inProcess} message={message} />;
 		case "async-result":
 			return <AsyncResultCard inProcess={inProcess} message={message} />;
 		case "launch-completion":
@@ -98,38 +104,6 @@ function CardFrame({ children }: { children: ReactNode }) {
 	);
 }
 
-/** Body text capped at `lines` with a "+N more lines" / "Show less" toggle. */
-function CollapsibleText({ text, lines, className }: { text: string; lines: number; className?: string }) {
-	const t = useT();
-	const [open, setOpen] = useState(false);
-	const { head, omitted } = headLines(text, lines);
-	return (
-		<div>
-			<pre
-				className={cx(
-					"font-mono text-omp-sm leading-[1.55] break-words whitespace-pre-wrap text-[var(--omp-tool-output)]",
-					!open && "max-h-60 overflow-hidden",
-					open && "max-h-80 overflow-auto",
-					className,
-				)}
-			>
-				{open ? text : head}
-			</pre>
-			{omitted > 0 && (
-				<button
-					type="button"
-					onClick={() => setOpen(v => !v)}
-					className="omp-pressable mt-0.5 text-omp-xs font-medium text-[var(--omp-dim)] hover:text-[var(--omp-text)]"
-				>
-					{open
-						? t("chat.custom.showLess")
-						: t("chat.custom.moreLines", { count: omitted, plural: omitted === 1 ? "" : "s" })}
-				</button>
-			)}
-		</div>
-	);
-}
-
 function CompletionRows({ children, inProcess }: { children: ReactNode; inProcess: boolean }) {
 	return (
 		<div
@@ -151,6 +125,7 @@ function CompletionRow({
 	meta?: string;
 	output?: string;
 }) {
+	const [expanded, setExpanded] = useState(false);
 	const Icon = failed === undefined ? Zap : failed ? XCircle : CheckCircle2;
 	const content = (
 		<>
@@ -173,7 +148,7 @@ function CompletionRow({
 	const rowClass = "flex min-h-8 w-full items-center gap-2 rounded-md px-1.5 py-1 text-left";
 	if (!output) return <div className={rowClass}>{content}</div>;
 	return (
-		<details className="group">
+		<details className="group" onToggle={event => setExpanded(event.currentTarget.open)}>
 			<summary className={cx("omp-pressable cursor-pointer list-none", rowClass)}>
 				{content}
 				<ChevronRight
@@ -182,9 +157,16 @@ function CompletionRow({
 					size={13}
 				/>
 			</summary>
-			<div className="pb-2 pl-6">
-				<CollapsibleText className="mt-0.5" lines={3} text={output} />
-			</div>
+			{expanded && (
+				<pre
+					className={cx(
+						"ml-6 mb-2 font-mono text-omp-sm break-words whitespace-pre-wrap text-[var(--omp-tool-output)]",
+						PREVIEW_SCROLL_MD,
+					)}
+				>
+					<AnsiText text={output} />
+				</pre>
+			)}
 		</details>
 	);
 }
@@ -286,6 +268,32 @@ function AdvisorCard({ message }: { message: AgentMessage }) {
 	);
 }
 
+function noticeBody(content: AgentMessage["content"]): string {
+	return resultText(content)
+		.trim()
+		.replace(/^<system-notice\s*>\s*|\s*<\/system-notice\s*>$/g, "");
+}
+
+function AsyncNotifyCard({ message, inProcess }: { message: AgentMessage; inProcess: boolean }) {
+	const t = useT();
+	const reports = resultDetails(message)?.reports;
+	const sources = Array.isArray(reports)
+		? reports.flatMap(report => {
+				const id = report && typeof report === "object" && "id" in report ? str(report.id) : undefined;
+				return id ? [sanitizeToolText(id)] : [];
+			})
+		: [];
+	return (
+		<CompletionRows inProcess={inProcess}>
+			<CompletionRow
+				label={t("chat.custom.asyncNotify")}
+				meta={sources.join(" · ")}
+				output={noticeBody(message.content)}
+			/>
+		</CompletionRows>
+	);
+}
+
 // ---------------------------------------------------------------------------
 // async-result — completed background bash/task job rows
 // ---------------------------------------------------------------------------
@@ -316,11 +324,10 @@ function asyncJobs(details: Record<string, unknown> | undefined): AsyncJob[] {
  * section headers). Best-effort: jobs without a recoverable section just
  * render their status row.
  */
-function asyncJobResults(content: string, jobs: AsyncJob[]): Map<string, string> {
+function asyncJobResults(body: string, jobs: AsyncJob[]): Map<string, string> {
 	const results = new Map<string, string>();
-	const body = content.replace(/<\/?system-notice\s*>/g, "").trim();
 	if (!body) return results;
-	const sectionRe = /^── Job (\S+)(?:\s+\([^)]*\))? ──\s*$/gm;
+	const sectionRe = /^── Job (\S+)(?: \(.*\))? ──[ \t]*$/gm;
 	const matches = [...body.matchAll(sectionRe)];
 	if (matches.length > 0) {
 		for (let i = 0; i < matches.length; i++) {
@@ -344,14 +351,14 @@ function asyncJobResults(content: string, jobs: AsyncJob[]): Map<string, string>
 function AsyncResultCard({ message, inProcess }: { message: AgentMessage; inProcess: boolean }) {
 	const t = useT();
 	const jobs = asyncJobs(resultDetails(message));
-	const results = asyncJobResults(resultText(message.content), jobs);
+	const body = noticeBody(message.content);
+	const results = asyncJobResults(body, jobs);
 
-	// A batch without job rows must not invent one: the delivery text is the
-	// only truthful summary left.
+	// Older deliveries may not have job metadata. Keep their text behind the disclosure, too.
 	if (jobs.length === 0) {
 		return (
 			<CompletionRows inProcess={inProcess}>
-				<CompletionRow label={resultText(message.content) || t("chat.exec.finished")} />
+				<CompletionRow label={t("chat.custom.asyncDone")} output={body} />
 			</CompletionRows>
 		);
 	}
@@ -360,10 +367,11 @@ function AsyncResultCard({ message, inProcess }: { message: AgentMessage; inProc
 		<CompletionRows inProcess={inProcess}>
 			{jobs.map((job, index) => {
 				const id = job.jobId ?? "unknown";
+				const bash = job.type === "bash";
 				const meta = [
-					t("chat.custom.asyncDone"),
+					bash ? id : t("chat.custom.asyncDone"),
 					`[${job.type ?? "job"}]`,
-					job.label ? id : undefined,
+					!bash && job.label ? id : undefined,
 					job.durationMs != null ? formatDuration(job.durationMs) : undefined,
 				]
 					.filter(Boolean)
@@ -372,9 +380,9 @@ function AsyncResultCard({ message, inProcess }: { message: AgentMessage; inProc
 					<CompletionRow
 						failed={false}
 						key={job.jobId ?? index}
-						label={job.label ?? id}
+						label={bash ? t("chat.custom.asyncDone") : (job.label ?? id)}
 						meta={meta}
-						output={job.jobId ? results.get(job.jobId) : undefined}
+						output={bash ? [job.label, results.get(id)].filter(Boolean).join("\n\n") : results.get(id)}
 					/>
 				);
 			})}
@@ -677,38 +685,13 @@ function CollabCard({ message }: { message: AgentMessage }) {
 
 function IrcCard({ message }: { message: AgentMessage }) {
 	const t = useT();
-	const details = resultDetails(message);
-	const kind =
-		message.customType === "irc:incoming"
-			? "incoming"
-			: message.customType === "irc:autoreply"
-				? "autoreply"
-				: "relay";
-	const from = str(details?.from) ?? "?";
-	const to = str(details?.to) ?? "?";
-	const body = str(kind === "incoming" ? details?.message : details?.body) ?? "";
-	const title = kind === "incoming" ? `IRC ← ${from}` : kind === "autoreply" ? `IRC → ${to}` : `IRC ${from} → ${to}`;
-	// Relative age ("8m"); timestamp arrives as epoch ms or ISO.
-	const age =
-		message.timestamp == null
-			? ""
-			: formatTimeAgo(
-					typeof message.timestamp === "number" ? new Date(message.timestamp).toISOString() : message.timestamp,
-				);
-
 	return (
-		<CardFrame>
-			<div className="mb-1.5 flex items-center gap-1.5 text-omp-sm font-semibold text-[var(--omp-custom-msg-label)]">
-				<MessagesSquare size={12} className="shrink-0" />
-				<span className="min-w-0 truncate">{title}</span>
-				{kind === "autoreply" && <Badge variant="muted">{t("chat.custom.ircAuto")}</Badge>}
-				{str(details?.replyTo) && <Badge variant="muted">{t("chat.custom.ircReply")}</Badge>}
-				{age && (
-					<span className="ml-auto shrink-0 font-mono text-omp-xs font-normal text-[var(--omp-dim)]">{age}</span>
-				)}
+		<div className="omp-custom-turn ps-(--omp-editorial-inset) pe-(--omp-editorial-edge) py-1">
+			<div className="omp-transcript-content flex items-center gap-1.5 text-omp-sm text-(--omp-dim)">
+				<MessagesSquare aria-hidden="true" className="shrink-0" size={12} />
+				<span className="min-w-0 truncate">{ircNotice(message, t)}</span>
 			</div>
-			{body && <CollapsibleText text={body} lines={3} />}
-		</CardFrame>
+		</div>
 	);
 }
 

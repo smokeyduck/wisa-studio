@@ -10,6 +10,9 @@ files:
 extraResources:
   - from: resources/omp.exe
     to: omp.exe
+  - from: .
+    to: licenses
+    filter: [LICENSE, NOTICE, LICENSE-SCOPE.md, LICENSE-POLYFORM-STRICT]
 protocols:
   - name: wisa-studio
     schemes:

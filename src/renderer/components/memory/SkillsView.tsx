@@ -335,10 +335,17 @@ export function SkillsView({ open }: { open: boolean }) {
 	const t = useT();
 	const rpc = useTabRpc();
 	const connected = useSessionStore(state => state.status === "ready");
+	const sessionId = useSessionStore(state => state.sessionId);
 	const learned = useSkillReviewStore(state => state.learned);
 	const reviewed = useSkillReviewStore(state => state.reviewed);
 	const hydrated = useSkillReviewStore(state => state.hydrated);
-	const [autolearn, setAutolearn] = useState<boolean | null>(null);
+	const [effective, setEffective] = useState<{
+		rpc: typeof rpc;
+		sessionId: typeof sessionId;
+		enabled: boolean;
+	} | null>(null);
+	const [saving, setSaving] = useState(false);
+	const autolearn = effective?.rpc === rpc && effective.sessionId === sessionId ? effective.enabled : null;
 	const [expanded, setExpanded] = useState<string | null>(null);
 
 	const refresh = useCallback(() => refreshLearnedSkills(rpc), [rpc]);
@@ -347,25 +354,50 @@ export function SkillsView({ open }: { open: boolean }) {
 		if (!open || !connected) return;
 		void useSkillReviewStore.getState().hydrate();
 		void refresh();
-		void rpc
-			.getSettings([AUTOLEARN])
-			.then(response => {
-				if (!response.success) return;
+	}, [connected, open, refresh]);
+
+	useEffect(() => {
+		setEffective(null);
+		if (!open || !connected) return;
+		let active = true;
+		let version = 0;
+		const read = async () => {
+			const requested = ++version;
+			try {
+				const response = await rpc.getSettings([AUTOLEARN]);
+				if (!active || requested !== version || !response.success) return;
 				const values = (response.data as { values?: Record<string, unknown> } | undefined)?.values;
-				setAutolearn(values?.[AUTOLEARN] === true);
-			})
-			.catch(() => {});
-	}, [connected, open, refresh, rpc]);
+				const enabled = values?.[AUTOLEARN];
+				setEffective(typeof enabled === "boolean" ? { rpc, sessionId, enabled } : null);
+			} catch {
+				// Do not infer an opt-out from an unavailable settings read.
+			}
+		};
+		const unsubscribe = window.omp.events.onConfigUpdate(() => void read());
+		void read();
+		return () => {
+			active = false;
+			unsubscribe();
+		};
+	}, [connected, open, rpc, sessionId]);
 
 	const setAutolearnOn = async (on: boolean) => {
-		setAutolearn(on);
+		setSaving(true);
 		try {
 			const response = await rpc.setSetting(AUTOLEARN, on);
 			if (!response.success) throw new Error(response.error);
-			setAutolearn((response.data as { value?: unknown } | undefined)?.value === true);
+			const enabled = (response.data as { value?: unknown } | undefined)?.value;
+			setEffective(prev =>
+				prev?.rpc === rpc && prev.sessionId === sessionId && typeof enabled === "boolean"
+					? { rpc, sessionId, enabled }
+					: prev,
+			);
+			return enabled === on;
 		} catch (cause) {
-			setAutolearn(!on);
 			toast({ variant: "error", message: describeError(cause) });
+			return false;
+		} finally {
+			setSaving(false);
 		}
 	};
 
@@ -416,13 +448,20 @@ export function SkillsView({ open }: { open: boolean }) {
 			</div>
 
 			<div className="omp-card">
-				<Toggle
-					checked={autolearn === true}
-					description={t("memory.skills.autolearnHint")}
-					disabled={autolearn === null}
-					label={t("memory.skills.autolearn")}
-					onChange={on => void setAutolearnOn(on)}
-				/>
+				{autolearn === null ? (
+					<div className="px-3 py-2.5">
+						<div className="text-omp-md font-medium text-(--omp-text)">{t("memory.skills.autolearn")}</div>
+						<p className="mt-0.5 text-omp-sm text-(--omp-muted)">{t("memory.skills.autolearnHint")}</p>
+					</div>
+				) : (
+					<Toggle
+						checked={autolearn}
+						description={t("memory.skills.autolearnHint")}
+						disabled={saving}
+						label={t("memory.skills.autolearn")}
+						onChange={setAutolearnOn}
+					/>
+				)}
 			</div>
 
 			{!hydrated || learned === null ? (

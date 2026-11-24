@@ -27,7 +27,7 @@ import { isImeKeyEvent } from "../../lib/ime";
 import { modelLabel } from "../../lib/model-label";
 import { manufacturerLabel } from "../../lib/model-manufacturer";
 import { rememberModelPick } from "../../lib/model-preference";
-import { providerBrand } from "../../lib/provider-brand";
+import { manufacturerIcon, providerLabel } from "../../lib/provider-brand";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
 import { useRuntimeTabId } from "../../stores/session-runtime-context";
@@ -64,6 +64,7 @@ export function ModelPicker() {
 	const open = useUiStore(state => state.modelPickerOpen);
 	const close = useUiStore(state => state.closeModelPicker);
 	const availableModels = useModelStore(state => state.availableModels);
+	const refreshPending = useModelStore(state => state.catalogRefreshPending);
 	const current = useModelStore(state => state.model);
 	const refreshAvailableModels = useModelStore(state => state.refreshAvailableModels);
 	const openProviders = useUiStore(state => state.openProviders);
@@ -73,7 +74,7 @@ export function ModelPicker() {
 	const sidecarReady = useSessionStore(state => state.status) === "ready";
 
 	const [query, setQuery] = useState("");
-	const [providers, setProviders] = useState<LoginProvider[]>([]);
+	const [login, setLogin] = useState<{ rpc: typeof tabRpc; providers: LoginProvider[] }>();
 	const [switching, setSwitching] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -151,13 +152,10 @@ export function ModelPicker() {
 		};
 	}, [close, dismiss, open, tabId]);
 
-	/** Login flows are the picker's own concern, but the model list is shared
-	 * catalog state: it commits through the store's generation guard, so a
-	 * `model_catalog_update` that lands mid-read can never be reverted by this
-	 * response. `forceRefresh` belongs to the retry path, where the user is
-	 * disputing what the list shows. */
+	// Keep showing the scoped catalog while discovery revalidates it. Reads and
+	// model_catalog_update pushes share the store's generation guard.
 	const load = useCallback(
-		async (forceRefresh: boolean, failedCopy?: string): Promise<void> => {
+		async (failedCopy?: string): Promise<void> => {
 			const version = ++requestVersion.current;
 			setLoading(true);
 			setError(null);
@@ -166,29 +164,15 @@ export function ModelPicker() {
 				setLoading(false);
 				return;
 			}
-			const [providersResult, modelsResult] = await Promise.allSettled([
-				tabRpc.getLoginProviders(),
-				refreshAvailableModels(forceRefresh),
-			]);
-			if (version !== requestVersion.current) return;
-			setLoading(false);
-			const providersOk = providersResult.status === "fulfilled" && providersResult.value.success;
-			if (providersOk) {
-				const data = providersResult.value.data as { providers?: LoginProvider[] } | undefined;
-				setProviders(data?.providers ?? []);
-				return;
+			try {
+				await refreshAvailableModels(true);
+			} catch (cause) {
+				if (version === requestVersion.current) setError(failedCopy ?? describeProviderError(cause));
+			} finally {
+				if (version === requestVersion.current) setLoading(false);
 			}
-			if (modelsResult.status === "fulfilled") return;
-			const reason = (settled: PromiseSettledResult<unknown>): string | null => {
-				if (settled.status === "rejected") {
-					return describeProviderError(settled.reason);
-				}
-				const failure = (settled.value as { error?: string } | undefined)?.error;
-				return failure ? describeProviderError(failure) : null;
-			};
-			setError(failedCopy ?? reason(providersResult) ?? reason(modelsResult) ?? t("modelPicker.notResponding"));
 		},
-		[refreshAvailableModels, sidecarReady, t, tabRpc],
+		[refreshAvailableModels, sidecarReady, t],
 	);
 
 	useEffect(() => {
@@ -196,41 +180,71 @@ export function ModelPicker() {
 		setQuery("");
 		setSearchCollapsed(new Set());
 		setActiveIndex(0);
-		requestAnimationFrame(() => inputRef.current?.focus());
-		void load(false);
+		const frame = requestAnimationFrame(() => inputRef.current?.focus());
+		return () => cancelAnimationFrame(frame);
+	}, [open, tabId]);
+
+	useEffect(() => {
+		if (!open) return;
+		void load();
 		return () => {
 			requestVersion.current++;
 		};
 	}, [open, load]);
 
+	useEffect(() => {
+		if (!open || !sidecarReady) return;
+		let cancelled = false;
+		void tabRpc
+			.getLoginProviders()
+			.then(response => {
+				if (cancelled || !response.success) return;
+				const data = response.data as { providers?: LoginProvider[] } | undefined;
+				setLogin({ rpc: tabRpc, providers: data?.providers ?? [] });
+			})
+			.catch(() => {
+				// Auth badges are auxiliary; a failed auth read does not block the catalog.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [open, sidecarReady, tabRpc]);
+
 	const authByProvider = useMemo(() => {
 		const map = new Map<string, LoginProvider>();
-		for (const provider of providers) map.set(provider.id, provider);
+		if (login?.rpc === tabRpc) for (const provider of login.providers) map.set(provider.id, provider);
 		return map;
-	}, [providers]);
+	}, [login, tabRpc]);
 
 	/** Manufacturer-first index; unknown routes stay under their connection label. */
 	const groups = useMemo(() => {
 		const q = query.trim().toLowerCase();
-		const filtered = availableModels.filter(
-			model =>
-				q.length === 0 ||
-				model.id.toLowerCase().includes(q) ||
-				model.provider.toLowerCase().includes(q) ||
-				model.name?.toLowerCase().includes(q) ||
-				model.description?.toLowerCase().includes(q) ||
-				providerBrand(model.provider).label.toLowerCase().includes(q) ||
-				manufacturerLabel(model).toLowerCase().includes(q),
-		);
-		const map = new Map<string, typeof filtered>();
-		for (const model of filtered) {
-			const manufacturer = manufacturerLabel(model) || providerBrand(model.provider).label;
-			const list = map.get(manufacturer) ?? [];
-			list.push(model);
-			map.set(manufacturer, list);
+		const map = new Map<string, { manufacturer: string; models: ModelInfo[] }>();
+		for (const model of availableModels) {
+			const manufacturer = manufacturerLabel(model);
+			const connection = providerLabel(model.provider);
+			if (
+				q &&
+				!model.id.toLowerCase().includes(q) &&
+				!model.provider.toLowerCase().includes(q) &&
+				!model.name?.toLowerCase().includes(q) &&
+				!model.description?.toLowerCase().includes(q) &&
+				!connection.toLowerCase().includes(q) &&
+				!manufacturer.toLowerCase().includes(q)
+			) {
+				continue;
+			}
+			const label = manufacturer || connection;
+			const group = map.get(label);
+			if (group) {
+				group.models.push(model);
+				if (manufacturer) group.manufacturer = manufacturer;
+			} else {
+				map.set(label, { manufacturer, models: [model] });
+			}
 		}
-		for (const list of map.values()) {
-			list.sort(
+		for (const { models } of map.values()) {
+			models.sort(
 				(a, b) =>
 					(modelLabel(a) ?? a.id).localeCompare(modelLabel(b) ?? b.id) ||
 					a.id.localeCompare(b.id) ||
@@ -264,7 +278,7 @@ export function ModelPicker() {
 		() =>
 			groups
 				.filter(([label]) => openGroupSet.has(label))
-				.flatMap(([, models]) =>
+				.flatMap(([, { models }]) =>
 					models.map(model => ({
 						provider: model.provider,
 						modelId: model.id,
@@ -360,9 +374,8 @@ export function ModelPicker() {
 		}
 	};
 
-	// role="listbox" only when option rows actually render (loading / error /
-	// empty states are plain status blocks, not listbox children).
-	const showOptions = !error && !loading && groups.length > 0;
+	const showOptions = groups.length > 0;
+	const refreshing = !error && (loading || (sidecarReady && refreshPending));
 
 	if (!open) return null;
 	return createPortal(
@@ -391,51 +404,68 @@ export function ModelPicker() {
 						ref={inputRef}
 						value={query}
 					/>
+					{refreshing && availableModels.length > 0 && (
+						<span title={t("modelPicker.loading")} role="status" aria-label={t("modelPicker.loading")}>
+							<Spinner size="sm" />
+						</span>
+					)}
 				</div>
+				{error && (
+					<div
+						className={cx(
+							"flex flex-col items-center gap-2 px-3 text-center",
+							availableModels.length > 0 ? "border-b border-(--omp-border-muted) py-2" : "py-10",
+						)}
+					>
+						<span className="text-omp-xs text-(--omp-error)" role="status">
+							{error}
+						</span>
+						{availableModels.length === 0 && (
+							<span className="text-omp-xs text-(--omp-dim)">{t("modelPicker.notRespondingHint")}</span>
+						)}
+						<button
+							type="button"
+							className="rounded-md border border-(--omp-border-muted) px-3 py-1 text-omp-sm font-medium text-(--omp-text) hover:bg-(--omp-selected-bg)"
+							onClick={() => void load(t("modelPicker.stillNotResponding"))}
+							disabled={!sidecarReady}
+						>
+							{t("modelPicker.retry")}
+						</button>
+					</div>
+				)}
 				<div
+					aria-busy={refreshing}
 					className="min-h-0 flex-1 overflow-y-auto p-1.5"
 					id={listboxId}
 					ref={listRef}
 					role={showOptions ? "listbox" : undefined}
 				>
-					{error ? (
-						<div className="flex flex-col items-center gap-3 py-10">
-							<span className="text-omp-xs text-[var(--omp-error)]">{error}</span>
-							<span className="text-omp-xs text-[var(--omp-dim)]">{t("modelPicker.notRespondingHint")}</span>
-							<button
-								type="button"
-								className="rounded-md border border-[var(--omp-border-muted)] px-3 py-1 text-omp-sm font-medium text-[var(--omp-text)] hover:bg-[var(--omp-selected-bg)]"
-								onClick={() => void load(true, t("modelPicker.stillNotResponding"))}
-								disabled={!sidecarReady}
-								title={!sidecarReady ? t("modelPicker.notConnected") : undefined}
-							>
-								{t("modelPicker.retry")}
-							</button>
-						</div>
-					) : loading ? (
+					{availableModels.length === 0 && refreshing ? (
 						<div className="flex items-center justify-center gap-2 py-10">
 							<Spinner size="sm" />
 							<span className="text-omp-xs text-(--omp-dim)">{t("modelPicker.loading")}</span>
 						</div>
 					) : availableModels.length === 0 ? (
-						<div className="py-10 text-center text-omp-xs text-(--omp-dim)">{t("modelPicker.empty")}</div>
+						error ? null : (
+							<div className="py-10 text-center text-omp-xs text-(--omp-dim)">{t("modelPicker.empty")}</div>
+						)
 					) : groups.length === 0 ? (
 						<div className="py-10 text-center text-omp-xs text-(--omp-dim)">
 							{t("modelPicker.noMatch", { query })}
 						</div>
 					) : (
-						groups.map(([manufacturer, models], groupIndex) => {
-							const expanded = openGroupSet.has(manufacturer);
+						groups.map(([label, { manufacturer, models }], groupIndex) => {
+							const expanded = openGroupSet.has(label);
 							const groupId = `${listboxId}-group-${groupIndex}`;
-							const BrandIcon = providerBrand(manufacturer).Icon;
+							const BrandIcon = manufacturerIcon(manufacturer);
 							return (
-								<section aria-label={manufacturer} className="mb-1" key={manufacturer} role="group">
+								<section aria-label={label} className="mb-1" key={label} role="group">
 									<h3 className="flex items-center gap-2 px-1 pt-2">
 										<button
 											aria-controls={expanded ? groupId : undefined}
 											aria-expanded={expanded}
 											className="omp-pressable flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left hover:bg-(--omp-bg-tertiary)"
-											onClick={() => toggleGroup(manufacturer)}
+											onClick={() => toggleGroup(label)}
 											type="button"
 										>
 											<ChevronRight
@@ -446,9 +476,9 @@ export function ModelPicker() {
 												)}
 												size={14}
 											/>
-											<BrandIcon className="shrink-0 text-(--omp-muted)" size={16} />
+											<BrandIcon className="shrink-0 text-(--omp-text)" size={16} />
 											<span className="truncate text-omp-md font-bold text-(--omp-text)">
-												{manufacturer}
+												{label}
 											</span>
 											{!expanded &&
 												models.some(
@@ -467,7 +497,7 @@ export function ModelPicker() {
 											{models.map(model => {
 												const provider = model.provider;
 												const auth = authByProvider.get(provider);
-												const connection = providerBrand(provider).label;
+												const connection = providerLabel(provider);
 												const isCurrent = current?.provider === provider && current.id === model.id;
 												const key = modelKey(provider, model.id);
 												const optionIndex = indexByKey.get(key) ?? 0;
@@ -536,7 +566,13 @@ export function ModelPicker() {
 																		{model.description}
 																	</span>
 																)}
-																<span className="text-omp-xxs text-(--omp-dim)">{connection}</span>
+																<span
+																	className="truncate text-omp-xs font-bold text-(--omp-text)"
+																	data-model-provider={provider}
+																	title={provider}
+																>
+																	{provider}
+																</span>
 															</div>
 															{model.int != null && Number.isFinite(model.int) && (
 																// INT is a catalog score, not a promise: the tooltip is the

@@ -185,6 +185,7 @@ export function BtwDialog() {
 						rows={2}
 						value={draft}
 					/>
+					{!latest && <p className="mt-2 text-omp-xs text-(--omp-dim)">{t("btw.scopeHint")}</p>}
 					<div className="mt-2 flex flex-wrap items-center justify-end gap-2">
 						{running ? (
 							<Button onClick={stop} size="sm" variant="secondary">

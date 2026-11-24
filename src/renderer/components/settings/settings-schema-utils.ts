@@ -146,21 +146,22 @@ export function groupSchemaEntries(
 	};
 }
 
-const CAPABILITIES_TAB_ID = "capabilities";
 const RESOURCES_TAB_ID = "resources";
 export const GUI_TAB_ID = "gui";
 export const GENERAL_SCHEMA_TABS: ReadonlySet<string> = new Set(["appearance", "interaction"]);
 
 export function resolveSettingsTarget(target: string | null | undefined): {
 	tab: string;
-	resourceTab?: "plugins" | "marketplaces" | "templates" | "memory";
+	resourceTab?: "catalog" | "plugins" | "marketplaces" | "templates" | "memory";
 } {
-	const requested = target || CAPABILITIES_TAB_ID;
+	const requested = target || GUI_TAB_ID;
 	if (GENERAL_SCHEMA_TABS.has(requested)) return { tab: GUI_TAB_ID };
 	if (!requested.startsWith(`${RESOURCES_TAB_ID}:`)) return { tab: requested };
 	const resource = requested.slice(RESOURCES_TAB_ID.length + 1);
-	const resourceTab: "plugins" | "marketplaces" | "templates" | "memory" =
-		resource === "marketplaces" || resource === "templates" || resource === "memory" ? resource : "plugins";
+	const resourceTab =
+		resource === "plugins" || resource === "marketplaces" || resource === "templates" || resource === "memory"
+			? resource
+			: "catalog";
 	return { tab: RESOURCES_TAB_ID, resourceTab };
 }
 

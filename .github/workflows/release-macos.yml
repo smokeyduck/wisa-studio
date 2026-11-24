@@ -9,8 +9,7 @@ name: Release macOS builds
 # recorded in that GUI revision's sidecar-source.json.
 
 on:
-  release:
-    types: [published]
+  # Build against a draft; publishing must not enqueue another upload.
   workflow_dispatch:
     inputs:
       tag:
@@ -41,14 +40,11 @@ jobs:
       - name: Resolve release tag
         id: refs
         shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+          GUI_REF: ${{ inputs.gui_ref || inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-            echo "gui_ref=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-            echo "gui_ref=${{ inputs.gui_ref || inputs.tag }}" >> "$GITHUB_OUTPUT"
-          fi
+          printf 'tag=%s\ngui_ref=%s\n' "$TAG" "$GUI_REF" >> "$GITHUB_OUTPUT"
 
       - name: Read the Core pin from the selected GUI commit
         uses: actions/checkout@v6
@@ -386,4 +382,5 @@ jobs:
           shopt -s nullglob
           files=(*.dmg *.zip latest-mac.yml)
           test "${#files[@]}" = 5
-          gh release upload "$RELEASE_TAG" "${files[@]}" --repo "$GUI_REPO" --clobber
+          sha256sum "${files[@]}"
+          gh release upload "$RELEASE_TAG" "${files[@]}" --repo "$GUI_REPO"

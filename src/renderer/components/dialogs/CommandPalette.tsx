@@ -25,6 +25,7 @@ import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
 import { retryLastTurn as retryLastTurnShared } from "../../lib/messages";
+import { supportsPriorityMode } from "../../lib/service-tier";
 import { openHandoffDialog } from "../../stores/fork-handoff";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
@@ -148,11 +149,12 @@ export function CommandPalette() {
 	const openHotkeys = useUiStore(state => state.openHotkeys);
 	const openImportDialog = useUiStore(state => state.openImportDialog);
 	const openProviderConfig = useUiStore(state => state.openProviderConfig);
-	const focusDockCard = useUiStore(state => state.focusDockCard);
+	const focusTodoRibbon = useUiStore(state => state.focusTodoRibbon);
 
 	const isStreaming = useSessionStore(s => s.isStreaming);
 	const tabKind = useActiveTabKind();
-	const fastModeEnabled = useModelStore(s => s.fastModeEnabled);
+	const fastModeEnabled = useModelStore(s => (supportsPriorityMode(s.model) ? s.fastModeEnabled : null));
+	const setModelSpeed = useModelStore(s => s.setModelSpeed);
 	const autoCompaction = useSettingsStore(s => s.autoCompaction);
 	const autoRetry = useSettingsStore(s => s.autoRetry);
 	const steeringMode = useSettingsStore(s => s.steeringMode);
@@ -283,6 +285,7 @@ export function CommandPalette() {
 				tabKind,
 				isStreaming,
 				fastModeEnabled,
+				setFastMode: enabled => setModelSpeed(enabled ? "fast" : "standard"),
 				autoCompaction,
 				autoRetry,
 				steeringMode,
@@ -319,12 +322,11 @@ export function CommandPalette() {
 				openHotkeys,
 				openImportDialog,
 				openProviderConfig,
-				focusDockCard,
+				focusTodoRibbon,
 				openCommandPalette: () => {},
 				retryTurn,
 				retryLastTurn,
 				rpc: {
-					setFastMode: enabled => tabRpc.setFastMode(enabled),
 					setAutoCompaction: enabled => tabRpc.setAutoCompaction(enabled),
 					setAutoRetry: enabled => tabRpc.setAutoRetry(enabled),
 					setSteeringMode: mode => tabRpc.setSteeringMode(mode),
@@ -347,6 +349,7 @@ export function CommandPalette() {
 			tabKind,
 			isStreaming,
 			fastModeEnabled,
+			setModelSpeed,
 			autoCompaction,
 			autoRetry,
 			steeringMode,
@@ -371,7 +374,7 @@ export function CommandPalette() {
 			retryTurn,
 			openModes,
 			openProviderConfig,
-			focusDockCard,
+			focusTodoRibbon,
 			openModelCompare,
 			openBenchmark,
 			openAgentHub,
@@ -389,7 +392,6 @@ export function CommandPalette() {
 			tabRpc.setPlanMode,
 			tabRpc.setInterruptMode,
 			tabRpc.setFollowUpMode,
-			tabRpc.setFastMode,
 			tabRpc.prompt,
 			tabRpc.setAutoRetry,
 			tabRpc.handoff,

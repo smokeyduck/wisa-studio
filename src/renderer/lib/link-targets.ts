@@ -25,10 +25,9 @@ const NOT_A_PATH = /[\s*?<>|"'`{}$,;=]/;
 // ── Where a bare web address ends ─────────────────────────────────────────
 // GFM, like a "to the next space" scan, runs a bare address to the next
 // whitespace, but CJK prose rarely puts a space after one:
-// `运行于 http://127.0.0.1:18091，仅` linked `…18091，仅`, which the browser panel
-// then refused as a blocked address. Every linkifier (markdown literal
-// autolinks, terminal and tool output, the last-link command) ends an address
-// by the same rules:
+// `运行于 http://127.0.0.1:18091，仅` linked `…18091，仅`, an invalid URL.
+// Markdown autolinks, terminal and tool output, and the last-link command
+// all end an address by the same rules:
 //
 // - CJK and full-width punctuation ends it anywhere, as a space would, so the
 //   ASCII punctuation before it (`.`, `**`, an unopened `)`) is trimmed too.

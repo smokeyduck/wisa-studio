@@ -835,22 +835,30 @@ test("deep GUI audit: settings rows, nested controls, and command discoverabilit
 		// The command palette is the single discoverability surface for built-ins,
 		// slash commands, and native actions. Search every advertised command without
 		// executing it and retain the TUI-only negative contract.
-		// The settings home also exposes the same live palette entry, so the
-		// discoverability action is exercised through its second-level surface.
+		// The Wisa Capabilities workspace page also exposes the live palette.
 		await settings.getByRole("button", { name: "Back to chat", exact: true }).click();
 		await expect(settings).toHaveCount(0);
-		await page.getByRole("button", { name: "Settings", exact: true }).click();
-		const capabilitiesSettings = page.getByRole("dialog", { name: "Settings", exact: true });
-		await expect(capabilitiesSettings).toBeVisible();
-		const capabilitiesNav = capabilitiesSettings.locator(".settings-nav-item", { hasText: "OMP Capabilities" });
+		const index = page.locator('button[aria-controls="sidebar-tool-index"]');
+		if ((await index.getAttribute("aria-expanded")) !== "true") await index.click();
+		const capabilitiesNav = page
+			.locator('[data-sidebar-index-item="capabilities"]')
+			.getByRole("button", { name: "Wisa Capabilities", exact: true });
 		await capabilitiesNav.click();
-		const settingsCommandCenter = capabilitiesSettings.locator('[data-command-center-entry="true"]');
-		await expect(settingsCommandCenter).toBeVisible();
-		await settingsCommandCenter.click();
+		await expect(capabilitiesNav).toHaveAttribute("aria-current", "page");
+		const capabilities = page.getByRole("region", { name: "Wisa Capabilities", exact: true });
+		await expect(capabilities).toBeVisible();
+		await expect(settings).toHaveCount(0);
+		await capabilities.getByRole("button", { name: "Configure rules", exact: true }).click();
+		await expect(settings.getByRole("textbox", { name: "Search settings…", exact: true })).toHaveValue("ttsr");
+		await settings.getByRole("button", { name: "Back to chat", exact: true }).click();
+		await expect(capabilities).toBeVisible();
+		await capabilities.locator('[data-command-center-entry="true"]').click();
 		await expect(settings).toHaveCount(0);
 		await expect(page.getByRole("dialog")).toBeVisible();
 		await page.keyboard.press("Escape");
 		await expect(page.getByRole("dialog")).toHaveCount(0);
+		await capabilities.getByRole("button", { name: "Back to chat", exact: true }).click();
+		await expect(capabilities).toHaveCount(0);
 		await expect(page.locator('button[data-command-center-entry="true"]').first()).toHaveAccessibleName(
 			"Commands ⌘K",
 		);

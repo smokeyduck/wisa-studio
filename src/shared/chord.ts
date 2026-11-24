@@ -1,8 +1,7 @@
 /**
  * Keyboard chords as the GUI keymap spells them: modifiers ⌃⌥⇧⌘ plus a
- * canonical base key, serialized in the fixed order ⌥ ⇧ ⌃ ⌘. Shared so the
- * main process can recognize app shortcuts typed into a built-in browser page,
- * whose keystrokes never reach the renderer.
+ * canonical base key, serialized in the fixed order ⌥ ⇧ ⌃ ⌘. The renderer
+ * and native shortcuts use the same chord spelling.
  */
 
 export interface Chord {

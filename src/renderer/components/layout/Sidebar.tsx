@@ -1,7 +1,8 @@
 import {
 	Archive,
 	ArchiveRestore,
-	ArrowDownAZ,
+	ArrowDown,
+	ArrowUp,
 	BarChart3,
 	BookOpen,
 	Bot,
@@ -10,7 +11,6 @@ import {
 	CheckCheck,
 	ChevronDown,
 	ChevronRight,
-	ClockArrowDown,
 	Coins,
 	Columns2,
 	Command,
@@ -19,8 +19,10 @@ import {
 	FolderPlus,
 	GitBranchPlus,
 	GitPullRequest,
+	GripVertical,
 	Keyboard,
 	LayoutTemplate,
+	List,
 	ListChecks,
 	LoaderCircle,
 	type LucideIcon,
@@ -36,7 +38,9 @@ import {
 	Puzzle,
 	RefreshCw,
 	Rows2,
+	ScanSearch,
 	Settings,
+	ShieldCheck,
 	Sparkles,
 	Square,
 	SquareCheck,
@@ -47,6 +51,7 @@ import {
 	X,
 } from "lucide-react";
 import {
+	type DragEvent as ReactDragEvent,
 	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
@@ -70,7 +75,7 @@ import {
 	buildSessionTree,
 	isSubagentSession,
 	listedSessions,
-	orderSessionForest,
+	previewSessionForest,
 	type SessionNode,
 	sessionParents,
 } from "../../lib/session-tree";
@@ -125,6 +130,7 @@ interface WorkspaceGroup {
 	cwd: string;
 	name: string;
 	sessions: SessionInfo[];
+	lastUsed: number;
 }
 
 /** A delete the row, context menu or selection bar queued, awaiting the confirmation dialog. */
@@ -163,6 +169,14 @@ interface SessionRowSpec {
 	frame?: string;
 }
 
+interface SessionListPreview {
+	rows: SessionRowSpec[];
+	hidden: number;
+	expanded: boolean;
+}
+
+const SESSION_PREVIEW_LIMIT = 4;
+
 /** Tree lines line up with the parent's signal dot, as the agent rows under a session do. */
 function treeLineX(depth: number): number {
 	return 1 + Math.min(depth, 6) * 14;
@@ -181,8 +195,7 @@ function SidebarRowTitle({ className, title }: { className?: string; title: stri
 	);
 }
 
-/** Workspace names compare as people read them: case-insensitive, numbers by value ("web2" before "web10"). */
-const workspaceNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+type DropSide = "before" | "after";
 
 export function Sidebar() {
 	const tabRpc = useTabRpc();
@@ -251,10 +264,7 @@ export function Sidebar() {
 	// last row clicked, the start of a ⇧-click range.
 	const [selection, setSelection] = useState<ReadonlySet<string> | null>(null);
 	const selectionAnchor = useRef<string | null>(null);
-	const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-	// A session's family (its subagent sessions, forks and continuations) stays
-	// folded until you open it, so the list reads as main sessions. The family
-	// holding the session on screen opens by itself, keeping that row in view.
+	// Child sessions stay folded until explicitly opened, even if one is on screen.
 	const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>({});
 	const setFamilyOpen = (sessionPath: string, open: boolean) => {
 		setOpenFamilies(prev => ({ ...prev, [sessionPath]: open }));
@@ -266,7 +276,6 @@ export function Sidebar() {
 	const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null);
 	const [renameDraft, setRenameDraft] = useState("");
 	// App, project and session menus.
-	const [moreMenu, setMoreMenu] = useState<ContextMenuAnchor | null>(null);
 	const [newSessionOpen, setNewSessionOpen] = useState(false);
 	const [groupMenu, setGroupMenu] = useState<{ anchor: ContextMenuAnchor; group: WorkspaceGroup } | null>(null);
 	const [sessionMenu, setSessionMenu] = useState<{ anchor: ContextMenuAnchor; session: SessionInfo } | null>(null);
@@ -303,8 +312,14 @@ export function Sidebar() {
 	const archived = useMemo(() => new Set(archivedPaths), [archivedPaths]);
 	const groupAliases = useSidebarPrefs(s => s.groupAliases);
 	const workspaceLastUsed = useSidebarPrefs(s => s.workspaceLastUsed);
-	const workspaceSort = useSidebarPrefs(s => s.workspaceSort);
-	const setWorkspaceSort = useSidebarPrefs(s => s.setWorkspaceSort);
+	const workspaceOrder = useSidebarPrefs(s => s.workspaceOrder);
+	const collapsed = useSidebarPrefs(s => s.collapsedLists);
+	const expandedLists = useSidebarPrefs(s => s.expandedLists);
+	const toolIndexOpen = expandedLists.includes("__tools__");
+	const setListCollapsed = useSidebarPrefs(s => s.setListCollapsed);
+	const toggleListExpanded = useSidebarPrefs(s => s.toggleListExpanded);
+	const draggedWorkspace = useRef<string | null>(null);
+	const [dropTarget, setDropTarget] = useState<{ cwd: string; side: DropSide } | null>(null);
 	const sessionLastUsed = useSidebarPrefs(s => s.sessionLastUsed);
 	const touchSession = useSidebarPrefs(s => s.touchSession);
 	const renameRef = useRef<HTMLInputElement>(null);
@@ -454,7 +469,7 @@ export function Sidebar() {
 	);
 	const laneArchived = useMemo(() => archivedSessions.filter(inLane), [archivedSessions, inLane]);
 
-	// Pins remain a priority partition, with project recency inside it.
+	// Keep pinned workspaces first. Explicit positions win over recency inside each partition.
 	const groups = useMemo<WorkspaceGroup[]>(() => {
 		const byCwd = new Map<string, SessionInfo[]>();
 		for (const session of projectSessions) {
@@ -469,6 +484,10 @@ export function Sidebar() {
 		const result: WorkspaceGroup[] = [...byCwd.entries()].map(([groupCwd, groupSessions]) => ({
 			cwd: groupCwd,
 			name: groupAliases[groupCwd] ?? (basename(groupCwd) || groupCwd),
+			lastUsed: groupSessions.reduce(
+				(latest, session) => Math.max(latest, recencyForSession(session)),
+				workspaceLastUsed[groupCwd] ?? 0,
+			),
 			sessions: [...groupSessions].sort((a, b) => {
 				const aPinned = pinnedSessions.includes(a.path) ? 0 : 1;
 				const bPinned = pinnedSessions.includes(b.path) ? 0 : 1;
@@ -476,18 +495,14 @@ export function Sidebar() {
 				return recencyForSession(b) - recencyForSession(a);
 			}),
 		}));
+		const positions = new Map(workspaceOrder.map((path, index) => [path, index]));
 		result.sort((a, b) => {
 			const aPinned = pinnedGroups.includes(a.cwd) ? 0 : 1;
 			const bPinned = pinnedGroups.includes(b.cwd) ? 0 : 1;
 			if (aPinned !== bPinned) return aPinned - bPinned;
-			// By name the order holds still while you work: opening a session no
-			// longer lifts its workspace to the top (#55).
-			if (workspaceSort === "name") {
-				return workspaceNameCollator.compare(a.name, b.name) || a.cwd.localeCompare(b.cwd);
-			}
-			const aRecency = Math.max(workspaceLastUsed[a.cwd] ?? 0, ...a.sessions.map(recencyForSession));
-			const bRecency = Math.max(workspaceLastUsed[b.cwd] ?? 0, ...b.sessions.map(recencyForSession));
-			return bRecency - aRecency;
+			const aPosition = positions.get(a.cwd) ?? positions.size;
+			const bPosition = positions.get(b.cwd) ?? positions.size;
+			return aPosition - bPosition || b.lastUsed - a.lastUsed;
 		});
 		return result;
 	}, [
@@ -500,22 +515,26 @@ export function Sidebar() {
 		registeredWorkspaces,
 		recencyForSession,
 		workspaceLastUsed,
-		workspaceSort,
+		workspaceOrder,
 	]);
 	function isCollapsedGroup(groupCwd: string): boolean {
-		if (groupCwd in collapsed) return collapsed[groupCwd] === true;
-		// Default: current workspace expanded, others collapsed (Codex-style).
-		return groupCwd !== cwd;
+		// Before the first explicit choice, open the current workspace by default.
+		return collapsed[groupCwd] ?? groupCwd !== cwd;
 	}
 	// Counts name the sessions you started; subagent transcripts sit inside them.
 	const listedCount = (list: readonly SessionInfo[]) => list.filter(session => !isSubagentSession(session)).length;
 	const workCollapsed = collapsed.__work__ ?? false;
 	const projectlessCollapsed = collapsed.__projectless__ ?? false;
 	const archivedCollapsed = collapsed.__archived__ ?? true;
+	const archiveListId = `__archived__:${lane}`;
 	// A tab knows its session file from the start; the id comes later, from the sidecar.
 	const tabForSession = (session: SessionInfo) =>
 		tabs.find(tab => tab.sessionPath === session.path || (tab.sessionId && tab.sessionId === session.id)) ??
 		(session.id === sessionId ? activeTab : undefined);
+	const isOnScreen = (session: SessionInfo) =>
+		session.id === sessionId ||
+		session.path === activeTab?.sessionPath ||
+		sessionPairs.get(session.path)?.onScreen === true;
 	// Child sessions nest under the parent named by parentSessionPath. Roots are
 	// ordered by the family's newest activity, so a subagent that just ran does
 	// not leave its parent behind in the list. A session open in a tab lists its
@@ -523,12 +542,19 @@ export function Sidebar() {
 	// agents shown there are not listed a second time. Its other transcripts
 	// (agents of earlier turns), forks and continuations still are, and so is a
 	// transcript open in a tab of its own.
-	const rowsOf = (list: readonly SessionInfo[]): SessionRowSpec[] => {
-		const forest = orderSessionForest(buildSessionTree(list), {
+	const rowsOf = (list: readonly SessionInfo[], listId: string): SessionListPreview => {
+		const expanded = expandedLists.includes(listId);
+		const { roots, byPath, hidden } = previewSessionForest(buildSessionTree(list), {
 			pinned: session => pinnedSessions.includes(session.path),
 			recency: recencyForSession,
+			essential: session => isOnScreen(session) || session.id === switchPendingTo,
+			partnerPath: path => {
+				const pair = sessionPairs.get(path);
+				if (pair) return pair.first === path ? pair.second : pair.first;
+			},
+			limit: SESSION_PREVIEW_LIMIT,
+			expanded,
 		});
-		const byPath = new Map(forest.map(node => [node.session.path, node]));
 		const placed = new Set<string>();
 		const specs: SessionRowSpec[] = [];
 		const listedChildren = (node: SessionNode): SessionNode[] => {
@@ -544,8 +570,7 @@ export function Sidebar() {
 			);
 		};
 		const holdsActive = (node: SessionNode): boolean =>
-			listedChildren(node).some(child => child.session.id === sessionId || holdsActive(child));
-		const familyOpen = (node: SessionNode) => openFamilies[node.session.path] ?? holdsActive(node);
+			listedChildren(node).some(child => isOnScreen(child.session) || holdsActive(child));
 		const appendChildren = (
 			node: SessionNode,
 			children: readonly SessionNode[],
@@ -566,7 +591,7 @@ export function Sidebar() {
 			guides: readonly number[],
 		) => {
 			const children = listedChildren(node);
-			const expanded = children.length > 0 && familyOpen(node);
+			const expanded = children.length > 0 && openFamilies[node.session.path] === true;
 			specs.push({
 				session: node.session,
 				depth,
@@ -583,7 +608,7 @@ export function Sidebar() {
 			// Below a child that has a later sibling, that sibling line runs on.
 			appendChildren(node, children, depth + 1, depth > 0 && moreSiblings ? [...guides, depth] : guides);
 		};
-		for (const node of forest) {
+		for (const node of roots) {
 			if (placed.has(node.session.path)) continue;
 			const pair = sessionPairs.get(node.session.path);
 			if (pair && byPath.has(pair.first) && byPath.has(pair.second)) {
@@ -606,16 +631,22 @@ export function Sidebar() {
 			placed.add(node.session.path);
 			appendNode(node, 0, undefined, false, []);
 		}
-		return specs;
+		return { rows: specs, hidden, expanded };
 	};
-	// Rows in the order they are drawn: what "select all" and a ⇧-click range cover.
-	// Within a section a pair's rows are drawn together, and a ⇧-click range follows that.
-	const visibleSessions = [
-		...groups.flatMap(group => (isCollapsedGroup(group.cwd) ? [] : rowsOf(group.sessions))),
-		...(workCollapsed ? [] : rowsOf(workSessions)),
-		...(projectlessCollapsed ? [] : rowsOf(projectlessSessions)),
-		...(archivedCollapsed ? [] : rowsOf(archivedSessions)),
-	].map(spec => spec.session);
+	const projectRows = new Map<string, SessionListPreview>();
+	if (lane === "code") {
+		for (const group of groups) {
+			if (!isCollapsedGroup(group.cwd)) projectRows.set(group.cwd, rowsOf(group.sessions, group.cwd));
+		}
+	}
+	const workRows = lane === "work" && !workCollapsed ? rowsOf(workSessions, "__work__") : null;
+	const projectlessRows =
+		lane === "code" && !projectlessCollapsed ? rowsOf(projectlessSessions, "__projectless__") : null;
+	const archiveRows = !archivedCollapsed ? rowsOf(laneArchived, archiveListId) : null;
+	// Select all and shift-click use the actual preview, in the same order as the DOM.
+	const visibleSessions = [...projectRows.values(), workRows, projectlessRows, archiveRows].flatMap(
+		list => list?.rows.map(spec => spec.session) ?? [],
+	);
 	const selectedSessions = selection ? sessions.filter(session => selection.has(session.path)) : [];
 	const bulkLabel =
 		selectedSessions.length > 0
@@ -623,8 +654,32 @@ export function Sidebar() {
 			: t("sidebar.bulk.empty");
 	const allSelectedArchived = selectedSessions.length > 0 && selectedSessions.every(isArchived);
 
-	const toggleGroup = (groupCwd: string) => {
-		setCollapsed(prev => ({ ...prev, [groupCwd]: !isCollapsedGroup(groupCwd) }));
+	const canMoveWorkspace = (from: string, to: string) =>
+		from !== to && pinnedGroups.includes(from) === pinnedGroups.includes(to);
+	const moveWorkspace = (from: string, to: string, side: DropSide) => {
+		if (!canMoveWorkspace(from, to)) return;
+		const order = groups.map(group => group.cwd);
+		const source = order.indexOf(from);
+		const target = order.indexOf(to);
+		if (source < 0 || target < 0) return;
+		const destination = target + (side === "after" ? 1 : 0) - (source < target ? 1 : 0);
+		if (destination === source) return;
+		order.splice(source, 1);
+		order.splice(destination, 0, from);
+		const seen = new Set(order);
+		// A workspace that temporarily has no listed sessions keeps its saved slot.
+		const visibleOrder = order[Symbol.iterator]();
+		const persisted = workspaceOrder.map(path => (seen.has(path) ? (visibleOrder.next().value ?? path) : path));
+		for (const path of visibleOrder) persisted.push(path);
+		void useSidebarPrefs.getState().setWorkspaceOrder(persisted);
+	};
+	const dragSide = (event: ReactDragEvent): DropSide => {
+		const bounds = event.currentTarget.getBoundingClientRect();
+		return event.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+	};
+	const clearWorkspaceDrag = () => {
+		draggedWorkspace.current = null;
+		setDropTarget(null);
 	};
 	const sessionTabSignal = (session: SessionInfo) => {
 		const tab = tabForSession(session);
@@ -873,8 +928,8 @@ export function Sidebar() {
 	};
 
 	/** One section's rows. Child sessions sit under their parent; a pair's rows share a frame. */
-	const renderSessionRows = (list: readonly SessionInfo[]) => {
-		const specs = rowsOf(list);
+	const renderSessionRows = (list: SessionListPreview, listId: string) => {
+		const specs = list.rows;
 		const rows: ReactNode[] = [];
 		for (let index = 0; index < specs.length; index++) {
 			const spec = specs[index];
@@ -897,7 +952,25 @@ export function Sidebar() {
 			}
 			rows.push(renderSessionRow(spec));
 		}
-		return rows;
+		return (
+			<>
+				{rows}
+				{list.hidden > 0 && (
+					<button
+						type="button"
+						data-sidebar-overflow
+						aria-expanded={list.expanded}
+						onClick={() => void toggleListExpanded(listId)}
+						className="omp-pressable flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-omp-sm text-(--omp-muted) hover:bg-(--omp-sidebar-item-hover) hover:text-(--omp-text)"
+					>
+						<ChevronDown aria-hidden="true" size={13} className={cx("shrink-0", list.expanded && "rotate-180")} />
+						{list.expanded
+							? t("sidebar.sessions.showLess")
+							: t("sidebar.sessions.showMore", { count: list.hidden })}
+					</button>
+				)}
+			</>
+		);
 	};
 
 	const sessionRowElement = (spec: SessionRowSpec, agents: SidebarAgentsInfo | null) => {
@@ -1186,6 +1259,7 @@ export function Sidebar() {
 		actions,
 		onContextMenu,
 		current,
+		reorderable,
 	}: {
 		id: string;
 		name: string;
@@ -1197,14 +1271,66 @@ export function Sidebar() {
 		actions?: ReactNode;
 		onContextMenu?: (event: ReactMouseEvent) => void;
 		current?: boolean;
+		reorderable?: boolean;
 	}) => (
 		<div
 			data-workspace-group={id.startsWith("__") ? undefined : id}
+			draggable={reorderable || undefined}
+			data-workspace-drop={dropTarget?.cwd === id ? dropTarget.side : undefined}
+			onDragStart={
+				reorderable
+					? event => {
+							draggedWorkspace.current = id;
+							event.dataTransfer.effectAllowed = "move";
+							event.dataTransfer.setData("application/x-omp-workspace", id);
+						}
+					: undefined
+			}
+			onDragOver={
+				reorderable
+					? event => {
+							const from = draggedWorkspace.current;
+							if (!from || !canMoveWorkspace(from, id)) return;
+							event.preventDefault();
+							event.dataTransfer.dropEffect = "move";
+							const side = dragSide(event);
+							setDropTarget(previous =>
+								previous?.cwd === id && previous.side === side ? previous : { cwd: id, side },
+							);
+						}
+					: undefined
+			}
+			onDragLeave={
+				reorderable
+					? event => {
+							if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))
+								return;
+							setDropTarget(previous => (previous?.cwd === id ? null : previous));
+						}
+					: undefined
+			}
+			onDrop={
+				reorderable
+					? event => {
+							const from = draggedWorkspace.current;
+							if (!from || !canMoveWorkspace(from, id)) return;
+							event.preventDefault();
+							moveWorkspace(from, id, dragSide(event));
+							clearWorkspaceDrag();
+						}
+					: undefined
+			}
+			onDragEnd={reorderable ? clearWorkspaceDrag : undefined}
 			onContextMenu={onContextMenu}
 			className={cx(
 				"omp-sidebar-workspace-row omp-color-fade group/header flex h-[30px] w-full items-center rounded-lg px-2 text-omp-md",
 				current ? "text-[var(--omp-text)]" : "text-[var(--omp-muted)] hover:text-[var(--omp-text)]",
 				"hover:bg-[var(--omp-sidebar-item-hover)]",
+				reorderable && "select-none",
+				dropTarget?.cwd === id &&
+					(dropTarget.side === "before"
+						? "shadow-[inset_0_2px_var(--omp-accent)]"
+						: "shadow-[inset_0_-2px_var(--omp-accent)]"),
 			)}
 		>
 			<button
@@ -1234,6 +1360,14 @@ export function Sidebar() {
 			<span className="omp-sidebar-group-count ml-2 shrink-0 text-omp-xs tabular-nums text-[var(--omp-dim)]">
 				{count}
 			</span>
+			{reorderable && (
+				<span
+					title={t("sidebar.workspace.reorder")}
+					className="ml-1 flex shrink-0 cursor-grab text-(--omp-dim) active:cursor-grabbing"
+				>
+					<GripVertical aria-hidden="true" size={12} />
+				</span>
+			)}
 			{actions && (
 				<span className="ml-1 flex shrink-0 items-center gap-0.5" onClick={event => event.stopPropagation()}>
 					{actions}
@@ -1244,6 +1378,7 @@ export function Sidebar() {
 
 	interface NavigationItem {
 		id: string;
+		fixedPin?: boolean;
 		page?: WorkspacePageId;
 		icon: LucideIcon;
 		label: string;
@@ -1255,8 +1390,7 @@ export function Sidebar() {
 		unread?: boolean;
 		onClick: () => void;
 	}
-	// Session work stays one click away; app-wide tools live in the More menu
-	// and remain reachable from the Command Center.
+	// Keep session actions and personal shortcuts visible; group the rest by purpose.
 	const primaryNavigation: NavigationItem[] = [
 		{
 			id: "commands",
@@ -1274,6 +1408,8 @@ export function Sidebar() {
 			shortcut: actionChords.get("search.conversations")?.[0],
 			onClick: () => useUiStore.getState().openConversationSearch(),
 		},
+	];
+	const libraryNavigation: NavigationItem[] = [
 		{
 			id: "memory",
 			page: "memoryOpen",
@@ -1314,7 +1450,7 @@ export function Sidebar() {
 			onClick: () => useUiStore.getState().openTemplates(),
 		},
 	];
-	const secondaryNavigation: NavigationItem[] = [
+	const workspaceNavigation: NavigationItem[] = [
 		{
 			id: "agents",
 			page: "agentHubOpen",
@@ -1341,25 +1477,21 @@ export function Sidebar() {
 			unread: unreadNotices > 0,
 			onClick: () => useSchedulerStore.getState().openTasks(pendingTaskReviews > 0 ? { view: "review" } : undefined),
 		},
+	];
+	const appNavigation: NavigationItem[] = [
 		{
 			id: "capabilities",
+			page: "capabilities",
 			icon: Sparkles,
 			label: t("sidebar.navigation.capabilities"),
 			title: t("settings.capabilities.description"),
-			onClick: () => useUiStore.getState().openSettings("capabilities"),
+			onClick: () => useUiStore.getState().openCapabilitiesPage(),
 		},
 		{
 			id: "providers",
 			icon: Plug,
 			label: t("titlebar.providers"),
 			onClick: () => useUiStore.getState().openProviders(),
-		},
-		{ id: "usage", icon: Coins, label: t("titlebar.usage"), onClick: () => useUiStore.getState().openUsage() },
-		{
-			id: "stats",
-			icon: BarChart3,
-			label: t("titlebar.stats"),
-			onClick: () => useUiStore.getState().openStatsDashboard(),
 		},
 		{
 			id: "hotkeys",
@@ -1376,11 +1508,42 @@ export function Sidebar() {
 			onClick: () => useUiStore.getState().openFeedback(),
 		},
 	];
-	// Promoted entries keep their More-menu definition; the list order is the
-	// order they were pinned in, so a fresh pin lands under the built-ins.
+	const insightNavigation: NavigationItem[] = [
+		{ id: "usage", icon: Coins, label: t("titlebar.usage"), onClick: () => useUiStore.getState().openUsage() },
+		{
+			id: "stats",
+			icon: BarChart3,
+			label: t("titlebar.stats"),
+			onClick: () => useUiStore.getState().openStatsDashboard(),
+		},
+	];
+	const securityNavigation: NavigationItem = {
+		id: "security",
+		page: "security",
+		fixedPin: true,
+		icon: ShieldCheck,
+		label: t("security.title"),
+		onClick: () => useUiStore.getState().openSecurityPage(),
+	};
+	const auditNavigation: NavigationItem = {
+		id: "project-audit",
+		page: "projectAudit",
+		icon: ScanSearch,
+		label: t("projectAudit.shortTitle"),
+		title: t("projectAudit.title"),
+		onClick: () => useUiStore.getState().openProjectAuditPage(),
+	};
+	const toolGroups = [
+		{ id: "checks", label: t("projectAudit.navigation"), items: [securityNavigation, auditNavigation] },
+		{ id: "workspace", label: t("sidebar.navigation.workspace"), items: workspaceNavigation },
+		{ id: "library", label: t("sidebar.navigation.library"), items: libraryNavigation },
+		{ id: "insights", label: t("sidebar.navigation.insights"), items: insightNavigation },
+		{ id: "app", label: t("sidebar.navigation.app"), items: appNavigation },
+	];
+	const indexedNavigation = new Map(toolGroups.flatMap(group => group.items.map(item => [item.id, item] as const)));
 	const pinnedNavigation = pinnedNav
-		.map(id => secondaryNavigation.find(item => item.id === id))
-		.filter((item): item is NavigationItem => item !== undefined);
+		.map(id => indexedNavigation.get(id))
+		.filter((item): item is NavigationItem => item !== undefined && !item.fixedPin);
 	const navigationRow =
 		"omp-pressable group/nav flex h-8 w-full min-w-0 items-center gap-2.5 rounded-lg px-2 text-left text-omp-md text-[var(--omp-text-secondary)] hover:bg-[var(--omp-sidebar-item-hover)] hover:text-[var(--omp-text)]";
 	const renderNavigationItem = (item: NavigationItem) => {
@@ -1398,6 +1561,7 @@ export function Sidebar() {
 			>
 				<Icon aria-hidden="true" className="shrink-0 text-[var(--omp-muted)]" size={16} strokeWidth={1.75} />
 				<span className="min-w-0 flex-1 truncate">{item.label}</span>
+				{item.fixedPin && <Pin aria-label={t("sidebar.pinned")} className="shrink-0 text-(--omp-muted)" size={12} />}
 				{item.unread && (
 					<span
 						role="img"
@@ -1422,6 +1586,35 @@ export function Sidebar() {
 
 	const utilityButton =
 		"omp-pressable flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]";
+	const renderToolWithPin = (item: NavigationItem, location: "index" | "pinned") => {
+		const pinned = location === "pinned" || pinnedNav.includes(item.id);
+		const PinIcon = pinned ? PinOff : Pin;
+		const label = t(pinned ? "sidebar.menu.unpin" : "sidebar.menu.pin");
+		return (
+			<div
+				key={item.id}
+				data-sidebar-index-item={location === "index" ? item.id : undefined}
+				className="flex min-w-0 items-center"
+			>
+				{renderNavigationItem(item)}
+				{!item.fixedPin && (
+					<button
+						type="button"
+						aria-label={`${label}: ${item.label}`}
+						title={label}
+						onClick={() => void toggleNavPin(item.id)}
+						className={cx(utilityButton, pinned && "text-(--omp-accent)")}
+					>
+						<PinIcon aria-hidden="true" size={13} fill={pinned ? "currentColor" : "none"} />
+					</button>
+				)}
+			</div>
+		);
+	};
+	const hasHiddenNotices = unreadNotices > 0 && !pinnedNav.includes("scheduled-tasks");
+	const hiddenNavReviews =
+		(pinnedNav.includes("memory") ? 0 : pendingSkillReviews) +
+		(pinnedNav.includes("scheduled-tasks") ? 0 : pendingTaskReviews);
 	return (
 		<>
 			<aside
@@ -1466,35 +1659,56 @@ export function Sidebar() {
 					</div>
 					<div className="space-y-px">
 						{primaryNavigation.map(renderNavigationItem)}
-						{pinnedNavigation.map(renderNavigationItem)}
+						{renderNavigationItem(securityNavigation)}
+						{pinnedNavigation.map(item => renderToolWithPin(item, "pinned"))}
 					</div>
-					<button
-						type="button"
-						aria-haspopup="menu"
-						aria-expanded={moreMenu !== null}
-						aria-label={t("sidebar.navigation.expand")}
-						title={t("sidebar.navigation.expand")}
-						onClick={event => {
-							const rect = event.currentTarget.getBoundingClientRect();
-							setMoreMenu({
-								x: Number.isFinite(rect.left) ? rect.left : 8,
-								y: (Number.isFinite(rect.bottom) ? rect.bottom : 200) + 4,
-							});
-						}}
-						className={cx(
-							navigationRow,
-							"mt-px",
-							moreMenu && "bg-[var(--omp-sidebar-item-hover)] text-[var(--omp-text)]",
-						)}
-					>
-						<MoreHorizontal
-							aria-hidden="true"
-							className="shrink-0 text-[var(--omp-muted)]"
-							size={16}
-							strokeWidth={1.75}
-						/>
-						<span className="min-w-0 flex-1 truncate">{t("sidebar.navigation.more")}</span>
-					</button>
+					<nav aria-label={t("sidebar.navigation.index")}>
+						<button
+							type="button"
+							aria-expanded={toolIndexOpen}
+							aria-controls="sidebar-tool-index"
+							onClick={() => void toggleListExpanded("__tools__")}
+							className={cx(navigationRow, "mt-px", toolIndexOpen && "bg-(--omp-sidebar-item-hover)")}
+						>
+							<List aria-hidden="true" className="shrink-0 text-(--omp-muted)" size={16} strokeWidth={1.75} />
+							<span className="min-w-0 flex-1 truncate">{t("sidebar.navigation.index")}</span>
+							{!toolIndexOpen && hasHiddenNotices && (
+								<span
+									role="img"
+									aria-label={t("notices.unread", { count: unreadNotices })}
+									className="size-2 shrink-0 rounded-full bg-(--omp-error)"
+								/>
+							)}
+							{!toolIndexOpen && hiddenNavReviews > 0 && (
+								<span className="shrink-0 rounded-full bg-(--omp-accent-dim) px-1.5 text-omp-xxs font-medium tabular-nums text-(--omp-accent)">
+									{hiddenNavReviews}
+								</span>
+							)}
+							<ChevronDown
+								aria-hidden="true"
+								size={13}
+								className={cx("shrink-0", toolIndexOpen && "rotate-180")}
+							/>
+						</button>
+						<div
+							id="sidebar-tool-index"
+							hidden={!toolIndexOpen}
+							className="max-h-[min(34vh,22rem)] overflow-y-auto"
+						>
+							{toolIndexOpen &&
+								toolGroups.map(group => (
+									<section key={group.id} aria-labelledby={`sidebar-tools-${group.id}`} className="mt-2">
+										<h2
+											id={`sidebar-tools-${group.id}`}
+											className="px-2 text-omp-xs font-medium text-(--omp-dim)"
+										>
+											{group.label}
+										</h2>
+										{group.items.map(item => renderToolWithPin(item, "index"))}
+									</section>
+								))}
+						</div>
+					</nav>
 				</div>
 
 				<div className="flex h-7 shrink-0 items-center ps-4 pe-2.5">
@@ -1519,20 +1733,6 @@ export function Sidebar() {
 						className={rowActionButton}
 					>
 						<FolderPlus aria-hidden="true" size={14} />
-					</button>
-					<button
-						type="button"
-						onClick={() => void setWorkspaceSort(workspaceSort === "name" ? "recent" : "name")}
-						title={t(workspaceSort === "name" ? "sidebar.sort.byNameHint" : "sidebar.sort.byRecentHint")}
-						aria-label={t(workspaceSort === "name" ? "sidebar.sort.byNameHint" : "sidebar.sort.byRecentHint")}
-						data-workspace-sort={workspaceSort}
-						className="omp-pressable flex h-6 w-6 items-center justify-center rounded-md text-[var(--omp-dim)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
-					>
-						{workspaceSort === "name" ? (
-							<ArrowDownAZ aria-hidden="true" size={13} />
-						) : (
-							<ClockArrowDown aria-hidden="true" size={13} />
-						)}
 					</button>
 					<button
 						type="button"
@@ -1587,6 +1787,7 @@ export function Sidebar() {
 					{lane === "code" &&
 						groups.map(group => {
 							const groupCollapsed = isCollapsedGroup(group.cwd);
+							const preview = projectRows.get(group.cwd);
 							const menuOpen = groupMenu?.group.cwd === group.cwd;
 							const newSessionLabel = t("sidebar.newSessionInProject", { name: group.name });
 							return (
@@ -1598,11 +1799,12 @@ export function Sidebar() {
 										icon: Folder,
 										collapsedState: groupCollapsed,
 										onToggle: () => {
-											if (group.sessions.length > 0) toggleGroup(group.cwd);
+											if (group.sessions.length > 0) void setListCollapsed(group.cwd, !groupCollapsed);
 											else startProjectSession(group.cwd);
 										},
 										pinned: pinnedGroups.includes(group.cwd),
 										current: group.cwd === cwd,
+										reorderable: groups.length > 1 && !selecting,
 										onContextMenu: event => setGroupMenu({ anchor: anchorFromEvent(event), group }),
 										actions: (
 											<>
@@ -1634,13 +1836,10 @@ export function Sidebar() {
 											</>
 										),
 									})}
-									{/* Collapsed groups render nothing: a long-lived install with
-								    hundreds of sessions must not build the full DOM per
-								    debounced refresh just to hide it. */}
-									{!groupCollapsed && (
+									{preview && (
 										<div className="omp-sidebar-group" data-session-group={group.cwd} data-state="expanded">
 											<div className="omp-sidebar-group-content space-y-px">
-												{renderSessionRows(group.sessions)}
+												{renderSessionRows(preview, group.cwd)}
 											</div>
 										</div>
 									)}
@@ -1655,11 +1854,13 @@ export function Sidebar() {
 								count: listedCount(workSessions),
 								icon: SquareTerminal,
 								collapsedState: workCollapsed,
-								onToggle: () => setCollapsed(prev => ({ ...prev, __work__: !workCollapsed })),
+								onToggle: () => void setListCollapsed("__work__", !workCollapsed),
 							})}
-							{!workCollapsed && (
+							{workRows && (
 								<div className="omp-sidebar-group" data-session-group="__work__" data-state="expanded">
-									<div className="omp-sidebar-group-content space-y-px">{renderSessionRows(workSessions)}</div>
+									<div className="omp-sidebar-group-content space-y-px">
+										{renderSessionRows(workRows, "__work__")}
+									</div>
 								</div>
 							)}
 						</div>
@@ -1672,12 +1873,12 @@ export function Sidebar() {
 								count: listedCount(projectlessSessions),
 								icon: MessageCircle,
 								collapsedState: projectlessCollapsed,
-								onToggle: () => setCollapsed(prev => ({ ...prev, __projectless__: !projectlessCollapsed })),
+								onToggle: () => void setListCollapsed("__projectless__", !projectlessCollapsed),
 							})}
-							{!projectlessCollapsed && (
+							{projectlessRows && (
 								<div className="omp-sidebar-group" data-session-group="__projectless__" data-state="expanded">
 									<div className="omp-sidebar-group-content space-y-px">
-										{renderSessionRows(projectlessSessions)}
+										{renderSessionRows(projectlessRows, "__projectless__")}
 									</div>
 								</div>
 							)}
@@ -1691,11 +1892,13 @@ export function Sidebar() {
 								count: listedCount(laneArchived),
 								icon: Archive,
 								collapsedState: archivedCollapsed,
-								onToggle: () => setCollapsed(prev => ({ ...prev, __archived__: !archivedCollapsed })),
+								onToggle: () => void setListCollapsed("__archived__", !archivedCollapsed),
 							})}
-							{!archivedCollapsed && (
+							{archiveRows && (
 								<div className="omp-sidebar-group" data-session-group="__archived__" data-state="expanded">
-									<div className="omp-sidebar-group-content space-y-px">{renderSessionRows(laneArchived)}</div>
+									<div className="omp-sidebar-group-content space-y-px">
+										{renderSessionRows(archiveRows, archiveListId)}
+									</div>
 								</div>
 							)}
 						</div>
@@ -1813,34 +2016,6 @@ export function Sidebar() {
 					className="absolute inset-y-0 right-0 z-10 w-1 translate-x-1/2 cursor-col-resize transition-colors hover:bg-[var(--omp-accent)]/40 active:bg-[var(--omp-accent)] max-[1000px]:hidden"
 				/>
 			</aside>
-			{/* App-wide tools: one menu instead of a second list competing with tasks. */}
-			{moreMenu && (
-				<ContextMenu
-					x={moreMenu.x}
-					y={moreMenu.y}
-					onClose={() => setMoreMenu(null)}
-					items={secondaryNavigation.map(item => ({
-						id: `nav-${item.id}`,
-						label: item.label,
-						icon: item.icon,
-						hint: item.shortcut,
-						onSelect: () => {
-							setMoreMenu(null);
-							item.onClick();
-						},
-						// Everyone needs a different handful of these: pin the ones
-						// you reach for, the rest stay one menu away.
-						action: {
-							id: `pin-${item.id}`,
-							label: pinnedNav.includes(item.id) ? t("sidebar.menu.unpin") : t("sidebar.menu.pin"),
-							icon: pinnedNav.includes(item.id) ? PinOff : Pin,
-							active: pinnedNav.includes(item.id),
-							onSelect: () => void toggleNavPin(item.id),
-						},
-					}))}
-				/>
-			)}
-
 			{projectSettings && (
 				<ProjectSettingsDialog
 					key={projectSettings.cwd}
@@ -1854,6 +2029,10 @@ export function Sidebar() {
 			{groupMenu &&
 				(() => {
 					const groupHasBusySession = groupMenu.group.sessions.some(isSessionBusy);
+					const source = groupMenu.group.cwd;
+					const position = groups.findIndex(group => group.cwd === source);
+					const previous = groups[position - 1];
+					const next = position < 0 ? undefined : groups[position + 1];
 					return (
 						<ContextMenu
 							x={groupMenu.anchor.x}
@@ -1893,7 +2072,7 @@ export function Sidebar() {
 									icon: ListChecks,
 									onSelect: () => {
 										setGroupMenu(null);
-										setCollapsed(prev => ({ ...prev, [groupMenu.group.cwd]: false }));
+										if (isCollapsedGroup(source)) void setListCollapsed(source, false);
 										startSelection(groupMenu.group.sessions.map(session => session.path));
 									},
 								},
@@ -1905,6 +2084,26 @@ export function Sidebar() {
 									icon: pinnedGroups.includes(groupMenu.group.cwd) ? PinOff : Pin,
 									onSelect: () => {
 										useSidebarPrefs.getState().toggleGroupPin(groupMenu.group.cwd);
+										setGroupMenu(null);
+									},
+								},
+								{
+									id: "group-move-up",
+									label: t("sidebar.workspace.moveUp"),
+									icon: ArrowUp,
+									disabled: !previous || !canMoveWorkspace(source, previous.cwd),
+									onSelect: () => {
+										if (previous) moveWorkspace(source, previous.cwd, "before");
+										setGroupMenu(null);
+									},
+								},
+								{
+									id: "group-move-down",
+									label: t("sidebar.workspace.moveDown"),
+									icon: ArrowDown,
+									disabled: !next || !canMoveWorkspace(source, next.cwd),
+									onSelect: () => {
+										if (next) moveWorkspace(source, next.cwd, "after");
 										setGroupMenu(null);
 									},
 								},

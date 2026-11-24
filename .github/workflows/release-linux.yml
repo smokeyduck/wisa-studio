@@ -7,8 +7,7 @@ name: Release Linux builds
 # in that GUI revision's sidecar-source.json.
 
 on:
-  release:
-    types: [published]
+  # Build against a draft; publishing must not enqueue another upload.
   workflow_dispatch:
     inputs:
       tag:
@@ -34,14 +33,11 @@ jobs:
       - name: Resolve release tag
         id: refs
         shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+          GUI_REF: ${{ inputs.gui_ref || inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-            echo "gui_ref=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-            echo "gui_ref=${{ inputs.gui_ref || inputs.tag }}" >> "$GITHUB_OUTPUT"
-          fi
+          printf 'tag=%s\ngui_ref=%s\n' "$TAG" "$GUI_REF" >> "$GITHUB_OUTPUT"
 
       - name: Read the Core pin from the selected GUI commit
         uses: actions/checkout@v6
@@ -166,10 +162,23 @@ jobs:
           bun ../../node_modules/electron-builder/cli.js \
             --config electron-builder.yml --linux AppImage deb --publish never
 
-      - name: Verify packaged GUI READY and settings persistence
+      - name: Verify unpacked, AppImage, and installed deb runtime
         working-directory: oh-my-pi/packages/gui
-        timeout-minutes: 5
-        run: xvfb-run -a node scripts/smoke-packaged-gui.mjs dist/linux-unpacked/wisa-studio
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          shopt -s nullglob
+          appimages=("$PWD"/dist/*.AppImage)
+          debs=("$PWD"/dist/*.deb)
+          test "${#appimages[@]}" -eq 1
+          test "${#debs[@]}" -eq 1
+          xvfb-run -a node scripts/smoke-packaged-gui.mjs dist/linux-unpacked/wisa-studio
+          xvfb-run -a node scripts/smoke-packaged-gui.mjs "${appimages[0]}"
+          sudo apt-get install -y "${debs[0]}"
+          package=$(dpkg-deb -f "${debs[0]}" Package)
+          executable=$(dpkg-query -L "$package" | grep -E '^/opt/.+/wisa-studio$')
+          test -x "$executable"
+          xvfb-run -a node scripts/smoke-packaged-gui.mjs "$executable"
 
       - name: Upload Linux assets to the release
         working-directory: oh-my-pi/packages/gui/dist
@@ -187,5 +196,6 @@ jobs:
           compgen -G '*.AppImage' >/dev/null
           compgen -G '*.deb' >/dev/null
           printf 'uploading: %s\n' "${files[@]}"
+          sha256sum "${files[@]}"
           gh release upload "${{ steps.refs.outputs.tag }}" \
-            "${files[@]}" --repo "$GUI_REPO" --clobber
+            "${files[@]}" --repo "$GUI_REPO"

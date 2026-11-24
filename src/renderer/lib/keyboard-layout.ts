@@ -2,7 +2,7 @@
  * Shortcuts follow the letter the keyboard layout types, not the key's position
  * on a US keyboard (#49): this window reads the layout map, uses it for every
  * chord it records or matches, and tells the main process, which places the
- * system-wide shortcut and reads built-in browser keystrokes by the same map.
+ * system-wide shortcut with the same map.
  */
 import { keyboardLayoutFrom, setKeyboardLayout } from "../../shared/chord";
 

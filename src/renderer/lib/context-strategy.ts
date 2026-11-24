@@ -32,19 +32,19 @@ export interface CompactionConfig {
 	keepRecentTokens: number;
 	/** Experimental notes-backed context windows replace summary compression. */
 	notesBacked: boolean;
-	/** `-1` means the agent's reserve-based default. */
+	/** `-1` means the explicitly selected reserve-based Auto threshold. */
 	thresholdPercent: number;
 	/** Switch to the model's configured larger sibling on overflow before compacting. */
 	promotion: boolean;
 }
 
-/** Agent defaults (`context-settings.ts`), used for anything a read did not return. */
+/** WISA desktop defaults, used for anything a read did not return. */
 export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
 	enabled: true,
 	methodOrder: ["remote", "snapcompact", "handoff", "shake", "soft"],
 	keepRecentTokens: 20_000,
 	notesBacked: false,
-	thresholdPercent: -1,
+	thresholdPercent: 20,
 	promotion: false,
 };
 
@@ -139,7 +139,7 @@ export function detectStrategy(config: CompactionConfig): StrategyView {
 	return "custom";
 }
 
-/** The `set_setting` writes that switch to a strategy. */
+/** The session-scoped settings that define a strategy. */
 export function strategyPatch(id: StrategyId): Array<{ path: string; value: unknown }> {
 	const definition = STRATEGIES[id];
 	return [

@@ -37,19 +37,39 @@ describe("async-result card", () => {
 			}),
 		);
 
-		expect(markup).toContain("gui tests");
+		expect(markup).toContain("batch-1");
+		expect(markup).not.toContain("gui tests");
 		expect(markup).toContain("audit sweep");
 		expect(markup).toContain("[bash]");
 		expect(markup).toContain("[task]");
 	});
 
-	it("shows the delivery text instead of inventing a job row when no jobs arrived", () => {
-		// The card used to fold the whole `details` object into one fake job, so
-		// a malformed batch claimed an `[job]` named "unknown".
+	it("folds legacy delivery text without inventing a job ID", () => {
 		const markup = html(asyncResult({ meta: { source: "background job delivery" } }, "Nothing to report."));
 
-		expect(markup).toContain("Nothing to report.");
+		expect(markup).toContain("<details");
+		expect(markup).not.toContain("Nothing to report.");
 		expect(markup).not.toContain("unknown");
 		expect(markup).not.toContain("[job]");
+	});
+});
+
+describe("IRC notice", () => {
+	it.each(["irc:incoming", "irc:relay"])("shows only the sender's acknowledgement for %s", customType => {
+		const root = parseHTML(
+			html({
+				role: "custom",
+				customType,
+				content: "[IRC `ModelSurface` → `ComposerLayout`] Internal coordination",
+				details: {
+					from: "ModelSurface",
+					to: "ComposerLayout",
+					body: "Internal coordination",
+					message: "Internal coordination",
+				},
+				timestamp: 1,
+			}),
+		).document;
+		expect(root.documentElement.textContent).toBe("Agent ModelSurface replied.");
 	});
 });

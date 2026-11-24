@@ -55,6 +55,24 @@ export function applyAppProfile(): AppProfilePaths {
 	return paths;
 }
 
+/** Opt Git for Windows into long checkouts without writing to any Git config file. */
+function enableGitLongPaths(env: NodeJS.ProcessEnv): void {
+	const countKey = "GIT_CONFIG_COUNT";
+	const raw = env[countKey] ?? Object.entries(env).find(([key]) => key.toUpperCase() === countKey)?.[1] ?? "0";
+	const count = Number(raw);
+	// Do not discard existing configuration if Git would reject the inherited count.
+	if (!/^\d+$/.test(raw) || count >= 2_147_483_647) return;
+	const key = `GIT_CONFIG_KEY_${count}`;
+	const value = `GIT_CONFIG_VALUE_${count}`;
+	for (const name of Object.keys(env)) {
+		const upper = name.toUpperCase();
+		if (upper === countKey || upper === key || upper === value) delete env[name];
+	}
+	env[key] = "core.longpaths";
+	env[value] = "true";
+	env[countKey] = String(count + 1);
+}
+
 /** Applied after inherited/shell/proxy overlays; never mutates the parent environment.
  * HOME, Git/SSH credentials and explicit provider API keys remain OS-owned inputs.
  */
@@ -104,6 +122,7 @@ export function agentSpawnEnv(inherited: NodeJS.ProcessEnv = process.env): NodeJ
 	for (const kind of ["CONFIG", "DATA", "STATE", "CACHE"] as const) {
 		env[`XDG_${kind}_HOME`] = join(root, "xdg", kind.toLowerCase());
 	}
+	if (process.platform === "win32") enableGitLongPaths(env);
 	return Object.assign(env, {
 		PI_CONFIG_DIR: configDir,
 		PI_CODING_AGENT_DIR: agentDir(),

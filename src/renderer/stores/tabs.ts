@@ -791,14 +791,9 @@ export const useTabsStore = create<TabsStore>()((set, get) => {
 				replaceTabRuntime(payload.tabId);
 				if (active) setFocusedSessionRuntime(payload.tabId);
 			}
-			// A background tab's run settled → done badge until the user visits, and
-			// a notice: its full event stream (and so the usual end-of-run toast and
-			// desktop notification) only reaches the renderer while it is on screen.
-			const completedInBackground =
-				!visibleTabIds(state).includes(payload.tabId) &&
-				previous?.status === "running" &&
-				payload.status === "ready" &&
-				!sessionChanged;
+			// Only main's one-shot terminal outcome can mark a parked turn done.
+			// A return to ready can also mean an abort, an interrupted run or a retry.
+			const backgroundOutcome = sessionChanged ? undefined : payload.settledRun;
 			set(current => {
 				const index = current.tabs.findIndex(tab => tab.id === payload.tabId);
 				const next: SessionTab = {
@@ -819,7 +814,7 @@ export const useTabsStore = create<TabsStore>()((set, get) => {
 					sessionPath:
 						payload.sessionPath === undefined ? previous?.sessionPath : (payload.sessionPath ?? undefined),
 					sessionId: payload.sessionId ?? previous?.sessionId,
-					unreadDone: sessionChanged ? false : completedInBackground ? true : (previous?.unreadDone ?? false),
+					unreadDone: sessionChanged ? false : backgroundOutcome ? true : (previous?.unreadDone ?? false),
 					attention: sessionChanged
 						? undefined
 						: payload.attention === undefined
@@ -834,14 +829,14 @@ export const useTabsStore = create<TabsStore>()((set, get) => {
 				tabs[index] = next;
 				return { tabs };
 			});
-			if (completedInBackground) {
+			if (backgroundOutcome) {
 				const tabs = get().tabs;
 				const settled = tabs.find(tab => tab.id === payload.tabId);
 				if (settled) {
 					notifyBackgroundSettle(
 						settled.id,
 						tabChipLabel(settled, tabs),
-						settled.attention === "failed" ? "failed" : "complete",
+						backgroundOutcome,
 						payload.attentionDetail,
 					);
 				}
@@ -996,11 +991,10 @@ export function settleTabPlanApproval(
 			usePlanApprovalStore.getState().pending !== target
 		)
 			return;
-		usePlanApprovalStore.setState(state => ({
-			pending: result.clear ? null : target,
-			feedback: result.clear ? "" : state.feedback,
-			notice: result.clear ? null : result.notice === undefined ? state.notice : result.notice,
-			submitting: result.clear ? null : result.submitting === undefined ? state.submitting : result.submitting,
+		if (result.clear) usePlanApprovalStore.getState().clearProposal();
+		else usePlanApprovalStore.setState(state => ({
+			notice: result.notice === undefined ? state.notice : result.notice,
+			submitting: result.submitting === undefined ? state.submitting : result.submitting,
 		}));
 		if (result.exitPlanMode) useSessionStore.setState({ planModeEnabled: false });
 		return;
@@ -1008,11 +1002,10 @@ export function settleTabPlanApproval(
 	if (session.getState().sessionId !== sessionId) return;
 	const plan = planStore.getState();
 	if (plan.pending !== target) return;
-	planStore.setState({
-		pending: result.clear ? null : target,
-		feedback: result.clear ? "" : plan.feedback,
-		notice: result.clear ? null : result.notice === undefined ? plan.notice : result.notice,
-		submitting: result.clear ? null : result.submitting === undefined ? plan.submitting : result.submitting,
+	if (result.clear) plan.clearProposal();
+	else planStore.setState({
+		notice: result.notice === undefined ? plan.notice : result.notice,
+		submitting: result.submitting === undefined ? plan.submitting : result.submitting,
 	});
 	if (result.exitPlanMode) session.setState({ planModeEnabled: false });
 }

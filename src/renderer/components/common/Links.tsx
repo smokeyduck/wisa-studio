@@ -1,7 +1,7 @@
 /**
- * Links in replies and tool output. A click opens inside the app (web pages in
- * the browser panel, files in the Files preview); ⌘/Ctrl-click opens outside
- * (the system browser, the default app); right-click offers both plus copying.
+ * Links in replies and tool output. Web pages open in the system browser;
+ * files open in the Files preview or, on ⌘/Ctrl-click, in their default app.
+ * Right-click offers the relevant actions and copying.
  * A click that ends a text selection keeps the selection instead of opening.
  */
 import { type CSSProperties, type ReactNode, useMemo } from "react";
@@ -10,7 +10,6 @@ import { activateFileLink } from "../../lib/file-actions";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { type FileTarget, parseFileTarget } from "../../lib/link-targets";
-import { browserPanelAvailable, openLink } from "../../lib/open-link";
 import { useResolvedPath } from "../../lib/path-resolver";
 import { useRuntimeTabId } from "../../stores/session-runtime-context";
 import { LINK_MODIFIER, showLinkMenu } from "./LinkMenu";
@@ -33,11 +32,7 @@ export function WebLink({
 }) {
 	const t = useT();
 	const web = /^https?:\/\//i.test(url);
-	const hint = web
-		? browserPanelAvailable()
-			? t("links.webHint", { mod: LINK_MODIFIER })
-			: t("links.webHintExternal")
-		: null;
+	const hint = web ? t("links.webHintExternal") : null;
 	return (
 		<a
 			href={url}
@@ -46,7 +41,7 @@ export function WebLink({
 				event.preventDefault();
 				event.stopPropagation();
 				if (selectingText()) return;
-				openLink(url, event);
+				void window.omp.system.openExternal(url);
 			}}
 			onContextMenu={event => showLinkMenu(event, { kind: "url", url })}
 			className={className}

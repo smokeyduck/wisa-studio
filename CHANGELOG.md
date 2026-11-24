@@ -5,6 +5,26 @@ build is based on, so `0.9.46` here is the first WISA STUDIO release and also
 the point where the upstream GUI's history ends in this file. Release notes for
 earlier versions belong to that project; see [NOTICE](NOTICE).
 
+## [Unreleased]
+
+### Added
+
+- **SEO / GEO / AEO Audit** reviews the open website project for search visibility, AI citations, and answers. The report groups findings by impact and separates source checks from live-site checks; the model receives requested excerpts through scoped read tools, not shell or write access.
+- **View older history** loads the messages before `/handoff` or `/compact` on demand, up to three boundaries and 48 messages per boundary. Older messages are not sent back to the model.
+- **Side questions** can cite workspace text in compatible Agent tabs without changing files or the main transcript. Chat tabs stay tool-free.
+- Both READMEs link to GitHub contributors and contribution routes. First-party telemetry is design only; this build does not collect it.
+
+### Changed
+
+- **Compaction strategy is per conversation.** New WISA sessions default to 20%; explicit Auto or percentage overrides survive reopening. Unsupported or rejected image inputs fall back to text without changing the saved transcript.
+- The model picker opens on cached manufacturer groups and keeps usable rows while discovering models. Fast modes and reasoning controls only appear on supported routes.
+- The composer, chat, task ribbon and plan inspector fit narrow panes. Long prompts collapse to a preview, child sessions start collapsed, and agent questions replace only their own composer.
+- Work includes desktop control with existing approval rules; Coding and Work keep separate tool profiles. Agent Hub explains automatic role selection. Project memory and Auto-Learn are local by default without enabling automatic capture turns.
+- Skills opens on Community. Plugin catalogs preload, support long paths on Windows and share the resource library with MCP, templates and project memory.
+- Windows development launches respect explicit sidecars, show the window while loading, and restart cleanly after resetting settings. The native menu and renderer use the same startup language.
+- The embedded browser was removed. Web links open in the system browser; an authenticated Chrome session requires an explicitly configured [external relay](README.en.md#use-your-own-chrome-session-optional).
+- WinSell's contributions in two SEO Audit files use PolyForm Strict 1.0.0. [License scope](LICENSE-SCOPE.md) preserves upstream and previously granted MIT rights.
+
 ## [0.9.54] - 2026-11-23
 
 Core source: `smokeyduck/oh-my-pi@e256db57a616865c8768bdf83c649faa1c691de1` (Core 19.1.1), unchanged from the unpublished 0.9.53 candidate. This release includes its composer, hydration, scoped-store and startup-warning changes listed below.
@@ -56,7 +76,7 @@ Core source: `smokeyduck/oh-my-pi@bf5f8a1eb86ccb737493358c1c716b7f62f973c6`, inc
 - **Agent clarification questions appear inline in the session that asked them.** Answering keeps your place in the chat scroll.
 - **Plans and approvals open in the right inspector, one per project.** The inspector reveals them automatically. While a plan streams, its content and intent drive whether the view follows new text.
 - **Vibe, Goal, Loop, and starter setup use compact, responsive, centered modals.** They fit narrow windows and keep the same actions.
-- **Discovered models are listed and editable separately from your saved list.** Only models you change are saved as overrides; discovered models stay automatic.
+- **Discovered models are listed and editable separately from your saved list.** Only models you change are saved as overrides. Discovered models stay automatic.
 - **The Agents dock lists only agents doing work.** Idle and parked agents are reusable history, not work, so they leave the dock whatever their age. Finished and failed rows of an earlier task call drop out with their batch-mates, and a row leaves as soon as its terminal frame arrives. The count covers only the listed working agents. History stays in the agent hub, the sidebar, and the drawer.
 - **The conversation detail defaults to Compact.** A profile that has never chosen gets the folded view (reasoning and tool steps in one Process row); an explicit Full choice is kept as-is.
 - **Agents and To-Do share a bounded dock instead of filling the chat.** Together they use at most 360px or 40% of the available transcript height, whichever is smaller. Lists and transcripts scroll inside each card beneath fixed headers; focused/full and graph views keep the same limit. Very short panes can scroll the dock itself to reach every header without moving the composer.
@@ -65,7 +85,6 @@ Core source: `smokeyduck/oh-my-pi@bf5f8a1eb86ccb737493358c1c716b7f62f973c6`, inc
 ### Removed
 
 - The Btw panel's Enter / Shift+Enter hint and its read-only footer line. The disclosure stays in the empty state.
-
 
 
 ## [0.9.51] - 2026-11-22

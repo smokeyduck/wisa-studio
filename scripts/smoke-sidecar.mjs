@@ -20,7 +20,7 @@ const HARD_TIMEOUT_MS = Number(process.env.OMP_SIDECAR_SMOKE_TIMEOUT_MS ?? 40_00
 //   bun run packages/gui/scripts/smoke-sidecar.mjs packages/gui/resources/omp
 const exe = process.argv[2];
 const spawnCmd = exe ? resolve(exe) : "bun";
-const spawnArgs = exe ? ["--mode", "rpc-ui"] : [CLI, "--mode", "rpc-ui"];
+const spawnArgs = [...(exe ? [] : [CLI]), "--mode", "rpc-ui", "--no-auto-resume"];
 console.log(`probing: ${spawnCmd} ${spawnArgs.join(" ")}`);
 
 // Isolated home: this probe sends mutating RPCs (set_thinking_level), so it must
@@ -72,8 +72,10 @@ const spawnOptions = {
 		PI_RPC_EMIT_TITLE: "1",
 		PI_NO_PTY: "1",
 		PI_NOTIFICATIONS: "off",
+		WISA_STUDIO_DEFAULTS: "1",
 	},
 };
+const memoryPaths = ["memory.backend", "autolearn.enabled", "autolearn.autoContinue"];
 
 const pending = new Map();
 const results = [];
@@ -91,10 +93,10 @@ const send = (type, extra = {}) => {
 	return p;
 };
 
-const startChild = () => {
+const startChild = (args = spawnArgs) => {
 	stopping = false;
 	readyDone = false;
-	child = spawn(spawnCmd, spawnArgs, spawnOptions);
+	child = spawn(spawnCmd, args, spawnOptions);
 	const rl = createInterface({ input: child.stdout });
 	let startupLines = 0;
 	const ready = new Promise(resolve => {
@@ -182,13 +184,38 @@ const initialReady = startChild();
 	const originalColorBlindMode = settingsBefore.data?.values?.colorBlindMode;
 	const settingsReadable = settingsBefore.success && typeof originalColorBlindMode === "boolean";
 	console.log(`get_settings            ${settingsReadable ? "ok " : "ERR"} ${results.at(-1).ms}ms`);
-	// Namespace + native-filter check on the parsed response. Only WISA's false and the
-	// default true are accepted; a missing key or any other value fails the probe.
-	const profile = await send("get_settings", { paths: ["compaction.enabled", "display.showTokenUsage"] });
+	// Namespace, native-filter and effective desktop compaction-default checks.
+	const profile = await send("get_settings", {
+		paths: ["compaction.enabled", "compaction.thresholdPercent", "display.showTokenUsage"],
+	});
 	const profileValues = profile.data?.values ?? {};
 	const wisaProjectLoaded =
-		profile.success && profileValues["compaction.enabled"] === false && profileValues["display.showTokenUsage"] === false;
+		profile.success &&
+		profileValues["compaction.enabled"] === false &&
+		profileValues["compaction.thresholdPercent"] === 20 &&
+		profileValues["display.showTokenUsage"] === false;
 	console.log(`project config loaded  ${wisaProjectLoaded ? "ok " : "ERR"}  values=${JSON.stringify(profileValues)}`);
+
+	// Check the effective values that Settings and Skills consume, not just
+	// schema metadata. Enabling the guidance must not opt into an extra turn.
+	const memoryDefaults = await send("get_settings", { paths: memoryPaths });
+	const memoryValues = memoryDefaults.data?.values;
+	const memoryDefaultsMatch =
+		memoryDefaults.success &&
+		memoryValues?.["memory.backend"] === "local" &&
+		memoryValues?.["autolearn.enabled"] === true &&
+		memoryValues?.["autolearn.autoContinue"] === false;
+	console.log(`desktop memory defaults ${memoryDefaultsMatch ? "ok " : "ERR"}  values=${JSON.stringify(memoryValues)}`);
+	const memoryOff = await send("set_setting", { path: "memory.backend", value: "off" });
+	const autolearnOff = await send("set_setting", { path: "autolearn.enabled", value: false });
+	const memoryOverrides = await send("get_settings", { paths: memoryPaths });
+	const memoryOptOutsMatch =
+		memoryOff.success &&
+		autolearnOff.success &&
+		memoryOverrides.success &&
+		memoryOverrides.data?.values?.["memory.backend"] === "off" &&
+		memoryOverrides.data?.values?.["autolearn.enabled"] === false;
+	console.log(`desktop memory opt-outs ${memoryOptOutsMatch ? "ok " : "ERR"}`);
 
 	let settingsPersisted = false;
 	if (settingsReadable) {
@@ -213,7 +240,36 @@ const initialReady = startChild();
 	const modelsReturned = models.ms <= WEDGE_MS;
 	const legacyAgentWritten = existsSync(join(home, ".omp", "agent"));
 	console.log(`legacy agent write     ${legacyAgentWritten ? "ERR" : "ok "}`);
-	const pass = !wedged && modelsReturned && settingsReadable && settingsPersisted && wisaProjectLoaded && !legacyAgentWritten;
+	// Keep the saved opt-outs, override memory at project scope and opt out
+	// of Auto-Learn again with an explicit overlay on the restarted sidecar.
+	await stopChild();
+	await writeFile(
+		join(project, ".wisa-studio", "config.yml"),
+		"compaction:\n  enabled: false\nmemory:\n  backend: local\nautolearn:\n  enabled: true\n",
+	);
+	const overlay = join(home, "overrides.yml");
+	await writeFile(overlay, "autolearn:\n  enabled: false\n");
+	await startChild([...spawnArgs, "--config", overlay]);
+	await send("negotiate_protocol", { protocolVersion: 2 });
+	const precedence = await send("get_settings", { paths: memoryPaths });
+	const { values, provenance } = precedence.data ?? {};
+	const memoryPrecedenceMatch =
+		precedence.success &&
+		values?.["memory.backend"] === "local" &&
+		values?.["autolearn.enabled"] === false &&
+		provenance?.["memory.backend"]?.layers?.join(",") === "global,project" &&
+		provenance?.["autolearn.enabled"]?.layers?.join(",") === "global,project,overlay";
+	console.log(`memory override order  ${memoryPrecedenceMatch ? "ok " : "ERR"}  values=${JSON.stringify(values)}`);
+	const pass =
+		!wedged &&
+		modelsReturned &&
+		settingsReadable &&
+		settingsPersisted &&
+		wisaProjectLoaded &&
+		memoryDefaultsMatch &&
+		memoryOptOutsMatch &&
+		memoryPrecedenceMatch &&
+		!legacyAgentWritten;
 	console.log(
 		`\nVERDICT ${pass ? "PASS" : "FAIL"}  postDiscoveryMax=${Math.max(...postDiscovery.map(r => r.ms))}ms  models=${models.ms}ms  commands=${results.length}`,
 	);

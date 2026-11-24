@@ -112,4 +112,23 @@ describe("WISA profile isolation", () => {
 			rmSync(root, { recursive: true, force: true });
 		}
 	});
+	it.runIf(process.platform === "win32")("preserves inherited Git options when enabling long paths", () => {
+		const inherited = {
+			Git_Config_Count: "1",
+			GIT_CONFIG_KEY_0: "http.version",
+			GIT_CONFIG_VALUE_0: "HTTP/1.1",
+			Git_Config_Value_1: "unused value outside the configured count",
+		};
+		const env = agentSpawnEnv(inherited);
+		expect(env).toMatchObject({
+			GIT_CONFIG_COUNT: "2",
+			GIT_CONFIG_KEY_0: "http.version",
+			GIT_CONFIG_VALUE_0: "HTTP/1.1",
+			GIT_CONFIG_KEY_1: "core.longpaths",
+			GIT_CONFIG_VALUE_1: "true",
+		});
+		expect(env.Git_Config_Count).toBeUndefined();
+		expect(env.Git_Config_Value_1).toBeUndefined();
+		expect(inherited.Git_Config_Count).toBe("1");
+	});
 });

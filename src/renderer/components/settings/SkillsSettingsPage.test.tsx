@@ -90,6 +90,12 @@ function buttonWithLabel(label: string): HTMLButtonElement | undefined {
 	);
 }
 
+async function openInstalled(): Promise<void> {
+	const tab = buttonWithLabel(translate("skills.tab.installed"));
+	expect(tab).toBeDefined();
+	await act(async () => tab?.click());
+}
+
 afterEach(async () => {
 	for (const root of roots) {
 		await act(async () => {
@@ -104,9 +110,17 @@ afterEach(async () => {
 	useTabsStore.getState().reset();
 });
 
+it("opens Skills on Community by default", async () => {
+	await mount();
+	expect(document.querySelector('[data-tab-id="community"]')?.getAttribute("aria-selected")).toBe("true");
+	expect(document.querySelector('[data-tab-id="all-time"]')?.getAttribute("aria-selected")).toBe("true");
+	expect(buttonWithLabel(translate("settings.skills.enableAll"))).toBeUndefined();
+});
+
 describe("SkillsSettingsPage bulk switch", () => {
 	it("enables only the skills that are off", async () => {
 		await mount();
+		await openInstalled();
 
 		await act(async () => {
 			buttonWithLabel(translate("settings.skills.enableAll"))?.click();
@@ -123,6 +137,7 @@ describe("SkillsSettingsPage bulk switch", () => {
 
 	it("disables only the skills that are on", async () => {
 		await mount();
+		await openInstalled();
 
 		await act(async () => {
 			buttonWithLabel(translate("settings.skills.disableAll"))?.click();

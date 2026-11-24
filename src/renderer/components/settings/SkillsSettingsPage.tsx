@@ -105,7 +105,7 @@ export function SkillsSettingsPage({ query }: { query: string }) {
 	const routeReady = useActiveTabRouteReady();
 	const routeKey = `${activeTabId ?? "none"}:${cwd}`;
 	const routeRef = useRef(routeKey);
-	const [tab, setTab] = useState<SkillsTab>("installed");
+	const [tab, setTab] = useState<SkillsTab>("community");
 	const [skills, setSkills] = useState<RpcSkillInfo[]>([]);
 	const [selectedName, setSelectedName] = useState<string | null>(null);
 	const [detail, setDetail] = useState<RpcSkillDetail | null>(null);
@@ -342,8 +342,8 @@ export function SkillsSettingsPage({ query }: { query: string }) {
 				className="shrink-0"
 				onChange={next => setTab(next === "community" ? "community" : "installed")}
 				tabs={[
-					{ id: "installed", label: t("skills.tab.installed") },
 					{ id: "community", label: t("skills.tab.community") },
+					{ id: "installed", label: t("skills.tab.installed") },
 				]}
 			/>
 

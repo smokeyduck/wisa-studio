@@ -15,7 +15,6 @@ import { FolderOpen, Globe, RefreshCw, Search, Store, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { TemplateEntry } from "../../../shared/templates";
 import { TEMPLATE_CATEGORIES, templateSearchText } from "../../../shared/templates";
-import { showBrowserWindow } from "../../lib/browser-window";
 import { cx } from "../../lib/format";
 import { useLang, useT } from "../../lib/i18n";
 import { templateThumbnailSrc } from "../../lib/template-thumbnail";
@@ -229,23 +228,7 @@ export function TemplatesWindow() {
 	};
 
 	const openDemo = (entry: TemplateEntry) => {
-		const url = entry.demoUrl;
-		if (!url) return;
-		const tabId = useTabsStore.getState().activeTabId;
-		const tab = useTabsStore.getState().tabs.find(candidate => candidate.id === tabId);
-		if (!tab || tab.kind === "chat") {
-			void window.omp.system.openExternal(url);
-			return;
-		}
-		// The app's own browser window, beside the work — a template preview is
-		// exactly what it is for. A window that cannot show one falls back.
-		showBrowserWindow(tab.id);
-		window.omp.browser.open(tab.id, url).then(
-			state => {
-				if (!state) void window.omp.system.openExternal(url);
-			},
-			() => void window.omp.system.openExternal(url),
-		);
+		if (entry.demoUrl) void window.omp.system.openExternal(entry.demoUrl);
 	};
 
 	const install = async (entry: TemplateEntry) => {

@@ -25,13 +25,11 @@ export interface SettingsResponseData {
 	advisorActive?: boolean;
 }
 
-export const CAPABILITIES_TAB_ID = "capabilities";
 export const SKILLS_TAB_ID = "skills";
 export const MCP_TAB_ID = "mcp";
 export const RESOURCES_TAB_ID = "resources";
 export const HOOKS_TAB_ID = "hooks";
 export const COMMANDS_TAB_ID = "commands";
-export const SECURITY_TAB_ID = "security";
 export const SSH_TAB_ID = "ssh";
 export const UPDATES_TAB_ID = "updates";
 /** Settings without UI metadata (advanced): searchable flat list. */
@@ -44,7 +42,6 @@ export const MANAGEMENT_TAB_IDS = new Set([
 	RESOURCES_TAB_ID,
 	HOOKS_TAB_ID,
 	COMMANDS_TAB_ID,
-	SECURITY_TAB_ID,
 	SSH_TAB_ID,
 	UPDATES_TAB_ID,
 ]);
@@ -54,13 +51,7 @@ export const FILL_HEIGHT_TAB_IDS = new Set([SKILLS_TAB_ID, SSH_TAB_ID]);
 
 export function isAgentSchemaTab(tab: string, schema: { tabs: { id: string }[] } | null): boolean {
 	if (schema?.tabs.some(schemaTab => schemaTab.id === tab)) return true;
-	return (
-		!MANAGEMENT_TAB_IDS.has(tab) &&
-		tab !== GUI_TAB_ID &&
-		tab !== SHORTCUTS_TAB_ID &&
-		tab !== CAPABILITIES_TAB_ID &&
-		tab !== ADVANCED_TAB_ID
-	);
+	return !MANAGEMENT_TAB_IDS.has(tab) && tab !== GUI_TAB_ID && tab !== SHORTCUTS_TAB_ID && tab !== ADVANCED_TAB_ID;
 }
 
 export const SEARCHABLE_MANAGEMENT_TAB_IDS = new Set([
@@ -72,7 +63,7 @@ export const SEARCHABLE_MANAGEMENT_TAB_IDS = new Set([
 ]);
 
 export interface SettingsNavGroup {
-	id: "experience" | "models" | "tasks" | "tools" | "extensions" | "security" | "memory" | "system";
+	id: "experience" | "models" | "tasks" | "tools" | "extensions" | "memory" | "system";
 	items: TabItem[];
 }
 
@@ -97,7 +88,6 @@ export function buildSettingsNavGroups(
 		{
 			id: "extensions",
 			items: [
-				{ id: CAPABILITIES_TAB_ID, label: "Overview" },
 				{ id: SKILLS_TAB_ID, label: "Skills" },
 				{ id: MCP_TAB_ID, label: "MCP" },
 				{ id: RESOURCES_TAB_ID, label: "Plugins & resources" },
@@ -105,7 +95,6 @@ export function buildSettingsNavGroups(
 				{ id: COMMANDS_TAB_ID, label: "Commands" },
 			],
 		},
-		{ id: "security", items: [{ id: SECURITY_TAB_ID, label: "Security Center" }] },
 		{ id: "memory", items: [] },
 		{
 			id: "system",
@@ -150,11 +139,6 @@ export const GUI_SETTING_SEARCH_ITEMS = [
 		id: "pasteMenuThreshold",
 		labelKey: "settings.display.pasteMenuThreshold",
 		aliases: "paste.largeMenuThreshold paste 粘贴 阈值",
-	},
-	{
-		id: "linkOpenMode",
-		labelKey: "settings.gui.linkOpenMode",
-		aliases: "linkOpenMode link browser external window panel 链接 浏览器 外链 打开方式 ссылки браузер",
 	},
 	{ id: "theme", labelKey: "settings.gui.theme", aliases: "theme dark light 主题 明暗" },
 	{ id: "followAgentTheme", labelKey: "settings.gui.followAgentTheme", aliases: "theme override 主题 覆盖" },

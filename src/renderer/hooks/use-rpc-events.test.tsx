@@ -20,6 +20,7 @@ import type {
 	ExtensionErrorFrame,
 	ModelCatalogUpdateFrame,
 	PromptResultFrame,
+	RpcBtwFrame,
 	RpcCommand,
 	RpcResponse,
 	SessionInfoUpdateFrame,
@@ -29,6 +30,7 @@ import { TurnStatusRow } from "../components/chat/ChatStream";
 import { StreamingText } from "../components/chat/StreamingText";
 import { formatClock } from "../lib/format";
 import { I18nProvider, translate } from "../lib/i18n";
+import type { BtwStore } from "../stores/btw";
 import { type MessagesStore, useMessagesStore } from "../stores/messages";
 import { type ModelStore, useModelStore } from "../stores/model";
 import { type SessionStore, useSessionStore } from "../stores/session";
@@ -45,6 +47,7 @@ import { useTabsStore } from "../stores/tabs";
 import { useToastStore } from "../stores/toast";
 import { useTodoStore } from "../stores/todo";
 import { useToolsStore } from "../stores/tools";
+import { useTurnNoticesStore } from "../stores/turn-notices";
 import { useUiStore } from "../stores/ui";
 import { hydrateSession, hydrateTabSession, useRpcEvents } from "./use-rpc-events";
 
@@ -211,6 +214,7 @@ function installMockOmp(): {
 
 type TabBatchHandler = (events: AgentSessionEvent[], tabId: string) => void;
 type TabSidecarStatusHandler = (payload: IpcSidecarStatusPayload, tabId: string) => void;
+type TabBtwFrameHandler = (frame: RpcBtwFrame, tabId: string) => void;
 
 /**
  * Tab-routed variant of the legacy harness above: the modern preload exposes
@@ -220,11 +224,13 @@ type TabSidecarStatusHandler = (payload: IpcSidecarStatusPayload, tabId: string)
 function installTabRoutedMockOmp(): {
 	emitTabBatch: TabBatchHandler;
 	emitTabStatus: TabSidecarStatusHandler;
+	emitTabBtwFrame: TabBtwFrameHandler;
 	notify: Mock<(title: string, body: string) => void>;
 	commandForTab: Mock<(tabId: string, command: RpcCommand) => Promise<RpcResponse>>;
 } {
 	let tabBatchHandler: TabBatchHandler = () => {};
 	let tabStatusHandler: TabSidecarStatusHandler = () => {};
+	let tabBtwFrameHandler: TabBtwFrameHandler = () => {};
 	const commandForTab = vi.fn(async (_tabId: string, command: RpcCommand): Promise<RpcResponse> => {
 		switch (command.type) {
 			case "get_state":
@@ -243,6 +249,8 @@ function installTabRoutedMockOmp(): {
 				});
 			case "get_transcript":
 				return success({ messages: [] });
+			case "get_btw_history":
+				return success({ records: [] });
 			case "get_subagents":
 				return success({ subagents: [] });
 			case "get_goal":
@@ -281,6 +289,10 @@ function installTabRoutedMockOmp(): {
 				tabStatusHandler = callback;
 				return () => {};
 			}),
+			onTabBtwFrame: vi.fn((callback: TabBtwFrameHandler) => {
+				tabBtwFrameHandler = callback;
+				return () => {};
+			}),
 			onTabSubagentFrame: noopSub,
 			onTabModelCatalogUpdate: noopSub,
 			onTabConfigUpdate: noopSub,
@@ -290,7 +302,10 @@ function installTabRoutedMockOmp(): {
 			onTabSessionInfoUpdate: noopSub,
 			onTabExtensionError: noopSub,
 		},
-		sidecar: { getStatus: vi.fn(async () => ({ status: "ready", cwd: "/tmp" })) },
+		sidecar: {
+			getStatus: vi.fn(async () => ({ status: "ready", cwd: "/tmp" })),
+			getProxyWarnings: vi.fn(async () => []),
+		},
 		sessions: { consumePendingOpen: vi.fn(async () => null) },
 		system: { notify },
 		prefs: { get: vi.fn(async () => null), set: vi.fn(async () => {}) },
@@ -299,6 +314,7 @@ function installTabRoutedMockOmp(): {
 	return {
 		emitTabBatch: (events, tabId) => tabBatchHandler(events, tabId),
 		emitTabStatus: (payload, tabId) => tabStatusHandler(payload, tabId),
+		emitTabBtwFrame: (frame, tabId) => tabBtwFrameHandler(frame, tabId),
 		notify,
 		commandForTab,
 	};
@@ -412,6 +428,7 @@ afterEach(async () => {
 	useTodoStore.getState().reset();
 	useSettingsStore.getState().reset();
 	useSubagentsStore.getState().reset();
+	useUiStore.setState({ displayPreferences: {} });
 	useToastStore.setState({ toasts: [] });
 	vi.restoreAllMocks();
 });
@@ -1265,6 +1282,31 @@ describe("useRpcEvents mode-state sync", () => {
 	});
 });
 
+describe("IRC notifications", () => {
+	it("shows the agent's name without copying internal coordination into the toast", async () => {
+		const { emitBatch } = installMockOmp();
+		await mount(<RpcEventsProbe />);
+		await act(async () => {
+			emitBatch([
+				{
+					type: "irc_message",
+					message: {
+						role: "custom",
+						customType: "irc:relay",
+						content: "[IRC `ModelSurface` → `ComposerLayout`] Internal coordination",
+						details: { from: "ModelSurface", to: "ComposerLayout", body: "Internal coordination" },
+					},
+				},
+				{ type: "irc_message", message: { content: "Unstructured coordination" } },
+			]);
+		});
+		expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual([
+			"Agent ModelSurface replied.",
+			"An agent replied.",
+		]);
+	});
+});
+
 describe("failure toasts", () => {
 	// The transcript's retry row and error card say this in place; toasting it
 	// too doubled every provider failure for the tab the user was watching.
@@ -1338,6 +1380,7 @@ describe("desktop notifications", () => {
 	afterEach(() => {
 		Reflect.deleteProperty(document, "hasFocus");
 		useUiStore.setState({ notifications: true, notificationsWhenFocused: false });
+		useTurnNoticesStore.setState({ notices: [] });
 	});
 
 	it("stays quiet for a focused window by default and speaks once it loses focus", async () => {
@@ -1355,7 +1398,7 @@ describe("desktop notifications", () => {
 		await act(async () => {
 			emitTabBatch(settledTurn, "t0");
 		});
-		expect(notify).toHaveBeenCalledWith("Oh My Pi", "Complete");
+		expect(notify).toHaveBeenCalledWith("WISA STUDIO", "Complete");
 	});
 
 	it("notifies a focused window when the preference is on", async () => {
@@ -1368,7 +1411,7 @@ describe("desktop notifications", () => {
 		await act(async () => {
 			emitTabBatch(settledTurn, "t0");
 		});
-		expect(notify).toHaveBeenCalledWith("Oh My Pi", "Complete");
+		expect(notify).toHaveBeenCalledWith("WISA STUDIO", "Complete");
 	});
 
 	it("honours the master switch over the focused preference", async () => {
@@ -1382,6 +1425,48 @@ describe("desktop notifications", () => {
 			emitTabBatch(settledTurn, "t0");
 		});
 		expect(notify).not.toHaveBeenCalled();
+		expect(useTurnNoticesStore.getState().notices).toMatchObject([{ tabId: "t0", read: false, tone: "done" }]);
+	});
+
+	it("records only confirmed terminal outcomes, and distinguishes provider failures from success", async () => {
+		const { emitTabBatch, notify } = installTabRoutedMockOmp();
+		seedLiveTab();
+		standInFocus(false);
+		await mount(<RpcEventsProbe />);
+
+		await act(async () => {
+			emitTabBatch(
+				[
+					{ type: "agent_end", messages: [] },
+					{ type: "agent_end", messages: [{ role: "assistant", stopReason: "aborted" }] },
+					{ type: "agent_end", messages: [{ role: "assistant", stopReason: "length" }] },
+					{ type: "agent_end", messages: [{ role: "assistant", stopReason: "toolUse" }] },
+					{ type: "agent_end", isTerminal: false, messages: [{ role: "assistant", stopReason: "stop" }] },
+				],
+				"t0",
+			);
+		});
+		expect(useTurnNoticesStore.getState().notices).toEqual([]);
+		expect(notify).not.toHaveBeenCalled();
+
+		await act(async () => {
+			emitTabBatch(
+				[
+					{
+						type: "agent_end",
+						messages: [{ role: "assistant", stopReason: "error", errorMessage: "Unavailable" }],
+					},
+				],
+				"t0",
+			);
+			emitTabBatch(settledTurn, "t0");
+		});
+		expect(useTurnNoticesStore.getState().notices).toMatchObject([
+			{ tone: "done", read: false },
+			{ tone: "failed", detail: "Unavailable", read: false },
+		]);
+		expect(notify).toHaveBeenCalledTimes(1);
+		expect(notify).toHaveBeenCalledWith("WISA STUDIO", "Complete");
 	});
 });
 
@@ -1531,14 +1616,18 @@ describe("TurnStatusRow", () => {
 describe("hydrateSession streaming reconcile (F-HYDRATE)", () => {
 	it("shares an overlapping snapshot without losing delivered rows that race it", async () => {
 		const { commandForTab } = installTabRoutedMockOmp();
-		seedReadyTab("t-flight");
+		const session = seedReadyTab("t-flight");
 		const transcript = Promise.withResolvers<RpcResponse>();
 		const original = commandForTab.getMockImplementation()!;
-		commandForTab.mockImplementation((tabId, command) =>
-			command.type === "get_transcript" ? transcript.promise : original(tabId, command),
-		);
+		commandForTab.mockImplementation((tabId, command) => {
+			if (command.type === "get_transcript") return transcript.promise;
+			if (command.type === "get_state") return Promise.resolve(settledState({ isStreaming: true }));
+			return original(tabId, command);
+		});
 		const first = hydrateTabSession("t-flight");
 		const second = hydrateTabSession("t-flight");
+		await flush();
+		expect(session.getState().isStreaming).toBe(true);
 		const messages = sessionRuntimeStore<MessagesStore>("t-flight", "messages")!;
 		const delivered: AgentMessage = { role: "assistant", content: "racing commit", entryId: "new-row", timestamp: 2 };
 		messages.getState().appendMessage(delivered);
@@ -1548,26 +1637,63 @@ describe("hydrateSession streaming reconcile (F-HYDRATE)", () => {
 		expect(commandForTab.mock.calls.filter(([, command]) => command.type === "get_transcript")).toHaveLength(1);
 	});
 
+	it("does not reuse a pending transcript read after the compaction display preference changes", async () => {
+		const { commandForTab } = installTabRoutedMockOmp();
+		const session = seedReadyTab("t-folded");
+		const foldedTranscript = Promise.withResolvers<RpcResponse>();
+		const expandedTranscript = Promise.withResolvers<RpcResponse>();
+		const original = commandForTab.getMockImplementation()!;
+		commandForTab.mockImplementation((tabId, command) =>
+			command.type === "get_transcript"
+				? (command.folded ? foldedTranscript : expandedTranscript).promise
+				: original(tabId, command),
+		);
+		useUiStore.setState({ displayPreferences: { collapseCompacted: true } });
+		const folded = hydrateTabSession("t-folded");
+		useUiStore.setState({ displayPreferences: { collapseCompacted: false } });
+		const expanded = hydrateTabSession("t-folded");
+		const transcriptReads = commandForTab.mock.calls
+			.map(([, command]) => command)
+			.filter(command => command.type === "get_transcript");
+		expect(transcriptReads).toEqual([
+			{ type: "get_transcript", folded: true },
+			{ type: "get_transcript" },
+		]);
+
+		expandedTranscript.resolve(success({ messages: [{ role: "user", content: "Before compaction" }] }));
+		await expanded;
+		foldedTranscript.resolve(success({ messages: [{ role: "compactionSummary", summary: "Folded history" }] }));
+		await folded;
+		expect(useMessagesStore.getState().messages).toMatchObject([{ content: "Before compaction" }]);
+		expect(session.getState().transcriptFolded).toBe(false);
+	});
+
 	it("does not join or apply a snapshot from before an in-place session change", async () => {
 		const { commandForTab } = installTabRoutedMockOmp();
-		seedReadyTab("t-generation");
+		const session = seedReadyTab("t-generation");
 		const oldTranscript = Promise.withResolvers<RpcResponse>();
+		const newTranscript = Promise.withResolvers<RpcResponse>();
 		const oldGoal = Promise.withResolvers<RpcResponse>();
 		const original = commandForTab.getMockImplementation()!;
 		let changed = false;
 		commandForTab.mockImplementation(async (tabId, command) => {
-			if (command.type === "get_transcript")
-				return changed ? success({ messages: [{ role: "user", content: "new session" }] }) : oldTranscript.promise;
+			if (command.type === "get_transcript") return changed ? newTranscript.promise : oldTranscript.promise;
+			if (command.type === "get_state" && changed) return settledState({ sessionId: "new-session" });
 			if (command.type === "get_goal" && !changed) return oldGoal.promise;
 			return original(tabId, command);
 		});
 		const oldHydration = hydrateTabSession("t-generation");
 		await ensureTabRuntime("t-generation").command({ type: "switch_session", sessionPath: "/synthetic/new.jsonl" });
 		changed = true;
-		await hydrateTabSession("t-generation");
+		const newHydration = hydrateTabSession("t-generation");
+		await flush();
+		expect(session.getState().sessionId).toBe("s1");
+		newTranscript.resolve(success({ messages: [{ role: "user", content: "new session" }] }));
+		await newHydration;
 		oldTranscript.resolve(success({ messages: [{ role: "user", content: "old session" }] }));
 		oldGoal.resolve(success({ enabled: true, objective: "old goal" }));
 		await oldHydration;
+		expect(session.getState().sessionId).toBe("new-session");
 		expect(sessionRuntimeStore<MessagesStore>("t-generation", "messages")?.getState().messages).toMatchObject([
 			{ content: "new session" },
 		]);
@@ -1731,7 +1857,11 @@ describe("hydrateSession streaming reconcile (F-HYDRATE)", () => {
 		await hydrateTabSession("t-page");
 
 		expect(sessionRuntimeStore<MessagesStore>("t-page", "messages")?.getState().messages).toEqual([hydrated]);
-		expect(commandForTab.mock.calls.some(call => call[1]?.type === "get_transcript_page")).toBe(true);
+		expect(commandForTab.mock.calls.map(([, command]) => command)).toContainEqual({
+			type: "get_transcript_page",
+			limit: 256,
+			folded: true,
+		});
 	});
 
 	it("clears the stale streaming bubble when the hydrated tab has settled", async () => {
@@ -1839,6 +1969,42 @@ describe("useRpcEvents tab-scoped routing guards", () => {
 		ensureTabRuntime("t-dead");
 		setFocusedSessionRuntime("t-live");
 	}
+
+	it("keeps side questions in their originating tab, including a parked turn's completion", async () => {
+		const { emitTabBtwFrame } = installTabRoutedMockOmp();
+		seedTwoTabs();
+		await mount(<RpcEventsProbe />);
+		const record = {
+			id: "side-question",
+			leafId: "parent-message",
+			question: "why?",
+			answer: "",
+			status: "running" as const,
+			createdAt: 1,
+			updatedAt: 1,
+		};
+		const parked = sessionRuntimeStore<BtwStore>("t-dead", "btw")!;
+		const focused = sessionRuntimeStore<BtwStore>("t-live", "btw")!;
+		await act(async () => {
+			emitTabBtwFrame({ type: "btw_record", record }, "t-dead");
+			emitTabBtwFrame({ type: "btw_delta", recordId: record.id, delta: "Parked reply" }, "t-dead");
+			emitTabBtwFrame({ type: "btw_record", record }, "unknown-origin");
+		});
+		expect(parked.getState().records).toMatchObject([{ id: record.id, answer: "Parked reply" }]);
+		expect(focused.getState().records).toEqual([]);
+
+		const complete = { ...record, status: "complete" as const, answer: "Parked reply done", updatedAt: 2 };
+		await act(async () => emitTabBtwFrame({ type: "btw_record", record: complete }, "t-dead"));
+		expect(parked.getState().records).toEqual([complete]);
+		expect(parked.getState().branchableId).toBe(record.id);
+
+		await act(async () => {
+			await useTabsStore.getState().closeTab("t-dead");
+			emitTabBtwFrame({ type: "btw_record", record: complete }, "t-dead");
+		});
+		expect(sessionRuntime("t-dead")).toBeNull();
+		expect(focused.getState().records).toEqual([]);
+	});
 
 	it("routes a known unhydrated background stream only to its own runtime and drops unknown origins", async () => {
 		const { emitTabBatch } = installTabRoutedMockOmp();

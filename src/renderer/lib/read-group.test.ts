@@ -68,12 +68,21 @@ describe("groupReadRows", () => {
 		}
 	});
 
-	it("keeps remaining visible content in the trimmed message", () => {
-		const rows = [{ kind: "message" as const, message: assistant(readCall("r1", "a.ts"), text("explanation")) }];
+	it("preserves reply reminders when reads are moved out of the reply", () => {
+		const reminder: AgentMessage = { role: "developer", content: "Mark the task complete." };
+		const rows = [
+			{
+				kind: "message" as const,
+				message: assistant(readCall("r1", "a.ts"), text("explanation")),
+				todoReminders: [reminder],
+			},
+		];
 		const grouped = groupReadRows(rows);
 		expect(grouped.map(row => row.kind)).toEqual(["readGroup", "message"]);
-		const message = grouped[1]?.kind === "message" ? grouped[1].message : undefined;
-		expect(Array.isArray(message?.content) && message.content).toHaveLength(1);
+		expect(grouped[1]).toMatchObject({
+			message: { content: [text("explanation")] },
+			todoReminders: [reminder],
+		});
 	});
 
 	it("breaks the run on visible text between reads", () => {

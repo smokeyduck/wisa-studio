@@ -40,16 +40,18 @@ import {
 import { useSessionStore } from "../../stores/session";
 import { useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
+import { useUiStore } from "../../stores/ui";
 import { Badge, Button, Modal, Spinner, type TabItem, Tabs } from "../common";
 import { SwitchTrack } from "../common/SwitchTrack";
 import { SettingsPageIntro } from "../settings/SettingsPageIntro";
 import { AddMarketplaceForm, MarketplaceCard } from "./inventory/MarketplacesSection";
 import { PluginDetailDrawer } from "./inventory/PluginDetailDrawer";
 import { filterMarketplaces, filterPlugins, filterTemplates } from "./inventory-utils";
+import { PluginCatalogSurface } from "./PluginsWindow";
 
 type TFn = (key: string, params?: Record<string, string | number>) => string;
 
-export type TabId = "plugins" | "marketplaces" | "templates" | "memory";
+export type TabId = "catalog" | "plugins" | "marketplaces" | "templates" | "memory";
 
 interface RpcResource<T> {
 	data: T | null;
@@ -117,12 +119,13 @@ function useRpcResource<T>(fetcher: () => Promise<RpcResponse>): RpcResource<T> 
 }
 
 /**
- * Load a tab's resource the first time it becomes visible. Failures leave
- * `loaded` false, so revisiting the tab retries once; successes stay cached.
+ * Load a tab's resource on first view. Editable resources in the combined
+ * Settings page revalidate on revisit because its other tabs can change them.
  */
 function useAutoLoad(
 	resource: Pick<RpcResource<unknown>, "loaded" | "loading" | "ready" | "reload" | "routeKey">,
 	visible: boolean,
+	refreshOnShow = false,
 ): void {
 	const attemptedRef = useRef(false);
 	const routeRef = useRef(resource.routeKey);
@@ -136,7 +139,7 @@ function useAutoLoad(
 			attemptedRef.current = false;
 			return;
 		}
-		if (attemptedRef.current || loaded || loading) return;
+		if (attemptedRef.current || (loaded && !refreshOnShow) || loading) return;
 		attemptedRef.current = true;
 		// This hook lives in a child tab while the route-reset effect lives in
 		// the parent resource hook. Passive effects mount child-first, so an
@@ -150,7 +153,7 @@ function useAutoLoad(
 		return () => {
 			cancelled = true;
 		};
-	}, [visible, loaded, loading, ready, reload, routeKey]);
+	}, [visible, loaded, loading, ready, reload, routeKey, refreshOnShow]);
 }
 
 // ============================================================================
@@ -462,7 +465,7 @@ function PluginsTab({
 	const query = externalQuery ?? localQuery;
 	const [busyKey, setBusyKey] = useState<string | null>(null);
 	const [overrides, setOverrides] = useState<Readonly<Record<string, boolean>>>({});
-	useAutoLoad(resource, visible);
+	useAutoLoad(resource, visible, externalQuery !== undefined);
 	const plugins = useMemo(() => filterPlugins(resource.data?.plugins ?? [], query), [resource.data, query]);
 	const total = resource.data?.plugins.length ?? 0;
 
@@ -585,7 +588,7 @@ function MarketplacesTab({
 	const t = useT();
 	const [localQuery, setLocalQuery] = useState("");
 	const query = externalQuery ?? localQuery;
-	useAutoLoad(resource, visible);
+	useAutoLoad(resource, visible, externalQuery !== undefined);
 	const marketplaces = useMemo(
 		() => filterMarketplaces(resource.data?.marketplaces ?? [], query),
 		[resource.data, query],
@@ -738,7 +741,13 @@ function MemoryStatusCard({ report, t }: { report: RpcMemoryReport; t: TFn }) {
 			t("invPanel.memory.lastRecall"),
 			status.lastRecall ? t("invPanel.memory.yes") : t("invPanel.memory.no"),
 		]);
-	if (status.message) details.push([t("invPanel.memory.message"), status.message]);
+	const message =
+		report.backend === "off"
+			? t("invPanel.memory.offExplanation")
+			: report.backend === "local" && status.active
+				? t("invPanel.memory.localExplanation")
+				: status.message;
+	if (message) details.push([t("invPanel.memory.message"), message]);
 	return (
 		<div className="flex flex-col gap-2 rounded-lg border border-[var(--omp-border-muted)] px-3 py-2.5">
 			<div className="flex flex-wrap items-center gap-1.5">
@@ -787,13 +796,30 @@ function MemoryTab({ resource, visible }: { resource: RpcResource<RpcMemoryRepor
 		<TabPanel visible={visible}>
 			<div className="flex items-center gap-2">
 				<span className="min-w-0 flex-1 truncate text-omp-md font-medium text-[var(--omp-text)]">
-					{report?.backend ?? t("invPanel.tabs.memory")}
+					{report ? t(`invPanel.memory.backend.${report.backend}`) : t("invPanel.tabs.memory")}
 					{report?.entryCount !== undefined && (
 						<span className="ml-2 text-omp-xs font-normal tabular-nums text-[var(--omp-dim)]">
 							{t("invPanel.memory.entries", { count: report.entryCount })}
 						</span>
 					)}
 				</span>
+				{report?.backend === "local" && (
+					<Button
+						onClick={() => {
+							useUiStore.getState().closeSettings();
+							useUiStore.getState().openMemory("knowledge", useSessionStore.getState().cwd || undefined);
+						}}
+						size="sm"
+						variant="secondary"
+					>
+						{t("invPanel.memory.open")}
+					</Button>
+				)}
+				{report && (
+					<Button onClick={() => useUiStore.getState().openSettings("memory")} size="sm" variant="ghost">
+						{t("invPanel.memory.configure")}
+					</Button>
+				)}
 				<RefreshButton
 					disabledReason={!resource.ready ? t("invPanel.notConnected") : undefined}
 					loading={resource.loading}
@@ -849,7 +875,7 @@ export interface InventoryPanelProps {
 	open: boolean;
 	onClose: () => void;
 	/** Deep-link a specific tab on open (defaults to "plugins"). */
-	initialTab?: TabId;
+	initialTab?: Exclude<TabId, "catalog">;
 }
 
 function InventoryContent({
@@ -882,12 +908,17 @@ function InventoryContent({
 
 	const tabs = useMemo<TabItem[]>(
 		() => [
-			{ id: "plugins", label: t("invPanel.tabs.plugins"), badge: plugins.data?.plugins.length },
+			...(embedded ? [{ id: "catalog", label: t("invPanel.tabs.catalog") }] : []),
+			{
+				id: "plugins",
+				label: t(embedded ? "invPanel.tabs.installed" : "invPanel.tabs.plugins"),
+				badge: plugins.data?.plugins.length,
+			},
 			{ id: "marketplaces", label: t("invPanel.tabs.marketplaces"), badge: marketplaces.data?.marketplaces.length },
 			{ id: "templates", label: t("invPanel.tabs.templates"), badge: templates.data?.templates.length },
 			{ id: "memory", label: t("invPanel.tabs.memory") },
 		],
-		[t, plugins.data, marketplaces.data, templates.data],
+		[t, embedded, plugins.data, marketplaces.data, templates.data],
 	);
 
 	const footer =
@@ -895,7 +926,9 @@ function InventoryContent({
 			? t("invPanel.footer.plugins")
 			: tab === "marketplaces"
 				? t("marketplace.footerNote")
-				: t("invPanel.readonlyNote");
+				: tab === "templates"
+					? t("invPanel.readonlyNote")
+					: null;
 
 	return (
 		<div
@@ -913,6 +946,7 @@ function InventoryContent({
 				ariaLabel={t("invPanel.title")}
 			/>
 			<div className="min-h-0 flex-1 overflow-y-auto">
+				{active && tab === "catalog" && <PluginCatalogSurface onOpenSection={setTab} query={query ?? ""} />}
 				<PluginsTab
 					externalQuery={query}
 					onBrowseMarketplaces={() => setTab("marketplaces")}
@@ -920,13 +954,21 @@ function InventoryContent({
 					resource={plugins}
 					visible={active && tab === "plugins"}
 				/>
-				<MarketplacesTab externalQuery={query} resource={marketplaces} visible={active && tab === "marketplaces"} />
+				{(!embedded || tab === "marketplaces") && (
+					<MarketplacesTab
+						externalQuery={query}
+						resource={marketplaces}
+						visible={active && tab === "marketplaces"}
+					/>
+				)}
 				<TemplatesTab externalQuery={query} resource={templates} visible={active && tab === "templates"} />
 				<MemoryTab resource={memory} visible={active && tab === "memory"} />
 			</div>
-			<div className="shrink-0 border-t border-(--omp-border-muted) px-4 py-2 text-omp-xs leading-relaxed text-(--omp-dim)">
-				{footer}
-			</div>
+			{footer && (
+				<div className="shrink-0 border-t border-(--omp-border-muted) px-4 py-2 text-omp-xs leading-relaxed text-(--omp-dim)">
+					{footer}
+				</div>
+			)}
 			{/* Drill-in detail drawer — covers the window body until dismissed. */}
 			{detailPlugin && (
 				<PluginDetailDrawer
@@ -940,7 +982,7 @@ function InventoryContent({
 	);
 }
 
-export function InventorySettingsPage({ initialTab = "plugins", query }: { initialTab?: TabId; query: string }) {
+export function InventorySettingsPage({ initialTab = "catalog", query }: { initialTab?: TabId; query: string }) {
 	const t = useT();
 	return (
 		<div className="space-y-5">

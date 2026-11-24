@@ -1,4 +1,4 @@
-import { Bot, ClipboardList, Diff, FolderTree, LayoutDashboard, MessageCircleQuestion, SquareTerminal, X } from "lucide-react";
+import { Bot, ClipboardList, Diff, FolderTree, LayoutDashboard, MessageCircleQuestion, SquareTerminal } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
@@ -82,7 +82,6 @@ export function PanelContainer() {
 	const t = useT();
 	const panelTab = useUiStore(s => s.panelTab);
 	const setPanelTab = useUiStore(s => s.setPanelTab);
-	const togglePanel = useUiStore(s => s.togglePanel);
 	const activeTabId = useTabsStore(s => s.activeTabId);
 	const split = useTabsStore(s => s.split);
 	const routeReady = useActiveTabRouteReady();
@@ -151,16 +150,15 @@ export function PanelContainer() {
 	return (
 		<aside
 			aria-busy={!routeReady}
-			data-inspector-left-edge={viewportWidth - panelWidth < 78 ? "" : undefined}
+			data-inspector-overlay={overlay || undefined}
 			className={cx(
-				"omp-inspector flex h-full flex-col border-l border-[var(--omp-border-muted)]",
-				overlay ? "absolute inset-y-0 right-0 z-30 shadow-[var(--omp-shadow-lg)]" : "relative shrink-0",
+				"omp-inspector flex flex-col border-l border-[var(--omp-border-muted)]",
+				overlay ? "absolute top-12 right-0 bottom-0 z-30 shadow-[var(--omp-shadow-lg)]" : "relative h-full shrink-0",
 				!routeReady && "pointer-events-none",
 			)}
 			style={{ width: panelWidth }}
 		>
-			{/* One header row: the view switcher and the close control. The panel's
-	    name is announced, not printed - the tabs already say what it holds. */}
+			{/* The title-bar toggle stays visible above an overlay, including at full width. */}
 			<div className="omp-inspector-header drag-region flex h-12 shrink-0 items-center gap-2 border-b border-[var(--omp-border-muted)] pl-3">
 				<h2 className="sr-only">
 					{t("panel.title")} - {t("panel.subtitle")}
@@ -192,14 +190,6 @@ export function PanelContainer() {
 						);
 					})}
 				</div>
-				<button
-					type="button"
-					onClick={togglePanel}
-					title={t("panel.close")}
-					className="omp-pressable no-drag ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
-				>
-					<X size={16} />
-				</button>
 			</div>
 			<div className="min-h-0 flex-1 overflow-hidden">
 				<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>

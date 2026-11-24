@@ -11,6 +11,12 @@ import { Puzzle, RefreshCw, Search, Settings2, ShieldAlert, X } from "lucide-rea
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
+import {
+	capturePluginActivationOrigin,
+	isPluginActivationOriginActive,
+	type PluginActivationOrigin,
+} from "../../lib/plugin-activation";
+import { useSessionStore } from "../../stores/session";
 import { useUiStore } from "../../stores/ui";
 import { Button, ConfirmDialog, Modal, Spinner, Tabs } from "../common";
 import { CopyableError } from "./inventory/ErrorNote";
@@ -33,24 +39,34 @@ import { PanelEmpty } from "./workspace-ui";
 /** Catalogs bring dozens of categories, most with a plugin or two; the rest sit behind "More". */
 const TOP_CATEGORIES = 12;
 
-export function PluginsWindow() {
+type PluginCatalogSurfaceProps =
+	| { query: string; onOpenSection: (tab: "marketplaces" | "plugins") => void }
+	| { open: boolean; onClose: () => void };
+
+export function PluginCatalogSurface(props: PluginCatalogSurfaceProps) {
 	const t = useT();
-	const open = useUiStore(s => s.pluginsOpen);
-	const close = useUiStore(s => s.closePlugins);
+	const embedded = "query" in props;
+	const open = embedded || props.open;
 	const catalog = usePluginCatalog(open);
 	const categoryLabel = usePluginCategoryLabel();
 
-	const [query, setQuery] = useState("");
+	const [localQuery, setQuery] = useState("");
+	const query = embedded ? props.query : localQuery;
 	const [view, setView] = useState<CatalogFilter["view"]>("all");
 	const [category, setCategory] = useState<string | null>(null);
 	const [catalogFilter, setCatalogFilter] = useState<string | null>(null);
 	const [allCategories, setAllCategories] = useState(false);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
-	const [pendingInstall, setPendingInstall] = useState<CatalogPlugin | null>(null);
+	const [pendingInstall, setPendingInstall] = useState<{
+		plugin: CatalogPlugin;
+		origin: PluginActivationOrigin;
+		cwd: string;
+	} | null>(null);
 
 	// Opening the page starts at the list. Search and filters stay, as they're easy to clear and slow to redo.
 	useLayoutEffect(() => {
 		if (open) setSelectedId(null);
+		setPendingInstall(null);
 	}, [open]);
 
 	const { plugins, marketplaces, busy, canAct, actionErrors, runAction, isCatalogTrusted, trustCatalog } = catalog;
@@ -80,7 +96,8 @@ export function PluginsWindow() {
 	const requestAction = useCallback(
 		(plugin: CatalogPlugin, action: PluginAction): void => {
 			if (action === "install" && !isCatalogTrusted(plugin.marketplaceSource)) {
-				setPendingInstall(plugin);
+				const origin = capturePluginActivationOrigin();
+				if (origin) setPendingInstall({ plugin, origin, cwd: useSessionStore.getState().cwd });
 				return;
 			}
 			void runAction(plugin, action);
@@ -89,18 +106,29 @@ export function PluginsWindow() {
 	);
 
 	const confirmInstall = (): void => {
-		const plugin = pendingInstall;
-		if (!plugin) return;
+		const pending = pendingInstall;
+		if (!pending) return;
 		setPendingInstall(null);
+		const { plugin, origin, cwd } = pending;
+		if (
+			actionDisabled ||
+			!isPluginActivationOriginActive(origin) ||
+			cwd !== useSessionStore.getState().cwd ||
+			!marketplaces.some(entry => entry.name === plugin.marketplace && entry.source === plugin.marketplaceSource)
+		) {
+			return;
+		}
 		void trustCatalog(plugin.marketplaceSource);
 		void runAction(plugin, "install");
 	};
 
-	const openInSettings = (tab: "marketplaces" | "plugins"): void => {
-		close();
-		useUiStore.getState().openSettings(`resources:${tab}`);
+	const openSection = (tab: "marketplaces" | "plugins"): void => {
+		if (embedded) props.onOpenSection(tab);
+		else {
+			props.onClose();
+			useUiStore.getState().openSettings(`resources:${tab}`);
+		}
 	};
-
 	const clearFilters = (): void => {
 		setQuery("");
 		setCategory(null);
@@ -162,7 +190,7 @@ export function PluginsWindow() {
 								<Button onClick={() => void catalog.addDefaultCatalogs()} size="sm">
 									{t("plugins.addDefaults")}
 								</Button>
-								<Button onClick={() => openInSettings("marketplaces")} size="sm" variant="ghost">
+								<Button onClick={() => openSection("marketplaces")} size="sm" variant="ghost">
 									{t("plugins.manageCatalogs")}
 								</Button>
 							</div>
@@ -198,9 +226,11 @@ export function PluginsWindow() {
 					) : (
 						<PanelEmpty
 							action={
-								<Button onClick={clearFilters} size="sm" variant="ghost">
-									{t("plugins.clearFilters")}
-								</Button>
+								(!embedded || category !== null || activeCatalog !== null || view !== "all") && (
+									<Button onClick={clearFilters} size="sm" variant="ghost">
+										{t("plugins.clearFilters")}
+									</Button>
+								)
 							}
 							icon={Search}
 							title={t("plugins.noMatches")}
@@ -229,37 +259,39 @@ export function PluginsWindow() {
 
 	const showFilters = plugins.length > 0;
 
-	return (
-		<Modal dockable bodyClassName="p-0" onClose={close} open={open} size="full" title={t("plugins.title")}>
-			<div className="flex h-full min-h-0 flex-col">
+	const contents = (
+		<>
+			<div className={cx("flex min-h-0 flex-col", !embedded && "h-full")}>
 				{/* The list stays mounted behind a plugin's page, so Back returns to the same scroll and filters. */}
 				<div className={cx("flex min-h-0 flex-1 flex-col", selected && "hidden")}>
 					<div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-(--omp-border-muted) px-4 py-2.5">
-						<div className="relative min-w-[12rem] flex-1">
-							<Search
-								className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-(--omp-dim)"
-								size={13}
-							/>
-							<input
-								aria-label={t("plugins.search")}
-								className="w-full rounded-md border border-(--omp-input-border) bg-(--omp-input-bg) py-1.5 pr-7 pl-8 text-omp-sm text-(--omp-text) placeholder:text-(--omp-dim) focus:border-(--omp-input-focus-border) focus:outline-none"
-								onChange={event => setQuery(event.target.value)}
-								placeholder={t("plugins.search")}
-								spellCheck={false}
-								type="text"
-								value={query}
-							/>
-							{query && (
-								<button
-									aria-label={t("plugins.clearSearch")}
-									className="absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded text-(--omp-dim) hover:text-(--omp-text)"
-									onClick={() => setQuery("")}
-									type="button"
-								>
-									<X size={12} />
-								</button>
-							)}
-						</div>
+						{!embedded && (
+							<div className="relative min-w-[12rem] flex-1">
+								<Search
+									className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-(--omp-dim)"
+									size={13}
+								/>
+								<input
+									aria-label={t("plugins.search")}
+									className="w-full rounded-md border border-(--omp-input-border) bg-(--omp-input-bg) py-1.5 pr-7 pl-8 text-omp-sm text-(--omp-text) placeholder:text-(--omp-dim) focus:border-(--omp-input-focus-border) focus:outline-none"
+									onChange={event => setQuery(event.target.value)}
+									placeholder={t("plugins.search")}
+									spellCheck={false}
+									type="text"
+									value={query}
+								/>
+								{query && (
+									<button
+										aria-label={t("plugins.clearSearch")}
+										className="absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded text-(--omp-dim) hover:text-(--omp-text)"
+										onClick={() => setQuery("")}
+										type="button"
+									>
+										<X size={12} />
+									</button>
+								)}
+							</div>
+						)}
 						{marketplaces.length > 0 && (
 							<select
 								aria-label={t("plugins.catalogFilter")}
@@ -279,19 +311,21 @@ export function PluginsWindow() {
 								))}
 							</select>
 						)}
-						<Tabs
-							activeId={view}
-							ariaLabel={t("plugins.title")}
-							compact
-							onChange={id => setView(id as CatalogFilter["view"])}
-							tabs={[
-								{ id: "all", label: t("plugins.view.all"), badge: inCatalog.length },
-								{ id: "installed", label: t("plugins.view.installed"), badge: installedCount },
-							]}
-						/>
+						{!embedded && (
+							<Tabs
+								activeId={view}
+								ariaLabel={t("plugins.title")}
+								compact
+								onChange={id => setView(id as CatalogFilter["view"])}
+								tabs={[
+									{ id: "all", label: t("plugins.view.all"), badge: inCatalog.length },
+									{ id: "installed", label: t("plugins.view.installed"), badge: installedCount },
+								]}
+							/>
+						)}
 						<Button
 							icon={<Settings2 size={12} />}
-							onClick={() => openInSettings("marketplaces")}
+							onClick={() => openSection("marketplaces")}
 							size="sm"
 							variant="ghost"
 						>
@@ -368,20 +402,33 @@ export function PluginsWindow() {
 						key={selected.id}
 						onAction={action => requestAction(selected, action)}
 						onBack={() => setSelectedId(null)}
-						onOpenSettings={() => openInSettings("plugins")}
+						onOpenSettings={() => openSection("plugins")}
 						plugin={selected}
 					/>
 				)}
 			</div>
 			<ConfirmDialog
+				busy={actionDisabled}
 				confirmLabel={t("plugins.trust.confirm")}
-				message={t("plugins.trust.message", { catalog: pendingInstall?.marketplace ?? "" })}
+				message={t("plugins.trust.message", { catalog: pendingInstall?.plugin.marketplace ?? "" })}
 				onCancel={() => setPendingInstall(null)}
 				onConfirm={confirmInstall}
 				open={pendingInstall !== null}
-				title={t("plugins.trust.title", { name: pendingInstall?.title ?? "" })}
+				title={t("plugins.trust.title", { name: pendingInstall?.plugin.title ?? "" })}
 				warning={t("plugins.trust.warning")}
 			/>
+		</>
+	);
+	if (embedded) return contents;
+	return (
+		<Modal dockable bodyClassName="p-0" onClose={props.onClose} open={open} size="full" title={t("plugins.title")}>
+			{contents}
 		</Modal>
 	);
+}
+
+export function PluginsWindow() {
+	const open = useUiStore(s => s.pluginsOpen);
+	const close = useUiStore(s => s.closePlugins);
+	return <PluginCatalogSurface onClose={close} open={open} />;
 }

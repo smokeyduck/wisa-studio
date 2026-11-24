@@ -14,8 +14,6 @@ import type {
 	FsTreeEntry,
 	IpcBenchmarkRunOptions,
 	IpcBenchmarkRunResult,
-	IpcBrowserActionPayload,
-	IpcBrowserViewportPayload,
 	IpcCloseTabPayload,
 	IpcCollabPhoneAutoStartPayload,
 	IpcCollabPhoneTabPayload,
@@ -41,6 +39,7 @@ import type {
 	IpcPluginInspectPayload,
 	IpcPrefsGetPayload,
 	IpcPrefsSetPayload,
+	IpcProjectAuditResponse,
 	IpcResolvedPath,
 	IpcRpcCommandForTabPayload,
 	IpcRpcCommandPayload,
@@ -75,19 +74,20 @@ import { parseLaunchProfile } from "../shared/launch-profile";
 import type { DroppedProxy } from "../shared/proxy";
 import type { RpcCommand, RpcSessionState } from "../shared/rpc-types";
 import { isSessionOutputPath } from "../shared/session-output";
-import { requestQuit } from "./app-quit";
+import { CODING_TOOL_PROFILE_PREF, WORK_TOOL_PROFILE_PREF } from "../shared/tool-profiles";
+import { quitRisk, requestQuit, requestRestart } from "./app-quit";
 import { BenchmarkRunner } from "./benchmark-runner";
-import type { BrowserHost } from "./browser-host";
 import type { CollabPhoneHost } from "./collab-phone";
 import type { ConversationIndex } from "./conversation-index";
 import { type CustomThemesWatcher, deleteCustomTheme, readCustomThemes, saveCustomTheme } from "./custom-themes";
 import { ensureDefaultWorkspace } from "./default-workspace";
 import { readDocumentPreview } from "./document-preview";
 import { openInExternalEditor, openMacConfigEditor } from "./editor";
-import { setWindowFileDrafts } from "./file-draft-guard";
+import { hasUnsavedFileDrafts, setWindowFileDrafts } from "./file-draft-guard";
 import { readImageFile } from "./fs-image";
-import { mainT } from "./i18n";
+import { getMainLanguage, mainT } from "./i18n";
 import type { LogWatcher } from "./log-watcher";
+import { listMcpCatalog } from "./mcp-catalog";
 import type { MemoryWatcher } from "./memory-watcher";
 import { createMenu } from "./menu";
 import { deleteModelsProvider, listModelsProviders, modelsPath, upsertModelsProvider } from "./models-config";
@@ -95,9 +95,12 @@ import { speakWithOsVoice } from "./os-speech";
 import type { PhoneHub } from "./phone-hub";
 import { preparePiper } from "./piper";
 import { PluginCatalog } from "./plugin-catalog";
+import { runProjectAudit } from "./project-audit";
+import { quitNeedsConfirmation } from "./quit-guard";
 import { fetchRemoteImage } from "./remote-image";
 import { runtimeLogPath, writeRuntimeLog } from "./runtime-log";
 import type { SchedulerHost } from "./scheduler/host";
+import type { RunnerDeps } from "./scheduler/runner";
 import type { SessionIndex } from "./session-index";
 import { resolveSessionOutputPath } from "./session-output-paths";
 import { resolveEditorCommand } from "./shell-env";
@@ -119,8 +122,6 @@ import { resolveExistingPath, resolveWithin, toAbsolutePath } from "./workspace-
 
 export interface IpcDeps {
 	sidecarPool: SidecarPool;
-	/** Every agent tab's built-in browser panel. */
-	browserHost: BrowserHost;
 	sessionIndex: SessionIndex;
 	statsClient: StatsClient;
 	/** Demand-driven revive for the bundled stats server (no server → "exhausted"). */
@@ -142,6 +143,7 @@ export interface IpcDeps {
 	initialCwd: () => string;
 	/** Scheduled tasks: owns `schedule_task` calls and hides run sessions from the sidebar. */
 	schedulerHost: SchedulerHost | null;
+	createRunSidecar: RunnerDeps["createSidecar"];
 	/** Phone access: auto-hosts tabs and answers the phone dialog's snapshot. */
 	collabPhone: CollabPhoneHost;
 	/** The one-link phone hub: one room listing every session (src/main/phone-hub.ts). */
@@ -199,23 +201,44 @@ async function previewPathFor(
 	return resolved ? { path: resolved.absolutePath } : { error: "Session output not found" };
 }
 
-const BROWSER_ACTIONS: ReadonlySet<string> = new Set<IpcBrowserActionPayload["action"]>([
-	"navigate",
-	"back",
-	"forward",
-	"reload",
-	"stop",
-	"select",
-	"close",
-	"devtools",
-	"external",
-	"find",
-	"stopFind",
-]);
-
 interface PrefsSchema {
 	[key: string]: unknown;
 }
+
+/** Display and runtime preferences only: preserve projects, session layouts, and catalog trust records. */
+const RESETTABLE_GUI_PREFS: ReadonlySet<string> = new Set([
+	CONFIG_EDITOR_PREF,
+	KEYMAP_DISABLED_PREF,
+	KEYMAP_OVERRIDES_PREF,
+	CODING_TOOL_PROFILE_PREF,
+	WORK_TOOL_PROFILE_PREF,
+	"approvalMode",
+	"codeLineNumbers",
+	"collapseLargePastes",
+	"colorBlindMode",
+	"compactDensity",
+	"confirmSessionDelete",
+	"defaultPanelTab",
+	"displayPreferences",
+	"followAgentTheme",
+	"fontSize",
+	"gui",
+	"language",
+	"launchProfiles",
+	"modelPicks",
+	"notifications",
+	"notificationsWhenFocused",
+	"notificationSound",
+	"proxyUrl",
+	"sidebarQuotas",
+	"sidebarWidth",
+	"tabRows",
+	"tabWidth",
+	"theme",
+	"themeName",
+	"thinkingExpanded",
+	"transcriptDetail",
+]);
 
 // ============================================================================
 // Workspace filesystem (fs:list / fs:read) — node:fs based, no sidecar session
@@ -446,6 +469,7 @@ function aggregateProgress(states: RunProgressState[]): RunProgressState {
 export function registerIpcHandlers(deps: IpcDeps): void {
 	const benchmarkRunners = new Map<number, BenchmarkRunner>();
 	const fileSearches = new Map<number, AbortController>();
+	const projectAudits = new Map<number, { id: string; controller: AbortController }>();
 	const { sidecarPool, sessionIndex, statsClient, logWatcher, memoryWatcher, customThemesWatcher, windowManager } =
 		deps;
 	const prefsStore = new Store<PrefsSchema>({ name: "prefs" });
@@ -457,6 +481,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		progressStates.delete(record.id);
 		benchmarkRunners.get(record.id)?.abort();
 		benchmarkRunners.delete(record.id);
+		projectAudits.get(record.id)?.controller.abort();
+		projectAudits.delete(record.id);
 	});
 
 	// Sidecar → owning-window event forwarding (events/status/extensionUi/
@@ -880,53 +906,6 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		return deps.sidecarPool.setTabOrder(win, payload.tabIds);
 	});
 
-	// Built-in browser. Every call names its tab, and the tab must belong to
-	// the calling window.
-	const browserTabWindow = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent, tabId: unknown) => {
-		const win = BrowserWindow.fromWebContents(event.sender);
-		if (!win || typeof tabId !== "string") return null;
-		// A detached browser window owns the pages it draws, so it speaks for the
-		// tab without holding that tab's sidecar.
-		if (deps.browserHost.ownsWindow(tabId, win)) return win;
-		return deps.sidecarPool.sidecarForTab(win, tabId) ? win : null;
-	};
-	ipcMain.handle(IPC_COMMANDS.BROWSER_GET_STATE, (event, payload: { tabId: string }) => {
-		return browserTabWindow(event, payload?.tabId) ? deps.browserHost.state(payload.tabId) : null;
-	});
-	ipcMain.handle(IPC_COMMANDS.BROWSER_OPEN, (event, payload: { tabId: string; url: string }) => {
-		const win = browserTabWindow(event, payload?.tabId);
-		if (!win || typeof payload.url !== "string") return null;
-		return deps.browserHost.open(payload.tabId, win, payload.url);
-	});
-	ipcMain.handle(IPC_COMMANDS.BROWSER_ACTION, (event, payload: IpcBrowserActionPayload) => {
-		if (!browserTabWindow(event, payload?.tabId) || typeof payload.pageId !== "number") return null;
-		if (!BROWSER_ACTIONS.has(payload.action)) return null;
-		if (payload.action === "navigate" && typeof payload.url !== "string") return null;
-		if (payload.action === "find" && typeof payload.text !== "string") return null;
-		return deps.browserHost.action(payload.tabId, payload.pageId, payload);
-	});
-	ipcMain.on(IPC_COMMANDS.BROWSER_SET_VIEWPORT, (event, payload: IpcBrowserViewportPayload) => {
-		const win = browserTabWindow(event, payload?.tabId);
-		if (!win) return;
-		const bounds = payload.bounds;
-		const valid =
-			bounds !== null &&
-			typeof bounds === "object" &&
-			[bounds.x, bounds.y, bounds.width, bounds.height].every(value => Number.isFinite(value));
-		deps.browserHost.setViewport(payload.tabId, win, valid ? bounds : null);
-	});
-	ipcMain.handle(IPC_COMMANDS.BROWSER_CAPTURE, (event, payload: { tabId: string }) => {
-		return browserTabWindow(event, payload?.tabId) ? deps.browserHost.capture(payload.tabId) : null;
-	});
-	ipcMain.handle(IPC_COMMANDS.BROWSER_DETACH, (event, payload: { tabId: string }) => {
-		if (!browserTabWindow(event, payload?.tabId)) return false;
-		return deps.browserHost.detach(payload.tabId);
-	});
-	ipcMain.on(IPC_COMMANDS.BROWSER_SET_SHORTCUTS, (_event, payload: { chords: unknown }) => {
-		const chords = Array.isArray(payload?.chords) ? payload.chords : [];
-		deps.browserHost.setAppShortcuts(chords.filter((chord): chord is string => typeof chord === "string"));
-	});
-
 	// Boot reconciliation: the window's tabs in acquisition order (the initial
 	// sidecar is tab 0 — main minted its tabId at acquire).
 	ipcMain.handle(IPC_COMMANDS.GET_TABS, event => {
@@ -1045,7 +1024,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		node: process.versions.node ?? "?",
 	}));
 	ipcMain.handle(IPC_COMMANDS.SYSTEM_OPEN_EXTERNAL, async (_event, url: string) => {
-		if (typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://"))) {
+		if (typeof url === "string" && /^https?:\/\//i.test(url)) {
 			await shell.openExternal(url);
 		}
 	});
@@ -1225,10 +1204,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 			throw new Error("Invalid preference key");
 		}
 		prefsStore.set(payload.key, payload.value);
-		// The proxy is spawn-time env: a spare booted under the old one must go.
-		if (payload.key === "proxyUrl") sidecarPool.refreshSpare();
+		// Spawn-time preferences must also replace a spare booted under the old values.
+		if (
+			payload.key === "proxyUrl" ||
+			payload.key === CODING_TOOL_PROFILE_PREF ||
+			payload.key === WORK_TOOL_PROFILE_PREF
+		) {
+			sidecarPool.refreshSpare();
+		}
 		if (payload.key === "language" && isLanguage(payload.value)) {
-			createMenu(windowManager, deps.spawnWindow, deps.browserHost);
+			createMenu(windowManager, deps.spawnWindow);
 			for (const window of BrowserWindow.getAllWindows()) {
 				window.webContents.send(IPC_EVENTS.LANGUAGE_CHANGED, payload.value);
 			}
@@ -1237,12 +1222,34 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		// follow at once, and every other window re-reads its keymap.
 		if (payload.key === KEYMAP_OVERRIDES_PREF || payload.key === KEYMAP_DISABLED_PREF) {
 			applyWindowToggle();
-			createMenu(windowManager, deps.spawnWindow, deps.browserHost);
+			createMenu(windowManager, deps.spawnWindow);
 			// Not the saving window: it already holds the newer state, and a reload
 			// racing its next save would flash the older one back.
 			for (const window of BrowserWindow.getAllWindows()) {
 				if (window.webContents !== event.sender) window.webContents.send(IPC_EVENTS.KEYMAP_CHANGED);
 			}
+		}
+	});
+
+	let resettingSettings = false;
+	const resetBlocked = () => quitNeedsConfirmation(quitRisk()) || hasUnsavedFileDrafts();
+	ipcMain.handle(IPC_COMMANDS.PREFS_RESET_SETTINGS, async event => {
+		if (resettingSettings || resetBlocked()) return "busy";
+		const sidecar = sidecarFor(deps, event);
+		if (sidecar?.status !== "ready" || !sidecar.rpcClient) return "offline";
+		resettingSettings = true;
+		try {
+			const response = await sidecar.rpcClient.command({ type: "reset_settings" });
+			if (!response.success) throw new Error(response.error);
+			const preserved = Object.entries(prefsStore.store).filter(([key]) => !RESETTABLE_GUI_PREFS.has(key));
+			prefsStore.store = Object.fromEntries(preserved);
+			sidecarPool.refreshSpare();
+			// Another window may have started work while Core flushed to disk.
+			if (resetBlocked()) return "saved";
+			requestRestart();
+			return "restarting";
+		} finally {
+			resettingSettings = false;
 		}
 	});
 
@@ -1520,6 +1527,39 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	ipcMain.handle(IPC_COMMANDS.PLUGIN_INSPECT, (_event, payload: IpcPluginInspectPayload) =>
 		pluginCatalog.inspect(payload),
 	);
+	ipcMain.handle(IPC_COMMANDS.MCP_CATALOG_LIST, (_event, payload: unknown) =>
+		listMcpCatalog((url, init) => net.fetch(url, init), payload),
+	);
+	ipcMain.handle(
+		IPC_COMMANDS.PROJECT_AUDIT_RUN,
+		async (event, id: unknown, tabId: unknown): Promise<IpcProjectAuditResponse> => {
+			const win = BrowserWindow.fromWebContents(event.sender);
+			if (!win || !windowManager.recordFor(win) || event.senderFrame !== event.sender.mainFrame) {
+				return { error: "failed" };
+			}
+			if (typeof id !== "string" || id.length !== 36 || typeof tabId !== "string" || !tabId)
+				return { error: "failed" };
+			const cwd = cwdFor(deps, event, tabId);
+			if (!cwd) return { error: "noProject" };
+			if (projectAudits.has(win.id)) return { error: "busy" };
+			const windowId = win.id;
+			const controller = new AbortController();
+			projectAudits.set(windowId, { id, controller });
+			try {
+				return await runProjectAudit(cwd, getMainLanguage(), id, controller.signal, deps.createRunSidecar);
+			} catch {
+				return { error: controller.signal.aborted ? "cancelled" : "failed" };
+			} finally {
+				projectAudits.delete(windowId);
+			}
+		},
+	);
+	ipcMain.handle(IPC_COMMANDS.PROJECT_AUDIT_CANCEL, (event, id: unknown) => {
+		const win = BrowserWindow.fromWebContents(event.sender);
+		if (!win || event.senderFrame !== event.sender.mainFrame) return;
+		const audit = projectAudits.get(win.id);
+		if (audit && audit.id === id) audit.controller.abort();
+	});
 
 	// Templates page: the catalog (live → cached → bundled) and installation.
 	ipcMain.handle(IPC_COMMANDS.TEMPLATES_CATALOG, () => readTemplatesCatalog());

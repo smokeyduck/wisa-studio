@@ -17,6 +17,7 @@
   "extPanel.tabs.hooks",
   "extPanel.tabs.mcp",
   "modesPanel.tabs.vibe",
+  "projectAudit.shortTitle",
   "benchmark.col.ttft",
   "providerCfg.form.baseUrlPlaceholder",
   "providerCfg.form.apiKeyPlaceholder",

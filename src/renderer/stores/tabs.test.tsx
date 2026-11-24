@@ -211,7 +211,7 @@ function fillLiveStores(tag: string): void {
 		planContent: `plan-${tag}`,
 		options: ["execute"],
 	});
-	usePlanApprovalStore.getState().setFeedback(`feedback-${tag}`);
+	usePlanApprovalStore.getState().setComments([{ id: `comment-${tag}`, quote: `quote-${tag}`, feedback: `feedback-${tag}` }]);
 	useExtensionUiStore.getState().pushRequest({
 		type: "extension_ui_request",
 		id: `ui-${tag}`,
@@ -556,7 +556,7 @@ describe("tabs store switch", () => {
 		expect(useModelStore.getState().model?.id).toBe("m-t0");
 		expect(useModelStore.getState().fastModeEnabled).toBe(true);
 		expect(usePlanApprovalStore.getState().pending?.planContent).toBe("plan-t0");
-		expect(usePlanApprovalStore.getState().feedback).toBe("feedback-t0");
+		expect(usePlanApprovalStore.getState().comments[0]?.quote).toBe("quote-t0");
 		expect(useExtensionUiStore.getState().pendingRequests.map(request => request.id)).toEqual([
 			"ui-t0",
 			"ui-t0-late",
@@ -591,10 +591,12 @@ describe("tabs store switch", () => {
 		expect(useSessionStore.getState().sessionId).toBe("s-t1");
 		expect(useSessionStore.getState().planModeEnabled).toBe(true);
 		expect(usePlanApprovalStore.getState().pending?.planContent).toBe("plan-t1");
+		expect(usePlanApprovalStore.getState().comments[0]?.quote).toBe("quote-t1");
 
 		await useTabsStore.getState().switchTab("t0");
 		expect(useSessionStore.getState().planModeEnabled).toBe(false);
 		expect(usePlanApprovalStore.getState().pending).toBeNull();
+		expect(usePlanApprovalStore.getState().comments).toEqual([]);
 	});
 
 	it("restores a failed submit to its background tab without touching the visible composer", async () => {
@@ -983,7 +985,13 @@ describe("tabs store applyTabStatus", () => {
 		useTabsStore.getState().applyTabStatus({ kind: "agent", tabId: "t1", cwd: "/beta", status: "running" });
 		expect(useTabsStore.getState().tabs.find(tab => tab.id === "t1")?.unreadDone).toBe(false);
 
-		useTabsStore.getState().applyTabStatus({ kind: "agent", tabId: "t1", cwd: "/beta", status: "ready" });
+		useTabsStore.getState().applyTabStatus({
+			kind: "agent",
+			tabId: "t1",
+			cwd: "/beta",
+			status: "ready",
+			settledRun: "complete",
+		});
 		expect(useTabsStore.getState().tabs.find(tab => tab.id === "t1")?.unreadDone).toBe(true);
 
 		await useTabsStore.getState().switchTab("t1");
@@ -1002,11 +1010,12 @@ describe("tabs store applyTabStatus", () => {
 			tabId: "t1",
 			cwd: "/beta",
 			status: "ready",
+			settledRun: "failed",
 			attention: "failed",
 			attentionDetail: "upstream overloaded",
 		});
 		apply({ kind: "agent", tabId: "t2", cwd: "/gamma", status: "running" });
-		apply({ kind: "agent", tabId: "t2", cwd: "/gamma", status: "ready" });
+		apply({ kind: "agent", tabId: "t2", cwd: "/gamma", status: "ready", settledRun: "complete" });
 		apply({ kind: "agent", tabId: "t0", cwd: "/alpha", status: "running" });
 		apply({ kind: "agent", tabId: "t0", cwd: "/alpha", status: "ready" });
 
@@ -1017,6 +1026,16 @@ describe("tabs store applyTabStatus", () => {
 		expect(useToastStore.getState().toasts[0]?.message).toBe("upstream overloaded");
 		const failed = useTabsStore.getState().tabs.find(tab => tab.id === "t1");
 		expect(failed && tabSignalPresentation(failed).labelKey).toBe("tabs.failed");
+	});
+
+	it("does not mark a background ready transition without an outcome as successful", () => {
+		seedTabs();
+		useToastStore.setState({ toasts: [] });
+		const apply = useTabsStore.getState().applyTabStatus;
+		apply({ kind: "agent", tabId: "t1", cwd: "/beta", status: "running" });
+		apply({ kind: "agent", tabId: "t1", cwd: "/beta", status: "ready" });
+		expect(useTabsStore.getState().tabs.find(tab => tab.id === "t1")?.unreadDone).toBe(false);
+		expect(useToastStore.getState().toasts).toEqual([]);
 	});
 
 	it("seeds a parked tab's retry row from main's snapshot, and clears it with the saga", () => {

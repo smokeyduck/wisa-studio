@@ -1,40 +1,50 @@
 import { describe, expect, it } from "vitest";
 import type { ModelInfo } from "../../shared/rpc-types";
-import { serviceTierFamily, supportsFastMode } from "./service-tier";
+import { supportsFastMode, supportsPriorityMode, supportsUltrafastMode } from "./service-tier";
 
 const model = (over: Partial<ModelInfo>): ModelInfo => ({ provider: "openai", id: "gpt-5", ...over });
 
-describe("serviceTierFamily", () => {
-	it("classifies the official provider families", () => {
-		expect(serviceTierFamily(model({ provider: "openai" }))).toBe("openai");
-		expect(serviceTierFamily(model({ provider: "openai-codex", api: "openai-codex-responses" }))).toBe("openai");
-		expect(serviceTierFamily(model({ provider: "anthropic", id: "claude-sonnet-4-5" }))).toBe("anthropic");
-		expect(
-			serviceTierFamily(model({ provider: "amazon-bedrock", api: "anthropic-messages", id: "claude-sonnet-4-5" })),
-		).toBe("anthropic");
-		expect(serviceTierFamily(model({ provider: "google-vertex", id: "gemini-2.5-pro" }))).toBe("google");
+describe("Fast service tier capability", () => {
+	it("never infers a relay's capability from an OpenAI or Anthropic protocol or model name", () => {
+		for (const api of ["openai-completions", "openai-responses", "openai-codex-responses", "anthropic-messages"]) {
+			expect(supportsFastMode(model({ provider: "wisa", id: "gpt-5-fast", api }))).toBe(false);
+			expect(supportsFastMode(model({ provider: "acme", id: "claude-opus-5-5", api }))).toBe(false);
+		}
+		expect(supportsFastMode(model({ provider: "openrouter", id: "openai/gpt-5" }))).toBe(false);
 	});
 
-	it("classifies OpenRouter by the model id's namespace", () => {
-		expect(serviceTierFamily(model({ provider: "openrouter", id: "anthropic/claude-sonnet-4.5" }))).toBe("anthropic");
-		expect(serviceTierFamily(model({ provider: "openrouter", id: "google/gemini-2.5-pro" }))).toBe("google");
-		expect(serviceTierFamily(model({ provider: "openrouter", id: "openai/gpt-5" }))).toBe("openai");
-		expect(serviceTierFamily(model({ provider: "openrouter", id: "meta-llama/llama-4" }))).toBeUndefined();
+	it("keeps established first-party routes, but not endpoint overrides or unsupported Claude models", () => {
+		expect(supportsPriorityMode(model({ api: "openai-responses", baseUrl: "https://api.openai.com/v1" }))).toBe(true);
+		expect(supportsPriorityMode(model({ provider: "openai-codex", api: "openai-codex-responses" }))).toBe(true);
+		expect(supportsPriorityMode(model({ provider: "anthropic", id: "claude-opus-5-5" }))).toBe(true);
+		expect(supportsPriorityMode(model({ provider: "anthropic", id: "claude-sonnet-4-5" }))).toBe(false);
+		expect(supportsPriorityMode(model({ provider: "google-vertex", api: "google-vertex" }))).toBe(true);
+		expect(supportsPriorityMode(model({ provider: "google-vertex", api: "anthropic-messages" }))).toBe(false);
+		expect(supportsPriorityMode(model({ api: "openai-responses", baseUrl: "https://api.openai.com.relay.test/v1" }))).toBe(
+			false,
+		);
 	});
 
-	it("treats a relay serving OpenAI ids as the OpenAI family, and the ones that refuse the field as none", () => {
-		expect(serviceTierFamily(model({ provider: "wisa", id: "gpt-5", api: "openai-completions" }))).toBe("openai");
-		expect(serviceTierFamily(model({ provider: "wisa", id: "claude-sonnet-4-5", api: "openai-completions" }))).toBeUndefined();
-		expect(serviceTierFamily(model({ provider: "fireworks", id: "gpt-5", api: "openai-completions" }))).toBeUndefined();
-		expect(
-			serviceTierFamily(model({ provider: "github-copilot", id: "gpt-5", api: "openai-responses" })),
-		).toBeUndefined();
+	it("requires each exact premium tier when the route advertises metadata", () => {
+		const codex = { provider: "openai-codex", api: "openai-codex-responses" };
+		expect(supportsPriorityMode(model({ ...codex, serviceTiers: [] }))).toBe(false);
+		expect(supportsPriorityMode(model({ ...codex, serviceTiers: ["priority-high"] }))).toBe(false);
+		expect(supportsPriorityMode(model({ ...codex, serviceTiers: ["priority"] }))).toBe(true);
+		expect(supportsUltrafastMode(model({ ...codex, serviceTiers: ["priority"] }))).toBe(false);
+		const ultraOnly = model({ ...codex, serviceTiers: ["ultrafast"] });
+		expect(supportsPriorityMode(ultraOnly)).toBe(false);
+		expect(supportsUltrafastMode(ultraOnly)).toBe(true);
+		expect(supportsFastMode(ultraOnly)).toBe(true);
 	});
 
-	it("reports no family for models without a serving-priority knob", () => {
-		expect(serviceTierFamily(null)).toBeUndefined();
-		expect(serviceTierFamily(model({ provider: "wisa", id: "wisa-pro", api: "openai-completions" }))).toBeUndefined();
-		expect(supportsFastMode(model({ provider: "wisa", id: "wisa-pro" }))).toBe(false);
-		expect(supportsFastMode(model({ provider: "anthropic", id: "claude-sonnet-4-5" }))).toBe(true);
+	it("honors positive metadata only for a route the agent can use", () => {
+		const relay = model({ provider: "wisa", api: "openai-completions", serviceTiers: ["priority"] });
+		expect(supportsPriorityMode(relay)).toBe(true);
+		expect(supportsPriorityMode({ ...relay, identity: { class: "grok" } })).toBe(false);
+		expect(supportsPriorityMode({ ...relay, provider: "github-copilot" })).toBe(false);
+		expect(supportsPriorityMode({ ...relay, api: "anthropic-messages" })).toBe(false);
+		expect(supportsPriorityMode({ ...relay, provider: "openrouter", id: "google/gemini-2.5-pro" })).toBe(true);
+		expect(supportsPriorityMode({ ...relay, provider: "openrouter", id: "anthropic/claude-opus-5-5" })).toBe(false);
+		expect(supportsFastMode(null)).toBe(false);
 	});
 });

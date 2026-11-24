@@ -23,22 +23,65 @@ export const DEFAULT_CATALOGS: readonly DefaultCatalog[] = [
 	{ source: "anthropics/knowledge-work-plugins", name: "knowledge-work-plugins" },
 	{ source: "anthropics/skills", name: "anthropic-agent-skills" },
 	{ source: "anthropics/financial-services-plugins", name: "claude-for-financial-services" },
+	{ source: "anthropics/life-sciences", name: "life-sciences" },
 	// Other vendors' official catalogs, in alphabetical order of the vendor. Each
 	// `name` is the name the catalog gives itself, which is how the agent keys its
 	// registry and how a copy added some other way is recognised.
+	{ source: "adobe/skills", name: "adobe-skills" },
+	{ source: "awslabs/agent-plugins", name: "agent-plugins-for-aws" },
+	{ source: "aws/agent-toolkit-for-aws", name: "agent-toolkit-for-aws" },
+	{ source: "arize-ai/phoenix", name: "arize-phoenix" },
+	{ source: "auth0/agent-skills", name: "auth0-agent-skills" },
+	{ source: "better-auth/skills", name: "better-auth-agent-skills" },
+	{ source: "browserbase/skills", name: "browserbase" },
+	{ source: "clerk/skills", name: "clerk-skills" },
 	{ source: "cloudflare/skills", name: "cloudflare" },
+	{ source: "databricks/databricks-agent-skills", name: "databricks-agent-skills" },
+	{ source: "datadog-labs/agent-skills", name: "datadog-labs" },
+	{ source: "elastic/agent-skills", name: "elastic-agent-skills" },
+	{ source: "expo/skills", name: "expo-plugins" },
+	{ source: "firebase/agent-skills", name: "firebase" },
+	{ source: "flutter/agent-plugins", name: "dart-flutter" },
+	{ source: "google/skills", name: "google-plugins" },
+	{ source: "google-gemini/gemini-skills", name: "gemini-skills" },
+	{ source: "grafana/skills", name: "grafana-skills" },
 	{ source: "getsentry/sentry-skills", name: "sentry-skills" },
+	{ source: "hashicorp/agent-skills", name: "hashicorp" },
 	{ source: "huggingface/skills", name: "huggingface-skills" },
+	{ source: "langchain-ai/langchain-skills", name: "langchain-skills" },
+	{ source: "microsoft/azure-skills", name: "azure-skills" },
+	{ source: "dotnet/skills", name: "dotnet-agent-skills" },
 	// Microsoft's own catalog is named just "skills"; keeping its name is what lets a
 	// copy someone added under another address be recognised.
 	{ source: "microsoft/skills", name: "skills" },
+	{ source: "mongodb/agent-skills", name: "mongodb-plugins" },
+	{ source: "n8n-io/skills", name: "n8n-io" },
+	{ source: "nvidia/skills", name: "nvidia-official" },
 	{ source: "openai/codex-plugin-cc", name: "openai-codex" },
+	{ source: "pydantic/skills", name: "pydantic-skills" },
+	{ source: "railwayapp/railway-skills", name: "railway-skills" },
+	{ source: "render-oss/skills", name: "render-plugins" },
+	{ source: "sanity-io/agent-toolkit", name: "sanity-agent-toolkit" },
+	{ source: "Shopify/liquid-skills", name: "liquid-skills" },
+	{ source: "stripe/ai", name: "stripe" },
 	{ source: "supabase/agent-skills", name: "supabase-agent-skills" },
+	{ source: "sveltejs/ai-tools", name: "svelte" },
+	{ source: "upstash/context7", name: "context7-marketplace" },
+	{ source: "vercel/vercel-plugin", name: "vercel" },
+	{ source: "workos/skills", name: "workos" },
 	// Community catalogs last: they only win a duplicate when nothing above lists it.
 	{ source: "wshobson/agents", name: "claude-code-workflows" },
 	{ source: "trailofbits/skills", name: "trailofbits" },
 	{ source: "obra/superpowers-marketplace", name: "superpowers-marketplace" },
 	{ source: "phuryn/pm-skills", name: "pm-skills" },
+	{ source: "addyosmani/agent-skills", name: "addy-agent-skills" },
+	{ source: "affaan-m/ECC", name: "ecc" },
+	{ source: "coreyhaines31/marketingskills", name: "marketingskills" },
+	{ source: "EveryInc/compound-engineering-plugin", name: "compound-engineering-plugin" },
+	{ source: "mattpocock/skills", name: "mattpocock" },
+	{ source: "VoltAgent/awesome-claude-code-subagents", name: "voltagent-subagents" },
+	// Anthropic hosts this mirror, but its listings are third-party, not first-party Anthropic plugins.
+	{ source: "anthropics/claude-plugins-community", name: "claude-community" },
 ];
 
 /** Whether this catalog is already configured, under any address. The agent treats names case-insensitively. */
@@ -148,19 +191,39 @@ function isSamePlugin(a: RpcMarketplacePluginInfo, b: RpcMarketplacePluginInfo):
 	return Boolean(a.description) && a.description === b.description;
 }
 
+const defaultCatalogRank = new Map(DEFAULT_CATALOGS.map(({ name }, rank) => [name.toLowerCase(), rank]));
+
+function precedesAsDefault(candidate: CatalogPlugin, current: CatalogPlugin): boolean {
+	const candidateRank = defaultCatalogRank.get(candidate.marketplace.toLowerCase());
+	if (candidateRank === undefined) return false;
+	const currentRank = defaultCatalogRank.get(current.marketplace.toLowerCase());
+	return currentRank !== undefined && candidateRank < currentRank;
+}
+
 /**
  * One card per plugin when several catalogs list it: the installed copy, or else
- * the earliest catalog's. A shared name isn't enough, since two catalogs can use
- * the same name for different plugins, and two installed copies both stay so
- * either can be removed.
+ * the earlier default, or the first encountered when either catalog is custom.
+ * An upgraded registry may list the defaults in a different order. A shared name
+ * isn't enough to identify a plugin, and two installed copies both stay so either
+ * can be removed.
  */
 export function dedupeCatalog(plugins: readonly CatalogPlugin[]): CatalogPlugin[] {
 	const kept: CatalogPlugin[] = [];
+	const byName = new Map<string, number[]>();
 	for (const plugin of plugins) {
-		const twin = kept.findIndex(entry => isSamePlugin(entry.info, plugin.info));
-		if (twin === -1) kept.push(plugin);
-		else if (plugin.info.installed && !kept[twin].info.installed) kept[twin] = plugin;
-		else if (plugin.info.installed) kept.push(plugin);
+		const { name } = plugin.info;
+		let candidates = byName.get(name);
+		if (!candidates) {
+			candidates = [];
+			byName.set(name, candidates);
+		}
+		const twin = candidates.find(index => isSamePlugin(kept[index].info, plugin.info));
+		if (twin === undefined || (plugin.info.installed && kept[twin].info.installed)) {
+			candidates.push(kept.length);
+			kept.push(plugin);
+		} else if (plugin.info.installed || (!kept[twin].info.installed && precedesAsDefault(plugin, kept[twin]))) {
+			kept[twin] = plugin;
+		}
 	}
 	return kept;
 }

@@ -1,23 +1,9 @@
-/**
- * Composer thinking-level control (Codex/Claude Code-style effort picker):
- * an explicit menu of every selector the ACTIVE MODEL supports — off, auto,
- * and the model's own effort ladder from get_state — with the current
- * selector checked. Replaces the blind click-to-cycle chip, which jumped to
- * an unspecified next value and offered no way to pick `auto` or go back.
- *
- * Data comes from the model store (`thinkingConfigured`, `availableThinkingLevels`,
- * hydrated from get_state and thinking_level_changed events); the store derives
- * the ladder from `model.thinking.efforts` because the sidecar never fills in
- * the flat list. Selection goes through `set_thinking_level`, which the agent
- * resolves/clamps per model.
- * The dropdown renders in a portal so the composer's overflow-hidden never
- * clips it (same pattern as ApprovalControl).
- */
+/** Composer reasoning control. Only the active model's verified selectors reach the portal menu. */
 
 import { Brain, Check, ChevronDown } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { type RpcThinkingLevelState, THINKING_LEVEL_VALUES, type ThinkingLevel } from "../../../shared/rpc-types";
+import type { RpcThinkingLevelState, ThinkingLevel } from "../../../shared/rpc-types";
 import { refreshModelState } from "../../hooks/session-hydration";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { isDevOverlayEvent } from "../../lib/dev-overlay";
@@ -43,21 +29,6 @@ const THEMED_LEVELS: Record<string, true> = {
 	xhigh: true,
 };
 
-/**
- * The menu, from what the ACTIVE MODEL reports. `off` and `auto` are the two
- * synthetic selectors the agent resolves itself (disable reasoning / let the
- * agent pick), so they only appear for a model that reasons at all — a
- * non-reasoning model gets the honest note instead of two dead rows. The
- * ladder is whatever the sidecar listed for this model, in effort order: a
- * level it never reported is never offered.
- */
-export function menuOptions(available: readonly ThinkingLevel[]): ThinkingSelector[] {
-	const reported = new Set<string>(available);
-	const ladder = THINKING_LEVEL_VALUES.filter(level => level !== "off" && reported.has(level));
-	if (ladder.length === 0) return [];
-	return ["off", "auto", ...ladder];
-}
-
 export function ThinkingControl() {
 	const t = useT();
 	const rpc = useTabRpc();
@@ -65,23 +36,18 @@ export function ThinkingControl() {
 	const modelStore = sessionRuntimeStore<ModelStore>(tabId, "model");
 	const thinkingLevel = useModelStore(s => s.thinkingLevel);
 	const configured = useModelStore(s => s.thinkingConfigured);
-	const available = useModelStore(s => s.availableThinkingLevels);
+	const options = useModelStore(s => s.availableThinkingSelectors);
 	const [open, setOpen] = useState(false);
 	const { mounted, closing } = useOverlayPresence(open);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
 
-	const options = menuOptions(available);
 	const supportsThinking = options.length > 0;
-	// The trigger must advertise only what the menu can offer. A store that still
-	// carries `thinkingConfigured: "auto"` from an event (the sidecar reports the
-	// effective level, never the ladder) must not claim a selector the model does
-	// not expose: with an empty ladder the trigger reads as "off" and the menu
-	// shows the honest unsupported note.
-	const current: ThinkingSelector = supportsThinking ? (configured ?? thinkingLevel ?? "off") : "off";
-	// An unsupported model reads "off", and a level without a themed var (`max`) falls back to it.
-	const colorLevel = supportsThinking && thinkingLevel && THEMED_LEVELS[thinkingLevel] ? thinkingLevel : "off";
+	const selected = configured ?? thinkingLevel;
+	const current = selected && options.includes(selected) ? selected : undefined;
+	const label = current ? t(`input.thinking.name.${current}`) : t("input.thinking.label");
+	const colorLevel = current && THEMED_LEVELS[current] ? current : "off";
 
 	// Opening the menu re-reads the model state: the ladder belongs to the model,
 	// and a stale store (a switch whose event never arrived, a tab hydrated while
@@ -150,6 +116,9 @@ export function ThinkingControl() {
 	};
 
 	const select = (level: ThinkingSelector) => {
+		const targetStore = modelStore ?? useModelStore;
+		const { model, availableThinkingSelectors } = targetStore.getState();
+		if (!availableThinkingSelectors.includes(level)) return;
 		setOpen(false);
 		const fallbackTabId = useTabsStore.getState().activeTabId;
 		const fallbackSessionId = useSessionStore.getState().sessionId;
@@ -171,7 +140,9 @@ export function ThinkingControl() {
 						useSessionStore.getState().sessionId !== fallbackSessionId)
 				)
 					return;
-				(modelStore ?? useModelStore).setState({
+				const currentModel = targetStore.getState().model;
+				if (currentModel?.provider !== model?.provider || currentModel?.id !== model?.id) return;
+				targetStore.setState({
 					thinkingLevel: state.thinkingLevel,
 					thinkingConfigured: state.thinkingConfigured,
 				});
@@ -190,15 +161,13 @@ export function ThinkingControl() {
 				aria-haspopup="menu"
 				onClick={() => setOpen(value => !value)}
 				title={
-					supportsThinking
-						? t("input.thinking", { level: t(`input.thinking.name.${current}`) })
-						: t("input.thinking.unsupported")
+					current ? t("input.thinking", { level: label }) : supportsThinking ? label : t("input.thinking.unsupported")
 				}
 				className="omp-pressable flex h-8 items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium hover:bg-[var(--omp-selected-bg)]"
 				style={{ color: `var(--omp-thinking-${colorLevel})` }}
 			>
 				<Brain size={14} />
-				<span className="omp-composer-control-label hidden sm:inline">{t(`input.thinking.name.${current}`)}</span>
+				<span className="omp-composer-control-label hidden sm:inline">{label}</span>
 				<ChevronDown size={12} className="shrink-0 text-[var(--omp-dim)]" />
 			</button>
 
