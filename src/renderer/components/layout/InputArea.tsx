@@ -807,7 +807,9 @@ export function InputArea() {
 											{t("input.paste.moreLines", { count: pasteMenu.lineCount - 2 })}
 										</span>
 									)}
-									<span className="truncate">{pasteMenu.content.slice(pasteMenu.content.lastIndexOf("\n") + 1)}</span>
+									<span className="truncate">
+										{pasteMenu.content.slice(pasteMenu.content.lastIndexOf("\n") + 1)}
+									</span>
 								</div>
 							)}
 						</div>
@@ -851,7 +853,9 @@ export function InputArea() {
 						<div
 							className="absolute -top-2 left-5 z-10 flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-omp-xs font-semibold"
 							style={{ borderColor: modeColor, color: modeColor, backgroundColor: "var(--omp-bg-primary)" }}
-							title={composerMode.mode === "btw" ? t("cmd.btw.desc") : t(`input.mode.${composerMode.mode}.title`)}
+							title={
+								composerMode.mode === "btw" ? t("cmd.btw.desc") : t(`input.mode.${composerMode.mode}.title`)
+							}
 						>
 							<span className="font-mono text-omp-sm leading-none">
 								{{ bash: "!", python: "$", btw: "?" }[composerMode.mode]}
