@@ -166,11 +166,14 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 		"Đồng thời chặn mọi chế độ ngủ hệ thống khi dùng nguồn điện và khai báo người dùng đang hoạt động (macOS `caffeinate -i -d -s -u`)",
 	"Never classify prompts for prewalk": "Không bao giờ phân loại câu lệnh cho Prewalk",
 	Suggest: "Gợi ý",
-	"Classify each task and report the decision without arming prewalk":
-		"Phân loại từng tác vụ và báo cáo quyết định mà không kích hoạt Prewalk",
+	"Classify each task and report the decision, and whether Escalate would plan on another model, without arming prewalk":
+		"Phân loại từng tác vụ, báo quyết định và cho biết chế độ Chuyển mô hình có lập kế hoạch trên mô hình khác hay không, mà không kích hoạt Prewalk",
 	On: "Bật",
 	"For confidently front-loaded tasks, arm a handoff from the active model to the auto target; the next task starts back on the planning model":
 		"Với những tác vụ chắc chắn cần dồn suy luận nặng ở đầu, chuẩn bị Handoff từ mô hình đang dùng sang mô hình đích tự động; tác vụ tiếp theo sẽ quay lại mô hình lập kế hoạch",
+	Escalate: "Chuyển mô hình",
+	"Like On, but plan on the Prewalk planning model (prewalk.from) first: a confidently front-loaded task moves there before setup and hands off from it; the next task starts back where this one started. When the planning model is already active, this is On, except that '@initial' then has nothing to hand back to":
+		"Giống chế độ Bật, nhưng lập kế hoạch bằng mô hình Prewalk (prewalk.from) trước: nếu tác vụ rõ ràng cần suy luận nhiều ở đầu, hệ thống chuyển sang mô hình này trước khi thiết lập rồi bàn giao từ đó. Tác vụ tiếp theo quay lại mô hình ban đầu. Nếu mô hình lập kế hoạch đang hoạt động, chế độ này giống Bật, chỉ khác là '@initial' không có mô hình để bàn giao lại",
 	"Auto-detect per prompt": "Tự động phát hiện theo từng câu lệnh",
 	min: "Tối thiểu",
 	"Very brief reasoning (~1k tokens)": "Suy luận rất ngắn (~1k token)",

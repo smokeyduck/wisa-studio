@@ -7,6 +7,10 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+## [0.9.56] - 2026-11-25
+
+Core source: `smokeyduck/oh-my-pi@9e97421512282acee98a5e728adf575c4b55895d` (Core 19.2.0).
+
 - The right sidebar toggle is clearly labeled and sits at the right edge of the tab bar. The title bar no longer repeats the active session status.
 - Reasoning starts at the model's declared default level when known. The composer only offers Off when the active route supports disabling reasoning.
 - Workspace histories start expanded unless they were explicitly collapsed.

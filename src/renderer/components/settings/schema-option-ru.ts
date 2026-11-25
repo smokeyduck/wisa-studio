@@ -193,11 +193,14 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 		"Блокировать переход системы в сон при питании от сети и считать пользователя активным (macOS `caffeinate -i -d -s -u`)",
 	"Never classify prompts for prewalk": "Не классифицировать промпты для Prewalk",
 	Suggest: "Предлагать",
-	"Classify each task and report the decision without arming prewalk":
-		"Классифицировать каждую задачу и сообщать решение, не активируя Prewalk",
+	"Classify each task and report the decision, and whether Escalate would plan on another model, without arming prewalk":
+		"Классифицировать каждую задачу и сообщать решение и то, будет ли режим «Эскалация» планировать на другой модели, не активируя Prewalk",
 	On: "Включено",
 	"For confidently front-loaded tasks, arm a handoff from the active model to the auto target; the next task starts back on the planning model":
 		"Для задач, которым уверенно нужны сложные рассуждения в начале, подготовить передачу от активной модели целевой модели; следующая задача снова начнётся на модели планирования",
+	Escalate: "Эскалация",
+	"Like On, but plan on the Prewalk planning model (prewalk.from) first: a confidently front-loaded task moves there before setup and hands off from it; the next task starts back where this one started. When the planning model is already active, this is On, except that '@initial' then has nothing to hand back to":
+		"Как «Включено», но сначала планировать на модели Prewalk (prewalk.from): если задача явно требует больше рассуждений в начале, до подготовки она переключится на эту модель и передаст работу с неё. Следующая задача начнётся на исходной модели. Если модель планирования уже активна, поведение такое же, как в режиме «Включено», но '@initial' некуда возвращать работу",
 	"Auto-detect per prompt": "Определять автоматически для каждого промпта",
 	min: "Минимальный",
 	"Very brief reasoning (~1k tokens)": "Очень краткие рассуждения (~1 тыс. токенов)",
