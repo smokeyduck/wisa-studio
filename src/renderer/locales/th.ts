@@ -2240,7 +2240,10 @@ export const th: Record<string, string> = {
 	"settings.gui.transcript.fullDesc": "แสดงบล็อก reasoning และการ์ดเครื่องมือทุกชิ้น",
 	"settings.gui.proxy": "พรอกซี HTTP",
 	"settings.gui.proxyDesc":
-		"route คำขอที่ agent ส่งไปผู้ให้บริการ (OAuth, streaming, การใช้งาน) ผ่านพรอกซีนี้ ใช้ได้เฉพาะพรอกซี HTTP และ HTTPS ไม่รวม SOCKS: ให้ใช้พอร์ต HTTP ของโปรแกรมพรอกซีของคุณ ปล่อยว่างเพื่อใช้พรอกซีของระบบ จะมีผลเมื่อ agent รีสตาร์ต - จะรีสตาร์ตให้เองเมื่อ agent ว่างอยู่",
+		"ส่งคำขอของเอเจนต์ไปยังผู้ให้บริการผ่านพรอกซี HTTP หรือ HTTPS ไม่รองรับ SOCKS เว้นว่างเพื่อใช้พรอกซีจากสภาพแวดล้อมตอนเปิดแอปหรือจากระบบ ที่อยู่ IP ในเครื่องและเครือข่ายส่วนตัวไม่ผ่านพรอกซี มีผลเมื่อเอเจนต์เริ่มใหม่",
+	"settings.gui.proxyDirect": "เชื่อมต่อตรงโดยไม่ใช้พรอกซี",
+	"settings.gui.proxyDirectDesc":
+		"คำขอของเอเจนต์จะไม่ใช้พรอกซีที่ตั้งไว้ที่นี่ จากสภาพแวดล้อมตอนเปิดแอป หรือจากระบบ มีผลเมื่อเอเจนต์เริ่มใหม่",
 	"settings.gui.proxyUnsupported":
 		"agent ใช้ได้เฉพาะพรอกซี HTTP และ HTTPS ที่อยู่นี้จึงไม่ถูกใช้ ให้ใส่พอร์ต HTTP ของโปรแกรมพรอกซีแทน เช่น http://127.0.0.1:7890",
 	"settings.gui.proxyApplied": "บันทึกพรอกซีแล้ว - กำลังรีสตาร์ต agent เพื่อให้มีผล…",
@@ -2955,6 +2958,7 @@ export const th: Record<string, string> = {
 	"chat.branchSaved": "สร้าง branch แล้ว เปิดได้จากเซสชันล่าสุด",
 	"chat.jumpToLatest": "ไปที่ล่าสุด",
 	"chat.process.title": "งาน",
+	"chat.process.collapse": "ยุบขั้นตอน",
 	"chat.process.statusRunning": "กำลังทำงาน {running} - {total} ขั้นตอน",
 	"chat.process.statusComplete": "{total} ขั้นตอนเสร็จสมบูรณ์",
 	"chat.process.statusFailed": "ล้มเหลว {failed} - {total} ขั้นตอน",
@@ -3050,6 +3054,10 @@ export const th: Record<string, string> = {
 	"chat.thinking.live": "Thinking…",
 	"chat.thinking.show": "แสดงการคิด",
 	"chat.thinking.hide": "ซ่อนการคิด",
+	"chat.thinking.collapse": "ยุบการคิด",
+	"tools.collapseOutput": "ยุบผลลัพธ์ของเครื่องมือ",
+	"readGroup.collapse": "ยุบรายการอ่าน",
+	"chat.context.collapseDetails": "ยุบรายละเอียด",
 	"chat.waitingForAnswer": "กำลังรอคำตอบจากคุณ",
 	"chat.awaitingModel": "กำลังรอโมเดล",
 	"chat.awaitingModel.announcement": "กำลังรอการตอบสนองของโมเดล…",

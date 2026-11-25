@@ -2215,6 +2215,8 @@ export interface AgentMessage {
 	optimisticAfterEntryId?: string | null;
 	/** The local echo has received its wire delivery and must not match another user message. */
 	optimisticDelivered?: boolean;
+	/** GUI-only command output; null means it preceded the first persisted transcript entry. */
+	commandOutputAfterEntryId?: string | null;
 	role:
 		| "user"
 		| "assistant"

@@ -8,6 +8,7 @@ import { I18nProvider } from "../../lib/i18n";
 import { useMessagesStore } from "../../stores/messages";
 import { useSessionStore } from "../../stores/session";
 import { useToolsStore } from "../../stores/tools";
+import { useUiStore } from "../../stores/ui";
 
 import { buildHistoryRows, locateEntryRow } from "./chat-stream-utils";
 import { MessageBubble } from "./MessageBubble";
@@ -46,6 +47,7 @@ const toolResultMessage: AgentMessage = {
 
 afterEach(() => {
 	useToolsStore.getState().reset();
+	useUiStore.getState().setThinkingExpanded(false);
 });
 
 it("renders an approved plan as expandable Markdown without displaying the execution instructions", () => {
@@ -228,6 +230,76 @@ describe("MessageBubble tool messages", () => {
 			expect(firstNode.textContent).not.toContain("SECOND_RESULT");
 			expect(secondNode.textContent).toContain("SECOND_RESULT");
 			expect(secondNode.textContent).not.toContain("FIRST_RESULT");
+		} finally {
+			await act(async () => root.unmount());
+			container.remove();
+		}
+	});
+});
+
+describe("MessageBubble disclosure footers", () => {
+	it("closes separate reasoning blocks in the same answer independently", async () => {
+		useUiStore.getState().setThinkingExpanded(true);
+		const container = document.createElement("div");
+		document.body.appendChild(container);
+		const root = createRoot(container);
+		try {
+			await act(async () => {
+				root.render(
+					<I18nProvider>
+						<MessageBubble
+							message={{
+								role: "assistant",
+								content: [
+									{ type: "thinking", thinking: "First thought" },
+									{ type: "text", text: "The answer." },
+									{ type: "thinking", thinking: "Second thought" },
+								],
+							}}
+						/>
+					</I18nProvider>,
+				);
+			});
+			const footers = Array.from(container.querySelectorAll<HTMLButtonElement>(".omp-collapse-button"));
+			const headers = Array.from(container.querySelectorAll(".omp-thinking-header"));
+			expect(footers).toHaveLength(2);
+			expect(headers.map(header => header.getAttribute("aria-expanded"))).toEqual(["true", "true"]);
+			await act(async () => footers[1]!.click());
+			expect(headers.map(header => header.getAttribute("aria-expanded"))).toEqual(["true", "false"]);
+			expect(container.textContent).toContain("The answer.");
+		} finally {
+			await act(async () => root.unmount());
+			container.remove();
+		}
+	});
+
+	it("closes only the file preview containing the clicked footer", async () => {
+		const container = document.createElement("div");
+		document.body.appendChild(container);
+		const root = createRoot(container);
+		try {
+			await act(async () => {
+				root.render(
+					<I18nProvider>
+						<MessageBubble
+							message={{
+								role: "fileMention",
+								files: [
+									{ path: "first.txt", content: "First preview" },
+									{ path: "second.txt", content: "Second preview" },
+								],
+							}}
+						/>
+					</I18nProvider>,
+				);
+			});
+			const previews = Array.from(container.querySelectorAll("details"));
+			expect(previews).toHaveLength(2);
+			for (const preview of previews) preview.setAttribute("open", "");
+			const footer = previews[0]!.querySelector<HTMLButtonElement>(".omp-collapse-button");
+			expect(footer?.textContent).toBe("Collapse details");
+			await act(async () => footer!.click());
+			expect(previews.map(preview => preview.hasAttribute("open"))).toEqual([false, true]);
 		} finally {
 			await act(async () => root.unmount());
 			container.remove();

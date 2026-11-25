@@ -327,6 +327,7 @@ export function SettingsWindow() {
 	const [fontSizeDraft, setFontSizeDraft] = useState<string | null>(null);
 	const [proxyDraft, setProxyDraft] = useState<string | null>(null);
 	const [savedProxy, setSavedProxy] = useState("");
+	const [proxyDirect, setProxyDirect] = useState(false);
 	const [proxySaving, setProxySaving] = useState(false);
 	const proxyPending = useRef(false);
 	const [launchProfile, setLaunchProfile] = useState<LaunchProfile>({});
@@ -510,7 +511,7 @@ export function SettingsWindow() {
 			activeNavRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 		}
 	}, [open, tab, navItems]);
-	// Load the persisted proxy pref each time the window opens.
+	// Load the persisted proxy preferences each time the window opens.
 	useEffect(() => {
 		if (!open) return;
 		let cancelled = false;
@@ -519,6 +520,12 @@ export function SettingsWindow() {
 			.get("proxyUrl")
 			.then(value => {
 				if (!cancelled) setSavedProxy(typeof value === "string" ? value : "");
+			})
+			.catch(() => {});
+		void window.omp.prefs
+			.get("proxyDirect")
+			.then(value => {
+				if (!cancelled) setProxyDirect(value === true);
 			})
 			.catch(() => {});
 		return () => {
@@ -602,24 +609,14 @@ export function SettingsWindow() {
 			setFontSizeDraft(null);
 		});
 	};
-	const commitProxy = async () => {
-		if (proxyDraft === null || proxyPending.current) return;
-		const next = proxyDraft.trim();
-		if (next === savedProxy) {
-			setProxyDraft(null);
-			return;
-		}
-		// The field says why; the draft stays so the address can be corrected in place.
-		if (isUnsupportedProxyUrl(next)) return;
+	// Both proxy preferences are applied when the focused agent next starts.
+	const saveProxyPref = async (key: "proxyUrl" | "proxyDirect", value: string | boolean | null, apply: () => void) => {
+		if (proxyPending.current) return;
 		const origin = focusedSessionRuntime();
 		proxyPending.current = true;
 		setProxySaving(true);
 		try {
-			const saved = await saveGuiPreference("proxyUrl", next || null, () => {
-				setSavedProxy(next);
-				setProxyDraft(draft => (draft === proxyDraft ? null : draft));
-			});
-			if (!saved) return;
+			if (!(await saveGuiPreference(key, value, apply))) return;
 			const restart = () => {
 				const state = useSessionStore.getState();
 				const executing = useMessagesStore
@@ -648,6 +645,27 @@ export function SettingsWindow() {
 			proxyPending.current = false;
 			setProxySaving(false);
 		}
+	};
+	const commitProxy = async () => {
+		if (proxyDirect || proxyDraft === null || proxyPending.current) return;
+		const next = proxyDraft.trim();
+		if (next === savedProxy) {
+			setProxyDraft(null);
+			return;
+		}
+		// The field says why; the draft stays so the address can be corrected in place.
+		if (isUnsupportedProxyUrl(next)) return;
+		await saveProxyPref("proxyUrl", next || null, () => {
+			setSavedProxy(next);
+			setProxyDraft(draft => (draft === proxyDraft ? null : draft));
+		});
+	};
+	const applyProxyDirect = async (next: boolean) => {
+		await saveProxyPref("proxyDirect", next, () => {
+			setProxyDirect(next);
+			setProxyDraft(null);
+		});
+		return false; // The toast already explains when the change takes effect.
 	};
 
 	// ── Launch profile (per-workspace, prefs `launchProfiles.<cwd>`) ──
@@ -1316,9 +1334,17 @@ export function SettingsWindow() {
 										{tab === ADVANCED_TAB_ID && (
 											<>
 												<Section id="setting-gui-proxy" title={t("settings.gui.proxy")}>
+													<Toggle
+														checked={proxyDirect}
+														className="omp-settings-row"
+														description={t("settings.gui.proxyDirectDesc")}
+														disabled={proxySaving}
+														label={t("settings.gui.proxyDirect")}
+														onChange={applyProxyDirect}
+													/>
 													<Input
 														compact
-														disabled={proxySaving}
+														disabled={proxySaving || proxyDirect}
 														onBlur={commitProxy}
 														onChange={event => setProxyDraft(event.target.value)}
 														onKeyDown={event => {
@@ -1329,7 +1355,7 @@ export function SettingsWindow() {
 														spellCheck={false}
 														value={proxyDraft ?? savedProxy}
 													/>
-													{isUnsupportedProxyUrl(proxyDraft ?? savedProxy) ? (
+													{!proxyDirect && isUnsupportedProxyUrl(proxyDraft ?? savedProxy) ? (
 														<p className="mt-1.5 text-omp-sm text-(--omp-error)" role="alert">
 															{t("settings.gui.proxyUnsupported")}
 														</p>

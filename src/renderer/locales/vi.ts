@@ -2234,7 +2234,10 @@ export const vi: Record<string, string> = {
 	"settings.gui.transcript.fullDesc": "Hiện mọi khối suy luận và thẻ công cụ.",
 	"settings.gui.proxy": "Proxy HTTP",
 	"settings.gui.proxyDesc":
-		"Định tuyến các yêu cầu tới nhà cung cấp của tác nhân (OAuth, streaming, mức dùng) qua proxy này. Chỉ hỗ trợ proxy HTTP và HTTPS, không hỗ trợ SOCKS: hãy dùng cổng HTTP của ứng dụng proxy. Để trống để theo proxy hệ thống. Áp dụng khi khởi động lại tác nhân - sẽ tự khởi động lại giúp bạn khi rảnh.",
+		"Chuyển yêu cầu của tác nhân đến nhà cung cấp qua proxy HTTP hoặc HTTPS, không hỗ trợ SOCKS. Để trống để dùng proxy từ môi trường khởi chạy hoặc hệ thống. Địa chỉ IP cục bộ và nội bộ không đi qua proxy. Thay đổi có hiệu lực khi tác nhân khởi động lại.",
+	"settings.gui.proxyDirect": "Kết nối trực tiếp, không qua proxy",
+	"settings.gui.proxyDirectDesc":
+		"Yêu cầu của tác nhân bỏ qua proxy chỉ định tại đây, proxy từ môi trường khởi chạy và proxy hệ thống. Có hiệu lực khi tác nhân khởi động lại.",
 	"settings.gui.proxyUnsupported":
 		"Tác nhân chỉ dùng proxy HTTP và HTTPS, nên địa chỉ này không được dùng. Hãy nhập cổng HTTP của ứng dụng proxy, ví dụ http://127.0.0.1:7890.",
 	"settings.gui.proxyApplied": "Đã lưu proxy - đang khởi động lại tác nhân để áp dụng…",
@@ -2877,6 +2880,7 @@ export const vi: Record<string, string> = {
 	"chat.branchSaved": "Đã tạo nhánh. Mở từ các phiên gần đây.",
 	"chat.jumpToLatest": "Chuyển đến mới nhất",
 	"chat.process.title": "Tác vụ",
+	"chat.process.collapse": "Thu gọn các bước",
 	"chat.process.statusRunning": "{running} đang chạy - {total} bước",
 	"chat.process.statusComplete": "{total} bước hoàn tất",
 	"chat.process.statusFailed": "{failed} thất bại - {total} bước",
@@ -2974,6 +2978,10 @@ export const vi: Record<string, string> = {
 	"chat.thinking.live": "Thinking…",
 	"chat.thinking.show": "Hiện suy luận",
 	"chat.thinking.hide": "Ẩn suy luận",
+	"chat.thinking.collapse": "Thu gọn suy luận",
+	"tools.collapseOutput": "Thu gọn kết quả công cụ",
+	"readGroup.collapse": "Thu gọn các lượt đọc",
+	"chat.context.collapseDetails": "Thu gọn chi tiết",
 	"chat.waitingForAnswer": "Đang đợi bạn trả lời",
 	"chat.awaitingModel": "Đang chờ mô hình",
 	"chat.awaitingModel.announcement": "Đang chờ phản hồi từ mô hình…",

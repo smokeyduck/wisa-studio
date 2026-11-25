@@ -220,7 +220,8 @@ export const GUI_SETTING_SEARCH_ITEMS = [
 	{
 		id: "proxy",
 		labelKey: "settings.gui.proxy",
-		aliases: "proxyUrl proxy socks network 代理 网络",
+		aliases:
+			"proxyUrl proxyDirect proxy socks network direct bypass kết nối trực tiếp bỏ qua proxy 代理 网络 直连 绕过",
 		tabId: ADVANCED_TAB_ID,
 	},
 	{

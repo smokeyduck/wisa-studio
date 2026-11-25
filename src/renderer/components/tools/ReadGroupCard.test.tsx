@@ -43,7 +43,7 @@ function runningRead(): ToolEntry {
 let container: HTMLElement;
 let root: Root;
 
-async function mount(runningIndicator: RunningIndicator = "spinner"): Promise<void> {
+async function mount(runningIndicator: RunningIndicator = "spinner", group = entries): Promise<void> {
 	useToolsStore.setState({
 		activeTools: new Map([
 			["read-1", runningRead()],
@@ -56,7 +56,7 @@ async function mount(runningIndicator: RunningIndicator = "spinner"): Promise<vo
 	await act(async () => {
 		root.render(
 			<I18nProvider>
-				<ReadGroupCard entries={entries} runningIndicator={runningIndicator} />
+				<ReadGroupCard entries={group} runningIndicator={runningIndicator} />
 			</I18nProvider>,
 		);
 	});
@@ -82,5 +82,17 @@ describe("ReadGroupCard running indicators", () => {
 		await mount("dot");
 		expect(container.querySelectorAll(".animate-spin, .animate-pulse")).toHaveLength(0);
 		expect(container.querySelectorAll(".omp-tool-status-icon")).toHaveLength(2);
+	});
+});
+
+describe("ReadGroupCard footer", () => {
+	it.each([1, 2])("closes a group with %i reads from its footer", async count => {
+		await mount("dot", entries.slice(0, count));
+		const header = container.querySelector(".omp-read-group-header");
+		const footer = container.querySelector<HTMLButtonElement>(".omp-collapse-button");
+		expect(header?.getAttribute("aria-expanded")).toBe("true");
+		expect(footer?.textContent).toBe("Collapse reads");
+		await act(async () => footer!.click());
+		expect(header?.getAttribute("aria-expanded")).toBe("false");
 	});
 });

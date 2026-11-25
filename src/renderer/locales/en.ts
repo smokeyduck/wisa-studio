@@ -2299,7 +2299,10 @@ export const en: Record<string, string> = {
 	"settings.gui.transcript.fullDesc": "Show every reasoning block and tool card.",
 	"settings.gui.proxy": "HTTP proxy",
 	"settings.gui.proxyDesc":
-		"Routes the agent's provider requests (OAuth, streaming, usage) through this proxy. HTTP and HTTPS proxies only, not SOCKS: use your proxy client's HTTP port. Leave empty to follow the system proxy. Applies on agent restart - restarted for you when idle.",
+		"Routes the agent's provider requests through an HTTP or HTTPS proxy, not SOCKS. Leave empty to use the launch environment or system proxy. Local and private IP addresses bypass the proxy. Changes apply when the agent restarts.",
+	"settings.gui.proxyDirect": "Connect directly without a proxy",
+	"settings.gui.proxyDirectDesc":
+		"Agent requests ignore the proxy configured here, inherited proxy settings, and the system proxy. Applies on agent restart.",
 	"settings.gui.proxyUnsupported":
 		"The agent only works with HTTP and HTTPS proxies, so this address isn't used. Enter your proxy client's HTTP port instead, such as http://127.0.0.1:7890.",
 	"settings.gui.proxyApplied": "Proxy saved - restarting the agent to apply…",
@@ -3032,6 +3035,7 @@ export const en: Record<string, string> = {
 	"chat.branchSaved": "Branch created. Open it from Recent sessions.",
 	"chat.jumpToLatest": "Jump to latest",
 	"chat.process.title": "Tasks",
+	"chat.process.collapse": "Collapse process",
 	"chat.process.statusRunning": "{running} running - {total} step{plural}",
 	"chat.process.statusComplete": "{total} step{plural} complete",
 	"chat.process.statusFailed": "{failed} failed - {total} step{plural}",
@@ -3129,6 +3133,10 @@ export const en: Record<string, string> = {
 	"chat.thinking.live": "Thinking…",
 	"chat.thinking.show": "Show reasoning",
 	"chat.thinking.hide": "Hide reasoning",
+	"chat.thinking.collapse": "Collapse reasoning",
+	"tools.collapseOutput": "Collapse tool output",
+	"readGroup.collapse": "Collapse reads",
+	"chat.context.collapseDetails": "Collapse details",
 	"chat.waitingForAnswer": "Waiting for your answer",
 	"chat.awaitingModel": "Waiting for the model",
 	"chat.awaitingModel.announcement": "Waiting for model response…",

@@ -217,6 +217,11 @@ function messageKey(message: AgentMessage): string {
 	return `${message.role}-${String(message.timestamp ?? "untimed")}`;
 }
 
+/** One process preference per assistant message, independent of row-key suffixes. */
+export function processExpansionKey(message: AgentMessage): string {
+	return `message-${messageKey(message)}`;
+}
+
 function transcriptRowBaseKey(row: Row): string {
 	switch (row.kind) {
 		case "queued":
@@ -227,7 +232,7 @@ function transcriptRowBaseKey(row: Row): string {
 			// Compact mode may replace one live assistant row with a process row,
 			// or split it into process + answer rows. Key the first finalized row
 			// by the same assistant identity so the viewport anchor survives both.
-			return `message-${messageKey(row.messages[0]!)}`;
+			return processExpansionKey(row.messages[0]!);
 		case "readGroup":
 			return `read-${row.entries.map(entry => entry.toolKey).join("-")}`;
 		case "todoSnapshot":
@@ -239,7 +244,7 @@ function transcriptRowBaseKey(row: Row): string {
 			// Reusing it prevents the virtualizer from replacing one huge measured
 			// streaming row with a fresh 72px estimate, briefly clamping scrollTop
 			// to the end before the finalized row is measured.
-			return `message-${messageKey(row.message)}`;
+			return processExpansionKey(row.message);
 		case "pending":
 			return row.kind;
 		case "turnChanges":
@@ -439,7 +444,7 @@ export function matchTodoReminder(message: AgentMessage): RegExpExecArray | null
 export function buildHistoryRows(
 	messages: AgentMessage[],
 	detail: TranscriptDetail,
-	preservedProcessStarts?: ReadonlySet<string>,
+	preservedProcessStarts?: Pick<ReadonlySet<string>, "has">,
 ): HistoryRow[] {
 	const rows: HistoryRow[] = [];
 	let processMessages: AgentMessage[] = [];
@@ -453,8 +458,8 @@ export function buildHistoryRows(
 	for (let index = 0; index < messages.length; index++) {
 		const incoming = messages[index];
 		if (!incoming) continue;
-		// Keep an explicitly opened live phase in place when it finalizes.
-		if (preservedProcessStarts?.has(`message-${messageKey(incoming)}`)) flushProcess();
+		// Keep an interacted-with live phase separate on finalization and after closing it.
+		if (preservedProcessStarts?.has(processExpansionKey(incoming))) flushProcess();
 		let message = incoming;
 		if (message.role === "assistant") {
 			if (reactionTargetIndex !== undefined) {

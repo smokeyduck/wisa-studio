@@ -20,7 +20,7 @@ import {
 	summarizeTurnChanges,
 	tabAwaitsTranscript,
 } from "./ChatStream";
-import { mergeSubagentRows } from "./chat-stream-utils";
+import { mergeSubagentRows, processExpansionKey } from "./chat-stream-utils";
 import { foldSubagentCompletions } from "./completion-events";
 
 const at = "2026-08-05T04:00:00.000Z";
@@ -392,7 +392,7 @@ describe("virtual transcript identity", () => {
 		expect(liveKey).toEqual(finalizedKey);
 	});
 
-	it("keeps an expanded live phase separate when compact history absorbs it", () => {
+	it("keeps an explicitly opened or closed live phase separate when compact history absorbs it", () => {
 		const first: AgentMessage = {
 			role: "assistant",
 			timestamp: 1,
@@ -403,11 +403,30 @@ describe("virtual transcript identity", () => {
 			timestamp: 2,
 			content: [{ type: "thinking", thinking: "Next phase" }],
 		};
-		const [expandedKey] = buildTranscriptRowKeys([{ kind: "streaming", message: next }]);
+		const key = processExpansionKey(next);
 		expect(buildHistoryRows([first, next], "compact")).toHaveLength(1);
-		const rows = buildHistoryRows([first, next], "compact", new Set([expandedKey]));
-		expect(buildHistoryRowKeys(rows)).toContain(expandedKey);
-		expect(rows).toHaveLength(2);
+		for (const expanded of [true, false]) {
+			const rows = buildHistoryRows([first, next], "compact", new Map([[key, expanded]]));
+			expect(rows).toHaveLength(2);
+			expect(buildHistoryRowKeys(rows)[1]).toBe(key);
+		}
+	});
+
+	it("keeps the same process expansion key when full mode splits off preceding prose", () => {
+		const live: AgentMessage = { role: "assistant", timestamp: 1, content: [] };
+		const finalized: AgentMessage = {
+			...live,
+			content: [
+				{ type: "text", text: "Inspect the source." },
+				{ type: "toolCall", id: "read-source", name: "read", arguments: { path: "src/a.ts" } },
+			],
+		};
+		const key = processExpansionKey(live);
+		const rows = buildHistoryRows([finalized], "full", new Map([[key, true]]));
+		const process = rows[1];
+		if (process?.kind !== "process") throw new Error("process row missing");
+		expect(buildHistoryRowKeys(rows)).toEqual([key, `${key}-1`]);
+		expect(processExpansionKey(process.messages[0]!)).toBe(key);
 	});
 
 	it("anchors compact finalization to the first row produced from the live assistant", () => {

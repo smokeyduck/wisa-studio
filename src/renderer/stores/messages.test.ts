@@ -293,6 +293,26 @@ describe("transcript hydration", () => {
 		expect(mergeFetchedTranscript([fetchedA], [a], [refreshedA, b])).toEqual([fetchedA, b]);
 	});
 
+	it("keeps local command output in order before, during and after a transcript refresh", () => {
+		const a = userMessage("a");
+		const b = userMessage("b");
+		const c = userMessage("c");
+		const output = (text: string, commandOutputAfterEntryId: string | null): AgentMessage => ({
+			role: "custom",
+			customType: "command",
+			content: text,
+			commandOutputAfterEntryId,
+		});
+		const first = output("first", null);
+		const second = output("second", "a");
+		const third = output("third", "a");
+		const before = [first, a, second];
+		const current = [...before, third, c];
+		const merged = mergeFetchedTranscript([a, b], before, current);
+		expect(merged).toEqual([first, a, second, third, b, c]);
+		expect(mergeFetchedTranscript([b, c], merged, merged)).toEqual([first, b, c, second, third]);
+	});
+
 	it("clears delivered live rows after idle hydration but preserves local echo", () => {
 		const optimistic: AgentMessage = { role: "user", content: "pending", timestamp: 1, optimistic: true };
 		const delivered: AgentMessage = { role: "assistant", content: "stale", timestamp: 2 };

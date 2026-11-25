@@ -40,16 +40,15 @@ const OVERLAY_DENYLIST = new Set([
 	"USER",
 	"_",
 	// Proxy resolution has its own precedence chain (GUI pref → inherited
-	// env → system PAC); rc-file proxy exports must not bypass it.
+	// env → system PAC); standard rc-file proxy exports must not bypass it.
+	// NO_PROXY is a bypass list, not a proxy choice, so keep it.
 	"ALL_PROXY",
 	"HTTP_PROXY",
 	"HTTPS_PROXY",
-	"NO_PROXY",
 	"PI_PROXY",
 	"all_proxy",
 	"http_proxy",
 	"https_proxy",
-	"no_proxy",
 ]);
 
 export interface LoginShellEnv {
@@ -63,7 +62,7 @@ export interface LoginShellEnv {
 
 const PROBE_FAILED: LoginShellEnv = { env: {}, path: null, editor: null };
 
-let cached: LoginShellEnv | undefined;
+let cached: Promise<LoginShellEnv> | undefined;
 
 /** Test seam: drop the cached probe so a stubbed SHELL/HOME takes effect. */
 export function resetLoginShellEnvCache(): void {
@@ -72,26 +71,24 @@ export function resetLoginShellEnvCache(): void {
 
 /** Probe `$SHELL -ilc 'env'` once and cache; on failure every field is empty. */
 export function resolveLoginShellEnv(): Promise<LoginShellEnv> {
-	if (cached) return Promise.resolve(cached);
+	if (cached) return cached;
 	// Windows has no login-shell probe. Keep the inherited environment and add
 	// the well-known per-user tool directories through fallbackBinDirs().
 	if (process.platform === "win32") {
-		cached = PROBE_FAILED;
-		return Promise.resolve(PROBE_FAILED);
+		cached = Promise.resolve(PROBE_FAILED);
+		return cached;
 	}
 	const { promise, resolve } = Promise.withResolvers<LoginShellEnv>();
-	const finish = (env: LoginShellEnv) => {
-		cached = env;
-		resolve(env);
-	};
+	// The shell and proxy overlays resolve together; both must see the same probe.
+	cached = promise;
 	const shell = process.env.SHELL || "/bin/zsh";
 	// `command` bypasses rc aliases; markers isolate rc chatter.
 	const script = `command printf '%s\\n' '${BEGIN}'; command env; command printf '%s\\n' '${END}'`;
 	execFile(shell, ["-ilc", script], { timeout: PROBE_TIMEOUT_MS }, (error, stdout) => {
-		if (error) return finish(PROBE_FAILED);
+		if (error) return resolve(PROBE_FAILED);
 		const begin = stdout.indexOf(BEGIN);
 		const end = stdout.lastIndexOf(END);
-		if (begin === -1 || end < begin) return finish(PROBE_FAILED);
+		if (begin === -1 || end < begin) return resolve(PROBE_FAILED);
 		const env: Record<string, string> = {};
 		for (const line of stdout.slice(begin + BEGIN.length, end).split("\n")) {
 			const eq = line.indexOf("=");
@@ -100,7 +97,7 @@ export function resolveLoginShellEnv(): Promise<LoginShellEnv> {
 		}
 		const path = env.PATH?.trim() ?? "";
 		const editor = env.VISUAL?.trim() || env.EDITOR?.trim() || "";
-		finish({
+		resolve({
 			env,
 			path: path.length > 0 ? path : null,
 			editor: editor.length > 0 ? editor : null,

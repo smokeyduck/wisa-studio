@@ -85,6 +85,23 @@ describe("ToolCard terminal states", () => {
 		await act(async () => root.unmount());
 	});
 
+	it("closes just the selected output from its footer", async () => {
+		useToolsStore.getState().hydrateMessages([call("first"), call("second")]);
+		useUiStore.getState().toggleToolsExpandAll();
+		const { root, container } = await renderCards(["first", "second"]);
+		try {
+			const headers = Array.from(container.querySelectorAll(".omp-tool-header"));
+			expect(headers.map(header => header.getAttribute("aria-expanded"))).toEqual(["true", "true"]);
+			const footer = container.querySelector<HTMLButtonElement>(".omp-collapse-button");
+			expect(footer?.textContent).toBe("Collapse tool output");
+			await act(async () => footer!.click());
+			expect(headers.map(header => header.getAttribute("aria-expanded"))).toEqual(["false", "true"]);
+		} finally {
+			await act(async () => root.unmount());
+			container.remove();
+		}
+	});
+
 	it("shares a single clock between live cards and keeps none for finished ones", async () => {
 		useToolsStore.getState().hydrateMessages([call("dead")]);
 		useToolsStore.getState().applyEvents([

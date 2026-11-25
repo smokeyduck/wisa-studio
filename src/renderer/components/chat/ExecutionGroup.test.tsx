@@ -147,9 +147,12 @@ describe("ExecutionGroup", () => {
 		expect(container.querySelector('[data-testid="details"]')).not.toBeNull();
 
 		await act(async () => {
-			(container.querySelector("button") as unknown as { click: () => void }).click();
+			const footer = container.querySelector<HTMLButtonElement>(".omp-collapse-button");
+			expect(footer?.textContent).toBe("Collapse process");
+			footer!.click();
 			useToolsStore.setState({ activeTools: new Map([["tool-1", toolEntry("running")]]) });
 		});
+		expect(container.querySelector(".omp-execution-group-header")?.getAttribute("aria-expanded")).toBe("false");
 		// The body plays its exit before it unmounts.
 		await act(async () => {
 			await new Promise(resolve => setTimeout(resolve, OVERLAY_EXIT_MS + 40));

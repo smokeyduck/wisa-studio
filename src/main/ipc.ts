@@ -231,6 +231,7 @@ const RESETTABLE_GUI_PREFS: ReadonlySet<string> = new Set([
 	"notifications",
 	"notificationsWhenFocused",
 	"notificationSound",
+	"proxyDirect",
 	"proxyUrl",
 	"sidebarQuotas",
 	"sidebarWidth",
@@ -1233,6 +1234,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		// Spawn-time preferences must also replace a spare booted under the old values.
 		if (
 			payload.key === "proxyUrl" ||
+			payload.key === "proxyDirect" ||
 			payload.key === CODING_TOOL_PROFILE_PREF ||
 			payload.key === WORK_TOOL_PROFILE_PREF
 		) {

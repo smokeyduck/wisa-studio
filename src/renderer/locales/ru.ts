@@ -2248,7 +2248,10 @@ export const ru: Record<string, string> = {
 	"settings.gui.transcript.fullDesc": "Показывать каждый блок рассуждений и карточку инструмента.",
 	"settings.gui.proxy": "HTTP-прокси",
 	"settings.gui.proxyDesc":
-		"Запросы агента к провайдеру (OAuth, потоковая передача, расход) направляются через этот прокси. Поддерживаются только HTTP- и HTTPS-прокси, SOCKS не подойдёт: укажите HTTP-порт прокси-клиента. Пустое поле позволяет использовать системный прокси. Настройка применяется после перезапуска агента; если агент простаивает, он перезапустится автоматически.",
+		"Направляет запросы агента к провайдерам через HTTP- или HTTPS-прокси, но не SOCKS. Если поле пустое, используется прокси из окружения запуска или системы. Локальные и частные IP-адреса обходят прокси. Изменения вступают в силу после перезапуска агента.",
+	"settings.gui.proxyDirect": "Подключаться напрямую без прокси",
+	"settings.gui.proxyDirectDesc":
+		"Запросы агента обходят прокси, заданный здесь, в окружении запуска или в системе. Вступает в силу после перезапуска агента.",
 	"settings.gui.proxyUnsupported":
 		"Агент работает только с HTTP- и HTTPS-прокси, поэтому этот адрес не используется. Укажите HTTP-порт прокси-клиента, например http://127.0.0.1:7890.",
 	"settings.gui.proxyApplied": "Прокси сохранён - перезапуск агента для применения…",
@@ -2899,6 +2902,7 @@ export const ru: Record<string, string> = {
 	"chat.branchSaved": "Ветка обсуждения создана. Откройте её в недавних сеансах.",
 	"chat.jumpToLatest": "Перейти к последнему",
 	"chat.process.title": "Задачи",
+	"chat.process.collapse": "Свернуть процесс",
 	"chat.process.statusRunning": "Выполняется: {running} - шагов всего: {total}",
 	"chat.process.statusComplete": "Выполнено шагов: {total}",
 	"chat.process.statusFailed": "С ошибкой: {failed} - шагов всего: {total}",
@@ -2996,6 +3000,10 @@ export const ru: Record<string, string> = {
 	"chat.thinking.live": "Thinking…",
 	"chat.thinking.show": "Показать рассуждения",
 	"chat.thinking.hide": "Скрыть рассуждения",
+	"chat.thinking.collapse": "Свернуть рассуждения",
+	"tools.collapseOutput": "Свернуть вывод инструмента",
+	"readGroup.collapse": "Свернуть чтения",
+	"chat.context.collapseDetails": "Свернуть подробности",
 	"chat.waitingForAnswer": "Ожидаем вашего ответа",
 	"chat.awaitingModel": "Ожидание модели",
 	"chat.awaitingModel.announcement": "Ожидание ответа модели…",

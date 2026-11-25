@@ -17,7 +17,7 @@ import {
 import { useMessagesStore } from "../../stores/messages";
 import { useModelStore } from "../../stores/model";
 import { useUiStore } from "../../stores/ui";
-import { Collapse } from "../common/Collapse";
+import { Collapse, CollapseButton } from "../common/Collapse";
 import { StreamingMarkdown } from "./StreamingText";
 
 export interface ThinkingBlockProps {
@@ -229,6 +229,9 @@ export function ThinkingBlock({ text, live = false, startTime, endTime, level }:
 					) : (
 						<MarkdownRenderer content={formatted} />
 					)}
+				</div>
+				<div className="px-3 pb-2">
+					<CollapseButton label={t("chat.thinking.collapse")} onClick={() => setOpen(false)} />
 				</div>
 			</Collapse>
 		</div>

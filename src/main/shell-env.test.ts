@@ -3,6 +3,7 @@ import * as os from "node:os";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { resolveProxyForSpawn } from "./proxy-env";
 import {
 	resetLoginShellEnvCache,
 	resolveEditorCommand,
@@ -77,7 +78,9 @@ describe("resolveLoginShellEnv", () => {
 				envDumpBody({ PATH: "/probed/bin:/usr/bin", VISUAL: "probed-editor", PROBED_ONLY_KEY: "k1" }, true),
 			);
 			setEnv("SHELL", fakeShell);
-			const result = await resolveLoginShellEnv();
+			const probe = resolveLoginShellEnv();
+			expect(resolveLoginShellEnv()).toBe(probe);
+			const result = await probe;
 			expect(result.path).toBe("/probed/bin:/usr/bin");
 			expect(result.editor).toBe("probed-editor");
 			expect(result.env.PROBED_ONLY_KEY).toBe("k1");
@@ -140,6 +143,8 @@ describe("shellSpawnEnv", () => {
 						SHELL_ONLY_API_KEY: "from-rc",
 						LAUNCH_WINS_KEY: "from-rc",
 						HTTPS_PROXY: "rc-proxy-must-not-leak",
+						NO_PROXY: "git.corp.example,.internal",
+						no_proxy: "wiki.example",
 						PWD: "/rc/pwd/must/not/leak",
 					},
 					false,
@@ -147,11 +152,15 @@ describe("shellSpawnEnv", () => {
 			);
 			setEnv("SHELL", fakeShell);
 			deleteEnv("SHELL_ONLY_API_KEY");
+			deleteEnv("NO_PROXY");
+			deleteEnv("no_proxy");
 			setEnv("LAUNCH_WINS_KEY", "from-launch");
 			const overlay = await shellSpawnEnv();
 			expect(overlay.SHELL_ONLY_API_KEY).toBe("from-rc");
 			expect(overlay.LAUNCH_WINS_KEY).toBeUndefined();
 			expect(overlay.HTTPS_PROXY).toBeUndefined();
+			expect(overlay.NO_PROXY).toBe("git.corp.example,.internal");
+			expect(overlay.no_proxy).toBe("wiki.example");
 			expect(overlay.PWD).toBeUndefined();
 			expect(overlay.PATH.split(":")).toContain("/probed/bin");
 		} finally {
@@ -168,31 +177,55 @@ describe("resolveEditorCommand", () => {
 });
 
 describe("SidecarManager spawn env", () => {
-	it("injects the shellEnv overlay into the spawned process", async () => {
+	it("keeps the shell overlay but neutralizes launch and shell proxies when Direct is selected", async () => {
 		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-gui-sidecar-env-"));
 		const envPath = path.join(tempDir, "env.json");
-		const binaryPath = path.join(tempDir, "fake-sidecar.ts");
+		const sourceCli = path.join(tempDir, "fake-sidecar.ts");
 		await fs.writeFile(
-			binaryPath,
-			`#!/usr/bin/env bun\nimport * as fs from "node:fs/promises";\nawait fs.writeFile(${JSON.stringify(envPath)}, JSON.stringify({ PATH: process.env.PATH, KEY: process.env.PROBED_SHELL_KEY ?? null }));\nprocess.stdout.write(JSON.stringify({ type: "ready", protocolVersion: 1, supportedProtocolVersions: [1] }) + "\\n");\nprocess.stdin.resume();\n`,
+			sourceCli,
+			`
+import * as fs from "node:fs/promises";
+const { PATH, PROBED_SHELL_KEY, HTTPS_PROXY, PI_PROXY_OPENAI, NO_PROXY } = process.env;
+await fs.writeFile(${JSON.stringify(envPath)}, JSON.stringify({ PATH, PROBED_SHELL_KEY, HTTPS_PROXY, PI_PROXY_OPENAI, NO_PROXY }));
+process.stdout.write(JSON.stringify({ type: "ready", protocolVersion: 1, supportedProtocolVersions: [1] }) + "\\n");
+`,
 		);
-		await fs.chmod(binaryPath, 0o755);
+		setEnv("HTTPS_PROXY", "http://launch.example:7890");
+		const shellOverlay = {
+			PATH: `${path.join(tempDir, "shell-probed")}${path.delimiter}${process.env.PATH}`,
+			PROBED_SHELL_KEY: "present",
+			PI_PROXY_OPENAI: "http://rc.example:7890",
+			NO_PROXY: "wiki.example",
+		};
 
 		const sidecar = new SidecarManager({
-			binaryPath,
+			binaryPath: "",
+			sourceCli,
 			cwd: tempDir,
-			shellEnv: () => Promise.resolve({ PATH: `/shell-probed:${process.env.PATH}`, PROBED_SHELL_KEY: "present" }),
+			shellEnv: async () => shellOverlay,
+			proxyEnv: async () => {
+				const { env } = await resolveProxyForSpawn({
+					direct: true,
+					pref: "http://prefs.example:7890",
+					inherited: { ...process.env, ...shellOverlay },
+					systemPac: async () => "PROXY system.example:7890",
+				});
+				return env;
+			},
 		});
-		const ready = Promise.withResolvers<void>();
+		const exited = Promise.withResolvers<void>();
 		sidecar.on("status", ({ status }) => {
-			if (status === "ready") ready.resolve();
+			if (status === "exited") exited.resolve();
 		});
 		try {
 			sidecar.start();
-			await ready.promise;
-			const env = JSON.parse(await fs.readFile(envPath, "utf8")) as { PATH: string; KEY: string | null };
-			expect(env.PATH.startsWith("/shell-probed:")).toBe(true);
-			expect(env.KEY).toBe("present");
+			await exited.promise;
+			const env = JSON.parse(await fs.readFile(envPath, "utf8")) as Record<string, string>;
+			expect(env.PATH).toBe(shellOverlay.PATH);
+			expect(env.PROBED_SHELL_KEY).toBe("present");
+			expect(env.HTTPS_PROXY ?? "").toBe("");
+			expect(env.PI_PROXY_OPENAI ?? "").toBe("");
+			expect(env.NO_PROXY).toBe("wiki.example");
 		} finally {
 			sidecar.dispose();
 			await fs.rm(tempDir, { recursive: true, force: true });

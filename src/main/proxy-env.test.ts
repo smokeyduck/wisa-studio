@@ -4,6 +4,7 @@
  * skipped for the next source and reported, without ever repeating its value.
  */
 import { describe, expect, it, vi } from "vitest";
+import { LOCAL_NO_PROXY } from "../shared/proxy";
 import { dropUnsupportedProxies, type ProxySources, resolveProxyForSpawn } from "./proxy-env";
 
 const SOCKS = "socks5://127.0.0.1:1085";
@@ -23,6 +24,8 @@ describe("resolveProxyForSpawn: saved setting", () => {
 			https_proxy: HTTP,
 			http_proxy: HTTP,
 			all_proxy: HTTP,
+			NO_PROXY: LOCAL_NO_PROXY,
+			no_proxy: LOCAL_NO_PROXY,
 		});
 		expect(dropped).toEqual([]);
 	});
@@ -41,7 +44,7 @@ describe("resolveProxyForSpawn: saved setting", () => {
 	it("skips a saved SOCKS setting for a usable inherited proxy without asking the system", async () => {
 		const systemPac = vi.fn(async () => "PROXY 10.0.0.1:1");
 		const { env, dropped } = await resolve({ pref: SOCKS, inherited: { HTTPS_PROXY: HTTP }, systemPac });
-		expect(env).toEqual({});
+		expect(env).toEqual({ NO_PROXY: LOCAL_NO_PROXY, no_proxy: LOCAL_NO_PROXY });
 		expect(dropped).toEqual([{ source: "setting" }]);
 		expect(systemPac).not.toHaveBeenCalled();
 	});
@@ -78,9 +81,21 @@ describe("resolveProxyForSpawn: inherited environment", () => {
 			inherited: { https_proxy: HTTP, http_proxy: HTTP, all_proxy: SOCKS },
 			systemPac,
 		});
-		expect(env).toEqual({});
+		expect(env).toEqual({ NO_PROXY: LOCAL_NO_PROXY, no_proxy: LOCAL_NO_PROXY });
 		expect(dropped).toEqual([]);
 		expect(systemPac).not.toHaveBeenCalled();
+	});
+
+	it("preserves an inherited HTTP-only choice without promoting it to HTTPS", async () => {
+		const systemPac = vi.fn(async () => "PROXY 10.0.0.1:1");
+		const { env } = await resolve({ inherited: { HTTP_PROXY: HTTP }, systemPac });
+		expect(env).toEqual({ NO_PROXY: LOCAL_NO_PROXY, no_proxy: LOCAL_NO_PROXY });
+		expect(systemPac).not.toHaveBeenCalled();
+	});
+
+	it("keeps a provider-only override without converting it to a global proxy", async () => {
+		const { env } = await resolve({ inherited: { PI_PROXY_OPENAI: HTTP } });
+		expect(env).toEqual({ NO_PROXY: LOCAL_NO_PROXY, no_proxy: LOCAL_NO_PROXY });
 	});
 
 	it("still reports a SOCKS HTTP_PROXY beside a working https_proxy", async () => {
@@ -106,12 +121,71 @@ describe("resolveProxyForSpawn: system proxy", () => {
 	])("%s", async (pac, proxy, warnings) => {
 		const { env, dropped } = await resolve({ systemPac: async () => pac });
 		expect(env.HTTPS_PROXY).toBe(proxy);
+		expect(env.NO_PROXY).toBe(proxy ? LOCAL_NO_PROXY : undefined);
 		expect(dropped).toEqual(warnings);
 	});
 
 	it("treats a failed system lookup as having no proxy", async () => {
 		const result = await resolve({ systemPac: () => Promise.reject(new Error("no session")) });
 		expect(result).toEqual({ env: {}, dropped: [] });
+	});
+});
+
+describe("resolveProxyForSpawn: bypass rules", () => {
+	it.each([
+		{ pref: HTTP },
+		{ inherited: { HTTPS_PROXY: HTTP } },
+		{ systemPac: async () => "PROXY 127.0.0.1:7890" },
+	] satisfies Partial<ProxySources>[])("merges user lists with local and metadata rules: %j", async sources => {
+		const { env } = await resolve({
+			...sources,
+			inherited: {
+				...sources.inherited,
+				NO_PROXY: "git.corp.example .internal",
+				no_proxy: "GIT.CORP.EXAMPLE, wiki.example:443, *",
+			},
+		});
+		expect(env.NO_PROXY).toBe(`git.corp.example,.internal,wiki.example:443,*,${LOCAL_NO_PROXY}`);
+		expect(env.no_proxy).toBe(env.NO_PROXY);
+	});
+
+	it("bypasses the pinned Core's local, private and metadata ranges", () => {
+		expect(LOCAL_NO_PROXY.split(",")).toEqual([
+			"localhost",
+			".localhost",
+			"127.0.0.0/8",
+			"0.0.0.0/8",
+			"::1",
+			"::",
+			"10.0.0.0/8",
+			"172.16.0.0/12",
+			"192.168.0.0/16",
+			"169.254.0.0/16",
+			"fe80::/10",
+			"fc00::/7",
+			"metadata.google.internal",
+		]);
+	});
+});
+
+describe("resolveProxyForSpawn: direct connection", () => {
+	it("clears launch and per-provider proxy variables without consulting PAC or modifying NO_PROXY", async () => {
+		const systemPac = vi.fn(async () => "PROXY 10.0.0.1:1");
+		const inherited = { HTTPS_PROXY: HTTP, PI_PROXY_ANTHROPIC: HTTP, Http_Proxy: SOCKS, NO_PROXY: "git.example" };
+		const { env, dropped } = await resolve({ direct: true, pref: HTTP, inherited, systemPac });
+		expect(env).toEqual({
+			PI_PROXY: "",
+			HTTPS_PROXY: "",
+			HTTP_PROXY: "",
+			ALL_PROXY: "",
+			https_proxy: "",
+			http_proxy: "",
+			all_proxy: "",
+			PI_PROXY_ANTHROPIC: "",
+			Http_Proxy: "",
+		});
+		expect(dropped).toEqual([]);
+		expect(systemPac).not.toHaveBeenCalled();
 	});
 });
 

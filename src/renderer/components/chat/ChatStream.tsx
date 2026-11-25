@@ -65,6 +65,7 @@ import {
 	type MountedTranscriptRow,
 	mergeSubagentRows,
 	mergeTodoSnapshots,
+	processExpansionKey,
 	type Row,
 	shouldRePinTranscript,
 	summarizeTurnChanges,
@@ -202,8 +203,8 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	const saveView = useSessionStore(s => s.saveTranscriptView);
 	const [restoreView] = useState(() => (savedView?.sessionId === sessionId ? savedView : null));
 	const [preCompactionOpen, setPreCompactionOpen] = useState(restoreView?.preCompactionOpen ?? false);
-	const [expandedProcessKeys, setExpandedProcessKeys] = useState<Set<string>>(
-		() => restoreView?.expandedProcessKeys ?? new Set(),
+	const [processExpansion, setProcessExpansion] = useState<ReadonlyMap<string, boolean>>(
+		() => restoreView?.processExpansion ?? new Map(),
 	);
 	const [expandedUserKeys, setExpandedUserKeys] = useState<Set<string>>(() => new Set());
 	const [pinned, setPinned] = useState(restoreView?.pinned ?? true);
@@ -294,10 +295,10 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		return { currentAgents, olderAgents, currentMessages, olderMessages, completions };
 	}, [foldTime, historicalMessages, subagentAnchors, visibleMessages]);
 	const olderRows = useMemo(() => {
-		const built = buildHistoryRows(olderMessages, transcriptDetail, expandedProcessKeys);
+		const built = buildHistoryRows(olderMessages, transcriptDetail, processExpansion);
 		const grouped = transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
 		return mergeSubagentRows(grouped, olderAgents);
-	}, [olderMessages, olderAgents, transcriptDetail, expandedProcessKeys]);
+	}, [olderMessages, olderAgents, transcriptDetail, processExpansion]);
 	const todoHistory = useTodoStore(s => s.history);
 	// Folded history hides the todo snapshots archived before the compaction
 	// point too: they belong to the turns the divider replaced, and interleaving
@@ -308,14 +309,14 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		return todoHistory.filter(snapshot => snapshot.ts >= boundary);
 	}, [todoHistory, hiddenCount, displayMessages]);
 	const historyRows = useMemo<HistoryRow[]>(() => {
-		const built = buildHistoryRows(currentMessages, transcriptDetail, expandedProcessKeys);
+		const built = buildHistoryRows(currentMessages, transcriptDetail, processExpansion);
 		// Read-tool grouping (TUI parity) folds consecutive collapsible reads into
 		// one card — only in full mode; compact mode's ProcessGroup already folds
 		// ALL consecutive tool work, so a second fold would nest redundantly.
 		const grouped = transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
 		// Archived todo changes interleave by timestamp (transcript archive rows).
 		return mergeSubagentRows(mergeTodoSnapshots(grouped, visibleTodoHistory), currentAgents);
-	}, [currentMessages, currentAgents, transcriptDetail, visibleTodoHistory, expandedProcessKeys]);
+	}, [currentMessages, currentAgents, transcriptDetail, visibleTodoHistory, processExpansion]);
 
 	// What the latest run changed on disk, once it has settled: closes the turn
 	// with one line leading to the review drawer. Tool events stream in at a high
@@ -496,8 +497,8 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		if (el && footerRef.current?.offsetHeight) el.scrollTop = el.scrollHeight;
 		else virtualizer.scrollToEnd();
 	}, [virtualizer]);
-	const viewRef = useRef({ pinned, preCompactionOpen, expandedProcessKeys });
-	viewRef.current = { pinned, preCompactionOpen, expandedProcessKeys };
+	const viewRef = useRef({ pinned, preCompactionOpen, processExpansion });
+	viewRef.current = { pinned, preCompactionOpen, processExpansion };
 	useLayoutEffect(
 		() => () => {
 			const scrollOffset = virtualizer.scrollOffset ?? 0;
@@ -785,13 +786,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	useEffect(() => () => revealCancelRef.current?.(), []);
 	const jumpToConversation = useCallback((rowIndex: number) => revealRow(rowIndex), [revealRow]);
 	const updateProcessExpanded = useCallback((key: string, expanded: boolean) => {
-		setExpandedProcessKeys(current => {
-			if (current.has(key) === expanded) return current;
-			const next = new Set(current);
-			if (expanded) next.add(key);
-			else next.delete(key);
-			return next;
-		});
+		setProcessExpansion(current => (current.get(key) === expanded ? current : new Map(current).set(key, expanded)));
 	}, []);
 	const requestOlder = useCallback(
 		async (targetEntryId?: string) => {
@@ -1126,6 +1121,9 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 							const row = rows[item.index];
 							if (!row) return null;
 							const rowKey = rowKeys[item.index] ?? String(item.key);
+							const processMessage =
+								row.kind === "process" ? row.messages[0] : row.kind === "streaming" ? row.message : undefined;
+							const processKey = processMessage ? processExpansionKey(processMessage) : rowKey;
 							const previous = rows[item.index - 1];
 							return (
 								<div
@@ -1171,8 +1169,8 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 												<ReadGroupCard entries={row.entries} runningIndicator="dot" usage={row.usage} />
 											) : row.kind === "process" ? (
 												<ProcessGroup
-													expanded={expandedProcessKeys.has(rowKey)}
-													onExpandedChange={expanded => updateProcessExpanded(rowKey, expanded)}
+													expanded={processExpansion.get(processKey) === true}
+													onExpandedChange={expanded => updateProcessExpanded(processKey, expanded)}
 													row={row}
 												/>
 											) : row.kind === "subagent" ? (
@@ -1183,8 +1181,8 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 												/>
 											) : row.kind === "streaming" ? (
 												<StreamingRows
-													expanded={expandedProcessKeys.has(rowKey)}
-													onExpandedChange={expanded => updateProcessExpanded(rowKey, expanded)}
+													expanded={processExpansion.get(processKey) === true}
+													onExpandedChange={expanded => updateProcessExpanded(processKey, expanded)}
 												/>
 											) : row.kind === "queued" ? (
 												<QueuedMessageBubble item={row.item} lane={row.lane} />

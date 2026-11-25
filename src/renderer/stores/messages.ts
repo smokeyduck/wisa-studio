@@ -208,7 +208,39 @@ function upsertCommittedMessages(current: AgentMessage[], committed: AgentMessag
 	return next;
 }
 
-/** Preserve only committed rows appended after a transcript request began. */
+/** Restore local command output using the preceding persisted entry as its anchor. */
+function restoreCommandOutput(transcript: AgentMessage[], current: AgentMessage[]): AgentMessage[] {
+	let byAnchor: Map<string | null, AgentMessage[]> | undefined;
+	for (const message of current) {
+		const anchor = message.commandOutputAfterEntryId;
+		if (anchor === undefined) continue;
+		byAnchor ??= new Map();
+		const group = byAnchor.get(anchor);
+		if (group) group.push(message);
+		else byAnchor.set(anchor, [message]);
+	}
+	if (!byAnchor) return transcript;
+	const next = byAnchor.get(null) ?? [];
+	byAnchor.delete(null);
+	for (const message of transcript) {
+		next.push(message);
+		if (!message.entryId) continue;
+		const group = byAnchor.get(message.entryId);
+		if (!group) continue;
+		for (const row of group) next.push(row);
+		byAnchor.delete(message.entryId);
+	}
+	// Folded or rewritten history may no longer expose the old anchor.
+	if (byAnchor.size > 0) {
+		for (const message of current) {
+			const anchor = message.commandOutputAfterEntryId;
+			if (anchor !== undefined && byAnchor.has(anchor)) next.push(message);
+		}
+	}
+	return next;
+}
+
+/** Preserve committed rows appended during the request and local-only command output. */
 export function mergeFetchedTranscript(
 	fetched: AgentMessage[],
 	before: AgentMessage[],
@@ -223,10 +255,10 @@ export function mergeFetchedTranscript(
 				? message.entryId !== undefined && message.entryId === currentMessage.entryId
 				: message === currentMessage;
 		});
-	if (!prefixIntact) return fetched;
+	if (!prefixIntact) return restoreCommandOutput(fetched, current);
 	const fetchedIds = new Set(fetched.flatMap(message => (message.entryId ? [message.entryId] : [])));
 	const tail = current.slice(before.length).filter(message => message.entryId && !fetchedIds.has(message.entryId));
-	return tail.length === 0 ? fetched : [...fetched, ...tail];
+	return restoreCommandOutput(tail.length === 0 ? fetched : [...fetched, ...tail], current);
 }
 
 export const createMessagesStore = () =>
