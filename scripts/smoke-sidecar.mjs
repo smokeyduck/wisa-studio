@@ -30,14 +30,14 @@ const home = await mkdtemp(join(tmpdir(), "omp-smoke-"));
 const childTmp = join(home, "tmp");
 await mkdir(childTmp);
 // Fixture project. Never run in the repo: an old binary would read its .omp/.claude.
-// Sentinels: legacy .omp compaction.enabled=true; ambient .claude display.showTokenUsage=true.
-// WISA project compaction.enabled=false, no display key. Expected: compaction.enabled=false
-// (WISA project loaded), display.showTokenUsage=false (schema default off; .claude ignored).
+// Sentinels: legacy .omp compaction.enabled=true and thresholdPercent=20; ambient .claude showTokenUsage=true.
+// WISA project compaction.enabled=false, no threshold or display key. Expected: enabled=false
+// (WISA project loaded), thresholdPercent=-1 and showTokenUsage=false (legacy sentinels ignored).
 const project = join(home, "project");
 await mkdir(join(project, ".omp"), { recursive: true });
 await mkdir(join(project, ".wisa-studio"), { recursive: true });
 await mkdir(join(project, ".claude"), { recursive: true });
-await writeFile(join(project, ".omp", "config.yml"), "compaction:\n  enabled: true\n");
+await writeFile(join(project, ".omp", "config.yml"), "compaction:\n  enabled: true\n  thresholdPercent: 20\n");
 await writeFile(join(project, ".wisa-studio", "config.yml"), "compaction:\n  enabled: false\n");
 await writeFile(join(project, ".claude", "settings.json"), JSON.stringify({ display: { showTokenUsage: true } }));
 // Ambient dotenv sentinel: if loaded, mutating RPCs would write under the legacy agent dir.
@@ -192,9 +192,15 @@ const initialReady = startChild();
 	const wisaProjectLoaded =
 		profile.success &&
 		profileValues["compaction.enabled"] === false &&
-		profileValues["compaction.thresholdPercent"] === 20 &&
+		profileValues["compaction.thresholdPercent"] === -1 &&
 		profileValues["display.showTokenUsage"] === false;
 	console.log(`project config loaded  ${wisaProjectLoaded ? "ok " : "ERR"}  values=${JSON.stringify(profileValues)}`);
+	const thresholdPath = "compaction.thresholdPercent";
+	const explicitThreshold = await send("set_setting", { path: thresholdPath, value: 20 });
+	const thresholdAfter = await send("get_settings", { paths: [thresholdPath] });
+	const thresholdOverrideMatches =
+		explicitThreshold.success && thresholdAfter.success && thresholdAfter.data?.values?.[thresholdPath] === 20;
+	console.log(`explicit threshold     ${thresholdOverrideMatches ? "ok " : "ERR"}`);
 
 	// Check the effective values that Settings and Skills consume, not just
 	// schema metadata. Enabling the guidance must not opt into an extra turn.
@@ -266,6 +272,7 @@ const initialReady = startChild();
 		settingsReadable &&
 		settingsPersisted &&
 		wisaProjectLoaded &&
+		thresholdOverrideMatches &&
 		memoryDefaultsMatch &&
 		memoryOptOutsMatch &&
 		memoryPrecedenceMatch &&

@@ -7,6 +7,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+- Auto-compaction now defaults to the model's reserve-based threshold. Explicit thresholds stay unchanged. Chat usage shows uncached input, cache reads, and cache writes separately.
 - A slow startup RPC no longer permanently marks a live agent as failed. Studio recovers the session when Core answers again and uses lightweight idle health checks.
 - Windows no longer boots a duplicate idle agent. Conversation indexing starts on search rather than launch, and long transcripts avoid rebuilding entrance state and coalesce resize-driven scrolling.
 - Spaced out reasoning and execution disclosures in the conversation.

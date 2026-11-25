@@ -32,7 +32,7 @@ export interface CompactionConfig {
 	keepRecentTokens: number;
 	/** Experimental notes-backed context windows replace summary compression. */
 	notesBacked: boolean;
-	/** `-1` means the explicitly selected reserve-based Auto threshold. */
+	/** `-1` means the reserve-based Auto threshold, inherited or explicitly selected. */
 	thresholdPercent: number;
 	/** Switch to the model's configured larger sibling on overflow before compacting. */
 	promotion: boolean;
@@ -44,7 +44,7 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
 	methodOrder: ["remote", "snapcompact", "handoff", "shake", "soft"],
 	keepRecentTokens: 20_000,
 	notesBacked: false,
-	thresholdPercent: 20,
+	thresholdPercent: -1,
 	promotion: false,
 };
 

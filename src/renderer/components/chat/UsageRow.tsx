@@ -79,7 +79,6 @@ export function UsageRow({ message }: { message: UsageSource }) {
 	const model = typeof message.model === "string" ? message.model : "";
 	const durationMs = typeof message.duration === "number" && Number.isFinite(message.duration) ? message.duration : 0;
 	const ttftMs = typeof message.ttft === "number" && Number.isFinite(message.ttft) ? message.ttft : 0;
-	const totalInput = usage.input + usage.cacheWrite;
 	const tokPerSec = durationMs > MIN_DURATION_MS && usage.output > 0 ? (usage.output / durationMs) * 1000 : 0;
 	// Message time (TUI usage-row parity): the wire timestamp is an ISO string
 	// or epoch ms; render a compact HH:MM.
@@ -103,10 +102,10 @@ export function UsageRow({ message }: { message: UsageSource }) {
 			{model && <span className="font-mono">{model}</span>}
 			<span
 				className="flex items-center gap-1"
-				title={t("chat.usage.inputTokens", { count: totalInput.toLocaleString() })}
+				title={t("chat.usage.inputTokens", { count: usage.input.toLocaleString() })}
 			>
 				<ArrowUp size={10} />
-				{formatTokens(totalInput)}
+				{formatTokens(usage.input)}
 			</span>
 			<span
 				className="flex items-center gap-1"
@@ -115,10 +114,15 @@ export function UsageRow({ message }: { message: UsageSource }) {
 				<ArrowDown size={10} />
 				{formatTokens(usage.output)}
 			</span>
-			{usage.cacheRead > 0 && (
-				<span title={t("chat.usage.cachedTokens", { count: usage.cacheRead.toLocaleString() })}>
-					{t("chat.usage.cached", { tokens: formatTokens(usage.cacheRead) })}
-				</span>
+			{(usage.cacheRead > 0 || usage.cacheWrite > 0) && (
+				<>
+					<span title={`${t("usage.cacheRead")}: ${usage.cacheRead.toLocaleString()}`}>
+						{`${t("usage.cacheRead")}: ${formatTokens(usage.cacheRead)}`}
+					</span>
+					<span title={`${t("usage.cacheWrite")}: ${usage.cacheWrite.toLocaleString()}`}>
+						{`${t("usage.cacheWrite")}: ${formatTokens(usage.cacheWrite)}`}
+					</span>
+				</>
 			)}
 			{usage.costTotal !== undefined && (
 				<span className="flex items-center gap-1" title={t("chat.usage.cost")}>

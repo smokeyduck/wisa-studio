@@ -40,6 +40,27 @@ afterEach(() => {
 	initial.showTokenUsage = false;
 });
 
+describe("UsageRow cache segments", () => {
+	it("reports fresh input, reads and writes separately on a cache hit", () => {
+		const html = render({ ...baseMessage, usage: { input: 5, output: 1, cacheRead: 340446, cacheWrite: 113477 } });
+		expect(html).toContain('title="5 uncached input tokens"');
+		expect(html).toContain('title="Cache read: 340,446"');
+		expect(html).toContain('title="Cache write: 113,477"');
+	});
+
+	it("shows zero reads when the request wrote to the cache", () => {
+		const html = render({ ...baseMessage, usage: { input: 5, output: 196, cacheRead: 0, cacheWrite: 198930 } });
+		expect(html).toContain('title="Cache read: 0"');
+		expect(html).toContain('title="Cache write: 198,930"');
+	});
+
+	it("omits both cache segments when neither counter is positive", () => {
+		const html = render(baseMessage);
+		expect(html).not.toContain("Cache read:");
+		expect(html).not.toContain("Cache write:");
+	});
+});
+
 describe("UsageRow TTFT and time segments", () => {
 	it("renders TTFT when the message carries it", () => {
 		const html = render({ ...baseMessage, ttft: 350 });
