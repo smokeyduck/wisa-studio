@@ -1615,7 +1615,15 @@ export interface ModelInfo {
 	/** Whether the model reasons at all. A non-reasoning model reports `false` and no ladder. */
 	reasoning?: boolean;
 	/** Verified catalog controls and, for discovery rows, provisional capability hypotheses. */
-	thinking?: { mode?: string; efforts?: readonly string[]; unverified?: boolean } | null;
+	thinking?: {
+		mode?: string;
+		efforts?: readonly string[];
+		defaultLevel?: ThinkingLevel;
+		requiresEffort?: boolean;
+		suppressWhenOff?: boolean;
+		effortRouting?: { off?: string };
+		unverified?: boolean;
+	} | null;
 	/** Catalog-resolved quirks (an opaque bag here); the context strategy reads only `supportsServerCompaction`. */
 	compat?: object;
 }
@@ -2162,11 +2170,19 @@ export function deriveThinkingSelectors(
 	const ladder = THINKING_LEVEL_VALUES.filter(level => level !== "off" && reported.includes(level));
 	const nativeAuto = state.thinkingAutoMode === "provider" && state.thinkingLevels?.includes("auto");
 	if (ladder.length === 0 && !nativeAuto) return [];
-	return [
-		...(state.thinkingLevels == null || state.thinkingLevels.includes("off") ? ["off" as const] : []),
-		...(nativeAuto ? ["auto" as const] : state.thinkingLevels?.includes("inherit") ? ["inherit" as const] : []),
-		...ladder,
-	];
+	const { thinking, compat } = state.model;
+	const coercedOff =
+		(compat &&
+			"reasoningDisableMode" in compat &&
+			(compat.reasoningDisableMode === "lowest-effort" || compat.reasoningDisableMode === "omit")) ||
+		(compat &&
+			"disabledThinking" in compat &&
+			(compat.disabledThinking === "adaptive" || compat.disabledThinking === "between-tools"));
+	const supportsOff =
+		(state.thinkingLevels ?? state.availableThinkingLevels)?.includes("off") &&
+		(thinking?.suppressWhenOff === true ||
+			(!thinking?.requiresEffort && (thinking?.effortRouting?.off !== undefined || !coercedOff)));
+	return [...(supportsOff ? ["off" as const] : []), ...(nativeAuto ? ["auto" as const] : []), ...ladder];
 }
 
 export interface ImageContent {

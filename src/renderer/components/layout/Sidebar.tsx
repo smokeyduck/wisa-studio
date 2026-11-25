@@ -338,14 +338,6 @@ export function Sidebar() {
 	const sessionId = useSessionStore(s => s.sessionId);
 	const agentTranscripts = useSidebarAgentTranscripts();
 	const cwd = useSessionStore(s => s.cwd);
-	const currentProject = activeTab?.kind === "chat" ? null : activeTab?.cwd || cwd;
-	const [visitedProjects, setVisitedProjects] = useState<ReadonlySet<string>>(() => new Set());
-	useEffect(() => {
-		if (!currentProject) return;
-		setVisitedProjects(previous =>
-			previous.has(currentProject) ? previous : new Set([...previous, currentProject]),
-		);
-	}, [currentProject]);
 	const isStreaming = useSessionStore(s => s.isStreaming);
 	const isCompacting = useSessionStore(s => s.isCompacting);
 	// Sidebar signal-light state for the ATTACHED session: a blocking
@@ -520,8 +512,7 @@ export function Sidebar() {
 		workspaceOrder,
 	]);
 	function isCollapsedGroup(groupCwd: string): boolean {
-		// An explicit disclosure choice wins; visiting another project never closes this one.
-		return collapsed[groupCwd] ?? (groupCwd !== currentProject && !visitedProjects.has(groupCwd));
+		return collapsed[groupCwd] ?? false;
 	}
 	// Counts name the sessions you started; subagent transcripts sit inside them.
 	const listedCount = (list: readonly SessionInfo[]) => list.filter(session => !isSubagentSession(session)).length;

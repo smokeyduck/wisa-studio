@@ -110,28 +110,31 @@ afterEach(async () => {
 });
 
 describe("ThinkingControl", () => {
-	it("lists the fixed model's supported ladder without fabricating Auto", async () => {
+	it("checks the declared High default without offering a generic default or unsupported Off", async () => {
 		installMockOmp();
-		useModelStore.setState({
-			thinkingLevel: "medium",
-			thinkingConfigured: "medium",
-			availableThinkingSelectors: ["off", "inherit", "low", "medium", "high", "xhigh", "max"],
-		});
+		useModelStore.getState().setFromState({
+			model: {
+				provider: "fixture",
+				id: "fixed",
+				reasoning: true,
+				thinking: { defaultLevel: "high", requiresEffort: true },
+			},
+			thinkingConfigured: "inherit",
+			thinkingLevels: ["off", "inherit", "low", "high"],
+		} as RpcSessionState);
 		await mount(<ThinkingControl />);
 
-		const trigger = buttonWithMono(labelFor("medium"));
-		expect(trigger).toBeDefined();
-		if (!trigger) return;
+		const trigger = buttonWithMono(labelFor("high"));
+		if (!trigger) throw new Error("High default not rendered");
 		await act(async () => {
 			click(trigger);
 		});
 
-		const body = document.body.textContent ?? "";
-		for (const option of ["off", "inherit", "low", "medium", "high", "xhigh", "max"]) {
-			expect(body).toContain(labelFor(option));
-		}
-		expect(body).not.toContain(labelFor("minimal"));
-		expect(buttonWithMono(labelFor("auto"))).toBeUndefined();
+		const choices = Array.from(document.querySelectorAll('[role="menuitemradio"]'));
+		const checked = choices.find(choice => choice.getAttribute("aria-checked") === "true");
+		expect(checked?.textContent).toContain(labelFor("high"));
+		expect(choices).toHaveLength(2);
+		expect(choices.some(choice => choice.textContent?.includes(labelFor("low")))).toBe(true);
 	});
 
 	it("sends the explicitly picked value and applies the authoritative receipt", async () => {
@@ -303,7 +306,7 @@ describe("ThinkingControl", () => {
 		} as unknown as RpcSessionState);
 		await mount(<ThinkingControl />);
 
-		const trigger = buttonWithMono(translate("input.thinking.label"));
+		const trigger = buttonWithMono(labelFor("high"));
 		expect(trigger).toBeDefined();
 		if (!trigger) return;
 		await act(async () => {

@@ -216,7 +216,11 @@ export function createSessionRpcClient(transport: RpcTransport): SessionRpcClien
 			const state = snapshot.data as RpcSessionState | undefined;
 			const selectors = state ? deriveThinkingSelectors(state) : [];
 			if (!state || !selectors.length) return { ...snapshot, command: "cycle_thinking_level", data: null };
-			const current = state.thinkingConfigured ?? state.configuredThinkingLevel ?? state.thinkingLevel;
+			const configured = state.thinkingConfigured ?? state.configuredThinkingLevel;
+			const current =
+				configured === "auto" && selectors.includes("auto")
+					? configured
+					: (state.thinkingLevel ?? (configured === "inherit" ? state.model?.thinking?.defaultLevel : configured));
 			const index = current === undefined ? -1 : selectors.indexOf(current);
 			return rpcCommand({ type: "set_thinking_level", level: selectors[(index + 1) % selectors.length] });
 		},

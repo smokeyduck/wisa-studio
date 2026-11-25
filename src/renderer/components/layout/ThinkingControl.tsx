@@ -19,7 +19,7 @@ import { toast } from "../../stores/toast";
 
 type ThinkingSelector = ThinkingLevel | "auto";
 
-/** Levels that have a themed colour var (`--omp-thinking-*`); `max`/`inherit` do not. */
+/** Levels that have a themed colour var (`--omp-thinking-*`). */
 const THEMED_LEVELS: Record<string, true> = {
 	off: true,
 	minimal: true,
@@ -37,6 +37,7 @@ export function ThinkingControl() {
 	const thinkingLevel = useModelStore(s => s.thinkingLevel);
 	const configured = useModelStore(s => s.thinkingConfigured);
 	const options = useModelStore(s => s.availableThinkingSelectors);
+	const modelDefault = useModelStore(s => s.model?.thinking?.defaultLevel);
 	const [open, setOpen] = useState(false);
 	const { mounted, closing } = useOverlayPresence(open);
 	const triggerRef = useRef<HTMLButtonElement>(null);
@@ -44,7 +45,10 @@ export function ThinkingControl() {
 	const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
 
 	const supportsThinking = options.length > 0;
-	const selected = configured ?? thinkingLevel;
+	const selected =
+		configured === "auto" && options.includes("auto")
+			? configured
+			: (thinkingLevel ?? (configured === "inherit" ? modelDefault : configured));
 	const current = selected && options.includes(selected) ? selected : undefined;
 	const label = current ? t(`input.thinking.name.${current}`) : t("input.thinking.label");
 	const colorLevel = current && THEMED_LEVELS[current] ? current : "off";

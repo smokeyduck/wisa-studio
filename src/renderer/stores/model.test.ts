@@ -58,13 +58,13 @@ describe("model store thinking ladder", () => {
 	it("derives the ladder from model.thinking.efforts when availableThinkingLevels is null", () => {
 		store = createModelStore();
 		store.getState().setFromState(state(minimax));
-		expect(store.getState().availableThinkingSelectors).toEqual(["off", "minimal", "low", "medium", "high", "xhigh"]);
+		expect(store.getState().availableThinkingSelectors).toEqual(["minimal", "low", "medium", "high", "xhigh"]);
 	});
 
 	it("prefers an explicit availableThinkingLevels over the model's efforts", () => {
 		store = createModelStore();
 		store.getState().setFromState(state(minimax, { availableThinkingLevels: ["low", "high"] }));
-		expect(store.getState().availableThinkingSelectors).toEqual(["off", "low", "high"]);
+		expect(store.getState().availableThinkingSelectors).toEqual(["low", "high"]);
 	});
 
 	it("yields an empty ladder for a non-reasoning model", () => {
@@ -89,7 +89,7 @@ describe("model store thinking ladder", () => {
 				thinking: { mode: "effort", efforts: ["xhigh", "turbo", "off", "minimal", "inherit"] },
 			}),
 		);
-		expect(store.getState().availableThinkingSelectors).toEqual(["off", "minimal", "xhigh"]);
+		expect(store.getState().availableThinkingSelectors).toEqual(["minimal", "xhigh"]);
 	});
 
 	it("keeps the effective level and configured selector from get_state", () => {
@@ -116,7 +116,24 @@ describe("deriveThinkingSelectors", () => {
 		);
 		expect(store.getState().availableThinkingSelectors).toEqual(["off", "auto", "low"]);
 		store.getState().setFromState(state(minimax, { thinkingLevels: ["off", "inherit", "high"] }));
-		expect(store.getState().availableThinkingSelectors).toEqual(["off", "inherit", "high"]);
+		expect(store.getState().availableThinkingSelectors).toEqual(["off", "high"]);
+	});
+
+	it("does not trust legacy Off for route policies that require reasoning or substitute a low effort", () => {
+		for (const model of [
+			{ ...minimax, thinking: { ...minimax.thinking, requiresEffort: true } },
+			{ ...minimax, compat: { reasoningDisableMode: "lowest-effort" } },
+		]) {
+			expect(deriveThinkingSelectors({ model, thinkingLevels: ["off", "high"] })).toEqual(["high"]);
+		}
+		const suppressible = {
+			...minimax,
+			thinking: { ...minimax.thinking, requiresEffort: true, suppressWhenOff: true },
+		};
+		expect(deriveThinkingSelectors({ model: suppressible, thinkingLevels: ["off", "high"] })).toEqual([
+			"off",
+			"high",
+		]);
 	});
 
 	it("rejects non-reasoning and unverified rows even when an obsolete list reports effort", () => {

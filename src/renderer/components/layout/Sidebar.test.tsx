@@ -360,12 +360,6 @@ describe("Sidebar menus and pinned ordering", () => {
 		});
 		useSidebarPrefs.setState({ hydrated: true });
 		await mount(<SidebarWithRecency />);
-		// Non-active workspaces start collapsed and render no rows; expand alpha
-		// so its session order is inspectable.
-		const alphaToggle = [...container.querySelectorAll("button")].find(button =>
-			(button.textContent ?? "").includes("alpha"),
-		);
-		await fire(alphaToggle as unknown as TestElement, "onClick");
 
 		const workspaceOrder = () =>
 			[...container.querySelectorAll("[data-workspace-group]")].map(element =>
@@ -1000,12 +994,11 @@ describe("Sidebar menus and pinned ordering", () => {
 		const alphaHeader = [...container.querySelectorAll("button")].find(button =>
 			(button.textContent ?? "").includes("alpha"),
 		);
-		// Active workspace expanded; other groups render nothing at all — a
-		// long-lived install must not build hundreds of hidden rows per refresh.
+		// A manually collapsed workspace must not build invisible rows.
 		const alphaContent = () =>
 			container.querySelector('[data-session-group="/work/alpha"]') as unknown as Element | null;
 		expect(alphaContent()?.getAttribute("data-state")).toBe("expanded");
-		expect(container.querySelector('[data-session-group="/work/beta"]')).toBeNull();
+		expect(container.querySelector('[data-session-group="/work/beta"]')).not.toBeNull();
 
 		await fire(alphaHeader as unknown as TestElement, "onClick");
 		expect(alphaContent()).toBeNull();
@@ -1014,7 +1007,7 @@ describe("Sidebar menus and pinned ordering", () => {
 		expect(alphaContent()?.getAttribute("data-state")).toBe("expanded");
 	});
 
-	it("keeps visited workspaces open across a session switch unless the user collapses them", async () => {
+	it("opens unvisited workspace histories by default and keeps manual collapse on session switches", async () => {
 		installMockOmp(LIST);
 		seedStores();
 		await mount(<Sidebar />);
@@ -1030,7 +1023,7 @@ describe("Sidebar menus and pinned ordering", () => {
 			});
 
 		expect(content("alpha")?.textContent).toContain("Session /work/alpha/one");
-		expect(content("beta")).toBeNull();
+		expect(content("beta")?.textContent).toContain("Session /work/beta/three");
 		await select("beta", "three");
 		expect(content("alpha")?.textContent).toContain("Session /work/alpha/one");
 		expect(content("beta")?.textContent).toContain("Session /work/beta/three");
@@ -1389,6 +1382,7 @@ describe("Sidebar bulk selection", () => {
 			"Session /work/alpha/newest.jsonl",
 			"Session /work/alpha/one.jsonl",
 			"Session /work/alpha/two.jsonl",
+			"Session /work/beta/three.jsonl",
 		]);
 
 		await fire(container.querySelector("[data-sidebar-select]"), "onClick");
@@ -1400,7 +1394,7 @@ describe("Sidebar bulk selection", () => {
 			"Session /work/alpha/one.jsonl",
 			"Session /work/alpha/two.jsonl",
 		]);
-		// The collapsed beta workspace is not part of the drawn range.
+		// Beta is visible but outside the selected range.
 		expect(bulkBar()?.textContent).toContain("3 selected");
 	});
 
@@ -1410,7 +1404,11 @@ describe("Sidebar bulk selection", () => {
 			...LIST,
 		]);
 		seedStores();
-		useSidebarPrefs.setState({ hydrated: true, pinnedSessions: ["/work/alpha/one.jsonl"] });
+		useSidebarPrefs.setState({
+			hydrated: true,
+			pinnedSessions: ["/work/alpha/one.jsonl"],
+			collapsedLists: { "/work/beta": true },
+		});
 		await mount(<Sidebar />);
 
 		await fire(container.querySelector("[data-sidebar-select]"), "onClick");
@@ -1472,9 +1470,9 @@ describe("Sidebar selection keys", () => {
 		const row = document.querySelector(".omp-sidebar-session-row");
 
 		expect(await press(row, "a", { metaKey: true })).toBe(true);
-		expect(document.body.querySelector("[data-sidebar-bulk]")?.textContent).toContain("2 selected");
+		expect(document.body.querySelector("[data-sidebar-bulk]")?.textContent).toContain("3 selected");
 		await press(row, "Backspace");
-		expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Delete 2 selected sessions?");
+		expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Delete 3 selected sessions?");
 		expect(omp.sessions.delete).not.toHaveBeenCalled();
 	});
 });
