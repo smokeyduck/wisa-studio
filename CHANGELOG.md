@@ -7,6 +7,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+- New sessions use the last model successfully selected in the composer, even if that model is still being discovered when the session opens.
 - Plan approval no longer reports failure when execution opens a fresh session. The inspector retains the approved plan, and the conversation shows a compact approval card instead of internal instructions.
 - Auto-compaction now defaults to the model's reserve-based threshold. Explicit thresholds stay unchanged. Chat usage shows uncached input, cache reads, and cache writes separately.
 - A slow startup RPC no longer permanently marks a live agent as failed. Studio recovers the session when Core answers again and uses lightweight idle health checks.
