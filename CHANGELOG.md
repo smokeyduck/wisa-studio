@@ -7,6 +7,10 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-25
+
+Core source: `smokeyduck/oh-my-pi@31da293d40d1bf502bc2f7aac6b581aae8fd6f8a` (Core 19.2.0 with WISA patches, synced with upstream stable `v19.2.0`).
+
 - Composer questions now show one step at a time with a progress counter, Back and Next, and an auto-sizing card. Single-choice, multiple-choice, and written answers are kept between steps and sent to Core together.
 - The right sidebar has a compact icon toggle, opens wider by default, and sits beside the chat instead of covering it. Files reuses recent directory listings, and Changes loads diff bodies only for expanded files.
 - While an `ask` question waits for an answer, Studio shows a user-wait status and Core stops automatic prompt-cache refresh requests until the next model turn.

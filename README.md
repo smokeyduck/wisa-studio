@@ -10,10 +10,10 @@ GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một
 
 | Nền tảng | Gói |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-0.9.56-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.56) |
-| macOS Intel | `wisa-studio-0.9.56-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v0.9.56) |
-| Windows x64 | [`wisa-studio-0.9.56-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.56/wisa-studio-0.9.56-setup.exe) |
-| Linux x64 | [`wisa-studio-0.9.56.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v0.9.56/wisa-studio-0.9.56.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.0.0-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.0.0) |
+| macOS Intel | `wisa-studio-1.0.0-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.0.0) |
+| Windows x64 | [`wisa-studio-1.0.0-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.0.0/wisa-studio-1.0.0-setup.exe) |
+| Linux x64 | [`wisa-studio-1.0.0.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.0.0/wisa-studio-1.0.0.AppImage) |
 
 [Tất cả bản phát hành](https://github.com/smokeyduck/wisa-studio/releases) · [Hướng dẫn cài đặt](docs/vi/cai-dat.md)
 
@@ -21,11 +21,11 @@ Bản macOS được ký ad-hoc (chưa notarize) và bản Windows chưa ký, n�
 
 **Yêu cầu Windows:** Windows 10 x64 phiên bản 1809 (build 17763) trở lên, bao gồm Windows 11, và CPU x86-64-v2 có SSE4.2. Mức tối thiểu này dựa trên yêu cầu của Electron, Bun và native addon; không có nghĩa bản phát hành đã được kiểm thử trên máy Windows 10 thực tế.
 
-### Có gì mới trong 0.9.56
+### Có gì mới trong 1.0.0
 
-Bản này dùng Core 19.2.0, chuyển nút **Thanh bên phải** lên hàng thao tác của thanh thẻ và dùng ngưỡng thu gọn Auto theo mức dự trữ của mô hình. Phiên mới nhớ mô hình chọn lần cuối; thông tin sử dụng hiển thị riêng token đầu vào, đọc cache và ghi cache. Xem [changelog](CHANGELOG.md#0956---2026-11-25).
+Bản này dùng Core 19.2.0. Câu hỏi của agent hiển thị từng bước và giữ câu trả lời khi quay lại; Core tạm dừng tự làm mới cache trong lúc chờ bạn trả lời. Thanh bên phải mở cạnh cuộc trò chuyện thay vì che nội dung.
 
-WISA Browser trở lại với hồ sơ Chromium riêng. Các trang bảo mật có thể cung cấp công cụ WebMCP; phiên Chrome cá nhân không bị ảnh hưởng.
+Nhà cung cấp mô hình nội mạng kết nối không qua proxy. Có thể thu gọn các khối dài từ cuối khối; kết quả lệnh `/` tích hợp vẫn hiện khi tải lại cuộc trò chuyện. Xem [changelog](CHANGELOG.md#100---2026-11-25).
 
 ## Lấy API key
 
