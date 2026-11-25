@@ -1,11 +1,10 @@
 /**
- * The agent's `ask` form as one dialog. The sidecar parses the model's HTML and
- * sends structured sections, so nothing model-written is injected as markup.
- * Text rules (type, pattern, min/max) use the browser's own form validation.
+ * The agent's `ask` form. Each named control gets a step, but Core still
+ * receives one response for the entire form. Model markup stays structured.
  */
 
 import { Check } from "lucide-react";
-import { type Dispatch, type ReactNode, type SetStateAction, useMemo, useState } from "react";
+import { type Dispatch, type ReactNode, type SetStateAction, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
 	ExtensionFormBlock,
 	ExtensionFormChoiceField,
@@ -147,7 +146,14 @@ function TextFieldInput({
 		value,
 	};
 	if (field.multiline) {
-		return <TextArea {...shared} onChange={event => onChange(event.target.value)} rows={field.rows} />;
+		return (
+			<TextArea
+				{...shared}
+				className="[field-sizing:content]"
+				onChange={event => onChange(event.target.value)}
+				rows={field.rows}
+			/>
+		);
 	}
 	return (
 		<Input
@@ -185,27 +191,25 @@ function ChoiceFieldInput({
 		onChange({ ...draft, checked });
 	};
 	return (
-		<div className="space-y-1">
-			{field.label.length > 0 && (
-				<p className="text-omp-xs font-medium break-words whitespace-pre-wrap text-(--omp-text)">
-					<Spans spans={field.label} />
-				</p>
-			)}
-			{field.options.map((option, index) => (
-				<ChoiceRow
-					checked={draft.checked.has(index)}
-					disabled={option.disabled}
-					key={index}
-					multi={field.multi}
-					onClick={() => toggle(index)}
-				>
-					<span className="block text-omp-xs break-words whitespace-pre-wrap text-(--omp-text)">
-						<Spans spans={option.label} />
-					</span>
-				</ChoiceRow>
-			))}
+		<div className="space-y-2">
+			<div className="omp-question-options" role="group" aria-label={plainText(field.label) || undefined}>
+				{field.options.map((option, index) => (
+					<ChoiceRow
+						checked={draft.checked.has(index)}
+						disabled={option.disabled}
+						key={index}
+						multi={field.multi}
+						onClick={() => toggle(index)}
+					>
+						<span className="block text-omp-sm whitespace-pre-wrap text-(--omp-text)">
+							<Spans spans={option.label} />
+						</span>
+					</ChoiceRow>
+				))}
+			</div>
 			{field.other && (
 				<Input
+					aria-label={t("extDialog.ask.customPlaceholder")}
 					autoComplete="off"
 					onChange={event => {
 						const other = event.target.value;
@@ -216,7 +220,11 @@ function ChoiceFieldInput({
 					value={draft.other}
 				/>
 			)}
-			{error && <p className="text-omp-xs text-(--omp-error)">{error}</p>}
+			{error && (
+				<p className="text-omp-xs text-(--omp-error)" role="alert">
+					{error}
+				</p>
+			)}
 		</div>
 	);
 }
@@ -253,14 +261,14 @@ function ContextBlock({ block }: { block: Exclude<ExtensionFormBlock, { kind: "f
 		}
 		case "pre":
 			return (
-				<pre className="overflow-x-auto rounded-md bg-(--omp-code-bg) px-2.5 py-2 font-mono text-omp-xs text-(--omp-text)">
+				<pre className="whitespace-pre-wrap rounded-md bg-(--omp-code-bg) px-2.5 py-2 font-mono text-omp-xs text-(--omp-text)">
 					{sanitizeToolText(block.text)}
 				</pre>
 			);
 		case "table":
 			return (
-				<div className="overflow-x-auto">
-					<table className="w-full text-left text-omp-xs text-(--omp-text)">
+				<div>
+					<table className="w-full table-fixed text-left text-omp-xs text-(--omp-text)">
 						<tbody>
 							{block.rows.map((row, rowIndex) => {
 								const Cell = rowIndex < block.headerRows ? "th" : "td";
@@ -284,15 +292,29 @@ function ContextBlock({ block }: { block: Exclude<ExtensionFormBlock, { kind: "f
 const questionDrafts = new WeakMap<object, unknown>();
 /** Request-object ownership prevents cross-session draft reuse and survives transcript remounts. */
 export function useQuestionDraft<T>(key: object, initial: () => T): [T, Dispatch<SetStateAction<T>>] {
-	const [value, setValue] = useState<T>(() => questionDrafts.has(key) ? questionDrafts.get(key) as T : initial());
-	return [value, next => setValue(previous => {
-		const value = typeof next === "function" ? (next as (value: T) => T)(previous) : next;
-		questionDrafts.set(key, value);
-		return value;
-	})];
+	const [value, setValue] = useState<T>(() => (questionDrafts.has(key) ? (questionDrafts.get(key) as T) : initial()));
+	return [
+		value,
+		next =>
+			setValue(previous => {
+				const value = typeof next === "function" ? (next as (value: T) => T)(previous) : next;
+				questionDrafts.set(key, value);
+				return value;
+			}),
+	];
 }
 /** Questions dock in the composer; permission and sign-in surfaces stay modal. */
-export function QuestionSurface({ inline, title, onClose, children }: { inline?: boolean; title: string; onClose: () => void; children: ReactNode }) {
+export function QuestionSurface({
+	inline,
+	title,
+	onClose,
+	children,
+}: {
+	inline?: boolean;
+	title: string;
+	onClose: () => void;
+	children: ReactNode;
+}) {
 	return inline ? (
 		<section
 			aria-label={title}
@@ -302,9 +324,120 @@ export function QuestionSurface({ inline, title, onClose, children }: { inline?:
 			<h2 className="omp-inline-question-title text-omp-sm font-semibold text-(--omp-text)">{title}</h2>
 			{children}
 		</section>
-	) : <Modal onClose={onClose} open size="lg" title={title}>{children}</Modal>;
+	) : (
+		<Modal onClose={onClose} open size="lg" title={title}>
+			{children}
+		</Modal>
+	);
 }
 
+/** Shared navigation; a submit on an intermediate step never responds to Core. */
+export function QuestionForm({
+	step,
+	count,
+	onStep,
+	onAdvance,
+	inline,
+	onCancel,
+	footer,
+	secondary,
+	kind,
+	children,
+}: {
+	step: number;
+	count: number;
+	onStep: (step: number) => void;
+	onAdvance: () => void;
+	inline?: boolean;
+	onCancel: () => void;
+	footer: ReactNode;
+	secondary?: ReactNode;
+	kind?: "extDialog.ask.single" | "extDialog.ask.multiple" | "extDialog.ask.manual";
+	children: ReactNode;
+}) {
+	const t = useT();
+	const body = useRef<HTMLDivElement>(null);
+	const previous = useRef(step);
+	useLayoutEffect(() => {
+		if (previous.current === step) return;
+		previous.current = step;
+		body.current?.focus();
+	}, [step]);
+	return (
+		<QuestionSurface inline={inline} onClose={onCancel} title={t("extDialog.ask.title")}>
+			<form
+				className="omp-question-layout omp-question-flow"
+				onSubmit={event => {
+					event.preventDefault();
+					onAdvance();
+				}}
+			>
+				<div className="omp-question-body space-y-3" ref={body} tabIndex={-1}>
+					<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-omp-xs text-(--omp-muted)">
+						<span aria-live="polite" className="font-medium tabular-nums text-(--omp-accent)">
+							{t("extDialog.ask.progress", { current: step + 1, total: count })}
+						</span>
+						{kind && <span>{t(kind)}</span>}
+					</div>
+					<div className="space-y-3" key={step}>
+						{children}
+					</div>
+				</div>
+				<div className="omp-question-actions flex flex-wrap items-center justify-between gap-2 border-t border-(--omp-border-muted)">
+					<div className="flex flex-wrap items-center gap-2">
+						<Button onClick={onCancel} size="sm" type="button" variant="ghost">
+							{t("common.cancel")}
+						</Button>
+						{secondary}
+						{footer}
+					</div>
+					<div className="ml-auto flex flex-wrap gap-2">
+						{step > 0 && (
+							<Button onClick={() => onStep(step - 1)} size="sm" type="button" variant="secondary">
+								{t("extDialog.ask.back")}
+							</Button>
+						)}
+						<Button size="sm" type="submit" variant="primary">
+							{t(step + 1 < count ? "extDialog.ask.next" : "extDialog.submit")}
+						</Button>
+					</div>
+				</div>
+			</form>
+		</QuestionSurface>
+	);
+}
+
+type FormContext = Exclude<ExtensionFormBlock, { kind: "field" }>;
+interface FormStep {
+	title: ExtensionFormSpan[];
+	before: FormContext[];
+	after?: FormContext[];
+	field?: ExtensionFormField;
+	fieldIndex: number;
+}
+
+function formSteps(sections: ExtensionFormSection[]): { fields: ExtensionFormField[]; steps: FormStep[] } {
+	const fields: ExtensionFormField[] = [];
+	const steps: FormStep[] = [];
+	for (const { title, blocks } of sections) {
+		let before: FormContext[] = [];
+		let last: FormStep | undefined;
+		for (const block of blocks) {
+			if (block.kind !== "field") {
+				before.push(block);
+			} else if (block.field.name) {
+				last = { title, before, field: block.field, fieldIndex: fields.length };
+				fields.push(block.field);
+				steps.push(last);
+				before = [];
+			}
+		}
+		if (last) last.after = before;
+		else if (title.length || before.length) steps.push({ title, before, fieldIndex: -1 });
+	}
+	if (!steps.length) steps.push({ title: [], before: [], fieldIndex: -1 });
+	return { fields, steps };
+}
 
 export function FormDialog({
 	sections,
@@ -323,96 +456,70 @@ export function FormDialog({
 	draftKey?: object;
 }) {
 	const t = useT();
-	const fields = useMemo(
-		() =>
-			sections.flatMap(section =>
-				section.blocks.flatMap(block => (block.kind === "field" && block.field.name ? [block.field] : [])),
-			),
-		[sections],
-	);
-	const [drafts, setDrafts] = useQuestionDraft<FieldDraft[]>(draftKey ?? sections, () => fields.map(initialDraft));
-	const [missing, setMissing] = useState<ReadonlySet<number>>(new Set());
-
-	const update = (index: number, draft: FieldDraft) => {
-		setDrafts(previous => previous.map((item, position) => (position === index ? draft : item)));
-		setMissing(previous => {
-			const next = new Set(previous);
-			next.delete(index);
-			return next;
-		});
+	const { fields, steps } = useMemo(() => formSteps(sections), [sections]);
+	const [{ step, drafts }, setFlow] = useQuestionDraft(draftKey ?? sections, () => ({
+		step: 0,
+		drafts: fields.map(initialDraft),
+	}));
+	const [missing, setMissing] = useState(false);
+	const { title, before, after, field, fieldIndex } = steps[step]!;
+	const draft = drafts[fieldIndex];
+	const error = missing ? t("extDialog.form.required") : undefined;
+	const goTo = (step: number) => {
+		setMissing(false);
+		setFlow(previous => ({ ...previous, step }));
 	};
-
-	const submit = () => {
-		const blank = fields.flatMap((field, index) => (field.required && isBlank(field, drafts[index]) ? [index] : []));
-		if (blank.length > 0) {
-			setMissing(new Set(blank));
+	const update = (draft: FieldDraft) => {
+		setMissing(false);
+		setFlow(previous => ({ ...previous, drafts: previous.drafts.with(fieldIndex, draft) }));
+	};
+	const advance = () => {
+		if (field?.required && isBlank(field, draft)) {
+			setMissing(true);
 			return;
 		}
-		onSubmit(formDataOf(fields, drafts));
+		if (step + 1 < steps.length) goTo(step + 1);
+		else onSubmit(formDataOf(fields, drafts));
 	};
-
-	const renderField = (field: ExtensionFormField) => {
-		const index = fields.indexOf(field);
-		const draft = drafts[index];
-		if (index < 0 || draft === undefined) return null;
-		const error = missing.has(index) ? t("extDialog.form.required") : undefined;
-		if (field.kind === "text") {
-			return (
-				<TextFieldInput
-					error={error}
-					field={field}
-					onChange={value => update(index, value)}
-					value={typeof draft === "string" ? draft : ""}
-				/>
-			);
-		}
-		return (
-			<ChoiceFieldInput
-				draft={typeof draft === "string" ? { checked: new Set(), other: "" } : draft}
-				error={error}
-				field={field}
-				onChange={value => update(index, value)}
-			/>
-		);
-	};
-
 	return (
-		<QuestionSurface inline={inline} onClose={onCancel} title={t("extDialog.ask.title")}>
-			<form
-				className="omp-question-layout space-y-5"
-				onSubmit={event => {
-					event.preventDefault();
-					submit();
-				}}
-			>
-				<div className="omp-question-body space-y-3">
-					{sections.map((section, sectionIndex) => (
-						<div className="space-y-3" key={sectionIndex}>
-							{section.title.length > 0 && (
-								<h3 className="text-omp-xs font-semibold break-words whitespace-pre-wrap text-(--omp-text)">
-									<Spans spans={section.title} />
-								</h3>
-							)}
-							{section.blocks.map((block, blockIndex) => (
-								<div key={blockIndex}>
-									{block.kind === "field" ? renderField(block.field) : <ContextBlock block={block} />}
-								</div>
-							))}
-						</div>
-					))}
-				</div>
-				<div className="omp-question-actions flex items-center justify-between gap-2 border-t border-(--omp-border-muted) pt-3">
-					<div className="flex items-center gap-2">{footer}</div>
-					<div className="flex gap-2">
-						<Button onClick={onCancel} size="sm" type="button" variant="ghost">
-							{t("common.cancel")}
-						</Button>
-						<Button size="sm" type="submit" variant="primary">
-							{t("extDialog.submit")}
-						</Button>
-					</div>
-				</div>
-			</form>
-		</QuestionSurface>
+		<QuestionForm
+			count={steps.length}
+			footer={footer}
+			inline={inline}
+			kind={
+				field?.kind === "choice"
+					? field.multi
+						? "extDialog.ask.multiple"
+						: "extDialog.ask.single"
+					: field && "extDialog.ask.manual"
+			}
+			onAdvance={advance}
+			onCancel={onCancel}
+			onStep={goTo}
+			step={step}
+		>
+			{title.length > 0 && (
+				<h3 className="text-omp-lg font-semibold whitespace-pre-wrap">
+					<Spans spans={title} />
+				</h3>
+			)}
+			{before.map((block, index) => (
+				<ContextBlock block={block} key={index} />
+			))}
+			{field?.kind === "choice" && field.label.length > 0 && (
+				<p className="text-omp-sm font-medium whitespace-pre-wrap">
+					<Spans spans={field.label} />
+				</p>
+			)}
+			{field?.kind === "text" && typeof draft === "string" && (
+				<TextFieldInput error={error} field={field} onChange={update} value={draft} />
+			)}
+			{field?.kind === "choice" && draft && typeof draft !== "string" && (
+				<ChoiceFieldInput draft={draft} error={error} field={field} onChange={update} />
+			)}
+			{after?.map((block, index) => (
+				<ContextBlock block={block} key={index} />
+			))}
+		</QuestionForm>
 	);
 }

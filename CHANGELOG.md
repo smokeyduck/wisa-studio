@@ -7,6 +7,8 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+- Composer questions now show one step at a time with a progress counter, Back and Next, and an auto-sizing card. Single-choice, multiple-choice, and written answers are kept between steps and sent to Core together.
+
 ## [0.9.56] - 2026-11-25
 
 Core source: `smokeyduck/oh-my-pi@9e97421512282acee98a5e728adf575c4b55895d` (Core 19.2.0).

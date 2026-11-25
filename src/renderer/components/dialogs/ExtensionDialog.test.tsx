@@ -7,10 +7,10 @@ import { I18nProvider } from "../../lib/i18n";
 import { type ExtensionUiStore, useExtensionUiStore } from "../../stores/extension-ui";
 import {
 	deleteSessionRuntime,
-	sessionRuntimeStore,
-	setFocusedSessionRuntime,
 	SessionRuntimeProvider,
 	sessionRuntime,
+	sessionRuntimeStore,
+	setFocusedSessionRuntime,
 } from "../../stores/session-runtime-context";
 import { createTabRuntime } from "../../stores/tab-runtime";
 import { ComposerQuestions, ExtensionDialog } from "./ExtensionDialog";
@@ -281,20 +281,28 @@ describe("ExtensionDialog form", () => {
 		});
 	};
 
-	it("shows every question in one dialog and answers by control name", async () => {
+	it("shows one field at a time, retains edits on Back, and submits all named answers once", async () => {
 		await mount();
 		await showForm();
 		const body = () => document.body.textContent ?? "";
+		expect(body()).toContain("Question 1 / 2");
 		expect(body()).toContain("Where to?");
-		expect(body()).toContain("API key");
-		const staging = buttonWithText("Staging");
-		if (!staging) throw new Error("missing option");
-		await click(staging);
+		expect(body()).not.toContain("API key");
+		await click(buttonWithText("Staging")!);
 		await submitForm();
-		expect(respondExtensionUi).toHaveBeenCalledWith({
+		expect(respondExtensionUi).not.toHaveBeenCalled();
+		expect(body()).toContain("Question 2 / 2");
+		expect(body()).not.toContain("Where to?");
+		await typeInto(document.querySelector('input[type="password"]') as unknown as TestElement, "edited");
+		await click(buttonWithText("Back")!);
+		expect(document.querySelector('button[aria-pressed="true"]')?.textContent).toBe("Staging");
+		await click(buttonWithText("Production")!);
+		await submitForm();
+		await submitForm();
+		expect(respondExtensionUi).toHaveBeenCalledExactlyOnceWith({
 			type: "extension_ui_response",
 			id: "form-1",
-			formData: { target: "stage", api_key: "prefilled" },
+			formData: { target: "prod", api_key: "edited" },
 		});
 	});
 
@@ -444,11 +452,20 @@ describe("ExtensionDialog non-dialog mutations", () => {
 
 describe("ExtensionDialog cross-tab requests", () => {
 	it("keeps background questions out of the active chat and restores their draft on remount", async () => {
-		createTabRuntime("tab-fg"); createTabRuntime("tab-bg"); setFocusedSessionRuntime("tab-fg");
+		createTabRuntime("tab-fg");
+		createTabRuntime("tab-bg");
+		setFocusedSessionRuntime("tab-fg");
 		const bg = sessionRuntimeStore<ExtensionUiStore>("tab-bg", "extensionUi");
 		if (!bg) throw new Error("missing background store");
 		await mount();
-		await act(async () => bg.getState().pushRequest({ type: "extension_ui_request", id: "bg-question", method: "input", title: "Owning question" }));
+		await act(async () =>
+			bg.getState().pushRequest({
+				type: "extension_ui_request",
+				id: "bg-question",
+				method: "input",
+				title: "Owning question",
+			}),
+		);
 		expect(document.body.textContent).not.toContain("Owning question");
 		const runtime = sessionRuntime("tab-bg");
 		if (!runtime) throw new Error("missing runtime");
@@ -462,15 +479,30 @@ describe("ExtensionDialog cross-tab requests", () => {
 				</SessionRuntimeProvider>
 			</I18nProvider>
 		);
-		await act(async () => { setFocusedSessionRuntime("tab-bg"); root.render(owningPane); });
+		await act(async () => {
+			setFocusedSessionRuntime("tab-bg");
+			root.render(owningPane);
+		});
 		expect(document.querySelector("[data-inline-question]")).not.toBeNull();
 		expect(document.querySelector('[role="dialog"]')).toBeNull();
 		await typeInto(document.querySelector("input") as unknown as TestElement, "keep draft");
-		await act(async () => { root.render(<I18nProvider><ExtensionDialog /></I18nProvider>); });
-		await act(async () => { root.render(owningPane); });
+		await act(async () => {
+			root.render(
+				<I18nProvider>
+					<ExtensionDialog />
+				</I18nProvider>,
+			);
+		});
+		await act(async () => {
+			root.render(owningPane);
+		});
 		expect(document.querySelector("input")?.getAttribute("value")).toBe("keep draft");
 		await submit(document.querySelector("form") as unknown as TestElement);
-		expect(respondExtensionUi).toHaveBeenCalledWith({ type: "extension_ui_response", id: "bg-question", value: "keep draft" });
+		expect(respondExtensionUi).toHaveBeenCalledWith({
+			type: "extension_ui_response",
+			id: "bg-question",
+			value: "keep draft",
+		});
 		expect(bg.getState().pendingRequests).toEqual([]);
 	});
 	it("surfaces a blocking request queued in a background tab and clears it from the owning store", async () => {

@@ -20,11 +20,16 @@ import type { ExtensionAskDialogResult, ExtensionUIRequest } from "../../../shar
 import { AnsiText } from "../../lib/ansi";
 import { useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
-import { extensionRequestReceivedAt, removeExtensionRequest, useAllPendingRequests, useExtensionUiStore } from "../../stores/extension-ui";
+import {
+	extensionRequestReceivedAt,
+	removeExtensionRequest,
+	useAllPendingRequests,
+	useExtensionUiStore,
+} from "../../stores/extension-ui";
 import { toast } from "../../stores/toast";
-import { Button, Input, Modal, Spinner } from "../common";
+import { Button, Input, Modal, Spinner, TextArea } from "../common";
 import { ApprovalDialog } from "./ApprovalDialog";
-import { ChoiceRow, FormDialog, QuestionSurface, useQuestionDraft } from "./FormDialog";
+import { ChoiceRow, FormDialog, QuestionForm, QuestionSurface, useQuestionDraft } from "./FormDialog";
 
 /** The `open_url` request a sign-in prompt says it belongs to. */
 function signInOwner(request: ExtensionUIRequest): string | undefined {
@@ -74,7 +79,6 @@ function ExtensionSurfaces() {
 }
 
 function useCountdown(request: ExtensionUIRequest | null): number | null {
-	const requestId = request?.id ?? null;
 	const timeout =
 		request && request.method === "select"
 			? request.timeout
@@ -271,41 +275,24 @@ function AskDialog({
 	inline?: boolean;
 }) {
 	const t = useT();
-	const [answers, setAnswers] = useQuestionDraft<AskAnswerState[]>(request, () =>
-		request.questions.map(() => ({ selected: new Set<string>(), custom: "", note: "" })),
-	);
+	const [{ step, answers }, setFlow] = useQuestionDraft(request, () => ({
+		step: 0,
+		answers: request.questions.map<AskAnswerState>(() => ({ selected: new Set(), custom: "", note: "" })),
+	}));
+	const goTo = (step: number) => setFlow(previous => ({ ...previous, step }));
+	const question = request.questions[step];
+	const answer = answers[step];
+	const update = (change: (answer: AskAnswerState) => AskAnswerState) =>
+		setFlow(previous => ({ ...previous, answers: previous.answers.with(step, change(previous.answers[step]!)) }));
 
-	const toggleOption = (questionIndex: number, label: string) => {
-		setAnswers(prev =>
-			prev.map((answer, index) => {
-				if (index !== questionIndex) return answer;
-				if (request.questions[questionIndex]?.multi) {
-					const selected = new Set(answer.selected);
-					if (selected.has(label)) selected.delete(label);
-					else selected.add(label);
-					return { ...answer, selected };
-				}
-				// Single-select: picking an option replaces any custom answer.
-				return { ...answer, selected: new Set([label]), custom: "" };
-			}),
-		);
-	};
-
-	const setCustom = (questionIndex: number, custom: string) => {
-		setAnswers(prev =>
-			prev.map((answer, index) => {
-				if (index !== questionIndex) return answer;
-				// Single-select: typing a custom answer clears the option selection.
-				if (!request.questions[questionIndex]?.multi && custom.trim() !== "") {
-					return { ...answer, custom, selected: new Set<string>() };
-				}
-				return { ...answer, custom };
-			}),
-		);
-	};
-
-	const setNote = (questionIndex: number, note: string) => {
-		setAnswers(prev => prev.map((answer, index) => (index === questionIndex ? { ...answer, note } : answer)));
+	const toggleOption = (label: string) => {
+		update(answer => {
+			if (!question?.multi) return { ...answer, selected: new Set([label]), custom: "" };
+			const selected = new Set(answer.selected);
+			if (selected.has(label)) selected.delete(label);
+			else selected.add(label);
+			return { ...answer, selected };
+		});
 	};
 
 	const unansweredCount = request.questions.reduce((count, _question, index) => {
@@ -336,106 +323,111 @@ function AskDialog({
 	};
 
 	return (
-		<QuestionSurface inline={inline} onClose={onCancel} title={t("extDialog.ask.title")}>
-			<form
-				className="omp-question-layout space-y-5"
-				onSubmit={event => {
-					event.preventDefault();
-					submit();
-				}}
-			>
-				<div className="omp-question-body space-y-3">
-					{request.questions.map((question, questionIndex) => {
-						const answer = answers[questionIndex];
-						return (
-							<div className={inline ? "space-y-1" : "space-y-2"} key={question.id}>
-								{question.header && (
-									<div className="text-omp-xxs font-medium text-(--omp-dim)">{question.header}</div>
-								)}
-								<p className="text-omp-xs leading-relaxed font-medium break-words whitespace-pre-wrap text-(--omp-text)">
-									{request.questions.length > 1 ? `${questionIndex + 1}. ` : ""}
-									{question.question}
-								</p>
-								<div className="omp-ask-options space-y-1">
-									{question.options.map((option, optionIndex) => {
-										const checked = answer?.selected.has(option.label) ?? false;
-										return (
-											<ChoiceRow
-												checked={checked}
-												key={option.label}
-												multi={question.multi ?? false}
-												onClick={() => toggleOption(questionIndex, option.label)}
-											>
-												<span className="flex items-center gap-1.5 text-omp-xs text-(--omp-text)">
-													<span className="min-w-0 break-words">{option.label}</span>
-													{question.recommended === optionIndex && (
-														<span className="shrink-0 rounded border border-(--omp-border-accent) px-1 py-px text-omp-xxs font-medium text-(--omp-accent)">
-															{t("extDialog.ask.recommended")}
-														</span>
-													)}
-												</span>
-												{option.description && (
-													<span className="mt-0.5 block text-omp-xs leading-snug break-words text-(--omp-dim)">
-														{option.description}
-													</span>
-												)}
-											</ChoiceRow>
-										);
-									})}
-								</div>
-								{question.options
-									.filter(option => answer?.selected.has(option.label) && option.preview)
-									.map(option => (
-										<div
-											className="rounded-md border border-(--omp-border-muted) bg-(--omp-code-bg) px-2.5 py-2 text-omp-sm"
-											key={`preview:${option.label}`}
-										>
-											<MarkdownRenderer content={option.preview!} />
-										</div>
-									))}
-								<div className="omp-ask-fields space-y-2">
-									<Input
-										aria-label={`${question.question}: ${t("extDialog.ask.customPlaceholder")}`}
-										compact={inline}
-										onChange={event => setCustom(questionIndex, event.target.value)}
-										placeholder={t("extDialog.ask.customPlaceholder")}
-										value={answer?.custom ?? ""}
-									/>
-									<Input
-										aria-label={`${question.question}: ${t("extDialog.ask.notePlaceholder")}`}
-										compact={inline}
-										onChange={event => setNote(questionIndex, event.target.value)}
-										placeholder={t("extDialog.ask.notePlaceholder")}
-										value={answer?.note ?? ""}
-									/>
-								</div>
+		<QuestionForm
+			count={Math.max(1, request.questions.length)}
+			footer={
+				<>
+					<TimeoutFooter remaining={remaining} />
+					{unansweredCount > 0 && (
+						<span className="text-omp-xs text-(--omp-warning)">
+							{t("extDialog.ask.unanswered", { count: unansweredCount })}
+						</span>
+					)}
+				</>
+			}
+			inline={inline}
+			kind={
+				question &&
+				(!question.options.length
+					? "extDialog.ask.manual"
+					: question.multi
+						? "extDialog.ask.multiple"
+						: "extDialog.ask.single")
+			}
+			onAdvance={() => {
+				if (step + 1 < request.questions.length) goTo(step + 1);
+				else submit();
+			}}
+			onCancel={onCancel}
+			onStep={goTo}
+			secondary={
+				<Button onClick={() => onSubmit({ kind: "chat" })} size="sm" type="button" variant="secondary">
+					{t("extDialog.ask.chat")}
+				</Button>
+			}
+			step={step}
+		>
+			{question && answer && (
+				<>
+					{question.header && <div className="text-omp-xs font-medium text-(--omp-muted)">{question.header}</div>}
+					<h3 className="text-omp-lg font-semibold whitespace-pre-wrap">{question.question}</h3>
+					{question.options.length > 0 && (
+						<div aria-label={question.question} className="omp-question-options" role="group">
+							{question.options.map((option, index) => (
+								<ChoiceRow
+									checked={answer.selected.has(option.label)}
+									key={option.label}
+									multi={question.multi ?? false}
+									onClick={() => toggleOption(option.label)}
+								>
+									<span className="flex flex-wrap items-center gap-1.5 text-omp-sm text-(--omp-text)">
+										<span className="min-w-0">{option.label}</span>
+										{question.recommended === index && (
+											<span className="rounded border border-(--omp-border-accent) px-1 text-omp-xxs font-medium text-(--omp-accent)">
+												{t("extDialog.ask.recommended")}
+											</span>
+										)}
+									</span>
+									{option.description && (
+										<span className="mt-1 block text-omp-xs whitespace-pre-wrap text-(--omp-muted)">
+											{option.description}
+										</span>
+									)}
+								</ChoiceRow>
+							))}
+						</div>
+					)}
+					{question.options.map(option =>
+						answer.selected.has(option.label) && option.preview ? (
+							<div
+								className="min-w-0 rounded-md border border-(--omp-border-muted) bg-(--omp-code-bg) px-2.5 py-2 text-omp-sm"
+								key={option.label}
+							>
+								<MarkdownRenderer content={option.preview} />
 							</div>
-						);
-					})}
-				</div>
-				<div className="omp-question-actions flex flex-wrap items-center justify-between gap-2 border-t border-(--omp-border-muted) pt-3">
-					<div className="flex items-center gap-2">
-						<TimeoutFooter remaining={remaining} />
-						{unansweredCount > 0 && (
-							<span className="text-omp-xs text-(--omp-warning)">
-								{t("extDialog.ask.unanswered", { count: unansweredCount })}
-							</span>
+						) : null,
+					)}
+					<div className="omp-ask-fields">
+						<TextArea
+							aria-label={t("extDialog.ask.customPlaceholder")}
+							className="[field-sizing:content]"
+							onChange={event => {
+								const custom = event.target.value;
+								update(answer => ({
+									...answer,
+									custom,
+									selected: !question.multi && custom.trim() ? new Set() : answer.selected,
+								}));
+							}}
+							placeholder={t("extDialog.ask.customPlaceholder")}
+							rows={2}
+							value={answer.custom}
+						/>
+						{request.method === "askDialog" && (
+							<Input
+								aria-label={t("extDialog.ask.notePlaceholder")}
+								onChange={event => {
+									const note = event.target.value;
+									update(answer => ({ ...answer, note }));
+								}}
+								placeholder={t("extDialog.ask.notePlaceholder")}
+								value={answer.note}
+							/>
 						)}
 					</div>
-					<div className="flex flex-wrap gap-2">
-						<Button onClick={onCancel} size="sm" type="button" variant="ghost">
-							{t("common.cancel")}
-						</Button>
-						<Button onClick={() => onSubmit({ kind: "chat" })} size="sm" type="button" variant="secondary">
-							{t("extDialog.ask.chat")}
-						</Button>
-						<Button size="sm" type="submit" variant="primary">
-							{t("extDialog.submit")}
-						</Button>
-					</div>
-				</div>
-			</form>
-		</QuestionSurface>
+				</>
+			)}
+		</QuestionForm>
 	);
 }
 
@@ -800,9 +792,13 @@ function ActiveDialog({
 }
 
 export function isInlineQuestion(request: ExtensionUIRequest): boolean {
-	return request.method === "ask" || request.method === "askDialog" || request.method === "form" ||
+	return (
+		request.method === "ask" ||
+		request.method === "askDialog" ||
+		request.method === "form" ||
 		(request.method === "select" && !isApprovalRequest(request)) ||
-		(request.method === "input" && !request.authCodeFor && !request.loginPromptFor);
+		(request.method === "input" && !request.authCodeFor && !request.loginPromptFor)
+	);
 }
 
 /** Render a pending question instead of the owning tab's composer without unmounting its draft. */
@@ -815,7 +811,7 @@ export function ComposerQuestions({ children }: { children: ReactNode }) {
 				{children}
 			</div>
 			{request && (
-				<div className="omp-composer-shell min-h-0 w-full shrink-0 px-2 pb-1">
+				<div className="omp-composer-shell omp-question-dock min-h-0 w-full shrink-0 px-2 pb-1">
 					<ActiveDialog inline key={request.id} remaining={remaining} request={request} />
 				</div>
 			)}
@@ -835,7 +831,12 @@ export function ExtensionDialog() {
 			for (const req of pending) {
 				if (!isInlineQuestion(req) || !("timeout" in req) || req.timeout === undefined) continue;
 				if (Date.now() - extensionRequestReceivedAt(req) < req.timeout) continue;
-				window.omp.ui.respondExtensionUi({ type: "extension_ui_response", id: req.id, cancelled: true, timedOut: true });
+				window.omp.ui.respondExtensionUi({
+					type: "extension_ui_response",
+					id: req.id,
+					cancelled: true,
+					timedOut: true,
+				});
 				removeExtensionRequest(req.id);
 			}
 		};
@@ -844,7 +845,10 @@ export function ExtensionDialog() {
 	}, [pending]);
 
 	const request = useMemo(
-		() => pending.find(req => !NON_DIALOG_METHODS.has(req.method) && !isInlineQuestion(req) && !belongsToOpenUrl(req, pending)) ?? null,
+		() =>
+			pending.find(
+				req => !NON_DIALOG_METHODS.has(req.method) && !isInlineQuestion(req) && !belongsToOpenUrl(req, pending),
+			) ?? null,
 		[pending],
 	);
 	const codePrompt = useMemo(
