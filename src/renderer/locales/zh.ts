@@ -4157,7 +4157,6 @@ export const zh: Record<string, string> = {
 	"browserWorkspace.error.address": "无法打开此网址",
 	"browserWorkspace.error.action": "浏览器操作失败",
 	"titlebar.togglePanel": "右侧边栏",
-	"titlebar.review.changes": "右侧边栏 · {count} 个未提交的文件",
 	"diffPanel.scope.aria": "选择要查看的变更",
 	"diffPanel.layout": "差异布局",
 	"diffPanel.mode.repositoryDescription": "当前检出中尚未提交的变更",

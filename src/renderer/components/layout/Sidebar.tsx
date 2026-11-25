@@ -216,7 +216,7 @@ export function Sidebar() {
 	const SIDEBAR_MAX = 420;
 	const [sidebarWidth, setSidebarWidth] = useState(236);
 	const viewportWidth = useViewportWidth();
-	const sidebarLimit = Math.round(Math.max(152, Math.min(SIDEBAR_MAX, viewportWidth * 0.22)));
+	const sidebarLimit = Math.round(Math.max(152, Math.min(SIDEBAR_MAX, viewportWidth * 0.27)));
 	const visibleSidebarWidth = Math.min(sidebarWidth, sidebarLimit);
 	const sidebarWidthRef = useRef(236);
 	// Layout widths persist like every other chrome pref; restored on mount.

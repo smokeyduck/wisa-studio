@@ -1758,12 +1758,6 @@
 	}
 }
 
-@container omp-workspace (max-width: 520px) {
-	.omp-review-label {
-		display: none;
-	}
-}
-
 @container omp-workspace (min-width: 1900px) {
 	.omp-starter-grid {
 		grid-template-columns: repeat(4, minmax(0, 1fr));

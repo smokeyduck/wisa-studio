@@ -50,7 +50,7 @@ function changes(...paths: string[]): RpcGitChanges {
 
 let getGitChanges: Mock<() => Promise<unknown>>;
 
-function installMockOmp(next: () => Promise<unknown>): void {
+function installMockOmp(next: () => Promise<unknown>) {
 	getGitChanges = vi.fn(next);
 	const getGitDiff = vi.fn(async (path: string) => ({
 		type: "response",
@@ -66,6 +66,7 @@ function installMockOmp(next: () => Promise<unknown>): void {
 	(window as unknown as { omp: { rpc: { getGitChanges: Mock; getGitDiff: Mock } } }).omp = {
 		rpc: { getGitChanges, getGitDiff },
 	};
+	return getGitDiff;
 }
 
 /** Paths of the change rows on screen. */
@@ -138,6 +139,22 @@ afterEach(async () => {
 });
 
 describe("RepositoryChanges", () => {
+	it("does not fetch collapsed file diffs when opening the panel", async () => {
+		const getGitDiff = installMockOmp(async () => ({
+			success: true,
+			data: changes("a.txt", "b.txt", "c.txt", "d.txt"),
+		}));
+		await mount();
+		expect(rowPaths()).toEqual(["a.txt", "b.txt", "c.txt", "d.txt"]);
+		expect(getGitDiff).not.toHaveBeenCalled();
+		const fileButton = queryAll('[data-change-path="b.txt"] button')[0];
+		if (!fileButton) throw new Error("missing b.txt change");
+		await click(fileButton);
+		await flush();
+		expect(getGitDiff.mock.calls).toEqual([["b.txt"]]);
+		expect(bodyText()).toContain("more");
+	});
+
 	it("keeps the loaded file list on screen when a refresh fails", async () => {
 		installMockOmp(async () => ({
 			type: "response",

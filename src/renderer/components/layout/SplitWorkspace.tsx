@@ -154,14 +154,13 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 						<button
 							aria-label={t("titlebar.togglePanel")}
 							aria-pressed={active && panelVisible}
-							className="omp-pressable flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-1.5 font-medium text-(--omp-text) hover:bg-(--omp-selected-bg) aria-pressed:bg-(--omp-accent-dim)"
+							className="omp-pressable flex size-8 shrink-0 items-center justify-center rounded-md text-(--omp-text) hover:bg-(--omp-selected-bg) aria-pressed:bg-(--omp-accent-dim)"
 							data-pane-review
 							onClick={() => void openReview()}
 							title={t("titlebar.togglePanel")}
 							type="button"
 						>
 							<PanelRight aria-hidden="true" size={15} />
-							<span className="omp-review-label whitespace-nowrap">{t("titlebar.togglePanel")}</span>
 						</button>
 						<button
 							type="button"
@@ -176,8 +175,10 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 					</header>
 				)}
 				<TodoRibbon active={active} />
-				<div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-					<SessionPaneBody label={label} tabId={tabId} />
+				<div className="relative isolate flex min-h-0 min-w-0 flex-1 overflow-hidden">
+					<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+						<SessionPaneBody label={label} tabId={tabId} />
+					</div>
 					{active && panelVisible && <PanelContainer />}
 				</div>
 			</section>

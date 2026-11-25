@@ -8,6 +8,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 ## [Unreleased]
 
 - Composer questions now show one step at a time with a progress counter, Back and Next, and an auto-sizing card. Single-choice, multiple-choice, and written answers are kept between steps and sent to Core together.
+- The right sidebar has a compact icon toggle, opens wider by default, and sits beside the chat instead of covering it. Files reuses recent directory listings, and Changes loads diff bodies only for expanded files.
 
 ## [0.9.56] - 2026-11-25
 

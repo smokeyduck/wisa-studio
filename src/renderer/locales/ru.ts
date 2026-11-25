@@ -4081,7 +4081,6 @@ export const ru: Record<string, string> = {
 	"browserWorkspace.error.address": "Не удалось открыть этот адрес",
 	"browserWorkspace.error.action": "Действие в браузере не выполнено",
 	"titlebar.togglePanel": "Правая боковая панель",
-	"titlebar.review.changes": "Правая боковая панель · незакоммиченных файлов: {count}",
 	"diffPanel.scope.aria": "Выберите, какие изменения показывать",
 	"diffPanel.layout": "Вид diff",
 	"diffPanel.mode.repositoryDescription": "Незакоммиченные изменения в этой копии репозитория",

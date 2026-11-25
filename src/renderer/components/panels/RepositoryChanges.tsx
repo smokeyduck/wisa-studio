@@ -22,8 +22,6 @@ import {
 	ToolbarIconButton,
 } from "./workspace-ui";
 
-/** Lists at most this long get their +/- counts fetched up front. */
-const PREFETCH_LIMIT = 40;
 const PREFETCH_CONCURRENCY = 4;
 /** Small change sets open fully — reading them is the whole point. */
 const AUTO_EXPAND_LIMIT = 3;
@@ -123,12 +121,10 @@ export function RepositoryChanges({ split = false }: { split?: boolean }) {
 		[rpc, t],
 	);
 
-	// Expanded cards need their body; short lists also get counts up front.
+	// Fetch diff bodies only for opened cards; collapsed paths need only Git status.
 	useEffect(() => {
 		if (!changes?.isRepo) return;
-		const wanted = [...expanded];
-		if (changes.files.length <= PREFETCH_LIMIT) wanted.push(...changes.files.map(file => file.path));
-		const queue = [...new Set(wanted)].filter(path => !requested.current.has(path));
+		const queue = [...expanded].filter(path => !requested.current.has(path));
 		if (queue.length === 0) return;
 		let cancelled = false;
 		const worker = async () => {
@@ -139,7 +135,7 @@ export function RepositoryChanges({ split = false }: { split?: boolean }) {
 				await loadDiff(path);
 			}
 		};
-		for (let i = 0; i < PREFETCH_CONCURRENCY; i++) void worker();
+		for (let i = 0, count = Math.min(queue.length, PREFETCH_CONCURRENCY); i < count; i++) void worker();
 		return () => {
 			cancelled = true;
 		};
@@ -160,8 +156,8 @@ export function RepositoryChanges({ split = false }: { split?: boolean }) {
 			removes += entry.removes;
 			counted++;
 		}
-		return counted > 0 ? { adds, removes } : null;
-	}, [diffs]);
+		return counted > 0 && counted === changes?.files.length ? { adds, removes } : null;
+	}, [changes, diffs]);
 
 	const toggle = (path: string) =>
 		setExpanded(previous => {

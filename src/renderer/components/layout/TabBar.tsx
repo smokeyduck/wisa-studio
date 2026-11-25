@@ -41,7 +41,6 @@ import {
 	useState,
 } from "react";
 import { useSessionList } from "../../hooks/use-session-list";
-import { useWorkingTreeChangeCount } from "../../hooks/use-working-tree-changes";
 import { basename, cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { actionChords, KEYMAP_ACTION_BY_ID, onEscape } from "../../lib/keymap";
@@ -69,7 +68,6 @@ import {
 	tabDisplayTitle,
 	tabUnits,
 	unitFocusTabId,
-	useActiveTabKind,
 	useTabsStore,
 	visibleTabIds,
 } from "../../stores/tabs";
@@ -322,15 +320,9 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 	const { sessions } = useSessionList("global");
 	const tabs = useTabsStore(s => s.tabs);
 	const activeTabId = useTabsStore(s => s.activeTabId);
-	const isChat = useActiveTabKind() === "chat";
 	const panelVisible = useUiStore(s => s.panelVisible && s.panelOwnerTabId === activeTabId);
 	const togglePanel = useUiStore(s => s.togglePanel);
-	const changeCount = useWorkingTreeChangeCount(!isChat);
 	const panelLabel = t("titlebar.togglePanel");
-	const panelTitle =
-		changeCount && changeCount > 0
-			? t("titlebar.review.changes", { count: changeCount, plural: changeCount === 1 ? "" : "s" })
-			: panelLabel;
 	const groups = useTabsStore(s => s.groups);
 	const split = useTabsStore(s => s.split);
 	const groupAliases = useSidebarPrefs(s => s.groupAliases);
@@ -756,16 +748,10 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 					aria-label={panelLabel}
 					aria-pressed={panelVisible}
 					onClick={togglePanel}
-					title={panelTitle}
-					className="omp-review-toggle no-drag omp-pressable ml-auto flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-(--omp-border-muted) px-2 text-omp-sm font-medium text-(--omp-text) hover:bg-(--omp-selected-bg) aria-pressed:border-(--omp-border-accent) aria-pressed:bg-(--omp-accent-dim)"
+					title={panelLabel}
+					className="omp-review-toggle no-drag omp-pressable ml-auto flex size-8 shrink-0 items-center justify-center rounded-lg border border-(--omp-border-muted) text-(--omp-text) hover:bg-(--omp-selected-bg) aria-pressed:border-(--omp-border-accent) aria-pressed:bg-(--omp-accent-dim)"
 				>
 					<PanelRight aria-hidden="true" size={17} />
-					<span className="omp-review-label whitespace-nowrap">{panelLabel}</span>
-					{changeCount != null && changeCount > 0 && (
-						<span className="omp-review-label font-mono text-omp-xs tabular-nums text-(--omp-muted)" aria-hidden="true">
-							{changeCount > 99 ? "99+" : changeCount}
-						</span>
-					)}
 				</button>
 			</div>
 			{searchMenu && (

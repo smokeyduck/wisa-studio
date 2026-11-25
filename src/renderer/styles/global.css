@@ -868,20 +868,9 @@ kbd,
 	}
 }
 
-/* Session panes clip the inspector's entrance at their right edge. */
 .omp-inspector {
 	background: var(--omp-bg-primary);
 	-webkit-app-region: no-drag;
-	animation: omp-inspector-enter var(--omp-motion-med) var(--omp-ease) both;
-}
-
-@keyframes omp-inspector-enter {
-	from {
-		transform: translateX(100%);
-	}
-	to {
-		transform: none;
-	}
 }
 
 /* ============================================================================

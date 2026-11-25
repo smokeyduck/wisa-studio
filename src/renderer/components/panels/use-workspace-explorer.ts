@@ -2,34 +2,61 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { IpcFsListResult } from "../../../shared/ipc-types";
 import { describeError } from "../../lib/errors";
 
+// Reuse recent listings when the explorer remounts. Never cache search results or errors.
+const DIRECTORY_CACHE_TTL_MS = 5_000;
+const DIRECTORY_CACHE_LIMIT = 32;
+const EMPTY_DIRECTORIES: ReadonlyMap<string, IpcFsListResult> = new Map();
+const directoryCache = new Map<string, { result: IpcFsListResult; expires: number }>();
+
 export function useWorkspaceExplorer(cwd: string, tabId: string | null, expanded: ReadonlySet<string>) {
 	const [query, setQuery] = useState("");
 	const [showIgnored, setShowIgnored] = useState(false);
-	const [directories, setDirectories] = useState<ReadonlyMap<string, IpcFsListResult>>(() => new Map());
+	const scope = `${JSON.stringify([tabId, cwd, showIgnored])}\0`;
+	const [listing, setListing] = useState({ scope, directories: EMPTY_DIRECTORIES });
+	const directories = listing.scope === scope ? listing.directories : EMPTY_DIRECTORIES;
 	const [search, setSearch] = useState<IpcFsListResult | null>(null);
-	const rootDirectory = directories.get("");
+	const [searchRevision, setSearchRevision] = useState(0);
 	const active = useRef(new Set<string>());
 	const version = useRef(0);
 	const term = query.trim();
 	const refresh = useCallback(() => {
+		for (const key of directoryCache.keys()) {
+			if (key.startsWith(scope)) directoryCache.delete(key);
+		}
 		version.current++;
 		active.current.clear();
-		setDirectories(new Map());
-	}, []);
+		setListing({ scope, directories: new Map() });
+		setSearchRevision(value => value + 1);
+	}, [scope]);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: changing the workspace or ignore mode invalidates every directory.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: invalidate in-flight reads when the scope changes or unmounts.
 	useEffect(() => {
-		refresh();
+		const requests = active.current;
 		return () => {
 			version.current++;
-			active.current.clear();
+			requests.clear();
 		};
-	}, [cwd, tabId, showIgnored, refresh]);
+	}, [scope]);
 
 	useEffect(() => {
 		const requestVersion = version.current;
 		const list = async (path: string) => {
 			if (directories.has(path) || active.current.has(path)) return;
+			const key = scope + path;
+			const cacheable = tabId !== null || cwd !== "";
+			const cached = cacheable ? directoryCache.get(key) : undefined;
+			const publish = (result: IpcFsListResult) =>
+				setListing(current => ({
+					scope,
+					directories: new Map(current.scope === scope ? current.directories : EMPTY_DIRECTORIES).set(
+						path,
+						result,
+					),
+				}));
+			if (cached && cached.expires > Date.now()) {
+				publish(cached.result);
+				return;
+			}
 			active.current.add(path);
 			let result: IpcFsListResult;
 			try {
@@ -39,11 +66,19 @@ export function useWorkspaceExplorer(cwd: string, tabId: string | null, expanded
 			}
 			if (requestVersion !== version.current) return;
 			active.current.delete(path);
-			setDirectories(current => new Map(current).set(path, result));
+			if (cacheable && result.ok) {
+				directoryCache.delete(key);
+				directoryCache.set(key, { result, expires: Date.now() + DIRECTORY_CACHE_TTL_MS });
+				if (directoryCache.size > DIRECTORY_CACHE_LIMIT) {
+					const oldest = directoryCache.keys().next().value;
+					if (oldest !== undefined) directoryCache.delete(oldest);
+				}
+			}
+			publish(result);
 		};
 		void list("");
 		for (const id of expanded) void list(id.slice(4));
-	}, [directories, expanded, showIgnored, tabId]);
+	}, [cwd, directories, expanded, scope, showIgnored, tabId]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reload on refresh and when a tab changes working directories.
 	useEffect(() => {
@@ -68,7 +103,7 @@ export function useWorkspaceExplorer(cwd: string, tabId: string | null, expanded
 			window.clearTimeout(timer);
 			if (started) void window.omp.fs.explore({ ...request, query: "" }).catch(() => {});
 		};
-	}, [term, cwd, tabId, showIgnored, rootDirectory]);
+	}, [term, scope, showIgnored, tabId, searchRevision]);
 
 	return { term, query, setQuery, showIgnored, setShowIgnored, directories, search, refresh };
 }

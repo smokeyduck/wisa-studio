@@ -4137,7 +4137,6 @@ export const th: Record<string, string> = {
 	"browserWorkspace.error.address": "เปิดที่อยู่นี้ไม่ได้",
 	"browserWorkspace.error.action": "คำสั่งเบราว์เซอร์ล้มเหลว",
 	"titlebar.togglePanel": "แถบด้านขวา",
-	"titlebar.review.changes": "แถบด้านขวา · {count} ไฟล์ที่ยังไม่ได้ commit",
 	"diffPanel.scope.aria": "เลือกว่าจะแสดงการเปลี่ยนแปลงชุดใด",
 	"diffPanel.layout": "เลย์เอาต์ Diff",
 	"diffPanel.mode.repositoryDescription": "การเปลี่ยนแปลงที่ยังไม่ได้ commit ใน checkout นี้",

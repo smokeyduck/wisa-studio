@@ -3,11 +3,6 @@ import type { RpcGitChanges } from "../../shared/rpc-types";
 import { useTabRpc } from "../lib/tab-rpc";
 import { useSessionStore } from "../stores/session";
 
-/** Number of changed files in the checkout, or null when unknown (see {@link useWorkingTreeChanges}). */
-export function useWorkingTreeChangeCount(enabled: boolean): number | null {
-	return useWorkingTreeChanges(enabled)?.files.length ?? null;
-}
-
 /**
  * Changed files in the session's checkout, or null when unknown
  * (not a repository, not ready, or the read failed). Read when the session

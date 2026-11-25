@@ -4046,7 +4046,6 @@ export const vi: Record<string, string> = {
 	"browserWorkspace.error.address": "Không mở được địa chỉ này",
 	"browserWorkspace.error.action": "Thao tác trình duyệt thất bại",
 	"titlebar.togglePanel": "Thanh bên phải",
-	"titlebar.review.changes": "Thanh bên phải · {count} tệp chưa commit",
 	"diffPanel.scope.aria": "Chọn thay đổi cần hiển thị",
 	"diffPanel.layout": "Bố cục diff",
 	"diffPanel.mode.repositoryDescription": "Các thay đổi chưa commit trong bản checkout này",

@@ -8,24 +8,31 @@ import {
 	SquareTerminal,
 	X,
 } from "lucide-react";
-import type { PointerEvent as ReactPointerEvent } from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+	memo,
+	type PointerEvent as ReactPointerEvent,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
-import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
-import { useSessionStore } from "../../stores/session";
 import { usePlanApprovalStore } from "../../stores/plan-approval";
-import { PlanPanel } from "../panels/PlanPanel";
-import { PlanApprovalPanel } from "../dialogs/PlanApprovalPanel";
+import { useSessionStore } from "../../stores/session";
+import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
 import { CHAT_PANEL_TABS, type PanelTab, useUiStore } from "../../stores/ui";
 import { AgentRoster, useAgentsTabSignal } from "../agents/AgentRoster";
 import { PanelErrorBoundary } from "../common";
 import { Glide } from "../common/Glide";
+import { PlanApprovalPanel } from "../dialogs/PlanApprovalPanel";
 import { BtwPanel } from "../panels/BtwPanel";
 import { DiffPanel } from "../panels/DiffPanel";
 import { FilesPanel } from "../panels/FilesPanel";
 import { OverviewPanel } from "../panels/OverviewPanel";
+import { PlanPanel } from "../panels/PlanPanel";
 import { TerminalPanel } from "../panels/TerminalPanel";
 
 const MIN_WIDTH = 360;
@@ -77,6 +84,35 @@ function InspectorTab({ label, description, icon: Icon, active, signal, onSelect
 	);
 }
 
+const InspectorContent = memo(function InspectorContent({ tab }: { tab: PanelTab }) {
+	switch (tab) {
+		case "overview":
+			return <OverviewPanel />;
+		case "agents":
+			return <AgentRoster />;
+		case "btw":
+			return <BtwPanel />;
+		case "diff":
+			return <DiffPanel />;
+		case "files":
+			return <FilesPanel />;
+		case "terminal":
+			return <TerminalPanel />;
+		case "plan":
+			return <InspectorPlan />;
+	}
+});
+
+function InspectorPlan() {
+	const sessionKey = useSessionStore(state => `${state.cwd}:${state.sessionId ?? state.sessionFile ?? "new"}`);
+	const proposal = usePlanApprovalStore(state => state.pending);
+	return (
+		<div key={sessionKey} className="h-full">
+			{proposal ? <PlanApprovalPanel /> : <PlanPanel />}
+		</div>
+	);
+}
+
 /** Session inspector: plans and approvals live here; execution cards stay in the transcript. */
 export function PanelContainer() {
 	const t = useT();
@@ -85,8 +121,6 @@ export function PanelContainer() {
 	const togglePanel = useUiStore(s => s.togglePanel);
 	const activeTabId = useTabsStore(s => s.activeTabId);
 	const routeReady = useActiveTabRouteReady();
-	const sessionKey = useSessionStore(state => `${state.cwd}:${state.sessionId ?? state.sessionFile ?? "new"}`);
-	const proposal = usePlanApprovalStore(state => state.pending);
 	/** Chat tabs expose only Overview, btw and Files — diffs, shells and agent browsing need tools. */
 	const isChat = useActiveTabKind() === "chat";
 	const visibleTabs = isChat ? TABS.filter(tab => CHAT_PANEL_TABS.has(tab.id)) : TABS;
@@ -98,7 +132,8 @@ export function PanelContainer() {
 	const [width, setWidth] = useState<number | "full" | null>(null);
 	const dragging = useRef(false);
 	const minWidth = Math.min(MIN_WIDTH, paneWidth);
-	const requestedWidth = width === "full" ? paneWidth : (width ?? Math.max(MIN_WIDTH, Math.round(paneWidth * 0.28)));
+	const defaultWidth = Math.min(520, Math.max(380, paneWidth * 0.42));
+	const requestedWidth = width === "full" ? paneWidth : (width ?? Math.max(MIN_WIDTH, Math.round(defaultWidth)));
 	const panelWidth = Math.min(requestedWidth, paneWidth);
 	const atLeftEdge = panelWidth === paneWidth;
 
@@ -162,7 +197,7 @@ export function PanelContainer() {
 		<aside
 			aria-busy={!routeReady}
 			ref={panelRef}
-			className="omp-inspector absolute inset-y-0 right-0 z-30 flex max-w-full flex-col border-l border-[var(--omp-border-muted)] shadow-[var(--omp-shadow-lg)]"
+			className="omp-inspector relative z-30 flex max-w-full shrink-0 flex-col border-l border-[var(--omp-border-muted)]"
 			style={{ width: paneWidth > 0 ? panelWidth : "100%" }}
 		>
 			<header className="flex h-12 shrink-0 items-center border-b border-[var(--omp-border-muted)] px-3">
@@ -207,20 +242,12 @@ export function PanelContainer() {
 					</button>
 				</div>
 			</header>
-			<div className="min-h-0 flex-1 overflow-hidden" inert={!routeReady}>
-				<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>
-					{visiblePanelTab === "overview" && <OverviewPanel />}
-					{visiblePanelTab === "agents" && <AgentRoster />}
-					{visiblePanelTab === "btw" && <BtwPanel />}
-					{visiblePanelTab === "diff" && <DiffPanel />}
-					{visiblePanelTab === "files" && <FilesPanel />}
-					{visiblePanelTab === "terminal" && <TerminalPanel />}
-					{visiblePanelTab === "plan" && (
-						<div key={`${activeTabId}:${sessionKey}`} className="h-full">
-							{proposal ? <PlanApprovalPanel /> : <PlanPanel />}
-						</div>
-					)}
-				</PanelErrorBoundary>
+			<div className="min-h-0 flex-1 overflow-hidden">
+				{routeReady && (
+					<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>
+						<InspectorContent tab={visiblePanelTab} />
+					</PanelErrorBoundary>
+				)}
 			</div>
 			<div
 				role="separator"
