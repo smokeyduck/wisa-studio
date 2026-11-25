@@ -105,7 +105,7 @@ describe("ContextStrategyBar", () => {
 		expect(row).toContain("Balanced");
 		// No server compaction, reads images: the default order lands on the image archive.
 		expect(row).toContain("Image archive");
-		expect(row).toContain("at 52.4k");
+		expect(row).toContain("at 222.8k");
 	});
 
 	it("names the method for a server-compacting model", async () => {

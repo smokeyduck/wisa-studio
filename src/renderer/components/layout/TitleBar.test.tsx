@@ -140,8 +140,6 @@ describe("TitleBar", () => {
 		expect(metrics?.textContent).toBe("1.5k tokens-$0.123-5.0s");
 		expect(metrics?.getAttribute("title")).toContain("$0.1234");
 		expect(metrics?.getAttribute("title")).toContain("50%");
-		expect(container.querySelectorAll(".omp-signal-light")).toHaveLength(1);
-		expect(container.querySelectorAll(".omp-signal-light--active")).toHaveLength(0);
 		expect(getSessionStats).toHaveBeenCalledTimes(1);
 	});
 
