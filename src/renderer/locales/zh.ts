@@ -3049,6 +3049,7 @@ export const zh: Record<string, string> = {
 	"chat.thinking.live": "正在思考…",
 	"chat.thinking.show": "显示推理过程",
 	"chat.thinking.hide": "收起推理过程",
+	"chat.waitingForAnswer": "正在等待你回答",
 	"chat.awaitingModel": "正在等待模型",
 	"chat.awaitingModel.announcement": "正在等待模型响应…",
 	"chat.awaitingModel.slow": "响应缓慢，服务商或网络可能不稳定",

@@ -3050,6 +3050,7 @@ export const th: Record<string, string> = {
 	"chat.thinking.live": "Thinking…",
 	"chat.thinking.show": "แสดงการคิด",
 	"chat.thinking.hide": "ซ่อนการคิด",
+	"chat.waitingForAnswer": "กำลังรอคำตอบจากคุณ",
 	"chat.awaitingModel": "กำลังรอโมเดล",
 	"chat.awaitingModel.announcement": "กำลังรอการตอบสนองของโมเดล…",
 	"chat.awaitingModel.slow": "การตอบสนองช้า - ผู้ให้บริการหรือเครือข่ายอาจกำลังมีปัญหา",

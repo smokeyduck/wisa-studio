@@ -2996,6 +2996,7 @@ export const ru: Record<string, string> = {
 	"chat.thinking.live": "Thinking…",
 	"chat.thinking.show": "Показать рассуждения",
 	"chat.thinking.hide": "Скрыть рассуждения",
+	"chat.waitingForAnswer": "Ожидаем вашего ответа",
 	"chat.awaitingModel": "Ожидание модели",
 	"chat.awaitingModel.announcement": "Ожидание ответа модели…",
 	"chat.awaitingModel.slow": "Медленный ответ - возможно, у провайдера или сети проблемы",

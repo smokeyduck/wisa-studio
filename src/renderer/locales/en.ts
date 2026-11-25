@@ -3129,6 +3129,7 @@ export const en: Record<string, string> = {
 	"chat.thinking.live": "Thinking…",
 	"chat.thinking.show": "Show reasoning",
 	"chat.thinking.hide": "Hide reasoning",
+	"chat.waitingForAnswer": "Waiting for your answer",
 	"chat.awaitingModel": "Waiting for the model",
 	"chat.awaitingModel.announcement": "Waiting for model response…",
 	"chat.awaitingModel.slow": "Slow response - the provider or network may be struggling",

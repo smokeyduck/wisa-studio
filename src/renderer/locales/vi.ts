@@ -2974,6 +2974,7 @@ export const vi: Record<string, string> = {
 	"chat.thinking.live": "Thinking…",
 	"chat.thinking.show": "Hiện suy luận",
 	"chat.thinking.hide": "Ẩn suy luận",
+	"chat.waitingForAnswer": "Đang đợi bạn trả lời",
 	"chat.awaitingModel": "Đang chờ mô hình",
 	"chat.awaitingModel.announcement": "Đang chờ phản hồi từ mô hình…",
 	"chat.awaitingModel.slow": "Phản hồi chậm - nhà cung cấp hoặc mạng có thể đang gặp vấn đề",

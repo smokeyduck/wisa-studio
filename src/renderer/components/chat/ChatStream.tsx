@@ -29,6 +29,7 @@ import { messageTimestampMs } from "../../lib/message-identity";
 import { abortActiveTurn, isRenderableMessageText } from "../../lib/messages";
 import { collapsibleReadTarget, groupReadRows, type ReadGroupEntry } from "../../lib/read-group";
 import { useTabRpc } from "../../lib/tab-rpc";
+import { useExtensionUiStore } from "../../stores/extension-ui";
 import { useMessagesStore } from "../../stores/messages";
 import { type QueueLane, useQueuedMessages, useQueueStore } from "../../stores/queue";
 import { useSessionStore } from "../../stores/session";
@@ -187,6 +188,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	const isStreaming = useSessionStore(s => s.isStreaming);
 	const isCompacting = useSessionStore(s => s.isCompacting || s.isBackgroundCompacting);
 	const awaitingModelSince = useSessionStore(s => s.awaitingModelSince);
+	const waitingForAnswer = useWaitingForAnswer();
 	const retryInfo = useSessionStore(s => s.retryInfo);
 	const compactionInfo = useSessionStore(s => s.compactionInfo);
 	const manualMaintenance = useSessionStore(s => s.manualMaintenance);
@@ -348,6 +350,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	// Priority matches the TUI, whose transient loaders replace the working
 	// loader; tool-execution windows show running tool cards instead.
 	const showStatusRow =
+		waitingForAnswer ||
 		retryInfo != null ||
 		compactionInfo != null ||
 		manualMaintenance != null ||
@@ -1478,6 +1481,14 @@ const SLOW_RESPONSE_HINT_SECONDS = 30;
  */
 const STALLED_RESPONSE_HINT_SECONDS = 90;
 
+function useWaitingForAnswer(): boolean {
+	return useExtensionUiStore(s =>
+		s.pendingRequests.some(
+			request => request.method === "form" || request.method === "ask" || request.method === "askDialog",
+		),
+	);
+}
+
 /**
  * Live status row for the windows where the agent is busy but the transcript
  * has nothing to show yet:
@@ -1495,6 +1506,7 @@ export function TurnStatusRow() {
 	const t = useT();
 	const rpc = useTabRpc();
 	const tabId = useRuntimeTabId();
+	const waitingForAnswer = useWaitingForAnswer();
 	const retryInfo = useSessionStore(s => s.retryInfo);
 	const compactionInfo = useSessionStore(s => s.compactionInfo);
 	const manualMaintenance = useSessionStore(s => s.manualMaintenance);
@@ -1509,10 +1521,22 @@ export function TurnStatusRow() {
 	// 1s ticking clock shared by the countdown/elapsed variants.
 	const [, setNowTick] = useState(0);
 	useEffect(() => {
+		if (waitingForAnswer) return;
 		const interval = setInterval(() => setNowTick(tick => tick + 1), 1000);
 		return () => clearInterval(interval);
-	}, []);
+	}, [waitingForAnswer]);
 	const stop = () => void abortActiveTurn(rpc, tabId);
+
+	if (waitingForAnswer) {
+		return (
+			<div
+				className="omp-status-turn ps-(--omp-editorial-inset) pe-(--omp-editorial-edge) text-omp-md text-(--omp-muted)"
+				role="status"
+			>
+				{t("chat.waitingForAnswer")}
+			</div>
+		);
+	}
 
 	if (retryInfo) {
 		const remainingSeconds = Math.max(0, Math.ceil((retryInfo.startedAt + retryInfo.delayMs - now) / 1000));
