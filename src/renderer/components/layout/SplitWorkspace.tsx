@@ -161,7 +161,7 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 							type="button"
 						>
 							<PanelRight aria-hidden="true" size={15} />
-							<span className="omp-review-label whitespace-nowrap">{t("panel.title")}</span>
+							<span className="omp-review-label whitespace-nowrap">{t("titlebar.togglePanel")}</span>
 						</button>
 						<button
 							type="button"

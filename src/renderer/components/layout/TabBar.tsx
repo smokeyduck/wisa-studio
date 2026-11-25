@@ -326,10 +326,11 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 	const panelVisible = useUiStore(s => s.panelVisible && s.panelOwnerTabId === activeTabId);
 	const togglePanel = useUiStore(s => s.togglePanel);
 	const changeCount = useWorkingTreeChangeCount(!isChat);
-	const reviewLabel =
+	const panelLabel = t("titlebar.togglePanel");
+	const panelTitle =
 		changeCount && changeCount > 0
 			? t("titlebar.review.changes", { count: changeCount, plural: changeCount === 1 ? "" : "s" })
-			: t("titlebar.togglePanel");
+			: panelLabel;
 	const groups = useTabsStore(s => s.groups);
 	const split = useTabsStore(s => s.split);
 	const groupAliases = useSidebarPrefs(s => s.groupAliases);
@@ -752,14 +753,14 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 				<NewTabMenu buttonClass={cx(iconButtonClass, "w-6", multiRow && "mt-1")} />
 				<button
 					type="button"
-					aria-label={reviewLabel}
+					aria-label={panelLabel}
 					aria-pressed={panelVisible}
 					onClick={togglePanel}
-					title={reviewLabel}
+					title={panelTitle}
 					className="omp-review-toggle no-drag omp-pressable ml-auto flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-(--omp-border-muted) px-2 text-omp-sm font-medium text-(--omp-text) hover:bg-(--omp-selected-bg) aria-pressed:border-(--omp-border-accent) aria-pressed:bg-(--omp-accent-dim)"
 				>
 					<PanelRight aria-hidden="true" size={17} />
-					<span className="omp-review-label whitespace-nowrap">{t("panel.title")}</span>
+					<span className="omp-review-label whitespace-nowrap">{panelLabel}</span>
 					{changeCount != null && changeCount > 0 && (
 						<span className="omp-review-label font-mono text-omp-xs tabular-nums text-(--omp-muted)" aria-hidden="true">
 							{changeCount > 99 ? "99+" : changeCount}

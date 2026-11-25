@@ -143,7 +143,7 @@ test("real bundled sidecar persists settings and sessions and serves every stats
 		await expect(composer).toHaveValue("Read the attached plan");
 		await expect(removeAttachment).toHaveCount(0);
 		await composer.clear();
-		await page.getByRole("button", { name: "Review changes and files", exact: true }).click();
+		await page.getByRole("button", { name: "Right sidebar", exact: true }).click();
 		await page.getByRole("button", { name: "Files", exact: true }).click();
 		const tree = page.getByRole("tree");
 		const preview = page.locator("[data-file-preview]");
