@@ -7,6 +7,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+- The Review button sits at the right edge of the tab bar, and the title bar no longer repeats the active session status.
 - Reasoning starts at the model's declared default level when known. The composer only offers Off when the active route supports disabling reasoning.
 - Workspace histories start expanded unless they were explicitly collapsed.
 - New sessions use the last model successfully selected in the composer, even if that model is still being discovered when the session opens.

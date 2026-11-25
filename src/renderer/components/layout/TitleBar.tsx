@@ -9,14 +9,12 @@ import {
 	Menu,
 	MoreHorizontal,
 	PanelLeft,
-	PanelRight,
 	ScrollText,
 	Share2,
 	Wrench,
 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { SessionStats } from "../../../shared/rpc-types";
-import { useWorkingTreeChangeCount } from "../../hooks/use-working-tree-changes";
 import { cx, formatCost, formatDuration, formatPercent, formatTokens } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isRecording, subscribeRecording, toggleRecording } from "../../lib/recording";
@@ -48,8 +46,6 @@ export function TitleBar() {
 	const advisorStatus = useSessionStore(s => s.advisorStatus);
 	const recording = useSyncExternalStore(subscribeRecording, isRecording);
 	const isCompacting = useSessionStore(s => s.isCompacting);
-	// A manual compaction or handoff sends no agent event; its request marks the tab busy.
-	const manualMaintenance = useSessionStore(s => s.manualMaintenance);
 	const statsPulse = useSessionStore(s => s.statsPulse);
 	const isChat = useActiveTabKind() === "chat";
 
@@ -61,8 +57,6 @@ export function TitleBar() {
 	const sidebarVisible = useUiStore(s => s.sidebarVisible);
 	const toggleSidebar = useUiStore(s => s.toggleSidebar);
 	const activeTabId = useTabsStore(s => s.activeTabId);
-	const panelVisible = useUiStore(s => s.panelVisible && s.panelOwnerTabId === activeTabId);
-	const togglePanel = useUiStore(s => s.togglePanel);
 	const openCommandPalette = useUiStore(s => s.openCommandPalette);
 	const openUsage = useUiStore(s => s.openUsage);
 	const openStatsDashboard = useUiStore(s => s.openStatsDashboard);
@@ -155,33 +149,8 @@ export function TitleBar() {
 	]
 		.filter((line): line is string => line !== null)
 		.join("\n");
-	const changeCount = useWorkingTreeChangeCount(!isChat);
-	const reviewLabel =
-		changeCount && changeCount > 0
-			? t("titlebar.review.changes", { count: changeCount, plural: changeCount === 1 ? "" : "s" })
-			: t("titlebar.togglePanel");
-
 	const iconButton =
 		"no-drag omp-pressable flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]";
-	const working = isStreaming || isCompacting || manualMaintenance != null;
-	const statusActive = working || status === "starting" || status === "restarting";
-	const statusLabel = working
-		? t("titlebar.status.working")
-		: status === "ready"
-			? t("titlebar.status.ready")
-			: status === "starting"
-				? t("titlebar.status.connecting")
-				: status === "error" || status === "exited" || status === "restarting"
-					? t(`titlebar.status.${status}`)
-					: status;
-	const statusColor = working
-		? "var(--omp-accent)"
-		: status === "ready"
-			? "var(--omp-dim)"
-			: status === "error" || status === "exited"
-				? "var(--omp-error)"
-				: "var(--omp-warning)";
-
 	const actionMenuItems: ContextMenuItem[] = [
 		{
 			id: "workspace",
@@ -333,22 +302,6 @@ export function TitleBar() {
 			</button>
 			<button
 				type="button"
-				aria-label={reviewLabel}
-				aria-pressed={panelVisible}
-				onClick={togglePanel}
-				title={reviewLabel}
-				className="omp-review-toggle no-drag omp-pressable flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-(--omp-border-muted) px-2 text-omp-sm font-medium text-(--omp-text) hover:bg-(--omp-selected-bg) aria-pressed:border-(--omp-border-accent) aria-pressed:bg-(--omp-accent-dim)"
-			>
-				<PanelRight aria-hidden="true" size={17} />
-				<span className="omp-review-label whitespace-nowrap">{t("panel.title")}</span>
-				{changeCount != null && changeCount > 0 && (
-					<span className="omp-review-label font-mono text-omp-xs tabular-nums text-(--omp-muted)" aria-hidden="true">
-						{changeCount > 99 ? "99+" : changeCount}
-					</span>
-				)}
-			</button>
-			<button
-				type="button"
 				aria-label={t("titlebar.openBrowser")}
 				title={t("titlebar.openBrowser")}
 				onClick={() => {
@@ -373,17 +326,6 @@ export function TitleBar() {
 					<Command aria-hidden="true" size={16} />
 				</button>
 			)}
-
-			<div className="omp-titlebar-status no-drag flex shrink-0 items-center gap-1.5 px-1 text-omp-sm font-medium text-[var(--omp-muted)]">
-				<span
-					role="img"
-					aria-label={statusLabel}
-					title={statusLabel}
-					className={cx("omp-signal-light", statusActive && "omp-signal-light--active")}
-					style={{ color: statusColor }}
-				/>
-				<span className="omp-titlebar-status-label">{statusLabel}</span>
-			</div>
 
 			{planModeEnabled && (
 				<span

@@ -1767,15 +1767,6 @@
 	.omp-review-label {
 		display: none;
 	}
-
-	.omp-titlebar-status {
-		margin-inline: 0;
-		padding-inline: 0.5rem;
-	}
-
-	.omp-titlebar-status-label {
-		display: none;
-	}
 }
 
 @container omp-workspace (min-width: 1900px) {
