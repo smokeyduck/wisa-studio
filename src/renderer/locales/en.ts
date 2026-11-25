@@ -3100,6 +3100,8 @@ export const en: Record<string, string> = {
 	"chat.context.previewTruncated": "… preview truncated …",
 	"chat.extensionMessage": "Extension message",
 	"chat.steering": "steering",
+	"chat.approvedPlan": "Plan approved",
+	"chat.approvedPlanDetails": "View approved plan",
 	"chat.delegatedTo": "Delegated to {name}",
 	"chat.steeringResponse": "steering response",
 	"chat.attachedImage": "attached image",

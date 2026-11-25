@@ -1,4 +1,20 @@
+import type { AgentMessage } from "../../shared/rpc-types";
 import type { ToolEntry } from "../stores/tools";
+
+/** Core's synthetic execution prompt carries both the durable path and the approved Markdown. */
+export function approvedPlanInMessage(message: AgentMessage): { path: string; markdown: string } | null {
+	if (message.role !== "user" || message.synthetic !== true) return null;
+	const text =
+		typeof message.content === "string"
+			? message.content
+			: message.content?.find(block => block.type === "text")?.text;
+	if (!text?.startsWith("Plan approved.")) return null;
+	const match =
+		/<instruction>\r?\n[\s\S]*?\r?\n<\/instruction>\s*<plan path="([^"\r\n]+)">\r?\n([\s\S]*?)\r?\n<\/plan>\s*<critical>/.exec(
+			text,
+		);
+	return match ? { path: match[1], markdown: match[2].trim() } : null;
+}
 
 /** Decode only the completed prefix of a streamed JSON string. */
 function streamedString(json: string, field: "path" | "content"): string | null {

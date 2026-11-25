@@ -7,9 +7,10 @@ import { describeError } from "../../lib/errors";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
-import { livePlanWritePath, streamingPlanContent } from "../../lib/plan-tool";
+import { approvedPlanInMessage, livePlanWritePath, streamingPlanContent } from "../../lib/plan-tool";
 import { acceptsActiveTabEvents } from "../../lib/tab-routing";
 import { useTabRpc } from "../../lib/tab-rpc";
+import { useMessagesStore } from "../../stores/messages";
 import { type PlanComment, planFeedbackText } from "../../stores/plan-approval";
 import { type SessionStore, useSessionStore } from "../../stores/session";
 import { sessionRuntime, sessionRuntimeStore, useSessionRuntime } from "../../stores/session-runtime-context";
@@ -144,6 +145,15 @@ export function PlanPanel() {
 	}, [tabId, sessionStore, runtime]);
 	const planModeEnabled = useSessionStore(s => s.planModeEnabled);
 	const isStreaming = useSessionStore(s => s.isStreaming);
+	const messages = useMessagesStore(state => state.messages);
+	const approvedPlan = useMemo(() => {
+		if (planModeEnabled) return null;
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const plan = approvedPlanInMessage(messages[i]);
+			if (plan) return plan;
+		}
+		return null;
+	}, [messages, planModeEnabled]);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const pinned = useRef(true);
 	const [following, setFollowing] = useState(true);
@@ -166,7 +176,7 @@ export function PlanPanel() {
 	const streamedContent = useToolsStore(state =>
 		planModeEnabled ? streamingPlanContent(state.activeTools, planFilePath) : null,
 	);
-	const visibleContent = streamedContent ?? content;
+	const visibleContent = streamedContent ?? content ?? (approvedPlan?.markdown || null);
 	const writing = writePath !== null;
 	const planning = (isStreaming && planModeEnabled) || writing;
 	const knownPath = useRef<string | null>(null);
@@ -207,7 +217,8 @@ export function PlanPanel() {
 								if (!request.quiet || !path) setError(describeError(mode.error));
 								continue;
 							}
-							path = (mode.data as PlanModeState | undefined)?.planFilePath ?? null;
+							const modeState = mode.data as PlanModeState | undefined;
+							path = modeState?.planFilePath ?? (modeState?.enabled ? null : (approvedPlan?.path ?? null));
 							if (path !== knownPath.current) {
 								knownPath.current = path;
 								setPlanFilePath(path);
@@ -249,7 +260,7 @@ export function PlanPanel() {
 				if (loadRun.current === run) loadRun.current = null;
 			}
 		},
-		[capture, rpc, t, tabId],
+		[approvedPlan, capture, rpc, t, tabId],
 	);
 	useLayoutEffect(() => {
 		// Follow new content only while the user has not scrolled away.
@@ -371,7 +382,7 @@ export function PlanPanel() {
 			if (step.checkbox) checkCount++;
 			if (step.done) doneCount++;
 		}
-	const reviewable = ready && !switching && !writing && !error && !!content?.trim();
+	const reviewable = planModeEnabled && ready && !switching && !writing && !error && !!content?.trim();
 	const actionsDisabled = !reviewable || submission !== null || feedbackEditor.editor !== null;
 
 	return (

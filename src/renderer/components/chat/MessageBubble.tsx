@@ -25,6 +25,7 @@ import { useLang, useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
 import { editFromMessage, forkSessionFromMessageInNewTab, isRenderableMessageText } from "../../lib/messages";
 import { extractModelMentions, type ModelMentionChip } from "../../lib/model-mentions";
+import { approvedPlanInMessage } from "../../lib/plan-tool";
 import { PREVIEW_SCROLL_LG } from "../../lib/preview";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { useMessagesStore } from "../../stores/messages";
@@ -530,6 +531,7 @@ export const MessageBubble = memo(function MessageBubble({
 		);
 	}
 	const isUser = message.role === "user";
+	const approvedPlan = approvedPlanInMessage(message);
 	const isAssistant = message.role === "assistant";
 	const isSteering = Boolean(message.steering);
 	const timestamp = formatClock(message.timestamp);
@@ -537,7 +539,7 @@ export const MessageBubble = memo(function MessageBubble({
 	// as atomic chips; the raw tags/selectors are stripped from the body text.
 	// Computed inline (no hook) because this component early-returns above.
 	const userMentions = (() => {
-		if (!isUser) return { chips: [] as ModelMentionChip[], files: [] as string[], blocks: content };
+		if (!isUser || approvedPlan) return { chips: [] as ModelMentionChip[], files: [] as string[], blocks: content };
 		const chips: ModelMentionChip[] = [];
 		const files = new Set<string>();
 		const blocks = content.map(block => {
@@ -595,16 +597,18 @@ export const MessageBubble = memo(function MessageBubble({
 
 	if (isUser) {
 		const userImages = userMentions.blocks.filter((block): block is ImageContent => block.type === "image");
-		const userBlocks = userMentions.blocks.map((block, i) => {
-			if (block.type === "text" && isRenderableMessageText(block.text)) {
-				return (
-					<div key={i} className="text-omp-xl leading-[1.6] text-[var(--omp-text)]">
-						<MarkdownRenderer content={block.text} singleDollarTextMath={false} />
-					</div>
-				);
-			}
-			return null;
-		});
+		const userBlocks = approvedPlan
+			? []
+			: userMentions.blocks.map((block, i) => {
+					if (block.type === "text" && isRenderableMessageText(block.text)) {
+						return (
+							<div key={i} className="text-omp-xl leading-[1.6] text-[var(--omp-text)]">
+								<MarkdownRenderer content={block.text} singleDollarTextMath={false} />
+							</div>
+						);
+					}
+					return null;
+				});
 		return (
 			<div className="omp-user-turn group flex flex-col items-end px-6 py-2.5">
 				{readOnly && (
@@ -659,6 +663,23 @@ export const MessageBubble = memo(function MessageBubble({
 									{userImages.map((image, index) => (
 										<InlineImage key={index} image={image} />
 									))}
+								</div>
+							)}
+							{approvedPlan && (
+								<div className="space-y-2 text-omp-sm">
+									<div className="flex items-center gap-2 font-semibold">
+										<Check aria-hidden className="shrink-0 text-(--omp-success)" size={16} />
+										{t("chat.approvedPlan")}
+									</div>
+									<code className="block wrap-anywhere text-omp-xs text-(--omp-muted)">
+										{approvedPlan.path}
+									</code>
+									{approvedPlan.markdown && (
+										<details>
+											<summary className="cursor-pointer">{t("chat.approvedPlanDetails")}</summary>
+											<MarkdownRenderer content={approvedPlan.markdown} />
+										</details>
+									)}
 								</div>
 							)}
 							{userBlocks.some(Boolean) && (

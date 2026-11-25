@@ -3020,6 +3020,8 @@ export const zh: Record<string, string> = {
 	"chat.context.previewTruncated": "… 预览已截断 …",
 	"chat.extensionMessage": "扩展消息",
 	"chat.steering": "引导",
+	"chat.approvedPlan": "计划已批准",
+	"chat.approvedPlanDetails": "查看已批准的计划",
 	"chat.delegatedTo": "委派给 {name}",
 	"chat.steeringResponse": "引导回复",
 	"chat.attachedImage": "附件图片",

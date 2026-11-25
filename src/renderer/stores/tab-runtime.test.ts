@@ -183,6 +183,19 @@ it("preserves a committed session change acknowledgement when its metadata arriv
 	expect(sessionRuntimeStore<SessionStore>("tab-a", "session")?.getState().sessionId).toBe("committed-session");
 });
 
+it.each([undefined, "execute", "save"] as const)("returns the fresh plan approval result for %s", async option => {
+	const origin = createTabRuntime("tab-a");
+	const result = option === "save" ? { savedPath: "/project/plan.md" } : { dispatched: true };
+	vi.spyOn(window.omp.rpc, "commandForTab").mockImplementationOnce(async (_tabId, command) => {
+		replaceTabRuntime("tab-a");
+		return { type: "response", command: command.type, success: true, data: result };
+	});
+	expect(await origin.command({ type: "plan_approval", approved: true, option })).toMatchObject({
+		success: true,
+		data: result,
+	});
+});
+
 it("shows a compacting request as manual maintenance until its response arrives", async () => {
 	const runtime = createTabRuntime("tab-a");
 	const session = sessionRuntimeStore<SessionStore>("tab-a", "session");

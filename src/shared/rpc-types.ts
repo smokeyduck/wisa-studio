@@ -2214,6 +2214,8 @@ export interface AgentMessage {
 		| "fileMention";
 	content?: MessageContent[] | string;
 	attribution?: "user" | "agent";
+	/** Core-generated user turn, not text entered in the composer. */
+	synthetic?: boolean;
 	steering?: boolean;
 	stopReason?: string;
 	errorMessage?: string;

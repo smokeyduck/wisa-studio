@@ -2967,6 +2967,8 @@ export const ru: Record<string, string> = {
 	"chat.context.previewTruncated": "… предпросмотр усечён …",
 	"chat.extensionMessage": "Сообщение расширения",
 	"chat.steering": "корректировка направления",
+	"chat.approvedPlan": "План одобрен",
+	"chat.approvedPlanDetails": "Посмотреть одобренный план",
 	"chat.delegatedTo": "Поручено: {name}",
 	"chat.steeringResponse": "ответ с корректировкой",
 	"chat.attachedImage": "прикреплённое изображение",

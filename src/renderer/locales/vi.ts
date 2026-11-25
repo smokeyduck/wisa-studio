@@ -2945,6 +2945,8 @@ export const vi: Record<string, string> = {
 	"chat.context.previewTruncated": "… bản xem trước đã bị cắt …",
 	"chat.extensionMessage": "Tin nhắn tiện ích mở rộng",
 	"chat.steering": "chỉ đạo",
+	"chat.approvedPlan": "Đã phê duyệt kế hoạch",
+	"chat.approvedPlanDetails": "Xem kế hoạch đã duyệt",
 	"chat.delegatedTo": "Đã giao cho {name}",
 	"chat.steeringResponse": "phản hồi chỉ đạo",
 	"chat.attachedImage": "ảnh đính kèm",

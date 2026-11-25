@@ -3021,6 +3021,8 @@ export const th: Record<string, string> = {
 	"chat.context.previewTruncated": "… ตัดทอนตัวอย่าง …",
 	"chat.extensionMessage": "ข้อความจากส่วนขยาย",
 	"chat.steering": "บังคับทิศทาง",
+	"chat.approvedPlan": "อนุมัติแผนแล้ว",
+	"chat.approvedPlanDetails": "ดูแผนที่อนุมัติแล้ว",
 	"chat.delegatedTo": "มอบหมายให้ {name}",
 	"chat.steeringResponse": "การตอบกลับจากการบังคับทิศทาง",
 	"chat.attachedImage": "รูปภาพที่แนบมา",

@@ -48,6 +48,22 @@ afterEach(() => {
 	useToolsStore.getState().reset();
 });
 
+it("renders an approved plan as expandable Markdown without displaying the execution instructions", () => {
+	const content = `Plan approved.\n\n<instruction>\nInternal execution guidance.\n</instruction>\n\n<plan path="local://sample-plan.md">\n## Implementation\n\n- **Verify** the result.\n</plan>\n\n<critical>\nRecovery guidance.\n</critical>`;
+	const html = renderToStaticMarkup(
+		<I18nProvider>
+			<MessageBubble message={{ role: "user", synthetic: true, content }} />
+		</I18nProvider>,
+	);
+	const { document: rendered } = parseHTML(html);
+	expect(rendered.querySelector("summary")?.textContent).toBe("View approved plan");
+	expect(rendered.querySelector("details h2")?.textContent).toBe("Implementation");
+	expect(rendered.querySelector("details strong")?.textContent).toBe("Verify");
+	expect(html).toContain("local://sample-plan.md");
+	expect(html).not.toContain("Internal execution guidance");
+	expect(html).not.toContain("Recovery guidance");
+});
+
 describe("MessageBubble todo reminder", () => {
 	it("localizes Core's developer reminder while preserving task text and model context", () => {
 		const source =

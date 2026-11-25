@@ -75,7 +75,11 @@ export function createTabRuntime(tabId: string): SessionRuntime {
 	const send = async (rpcCommand: RpcCommand, timeoutMs?: number): Promise<RpcResponse> => {
 		// An old dialog/continuation must not send a mutation to this tab's new owner.
 		if (sessionRuntime(tabId) !== runtime) return replacedSessionResponse(rpcCommand);
-		const changesSession = SESSION_CHANGING_COMMANDS.has(rpcCommand.type);
+		const changesSession =
+			SESSION_CHANGING_COMMANDS.has(rpcCommand.type) ||
+			(rpcCommand.type === "plan_approval" &&
+				rpcCommand.approved &&
+				(rpcCommand.option === undefined || rpcCommand.option === "execute" || rpcCommand.option === "save"));
 		if (changesSession) runtime.sessionGeneration = (runtime.sessionGeneration ?? 0) + 1;
 		const requestGeneration = runtime.sessionGeneration;
 		const origin = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().sessionId;
