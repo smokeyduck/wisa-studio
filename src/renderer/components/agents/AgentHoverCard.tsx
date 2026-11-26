@@ -193,6 +193,9 @@ function AgentHoverCard({ target }: { target: HoverTarget }) {
 				</Badge>
 				<span className="min-w-0 truncate text-omp-xs tabular-nums text-[var(--omp-dim)]">{subline}</span>
 			</div>
+			{agent.progress?.resolvedModelRoute && (
+				<div className="mt-1 truncate text-omp-xs text-[var(--omp-dim)]">{agent.progress.resolvedModelRoute}</div>
+			)}
 			{line && (
 				<div className="mt-2 truncate text-omp-xs text-[var(--omp-dim)]">
 					{line.kind === "tool" ? (

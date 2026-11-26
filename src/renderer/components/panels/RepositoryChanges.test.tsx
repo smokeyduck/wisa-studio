@@ -86,6 +86,7 @@ async function flush(): Promise<void> {
 }
 
 async function mount(): Promise<void> {
+	if (useSessionStore.getState().status !== "ready") useSessionStore.setState({ status: "ready", cwd: "/work" });
 	container = document.createElement("div") as unknown as TestElement;
 	document.body.appendChild(container as never);
 	root = createRoot(container as unknown as Element);
@@ -225,8 +226,8 @@ describe("RepositoryChanges", () => {
 			success: true,
 			data: changes("src/a.ts"),
 		}));
-		await act(async () => useSessionStore.setState({ isStreaming: true }));
 		await mount();
+		await act(async () => useSessionStore.setState({ isStreaming: true }));
 		getGitChanges.mockResolvedValueOnce({
 			type: "response",
 			command: "get_git_changes",
@@ -238,6 +239,37 @@ describe("RepositoryChanges", () => {
 		await flush();
 
 		expect(rowPaths()).toEqual(["src/a.ts", "src/new.ts"]);
+	});
+
+	it("reuses the list and loaded diffs on reopen, then rereads a different workspace", async () => {
+		const getGitDiff = installMockOmp(async () => ({ success: true, data: changes("a.txt") }));
+		await mount();
+		await act(async () => root.unmount());
+		container.remove();
+		await mount();
+		expect(rowPaths()).toEqual(["a.txt"]);
+		expect(getGitChanges).toHaveBeenCalledTimes(1);
+		expect(getGitDiff).toHaveBeenCalledExactlyOnceWith("a.txt");
+
+		getGitChanges.mockResolvedValueOnce({ success: true, data: changes("b.txt") });
+		await act(async () => useSessionStore.setState({ cwd: "/different" }));
+		await flush();
+		expect(rowPaths()).toEqual(["b.txt"]);
+		expect(getGitChanges).toHaveBeenCalledTimes(2);
+		expect(getGitDiff).toHaveBeenLastCalledWith("b.txt");
+	});
+
+	it("invalidates the cache after a run even when the panel is closed", async () => {
+		installMockOmp(async () => ({ success: true, data: changes("before.txt") }));
+		await mount();
+		await act(async () => root.unmount());
+		container.remove();
+		getGitChanges.mockResolvedValueOnce({ success: true, data: changes("after.txt") });
+		useSessionStore.setState({ isStreaming: true });
+		useSessionStore.setState({ isStreaming: false });
+		await mount();
+		expect(rowPaths()).toEqual(["after.txt"]);
+		expect(getGitChanges).toHaveBeenCalledTimes(2);
 	});
 });
 

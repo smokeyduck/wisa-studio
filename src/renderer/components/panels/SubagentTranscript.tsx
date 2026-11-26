@@ -7,96 +7,26 @@ import { useRuntimeTabId, withSessionRuntime } from "../../stores/session-runtim
  */
 
 import { RefreshCw } from "lucide-react";
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { AgentMessage, SubagentSnapshot } from "../../../shared/rpc-types";
 import { describeError } from "../../lib/errors";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
-import { MarkdownRenderer } from "../../lib/markdown";
+import { isRenderableMessageText, messageText } from "../../lib/messages";
 import { toast } from "../../stores/toast";
+import { MessageBubble } from "../chat/MessageBubble";
+import { ReadOnlyTranscriptContext } from "../chat/transcript-mode";
 import { Button, Spinner } from "../common";
 import { registerTranscriptToolCalls } from "./subagent-graph";
 
-function messageText(message: AgentMessage): string {
-	if (typeof message.content === "string") return message.content.trim();
-	if (!Array.isArray(message.content)) return "";
-	return message.content
-		.filter(part => part.type === "text")
-		.map(part => (part.type === "text" ? part.text : ""))
-		.join("\n")
-		.trim();
-}
-
-const MESSAGE_PREVIEW_LINES = 3;
-
-const ConversationMessage = memo(function ConversationMessage({
-	role,
-	text,
-}: {
-	role: "user" | "assistant";
-	text: string;
-}) {
-	const t = useT();
-	const id = useId();
-	const viewport = useRef<HTMLDivElement>(null);
-	const body = useRef<HTMLDivElement>(null);
-	const [expanded, setExpanded] = useState(false);
-	const [overflows, setOverflows] = useState(false);
-
-	useLayoutEffect(() => {
-		const clip = viewport.current;
-		const content = body.current;
-		if (!clip || !content || typeof window.getComputedStyle !== "function") return;
-		const measure = () => {
-			const limit = Number.parseFloat(window.getComputedStyle(clip).lineHeight) * MESSAGE_PREVIEW_LINES;
-			setOverflows(content.offsetHeight > limit + 1);
-		};
-		measure();
-		if (typeof ResizeObserver === "undefined") return;
-		const observer = new ResizeObserver(measure);
-		observer.observe(content);
-		return () => observer.disconnect();
-	}, []);
-
-	return (
-		<div className="min-w-0 rounded-sm border-l-2 border-(--omp-border-muted) px-2 py-1">
-			<div className="mb-1 text-omp-xs font-semibold text-(--omp-dim)">
-				{t(role === "user" ? "subagent.messageSent" : "subagent.messageReceived")}
-			</div>
-			<div
-				className={cx(
-					"text-omp-sm leading-[1.5] wrap-anywhere text-(--omp-text)",
-					!expanded && "overflow-clip",
-					!expanded && overflows && "omp-user-text-cut",
-				)}
-				id={id}
-				onFocusCapture={event => {
-					if (expanded || !overflows) return;
-					if (event.target.getBoundingClientRect().bottom > event.currentTarget.getBoundingClientRect().bottom) {
-						setExpanded(true);
-					}
-				}}
-				ref={viewport}
-				style={expanded ? undefined : { maxHeight: `${MESSAGE_PREVIEW_LINES}lh` }}
-			>
-				<div className="flow-root" ref={body}>
-					<MarkdownRenderer content={text} />
-				</div>
-			</div>
-			{overflows && (
-				<button
-					aria-controls={id}
-					aria-expanded={expanded}
-					className="omp-pressable mt-1 text-omp-sm font-medium text-(--omp-link) hover:underline"
-					onClick={() => setExpanded(!expanded)}
-					type="button"
-				>
-					{t(expanded ? "chat.userMessage.collapse" : "chat.userMessage.expand")}
-				</button>
-			)}
-		</div>
+function conversationMessage(message: AgentMessage): AgentMessage | null {
+	if (message.role !== "user" && message.role !== "assistant") return null;
+	if (typeof message.content === "string") return isRenderableMessageText(message.content) ? message : null;
+	const content = message.content?.filter(
+		block => block.type === "image" || (block.type === "text" && isRenderableMessageText(block.text)),
 	);
-});
+	return content?.length ? { ...message, content } : null;
+}
 
 interface TranscriptState {
 	loading: boolean;
@@ -187,15 +117,19 @@ export const SubagentTranscript = memo(function SubagentTranscript({
 	}, [load]);
 
 	const rows = state.messages.map((message, index) => {
-		const { role } = message;
-		const conversation = role === "user" || role === "assistant";
-		if (conversationOnly && !conversation) return null;
+		if (conversationOnly) {
+			const visible = conversationMessage(message);
+			return visible ? (
+				<div className="omp-transcript-row" key={message.entryId ?? index}>
+					<MessageBubble message={visible} />
+				</div>
+			) : null;
+		}
 		const text = messageText(message);
 		if (!text) return null;
-		if (conversationOnly && conversation) return <ConversationMessage key={index} role={role} text={text} />;
 		return (
 			<div className="rounded-sm border-l-2 border-(--omp-border-muted) px-2 py-1" key={index}>
-				<div className="mb-0.5 text-omp-xxs font-semibold text-(--omp-dim)">{role}</div>
+				<div className="mb-0.5 text-omp-xxs font-semibold text-(--omp-dim)">{message.role}</div>
 				<div className="text-omp-sm leading-snug break-words whitespace-pre-wrap text-(--omp-muted)">
 					{text.length > 1200 ? `${text.slice(0, 1200)}…` : text}
 				</div>
@@ -212,11 +146,12 @@ export const SubagentTranscript = memo(function SubagentTranscript({
 		);
 	}
 
+	const conversationInset = conversationOnly && "mx-(--omp-editorial-inset)";
 	return (
-		<div className="space-y-1.5 px-2 py-2">
+		<div className={cx("py-2", !conversationOnly && "space-y-1.5 px-2")}>
 			{error &&
 				(state.messages.length === 0 ? (
-					<div className="flex flex-col items-start gap-2">
+					<div className={cx("flex flex-col items-start gap-2", conversationInset)}>
 						<p role="alert" className="text-omp-sm text-(--omp-error)">
 							{error}
 						</p>
@@ -226,17 +161,26 @@ export const SubagentTranscript = memo(function SubagentTranscript({
 					</div>
 				) : (
 					/* Rows from the last good page stay on screen under the failure. */
-					<p role="alert" className="text-omp-sm text-(--omp-error)">
+					<p role="alert" className={cx("text-omp-sm text-(--omp-error)", conversationInset)}>
 						{error}
 					</p>
 				))}
 			{!error && !rows.some(Boolean) && (
-				<div className="text-omp-sm text-(--omp-dim) italic">{t("subagent.noEntries")}</div>
+				<div className={cx("text-omp-sm text-(--omp-dim) italic", conversationInset)}>
+					{t("subagent.noEntries")}
+				</div>
 			)}
-			{rows}
+			{conversationOnly ? (
+				<ReadOnlyTranscriptContext.Provider value={{ authorLabel: t("subagent.messageSent") }}>
+					{rows}
+				</ReadOnlyTranscriptContext.Provider>
+			) : rows}
 			{state.hasMore && (
 				<button
-					className="flex items-center gap-1.5 text-omp-sm text-(--omp-link) transition-colors hover:brightness-125 disabled:opacity-50"
+					className={cx(
+						"flex items-center gap-1.5 text-omp-sm text-(--omp-link) transition-colors hover:brightness-125 disabled:opacity-50",
+						conversationInset,
+					)}
 					disabled={state.loading}
 					onClick={() => void load(state.nextByte)}
 					type="button"

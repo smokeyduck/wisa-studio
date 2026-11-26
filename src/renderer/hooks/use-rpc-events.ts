@@ -37,13 +37,15 @@ import {
 	type SubagentFrame,
 } from "../../shared/rpc-types";
 import { describeError, describeProviderError } from "../lib/errors";
+import { isLegacyCompactionSuccess } from "../lib/event-parser";
 import { formatClock } from "../lib/format";
 import { translate } from "../lib/i18n";
-import { ircNotice } from "../lib/irc-notice";
+import { ircNotice, ircSenderId } from "../lib/irc-notice";
 import { normalizeLoopUpdate } from "../lib/loop-mode";
 import { applyPreferredModel } from "../lib/model-preference";
 import { playNotificationChime } from "../lib/notify-sound";
 import { acceptsActiveTabEvents } from "../lib/tab-routing";
+import { handleVoiceEvent } from "../lib/voice";
 import { type BtwStore, useBtwStore } from "../stores/btw";
 import { useExtensionUiStore } from "../stores/extension-ui";
 import { useMessagesStore } from "../stores/messages";
@@ -353,6 +355,7 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 				useToolsStore.getState().applyEvents(events);
 
 				for (const event of events) {
+					handleVoiceEvent(tabId, event);
 					useSessionStore.setState(state => ({ eventVersion: state.eventVersion + 1 }));
 					switch (event.type) {
 						case "collab_state":
@@ -411,8 +414,8 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							useSessionStore.setState({ isStreaming: false, awaitingModelSince: null });
 							notifyOnAgentEnd(tabId, event);
 							toastOnAgentError(tabId, event);
-							// The commit missed rows this run delivered (a retried run reports
-							// only itself): fetch the transcript so they regain entry ids.
+							// Reconcile rows omitted by the run commit, including Core's
+							// persisted todo reminders that have no message delivery frame.
 							if (useMessagesStore.getState().needsTranscriptSync) {
 								void (tabId && sessionRuntime(tabId) ? hydrateTabSession(tabId) : hydrateSession());
 							}
@@ -646,6 +649,12 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							break;
 						}
 						case "irc_message": {
+							const from = ircSenderId(event.message);
+							const agents = useSubagentsStore.getState();
+							if (from && agents.subagents.has(from) && useSettingsStore.getState().pinnedAgents !== "off") {
+								agents.noteReply(from);
+								break;
+							}
 							useToastStore.getState().push({
 								variant: "info",
 								message: ircNotice(event.message, translate),
@@ -935,6 +944,9 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 		// output as local custom messages instead of silently dropping the frame.
 		const handleCommandOutput = (frame: CommandOutputFrame, tabId: string) => {
 			if (!frame.text || closedTabFrame(tabId)) return;
+			// A compaction already has a transcript summary. Suppress only Core's
+			// legacy success text, not its errors or other slash-command output.
+			if (isLegacyCompactionSuccess(frame.text)) return;
 			withSessionRuntime(tabId, () => {
 				const store = useMessagesStore.getState();
 				store.appendMessage({

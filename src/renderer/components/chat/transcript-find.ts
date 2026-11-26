@@ -34,8 +34,9 @@ function searchableText(message: AgentMessage): string {
 function rowMessages(row: Row): readonly AgentMessage[] {
 	switch (row.kind) {
 		case "message":
-		case "streaming":
 			return [row.message];
+		case "streaming":
+			return row.process ? [...row.process.messages, row.message] : [row.message];
 		case "process":
 			return row.messages;
 		default:

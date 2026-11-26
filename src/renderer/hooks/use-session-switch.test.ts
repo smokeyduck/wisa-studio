@@ -173,9 +173,8 @@ afterEach(() => {
 omp = installMockOmp();
 
 describe("switchSessionNow F-OWN owner guard", () => {
-	it("clears old todo history and agents before a successful new session hydrates", async () => {
+	it("clears the outgoing session's todos and agents on a successful new session", async () => {
 		useTodoStore.getState().setPhases([{ name: "old phase", tasks: [] }]);
-		useTodoStore.getState().setPhases([{ name: "old updated phase", tasks: [] }]);
 		useSubagentsStore.setState({
 			subagents: new Map([
 				["old-agent", { id: "old-agent", index: 0, agent: "task", status: "completed", lastUpdate: 1 }],
@@ -185,7 +184,7 @@ describe("switchSessionNow F-OWN owner guard", () => {
 
 		await newSessionNow();
 
-		expect(useTodoStore.getState()).toMatchObject({ phases: [], history: [], historyHydrated: true });
+		expect(useTodoStore.getState().phases).toEqual([]);
 		expect(useSubagentsStore.getState().subagents.size).toBe(0);
 		expect(useSessionStore.getState().sessionId).toBe("fresh");
 	});

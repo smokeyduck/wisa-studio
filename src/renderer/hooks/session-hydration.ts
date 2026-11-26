@@ -30,7 +30,7 @@ import { useSubagentGraphStore } from "../stores/subagent-graph";
 import { SUBAGENT_SUBSCRIPTION_LEVEL, type SubagentsStore, useSubagentsStore } from "../stores/subagents";
 import { ensureTabRuntime } from "../stores/tab-runtime";
 import { isTabClosed, useTabsStore } from "../stores/tabs";
-import { type TodoStore, todoHistoryFromMessages, useTodoStore } from "../stores/todo";
+import { useTodoStore } from "../stores/todo";
 import { type ToolsStore, useToolsStore } from "../stores/tools";
 import { rememberTranscript } from "../stores/transcript-cache";
 
@@ -357,8 +357,6 @@ export async function hydrateLegacySession(fallbackName?: string, initialState?:
 			useToolsStore
 				.getState()
 				.hydrateMessages(useMessagesStore.getState().messages, { turnIsLive: stateIsStreaming });
-		// Only a live tab archives plan changes: a reopened one replays them.
-		useTodoStore.getState().seedHistory(todoHistoryFromMessages(useMessagesStore.getState().messages));
 		rememberTranscript(useSessionStore.getState().sessionFile, useMessagesStore.getState().messages);
 	}
 	await subagents;
@@ -549,10 +547,6 @@ async function performTabHydration(
 		}
 		if (eventsUnchanged)
 			tools?.getState().hydrateMessages(messages?.getState().messages ?? [], { turnIsLive: stateIsStreaming });
-		// Only a live tab archives plan changes: a reopened one replays them.
-		sessionRuntimeStore<TodoStore>(tabId, "todo")
-			?.getState()
-			.seedHistory(todoHistoryFromMessages(messages?.getState().messages ?? []));
 		// Keep the painted transcript for the next open of this session (see
 		// stores/transcript-cache): a re-open can paint history instead of a
 		// spinner while the sidecar boots.

@@ -34,7 +34,6 @@ export type RpcCommand =
 	| { id?: string; type: "get_available_commands" }
 	| { id?: string; type: "set_todos"; phases: TodoPhase[] }
 	| { id?: string; type: "set_host_tools"; tools: HostToolDefinition[] }
-	| { id?: string; type: "browser_host_start" | "browser_host_stop" }
 	| { id?: string; type: "set_host_uri_schemes"; schemes: HostUriSchemeDefinition[] }
 	| { id?: string; type: "set_subagent_subscription"; level: SubagentSubscriptionLevel }
 	/**
@@ -647,6 +646,8 @@ export type RpcDictationState = "preparing" | "recording" | "transcribing" | "id
 export interface RpcDictationStateFrame {
 	type: "host_dictation_state";
 	state: RpcDictationState;
+	/** Explicit cloud provider that receives audio when dictation finishes; absent for local dictation. */
+	cloudProvider?: string;
 }
 
 /**
@@ -1325,6 +1326,10 @@ export interface RpcMemoryOverview {
 	enabled: boolean;
 	notes: RpcMemoryListEntry[];
 	lessons: RpcMemoryListEntry[];
+	knowledge:
+		| { source: "local"; vaultEnabled: boolean }
+		| { source: "obsidian"; vault: string; status: "disabled" | "unavailable" }
+		| { source: "obsidian"; vault: string; status: "ready"; notes: RpcMemoryListEntry[]; lessons: RpcMemoryListEntry[] };
 	summary: string;
 	full: string;
 	playbooks: Array<{ name: string; description: string; content: string }>;
@@ -1342,6 +1347,13 @@ export interface RpcMemoryOverview {
 }
 
 export type RpcMemoryEdit =
+	| { kind: "knowledge-source"; vault: string | null; previous: string | null }
+	| ({ kind: "knowledge-entry"; vault: string } &
+		(
+			| { action: "add"; entryKind: "note" | "lesson"; text: string }
+			| { action: "update"; line: string; text: string }
+			| { action: "delete"; line: string }
+		))
 	| { kind: "note"; action: "add"; text: string }
 	| { kind: "note" | "lesson"; action: "update"; line: string; text: string; context?: string }
 	| { kind: "note" | "lesson"; action: "delete"; line: string }
@@ -2067,6 +2079,7 @@ export interface AgentProgress {
 	modelOverride?: string | string[];
 	modelRole?: string;
 	resolvedModel?: string;
+	resolvedModelRoute?: string;
 	resolvedModelIsFallback?: boolean;
 	extractedToolData?: Record<string, unknown[]>;
 	retryState?: {

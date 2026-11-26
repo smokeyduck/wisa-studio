@@ -134,7 +134,7 @@ function ContextCard() {
 	);
 }
 
-/** Its own component so a chat tab, which shows no branch, never polls git. */
+/** Tool-free chat tabs do not request Git status. */
 function BranchRow() {
 	const t = useT();
 	const { status } = useGitStatus();
@@ -175,8 +175,8 @@ const CHANGE_STATUS_CLASS: Record<string, string> = {
 function ChangesCard() {
 	const t = useT();
 	const setPanelTab = useUiStore(state => state.setPanelTab);
-	const changes = useWorkingTreeChanges(true);
-	const files = changes?.files ?? [];
+	const { data: changes } = useWorkingTreeChanges();
+	const files = changes?.isRepo ? changes.files : [];
 
 	return (
 		<Card
@@ -188,7 +188,7 @@ function ChangesCard() {
 			icon={GitCompare}
 			title={t("overview.changes.title")}
 		>
-			{!changes ? (
+			{!changes?.isRepo ? (
 				<Muted>{t("overview.changes.unavailable")}</Muted>
 			) : files.length === 0 ? (
 				<Muted>{t("overview.changes.none")}</Muted>
@@ -265,16 +265,12 @@ function RunningCard() {
 					)}
 					{liveAgents.length > 0 && (
 						<li>
-							<button
-								className="w-full truncate text-start text-(--omp-text) hover:text-(--omp-link)"
-								onClick={() => setPanelTab("agents")}
-								type="button"
-							>
+							<p className="truncate text-(--omp-text)">
 								{t("overview.running.subagents", {
 									count: liveAgents.length,
 									plural: plural(liveAgents.length),
 								})}
-							</button>
+							</p>
 							<ul className="mt-1 space-y-0.5 ps-3">
 								{liveAgents.slice(0, RUNNING_PREVIEW).map(agent => (
 									<li className="truncate text-omp-sm text-(--omp-dim)" key={agent.id}>

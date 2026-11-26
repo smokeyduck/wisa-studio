@@ -19,7 +19,6 @@ import {
 	SettingsWindow,
 } from "./SettingsWindow";
 import { buildSettingsNavGroups, isAgentSchemaTab } from "./settings-window-model";
-import { ToolProfilesSetting } from "./ToolProfilesSetting";
 
 function entry(partial: Partial<SettingEntry> & { path: string }): SettingEntry {
 	return { type: "boolean", value: false, default: false, ...partial };
@@ -47,21 +46,6 @@ describe("Toggle", () => {
 		expect(html).toContain('role="switch"');
 		expect(html).toContain('aria-checked="false"');
 		expect(html).not.toContain("Saved");
-	});
-});
-
-describe("ToolProfilesSetting", () => {
-	it("identifies the Coding task control as the subagent tool", () => {
-		const html = renderToStaticMarkup(
-			<I18nProvider>
-				<ToolProfilesSetting />
-			</I18nProvider>,
-		);
-		const [coding, work] = html.split("</fieldset>");
-
-		expect(coding).toContain("Subagents (task)");
-		expect(coding).toContain("task.maxRecursionDepth");
-		expect(work).not.toContain("Subagents (task)");
 	});
 });
 

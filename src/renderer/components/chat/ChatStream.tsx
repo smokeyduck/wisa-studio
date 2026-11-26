@@ -26,7 +26,7 @@ import { describeError, describeProviderError } from "../../lib/errors";
 import { cx, formatClock } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { messageTimestampMs } from "../../lib/message-identity";
-import { abortActiveTurn, isRenderableMessageText } from "../../lib/messages";
+import { abortActiveTurn, isRenderableMessageText, messageText } from "../../lib/messages";
 import { collapsibleReadTarget, groupReadRows, type ReadGroupEntry } from "../../lib/read-group";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { useExtensionUiStore } from "../../stores/extension-ui";
@@ -38,7 +38,6 @@ import { useSettingsStore } from "../../stores/settings";
 import { useSubagentsStore } from "../../stores/subagents";
 import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
-import { type TodoSnapshot, useTodoStore } from "../../stores/todo";
 import { type ToolEntry, toolEntryKey, useToolsStore } from "../../stores/tools";
 import { cachedTranscript } from "../../stores/transcript-cache";
 import { TRANSCRIPT_FOCUS_TTL_MS, useTranscriptFocusStore } from "../../stores/transcript-focus";
@@ -64,7 +63,7 @@ import {
 	locateEntryRow,
 	type MountedTranscriptRow,
 	mergeSubagentRows,
-	mergeTodoSnapshots,
+	type ProcessRow,
 	processExpansionKey,
 	type Row,
 	shouldRePinTranscript,
@@ -72,7 +71,7 @@ import {
 	type TurnChangeSummary,
 	tabAwaitsTranscript,
 } from "./chat-stream-utils";
-import { foldSubagentCompletions } from "./completion-events";
+import { foldSubagentNotices } from "./completion-events";
 import { SubagentHistoryCard, SubagentHistoryDialog } from "./dock/AgentsDockCard";
 import { ExecutionGroup } from "./ExecutionGroup";
 import { MessageBubble } from "./MessageBubble";
@@ -109,8 +108,8 @@ const EMPTY_OLDER_HISTORY = {
 function estimateRowSize(row: Row | undefined): number {
 	const kind = row?.kind;
 	if (kind === "streaming") return 80;
-	if (kind === "pending" || kind === "queued" || kind === "turnChanges") return 56;
-	if (kind === "process" || kind === "todoSnapshot" || kind === "subagent") return 48;
+	if (kind === "pending" || kind === "queued" || kind === "turnChanges" || kind === "noReply") return 56;
+	if (kind === "process" || kind === "subagent") return 48;
 	if (kind === "message") return 72;
 	return 160;
 }
@@ -150,6 +149,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 			return anchors;
 		}),
 	);
+	const replyTimes = useSubagentsStore(state => state.replyTimes);
 	const [selectedSubagent, setSelectedSubagent] = useState<string | null>(null);
 	const status = useSessionStore(s => s.status);
 	const messages = useMessagesStore(s => s.messages);
@@ -208,6 +208,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	);
 	const [expandedUserKeys, setExpandedUserKeys] = useState<Set<string>>(() => new Set());
 	const [pinned, setPinned] = useState(restoreView?.pinned ?? true);
+	const [atLiveEdge, setAtLiveEdge] = useState(restoreView?.pinned ?? true);
 	const [visibleRowIndex, setVisibleRowIndex] = useState(Number.MAX_SAFE_INTEGER);
 	// Virtualizer measurements and programmatic scrollToIndex both emit scroll
 	// events. Only an actual wheel/touch/scrollbar/keyboard gesture may unpin the
@@ -280,7 +281,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		firstVisibleMessage && (hiddenCount > 0 || (transcriptFolded && lastCompactionIndex === 0))
 			? messageTimestampMs(firstVisibleMessage)
 			: 0;
-	const { currentAgents, olderAgents, currentMessages, olderMessages, completions } = useMemo(() => {
+	const { currentAgents, olderAgents, currentMessages, olderMessages, completions, replies } = useMemo(() => {
 		const currentAgents = new Map<string, number>();
 		const olderAgents = new Map<string, number>();
 		const olderStart = historicalMessages[0] ? messageTimestampMs(historicalMessages[0]) : undefined;
@@ -288,44 +289,108 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 			if (timestamp >= foldTime) currentAgents.set(id, timestamp);
 			else if (olderStart !== undefined && timestamp >= olderStart) olderAgents.set(id, timestamp);
 		}
-		const visibleAgents = new Map([...currentAgents, ...olderAgents]);
 		const completions = new Map<string, AgentMessage[]>();
-		const olderMessages = foldSubagentCompletions(historicalMessages, visibleAgents, completions);
-		const currentMessages = foldSubagentCompletions(visibleMessages, visibleAgents, completions);
-		return { currentAgents, olderAgents, currentMessages, olderMessages, completions };
-	}, [foldTime, historicalMessages, subagentAnchors, visibleMessages]);
+		const replies = new Map<string, number[]>();
+		if (subagentAnchors.size === 0) {
+			return {
+				currentAgents,
+				olderAgents,
+				currentMessages: visibleMessages,
+				olderMessages: historicalMessages,
+				completions,
+				replies,
+			};
+		}
+		const hasCard = (id: string) => currentAgents.has(id) || olderAgents.has(id);
+		const claimCurrent = (id: string, timestamp: number) => {
+			if (hasCard(id)) return true;
+			if (!subagentAnchors.has(id) || timestamp < foldTime) return false;
+			// Its spawn is folded away. Place one card at the first visible update.
+			currentAgents.set(id, timestamp);
+			return true;
+		};
+		const olderMessages = foldSubagentNotices(historicalMessages, hasCard, completions, replies);
+		const currentMessages = foldSubagentNotices(
+			visibleMessages,
+			(id, message) => claimCurrent(id, messageTimestampMs(message)),
+			completions,
+			replies,
+		);
+		for (const [id, timestamp] of replyTimes) {
+			if (!claimCurrent(id, timestamp)) continue;
+			const times = replies.get(id);
+			if (times) times.push(timestamp);
+			else replies.set(id, [timestamp]);
+		}
+		return { currentAgents, olderAgents, currentMessages, olderMessages, completions, replies };
+	}, [foldTime, historicalMessages, replyTimes, subagentAnchors, visibleMessages]);
 	const olderRows = useMemo(() => {
-		const built = buildHistoryRows(olderMessages, transcriptDetail, processExpansion);
+		const built = buildHistoryRows(olderMessages, transcriptDetail, processExpansion, subagentAnchors);
 		const grouped = transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
 		return mergeSubagentRows(grouped, olderAgents);
-	}, [olderMessages, olderAgents, transcriptDetail, processExpansion]);
-	const todoHistory = useTodoStore(s => s.history);
-	// Folded history hides the todo snapshots archived before the compaction
-	// point too: they belong to the turns the divider replaced, and interleaving
-	// them below it read as noise left over from the cleared screen.
-	const visibleTodoHistory = useMemo(() => {
-		if (hiddenCount === 0) return todoHistory;
-		const boundary = messageTimestampMs(displayMessages[hiddenCount]!);
-		return todoHistory.filter(snapshot => snapshot.ts >= boundary);
-	}, [todoHistory, hiddenCount, displayMessages]);
+	}, [olderMessages, olderAgents, transcriptDetail, processExpansion, subagentAnchors]);
 	const historyRows = useMemo<HistoryRow[]>(() => {
-		const built = buildHistoryRows(currentMessages, transcriptDetail, processExpansion);
+		const built = buildHistoryRows(currentMessages, transcriptDetail, processExpansion, subagentAnchors);
+		let anchors = currentAgents;
+		for (const row of built) {
+			if (row.kind !== "subagent" || !row.reuse) continue;
+			const anchor = anchors.get(row.id);
+			// A visible reuse already owns notices that arrived after it. Keep the
+			// real spawn and any earlier fallback for a folded-away spawn.
+			if (anchor !== undefined && anchor !== subagentAnchors.get(row.id) && anchor >= row.timestamp) {
+				if (anchors === currentAgents) anchors = new Map(currentAgents);
+				anchors.delete(row.id);
+			}
+		}
 		// Read-tool grouping (TUI parity) folds consecutive collapsible reads into
 		// one card — only in full mode; compact mode's ProcessGroup already folds
 		// ALL consecutive tool work, so a second fold would nest redundantly.
 		const grouped = transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
-		// Archived todo changes interleave by timestamp (transcript archive rows).
-		return mergeSubagentRows(mergeTodoSnapshots(grouped, visibleTodoHistory), currentAgents);
-	}, [currentMessages, currentAgents, transcriptDetail, visibleTodoHistory, processExpansion]);
+		return mergeSubagentRows(grouped, anchors);
+	}, [currentMessages, currentAgents, transcriptDetail, processExpansion, subagentAnchors]);
+	const repliedRows = useMemo(() => {
+		const result = new Set<HistoryRow>();
+		const nextActivity = new Map<string, number>();
+		for (const section of [historyRows, olderRows]) {
+			for (let index = section.length - 1; index >= 0; index--) {
+				const row = section[index];
+				if (row?.kind !== "subagent") continue;
+				const until = nextActivity.get(row.id) ?? Infinity;
+				const times = replies.get(row.id);
+				// Live spawn frames are stamped on receipt; a reply can carry a wire
+				// timestamp earlier than that local stamp, but belongs to this agent.
+				if (times?.some(time => time < until && (!row.reuse || time >= row.timestamp))) result.add(row);
+				nextActivity.set(row.id, row.timestamp);
+			}
+		}
+		return result;
+	}, [historyRows, olderRows, replies]);
 
 	// What the latest run changed on disk, once it has settled: closes the turn
 	// with one line leading to the review drawer. Tool events stream in at a high
 	// rate mid-run, so the map is only subscribed while idle.
 	const toolsTab = useActiveTabKind() !== "chat" && readOnly === null;
-	const lastPromptAt = useMemo(() => {
-		const prompt = displayMessages.findLast(message => message.role === "user");
-		return prompt ? messageTimestampMs(prompt) : null;
+	const { lastPromptAt, endedWithoutReply } = useMemo(() => {
+		const promptIndex = displayMessages.findLastIndex(message => message.role === "user");
+		const prompt = displayMessages[promptIndex];
+		if (!prompt) return { lastPromptAt: null, endedWithoutReply: false };
+		let endedWithoutReply = false;
+		for (let i = displayMessages.length - 1; i > promptIndex; i--) {
+			const message = displayMessages[i];
+			if (message?.role !== "assistant" || message.steering) continue;
+			endedWithoutReply =
+				message.stopReason === "stop" &&
+				!message.errorMessage &&
+				!isRenderableMessageText(messageText(message)) &&
+				!(
+					Array.isArray(message.content) && message.content.some(block => block.type === "toolCall" || block.type === "image")
+				);
+			break;
+		}
+		return { lastPromptAt: messageTimestampMs(prompt), endedWithoutReply };
 	}, [displayMessages]);
+	// Main keeps the tab running through background work even when a single agent run has yielded.
+	const tabRunning = useTabsStore(state => state.tabs.some(tab => tab.id === tabId && tab.status === "running"));
 	const settledTools = useToolsStore(s => (isStreaming ? null : s.activeTools));
 	const turnChanges = useMemo(
 		() =>
@@ -362,6 +427,14 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	// interrupts first, follow-ups after) — the future user turns, deletable
 	// in place via queue_remove.
 	const queued = useQueuedMessages();
+	const showNoReply =
+		readOnly === null &&
+		status === "ready" &&
+		!tabRunning &&
+		!isStreaming &&
+		!isCompacting &&
+		!showStatusRow &&
+		endedWithoutReply;
 
 	// Streaming deltas rerender this component for the live row, but they do not
 	// change finalized history. Keep the O(history) row/key projection stable so
@@ -371,8 +444,20 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		if (turnChanges && lastPromptAt !== null && !isStreaming && !showStatusRow) {
 			nextRows.push({ kind: "turnChanges", since: lastPromptAt, summary: turnChanges });
 		}
+		if (showNoReply && lastPromptAt !== null) nextRows.push({ kind: "noReply", since: lastPromptAt });
 		if (hasStreamedContent && streamingMessage) {
-			nextRows.push({ kind: "streaming", message: streamingMessage });
+			const tail = historyRows.at(-1);
+			// Reuse the phase's disclosure and virtual row as the next message
+			// streams, never borrowing work from an earlier user turn.
+			const process =
+				isStreaming &&
+				lastPromptAt !== null &&
+				tail?.kind === "process" &&
+				messageTimestampMs(tail.messages[0]!) >= lastPromptAt
+					? tail
+					: undefined;
+			if (process) nextRows.pop();
+			nextRows.push({ kind: "streaming", message: streamingMessage, process });
 		}
 		if (showStatusRow) {
 			nextRows.push({ kind: "pending" });
@@ -395,6 +480,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		isStreaming,
 		hasStreamedContent,
 		showStatusRow,
+		showNoReply,
 		queued.steering,
 		queued.followUp,
 		streamingMessage,
@@ -494,9 +580,10 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	const totalSize = virtualizer.getTotalSize();
 	const scrollToTail = useCallback(() => {
 		const el = parentRef.current;
-		if (el && footerRef.current?.offsetHeight) el.scrollTop = el.scrollHeight;
-		else virtualizer.scrollToEnd();
-	}, [virtualizer]);
+		if (!el) return;
+		el.scrollTop = el.scrollHeight;
+		setAtLiveEdge(isTranscriptAtLiveEdge(el));
+	}, []);
 	const viewRef = useRef({ pinned, preCompactionOpen, processExpansion });
 	viewRef.current = { pinned, preCompactionOpen, processExpansion };
 	useLayoutEffect(
@@ -528,9 +615,8 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	// Whether the tail belongs to the follower. An upward gesture is the only thing
 	// that revokes it: `pinned` carries the reader's intent, and the measured edge is
 	// the fallback for a stale unpinned flag from a restored view. Reading only the
-	// measured edge let one frame of lag strand the stream — `scrollToEnd()` targets
-	// the virtualizer's size, which trails a row that is still growing, so the view
-	// fell outside the edge slack and the tail was abandoned for the rest of the run.
+	// measured edge lets one late measurement strand the stream far enough from
+	// the edge that the follower would stop for the rest of the run.
 	const followsTail = useCallback(
 		(el: HTMLElement) =>
 			!footerRef.current?.querySelector("[data-focused-card]") &&
@@ -570,6 +656,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 			frame = requestAnimationFrame(() => {
 				frame = null;
 				if (!userScrollIntentRef.current && followsTail(el)) scrollToTail();
+				else setAtLiveEdge(isTranscriptAtLiveEdge(el));
 			});
 		});
 		observer.observe(canvas);
@@ -625,9 +712,11 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	}, []);
 
 	const handleScroll = useCallback(() => {
-		if (!userScrollIntentRef.current) return;
 		const el = parentRef.current;
 		if (!el) return;
+		const atEdge = isTranscriptAtLiveEdge(el);
+		setAtLiveEdge(atEdge);
+		if (!userScrollIntentRef.current) return;
 		const anchor = readingAnchor(el);
 		if (anchor) {
 			const looked = gestureAnchorRef.current;
@@ -637,7 +726,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 			// that as "the reader came back" re-pins a view they just took.
 			if (looked && looked.index === anchor.index && Math.abs(looked.offset - anchor.offset) < 2) return;
 		}
-		const nextPinned = shouldRePinTranscript(gestureTowardTailRef.current, isTranscriptAtLiveEdge(el));
+		const nextPinned = shouldRePinTranscript(gestureTowardTailRef.current, atEdge);
 		setPinned(nextPinned);
 		// Reaching the live edge by a tailward gesture hands layout growth back to
 		// the follower until another explicit gesture.
@@ -827,6 +916,17 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		},
 		[archive, archiveBoundaryId, archiveBusy, sessionId, tabId],
 	);
+	const archiveOpen = archive.depth > 0 || archive.searchMessages.length > 0 || preCompactionOpen;
+	const cannotLoadOlder = archiveBusy || archiveLoading || !archive.hasOlder || archive.depth >= MAX_OLDER_BOUNDARIES;
+	const closeOlder = () => {
+		archiveTicket.current = null;
+		revealCancelRef.current?.();
+		setArchiveState(EMPTY_OLDER_HISTORY);
+		setArchiveLoading(false);
+		setArchiveFailed(false);
+		setPreCompactionOpen(false);
+		jumpToLatest();
+	};
 	const revealedDepth = useRef(0);
 	useLayoutEffect(() => {
 		if (archive.depth > revealedDepth.current && olderRows.length) revealRow(0);
@@ -946,7 +1046,8 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		(match: { rowIndex: number; occurrence: number }, query: string) => {
 			const row = rows[match.rowIndex];
 			const key = rowKeys[match.rowIndex];
-			if (row?.kind === "process" && key) updateProcessExpanded(key, true);
+			if (key && (row?.kind === "process" || (row?.kind === "streaming" && row.process)))
+				updateProcessExpanded(key, true);
 			if (row?.kind === "message" && row.message.role === "user" && key) updateUserTextExpanded(key, true);
 			revealRow(match.rowIndex, element => {
 				const ranges = findRangesInRow(element, query);
@@ -1007,7 +1108,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 
 	return (
 		<>
-			<div className="omp-transcript-editorial relative flex min-h-0 flex-1 flex-col bg-transparent">
+			<div className="omp-transcript-editorial relative flex min-h-0 flex-1 flex-col bg-transparent [container-type:size]">
 				{findOpen && (
 					<TranscriptFindBar
 						current={findCurrent}
@@ -1024,15 +1125,24 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 						<button
 							type="button"
 							aria-controls={canvasId}
-							aria-expanded={olderRows.length > 0}
-							aria-disabled={
-								archiveBusy || archiveLoading || !archive.hasOlder || archive.depth >= MAX_OLDER_BOUNDARIES
-							}
-							onClick={() => void requestOlder()}
+							aria-expanded={archiveOpen}
+							aria-disabled={!archiveOpen && cannotLoadOlder}
+							onClick={archiveOpen ? closeOlder : () => void requestOlder()}
 							className="rounded-md px-2 py-1 text-omp-md font-medium text-[var(--omp-accent)] hover:bg-[var(--omp-selected-bg)] aria-disabled:opacity-50"
 						>
-							{t(archive.depth ? "chat.olderHistory.more" : "chat.olderHistory.open")}
+							{t(archiveOpen ? "chat.olderHistory.close" : "chat.olderHistory.open")}
 						</button>
+						{archiveOpen && (
+							<button
+								type="button"
+								aria-controls={canvasId}
+								aria-disabled={cannotLoadOlder}
+								onClick={() => void requestOlder()}
+								className="rounded-md px-2 py-1 text-omp-md font-medium text-[var(--omp-accent)] hover:bg-[var(--omp-selected-bg)] aria-disabled:opacity-50"
+							>
+								{t("chat.olderHistory.more")}
+							</button>
+						)}
 						<span role="status" className="text-omp-sm text-[var(--omp-muted)]">
 							{archiveLoading
 								? t("chat.olderHistory.loading")
@@ -1058,7 +1168,10 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 					onPointerCancel={endScrollGesture}
 					onKeyDown={handleScrollKeyDown}
 					tabIndex={0}
-					className="omp-transcript-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
+					className={cx(
+						"omp-transcript-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain",
+						(rows.length > 0 || Boolean(footer)) && "pb-4",
+					)}
 				>
 					{readOnly === null && <TranscriptQuoteAction tabId={tabId} transcriptRef={parentRef} />}
 					{switchPending && (
@@ -1122,7 +1235,11 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 							if (!row) return null;
 							const rowKey = rowKeys[item.index] ?? String(item.key);
 							const processMessage =
-								row.kind === "process" ? row.messages[0] : row.kind === "streaming" ? row.message : undefined;
+								row.kind === "process"
+									? row.messages[0]
+									: row.kind === "streaming"
+										? (row.process?.messages[0] ?? row.message)
+										: undefined;
 							const processKey = processMessage ? processExpansionKey(processMessage) : rowKey;
 							const previous = rows[item.index - 1];
 							return (
@@ -1178,18 +1295,26 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 													agentId={row.id}
 													full={subagentMode === "full"}
 													onOpen={setSelectedSubagent}
+													replied={repliedRows.has(row)}
+													reused={row.reuse !== undefined}
 												/>
 											) : row.kind === "streaming" ? (
 												<StreamingRows
 													expanded={processExpansion.get(processKey) === true}
 													onExpandedChange={expanded => updateProcessExpanded(processKey, expanded)}
+													process={row.process}
 												/>
 											) : row.kind === "queued" ? (
 												<QueuedMessageBubble item={row.item} lane={row.lane} />
-											) : row.kind === "todoSnapshot" ? (
-												<TodoSnapshotCard entry={row.entry} />
 											) : row.kind === "turnChanges" ? (
 												<TurnChangesRow summary={row.summary} />
+											) : row.kind === "noReply" ? (
+												<div
+													role="status"
+													className="ps-(--omp-editorial-inset) pe-(--omp-editorial-edge) py-2 text-omp-sm text-[var(--omp-muted)]"
+												>
+													{t("chat.turn.noReply")}
+												</div>
 											) : (
 												<TurnStatusRow />
 											)}
@@ -1205,18 +1330,16 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 						</div>
 					)}
 				</div>
-				<button
-					type="button"
-					onClick={jumpToLatest}
-					aria-label={t("chat.jumpToLatest")}
-					className={cx(
-						"absolute bottom-5 left-1/2 flex h-9 -translate-x-1/2 items-center gap-2 rounded-full border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] px-4 text-omp-md font-medium text-[var(--omp-text)] shadow-[var(--omp-shadow-md)] transition-all hover:bg-[var(--omp-selected-bg)]",
-						pinned ? "pointer-events-none translate-y-12 opacity-0" : "translate-y-0 opacity-100",
-					)}
-				>
-					<ArrowDown size={14} />
-					{t("chat.jumpToLatest")}
-				</button>
+				{rows.length > 0 && !pinned && !atLiveEdge && (
+					<button
+						type="button"
+						onClick={jumpToLatest}
+						className="absolute bottom-5 left-1/2 flex h-9 -translate-x-1/2 items-center gap-2 rounded-full border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] px-4 text-omp-md font-medium text-[var(--omp-text)] shadow-[var(--omp-shadow-md)] hover:bg-[var(--omp-selected-bg)]"
+					>
+						<ArrowDown aria-hidden size={14} />
+						{t("chat.jumpToLatest")}
+					</button>
+				)}
 			</div>
 			{subagentDialogHost && showSubagents && (
 				<SubagentHistoryDialog
@@ -1269,11 +1392,12 @@ function ProcessGroup({
 }: {
 	expanded: boolean;
 	onExpandedChange: (expanded: boolean) => void;
-	row: Extract<HistoryRow, { kind: "process" }>;
+	row: ProcessRow;
 }) {
 	return (
 		<div className="ps-(--omp-editorial-inset) pe-(--omp-editorial-edge)">
 			<ExecutionGroup
+				backgroundEvents={row.backgroundEvents}
 				expanded={expanded}
 				failureCount={row.failedEvents}
 				onExpandedChange={onExpandedChange}
@@ -1281,22 +1405,22 @@ function ProcessGroup({
 				toolCallIds={row.toolCallIds}
 			>
 				<div className="omp-process-group">
-					{row.messages.map((message, index) => (
-						<MessageBubble
-							compact
-							key={
-								typeof message.id === "string"
-									? message.id
-									: `${String(message.timestamp ?? "process")}-${index}`
-							}
-							message={message}
-							runningIndicator="dot"
-						/>
-					))}
+					<ProcessMessages messages={row.messages} />
 				</div>
 			</ExecutionGroup>
 		</div>
 	);
+}
+
+function ProcessMessages({ messages }: { messages: readonly AgentMessage[] }) {
+	return messages.map((message, index) => (
+		<MessageBubble
+			compact
+			key={`${message.id ?? message.entryId ?? String(message.timestamp ?? "process")}-${index}`}
+			message={message}
+			runningIndicator="dot"
+		/>
+	));
 }
 
 /**
@@ -1307,9 +1431,11 @@ function ProcessGroup({
 export function StreamingRows({
 	expanded,
 	onExpandedChange,
+	process,
 }: {
 	expanded: boolean;
 	onExpandedChange: (expanded: boolean) => void;
+	process?: ProcessRow;
 }) {
 	const streamingMessage = useMessagesStore(s => s.streamingMessage);
 	const hasThinking = useMessagesStore(s => isRenderableMessageText(s.streamingThinking));
@@ -1330,7 +1456,8 @@ export function StreamingRows({
 	// over with the same toolCallIds. Entries from before this stream started
 	// (hydrated history that never finished) are excluded by start time.
 	const streamStart = messageTimestampMs(streamingMessage);
-	const contentIds = new Set(toolCalls.map(block => toolEntryKey(block)));
+	const contentIds = new Set(process?.toolCallIds);
+	for (const block of toolCalls) contentIds.add(toolEntryKey(block));
 	const liveTools: Array<{ id: string; entry: ToolEntry }> = [];
 	for (const [id, entry] of activeTools) {
 		if (contentIds.has(id)) continue;
@@ -1339,8 +1466,8 @@ export function StreamingRows({
 		liveTools.push({ id, entry });
 	}
 
-	const hasProcess = hasThinking || toolCalls.length > 0 || liveTools.length > 0;
-	const compactChrome = transcriptDetail === "compact" ? !hasText : !hasText && !hasThinking;
+	const hasProcess = process !== undefined || hasThinking || toolCalls.length > 0 || liveTools.length > 0;
+	const compactChrome = !hasText;
 	const turnClass = compactChrome ? "omp-assistant-turn--compact" : "omp-assistant-turn";
 
 	// Live read grouping (same predicate as the finalized path): consecutive
@@ -1417,51 +1544,27 @@ export function StreamingRows({
 		</>
 	);
 
-	if (transcriptDetail === "full") {
-		return (
-			<div className={cx("omp-streaming-turn group flex px-6", turnClass)}>
-				<div className="omp-transcript-content min-w-0">
-					{/* streamingMessage.content only fills at message_end; mid-stream the
-				    thinking deltas accumulate in the streamingThinking buffer, which
-				    ThinkingBlock reads itself when live. */}
-					{hasThinking ? <ThinkingBlock live /> : null}
-					{toolCalls.length + liveTools.length > 0 ? (
-						<ExecutionGroup
-							expanded={expanded}
-							live
-							onExpandedChange={onExpandedChange}
-							stepCount={toolCalls.length + liveTools.length}
-							toolCallIds={allCards.map(card => card.id)}
-						>
-							<div className="omp-process-group omp-process-group--live">{toolCards}</div>
-						</ExecutionGroup>
-					) : null}
-					<StreamingText />
-				</div>
-			</div>
-		);
-	}
-
 	return (
 		<div className={cx("omp-streaming-turn group flex px-6", turnClass)}>
 			<div className="omp-transcript-content min-w-0">
 				{hasProcess ? (
 					<ExecutionGroup
+						backgroundEvents={process?.backgroundEvents}
 						expanded={expanded}
+						failureCount={process?.failedEvents}
 						live
 						onExpandedChange={onExpandedChange}
-						stepCount={toolCalls.length + liveTools.length + (hasThinking ? 1 : 0)}
-						toolCallIds={allCards.map(card => card.id)}
+						stepCount={(process?.stepCount ?? 0) + allCards.length + (hasThinking ? 1 : 0)}
+						toolCallIds={[...(process?.toolCallIds ?? []), ...allCards.map(card => card.id)]}
 					>
 						<div className="omp-process-group omp-process-group--live">
+							{process && <ProcessMessages messages={process.messages} />}
 							{hasThinking ? <ThinkingBlock live /> : null}
 							{toolCalls.length + liveTools.length > 0 ? <div>{toolCards}</div> : null}
 						</div>
 					</ExecutionGroup>
 				) : null}
-				<div className={hasProcess ? "mt-0.5" : undefined}>
-					<StreamingText />
-				</div>
+				<StreamingText />
 			</div>
 		</div>
 	);
@@ -1740,88 +1843,6 @@ function QueuedMessageBubble({ item, lane }: { item: RpcQueuedMessage; lane: Que
 	);
 }
 
-/**
- * Archived todo state rendered inline in the transcript where the change
- * happened (todo store history). Collapses to a one-line summary; expanding
- * shows the phase/task state at that time, read-only — the live dock card
- * above the composer carries the editable current list.
- */
-function TodoSnapshotCard({ entry }: { entry: TodoSnapshot }) {
-	const t = useT();
-	const [expanded, setExpanded] = useState(false);
-	const total = entry.phases.reduce((n, phase) => n + phase.tasks.length, 0);
-	const done = entry.phases.reduce(
-		(n, phase) => n + phase.tasks.filter(task => task.status === "completed").length,
-		0,
-	);
-	const cleared = total === 0;
-
-	return (
-		<div className="ml-(--omp-editorial-inset) mr-(--omp-editorial-edge) my-1.5">
-			<button
-				aria-expanded={expanded}
-				className="omp-pressable flex items-center gap-1.5 rounded-lg border border-[var(--omp-border-muted)] px-2.5 py-1 text-omp-sm text-[var(--omp-muted)] hover:text-[var(--omp-text)]"
-				disabled={cleared}
-				onClick={() => setExpanded(value => !value)}
-				type="button"
-			>
-				<ChevronRight
-					className="omp-disclosure-chevron shrink-0 text-[var(--omp-dim)]"
-					size={11}
-					style={{ transform: expanded ? "rotate(90deg)" : undefined }}
-				/>
-				<ListTodo className="shrink-0 text-[var(--omp-dim)]" size={12} />
-				<span className="font-medium">{cleared ? t("todoSnapshot.cleared") : t("todoSnapshot.title")}</span>
-				{!cleared && (
-					<span className="tabular-nums text-[var(--omp-dim)]">{t("todoSnapshot.progress", { done, total })}</span>
-				)}
-			</button>
-			{expanded && !cleared && (
-				<div className="mt-1 ml-1 space-y-1 border-l border-[var(--omp-border-muted)] pl-3">
-					{entry.phases.map((phase, phaseIndex) => (
-						<div key={`${phase.name}-${phaseIndex}`}>
-							{entry.phases.length > 1 && (
-								<div className="py-0.5 text-omp-xs font-semibold text-[var(--omp-dim)]">{phase.name}</div>
-							)}
-							{phase.tasks.map((task, taskIndex) => (
-								<div
-									key={`${task.content}-${taskIndex}`}
-									className="flex items-center gap-1.5 py-0.5 text-omp-sm"
-								>
-									<span
-										aria-hidden
-										className={cx(
-											"h-1.5 w-1.5 shrink-0 rounded-full",
-											task.status === "completed"
-												? "bg-[var(--omp-success)]"
-												: task.status === "in_progress"
-													? "bg-[var(--omp-link)]"
-													: task.status === "abandoned"
-														? "bg-[var(--omp-error)]"
-														: "bg-[var(--omp-border)]",
-										)}
-									/>
-									<span
-										className={cx(
-											"min-w-0 flex-1 truncate",
-											task.status === "completed" || task.status === "abandoned"
-												? "text-[var(--omp-dim)] line-through"
-												: "text-[var(--omp-muted)]",
-										)}
-										title={task.content}
-									>
-										{task.content}
-									</span>
-								</div>
-							))}
-						</div>
-					))}
-				</div>
-			)}
-		</div>
-	);
-}
-
 export type { HistoryRow, Row, TimelineMarkerSeed } from "./chat-stream-utils";
 // Re-export transcript helpers for consumers/tests that import them from ChatStream.
 export {
@@ -1837,7 +1858,6 @@ export {
 	isTranscriptAtLiveEdge,
 	LIVE_EDGE_SLACK_PX,
 	locateEntryRow,
-	mergeTodoSnapshots,
 	ROW_ENTRANCE_TAIL_ROWS,
 	shouldRePinTranscript,
 	summarizeTurnChanges,

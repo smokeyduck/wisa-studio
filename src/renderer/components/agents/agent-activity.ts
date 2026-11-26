@@ -186,21 +186,6 @@ export function buildAgentTree(rows: readonly SubagentListRow[], members: Readon
 	return out;
 }
 
-/** Hide rows under collapsed parents. */
-export function visibleTreeRows(rows: readonly AgentTreeRow[], collapsed: ReadonlySet<string>): AgentTreeRow[] {
-	const out: AgentTreeRow[] = [];
-	let hiddenBelow: number | null = null;
-	for (const row of rows) {
-		if (hiddenBelow !== null) {
-			if (row.depth > hiddenBelow) continue;
-			hiddenBelow = null;
-		}
-		out.push(row);
-		if (row.childCount > 0 && collapsed.has(row.agent.id)) hiddenBelow = row.depth;
-	}
-	return out;
-}
-
 export interface AgentTreeCut {
 	rows: AgentTreeRow[];
 	hidden: number;

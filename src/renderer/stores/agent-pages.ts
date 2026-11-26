@@ -128,16 +128,3 @@ useTabsStore.subscribe((state, previous) => {
 		if (!open.has(tabId)) useAgentPagesStore.getState().drop(tabId);
 	}
 });
-
-/**
- * Failures seen in the drawer's Agents tab or on their page. The tab's error
- * dot is for the others (plan/24 §5.6).
- */
-export const useSeenFailuresStore = create<{ seen: ReadonlySet<string> }>()(() => ({ seen: new Set() }));
-
-export function markFailuresSeen(ids: Iterable<string>): void {
-	const current = useSeenFailuresStore.getState().seen;
-	const next = new Set(current);
-	for (const id of ids) next.add(id);
-	if (next.size !== current.size) useSeenFailuresStore.setState({ seen: next });
-}

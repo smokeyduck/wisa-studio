@@ -37,12 +37,6 @@ import type {
 	SubagentFrame,
 } from "../shared/rpc-types";
 import { BTW_FRAME_TYPES, DICTATION_FRAME_TYPES, LIVE_FRAME_TYPES, TERMINAL_FRAME_TYPES } from "../shared/rpc-types";
-import {
-	CODING_TOOL_PROFILE_PREF,
-	WORK_TOOL_PROFILE_PREF,
-	readCodingToolProfile,
-	readWorkToolProfile,
-} from "../shared/tool-profiles";
 import { defaultWorkspacePath } from "./default-workspace";
 import { agentSpawnEnv } from "./dev-profile";
 import { EventBatcher } from "./event-batcher";
@@ -53,10 +47,14 @@ import { RpcClient } from "./rpc-client";
 const MAX_RESTART_ATTEMPTS = 3;
 const RESTART_DELAYS = [1000, 2000, 4000];
 
-// Work's allowlist is GUI-owned. A workspace launch profile must not replace it.
+// Work owns its tool ceiling; launch profiles can still turn all tools off.
 const WORK_TOOL_FLAGS: FlagDenylist = {
-	names: { "--tools": true, "--no-tools": true, "--plan-yolo": true, "--plan-yolo-into": true },
+	names: { "--tools": true, "--plan-yolo": true, "--plan-yolo-into": true },
 	withValue: { "--tools": true, "--plan-yolo-into": true },
+};
+const EXPLICIT_TOOL_FLAGS: FlagDenylist = {
+	names: { "--tools": true, "--no-tools": true },
+	withValue: { "--tools": true },
 };
 
 /**
@@ -159,6 +157,8 @@ export interface SidecarOptions {
 	runPolicy?: { flags: string[]; deny: FlagDenylist; hostToolsOnly?: true };
 	/** When set, spawn the workspace source CLI via bun instead of the installed binary. */
 	sourceCli?: string;
+	/** Studio-owned --config overlay, appended after project launch overlays. */
+	studioConfig?: string;
 	/**
 	 * Resolves proxy env vars (PI_PROXY / HTTPS_PROXY / …) injected at spawn -
 	 * the GUI proxy pref or the macOS system proxy. Finder-launched apps have
@@ -197,36 +197,20 @@ export interface SidecarFailureReport {
 	cwd: string;
 }
 
-/** Read preferences at each spawn/restart, not when the tab or spare is created. */
-function loadSpawnPrefs(cwd: string, mode: "coding" | "work" | null) {
-	let flags: string[] = [];
-	let rawProfile: unknown;
+/** Read the workspace launch profile at each spawn/restart. */
+function loadLaunchFlags(cwd: string): string[] {
 	try {
 		// With Electron, its userData path wins, matching the preferences IPC.
 		const storeOptions = { name: "prefs", projectName: "wisa-studio" };
 		const prefs = new Store<Record<string, unknown>>(storeOptions);
-		if (mode) rawProfile = prefs.get(mode === "work" ? WORK_TOOL_PROFILE_PREF : CODING_TOOL_PROFILE_PREF);
 		const profiles = prefs.get("launchProfiles");
 		if (profiles && typeof profiles === "object") {
-			flags = profileToFlags(parseLaunchProfile((profiles as Record<string, unknown>)[cwd]));
+			return profileToFlags(parseLaunchProfile((profiles as Record<string, unknown>)[cwd]));
 		}
 	} catch {
-		// Missing or unreadable preferences leave the built-in profiles intact.
+		// Missing or unreadable preferences leave the default argv intact.
 	}
-	if (mode === "work") {
-		const { tools } = readWorkToolProfile(rawProfile);
-		return { flags, toolProfile: `work:${tools.join(",")}`, editMode: "", workspaceRead: tools.includes("read") };
-	}
-	if (mode === "coding") {
-		const { disabled, editMode } = readCodingToolProfile(rawProfile);
-		return {
-			flags,
-			toolProfile: disabled.length ? `coding:${disabled.join(",")}` : "",
-			editMode: editMode === "core" ? "" : editMode,
-			workspaceRead: !disabled.includes("read"),
-		};
-	}
-	return { flags, toolProfile: "", editMode: "", workspaceRead: false };
+	return [];
 }
 
 /** Resolve the bun executable for source-sidecar spawns (PATH fallback last). */
@@ -300,6 +284,8 @@ export class SidecarManager extends EventEmitter {
 	#freshLaunchPending: boolean;
 	/** Whether the current spawn cycle reached `ready`. */
 	#bootedThisSpawn = false;
+	#allowsInteractiveHostTools = false;
+	#terminalAgentTools = true;
 	/**
 	 * Saved session model that failed to restore at boot. The next spawn adds
 	 * `--model @default` so the session opens on the configured default model
@@ -338,6 +324,10 @@ export class SidecarManager extends EventEmitter {
 
 	get rpcClient(): RpcClient | null {
 		return this.#rpcClient;
+	}
+
+	get allowsInteractiveHostTools(): boolean {
+		return this.#allowsInteractiveHostTools;
 	}
 
 	start(): void {
@@ -391,26 +381,27 @@ export class SidecarManager extends EventEmitter {
 		if (this.#resumeSessionPath) args.push("--session", this.#resumeSessionPath);
 		else if (this.#freshLaunchPending && this.#options.noAutoResume !== false) args.push("--no-auto-resume");
 		if (this.#bootModelFallback) args.push("--model", DEFAULT_ROLE_MODEL_SELECTOR);
-		if (this.#options.kind === "chat") args.push("--chat");
+		const chat = this.#options.kind === "chat";
+		if (chat) args.push("--chat");
 		const runPolicy = this.#options.runPolicy;
-		const toolMode =
-			runPolicy || this.#options.kind === "chat"
-				? null
-				: relative(defaultWorkspacePath(), cwd) === ""
-					? "work"
-					: "coding";
-		const { flags, toolProfile, editMode, workspaceRead } = runPolicy?.hostToolsOnly
-			? { flags: [], toolProfile: "work:", editMode: "", workspaceRead: false }
-			: loadSpawnPrefs(cwd, toolMode);
+		const work = !runPolicy && !chat && relative(defaultWorkspacePath(), cwd) === "";
+		const flags = runPolicy?.hostToolsOnly ? [] : loadLaunchFlags(cwd);
 		if (runPolicy) args.push(...runPolicy.flags);
 		// User-controllable flags ride the extraFlags seam + the launch profile.
 		// Strip the code-controlled-flag denylist (pair-aware) over BOTH, then
 		// append: neither can override the code-controlled argv above, while a
 		// profile value that merely looks like a protected flag survives intact.
-		const userFlags = [...(extraFlags ?? []), ...flags];
-		args.push(
-			...stripDenylistedFlags(userFlags, runPolicy?.deny ?? (toolMode === "work" ? WORK_TOOL_FLAGS : undefined)),
+		const userFlags = stripDenylistedFlags(
+			[...(extraFlags ?? []), ...flags],
+			runPolicy?.deny ?? (work ? WORK_TOOL_FLAGS : undefined),
 		);
+		const { studioConfig } = this.#options;
+		args.push(...userFlags);
+		if (studioConfig) args.push("--config", studioConfig);
+		const hasExplicitToolFlags = stripDenylistedFlags(userFlags, EXPLICIT_TOOL_FLAGS).length !== userFlags.length;
+		this.#allowsInteractiveHostTools = !!studioConfig && !runPolicy && !chat && !hasExplicitToolFlags;
+		// Work strips --tools, so the only explicit tool flag here can be --no-tools.
+		this.#terminalAgentTools = !work || !hasExplicitToolFlags;
 
 		// Source sidecar (monorepo dev): run the workspace coding-agent from
 		// source via bun so in-repo RPC fixes are live in the running GUI.
@@ -421,27 +412,32 @@ export class SidecarManager extends EventEmitter {
 
 		let child: ChildProcess;
 		try {
+			const env = agentSpawnEnv({
+				...process.env,
+				// Login-shell PATH first so the GUI proxy pref (and inherited
+				// proxy env) keeps precedence over rc-file proxy exports.
+				...this.#shellEnvVars,
+				...this.#proxyEnvVars,
+				PI_RPC_EMIT_TITLE: "1",
+				PI_NO_PTY: "1",
+				PI_NOTIFICATIONS: "off",
+				PI_GUI_NATIVE_THINKING: "1",
+				// Registry defaults, not argv overrides: global/project/--config settings still win.
+				WISA_STUDIO_DEFAULTS: runPolicy ? "0" : "1",
+				WISA_RPC_HOST_MODE: runPolicy?.hostToolsOnly ? "host-tools-only" : work ? "work" : "",
+				WISA_BTW_WORKSPACE_READ: !chat && !runPolicy?.hostToolsOnly ? "1" : "0",
+			});
+			if (!runPolicy) {
+				// Core owns stream timeouts and retries; renderer silence does not justify replaying a prompt.
+				const keys = new Set(Object.keys(env).map(key => (process.platform === "win32" ? key.toUpperCase() : key)));
+				if (!keys.has("PI_STREAM_FIRST_EVENT_TIMEOUT_MS")) env.PI_STREAM_FIRST_EVENT_TIMEOUT_MS = "300000";
+				if (!keys.has("PI_STREAM_IDLE_TIMEOUT_MS") && !keys.has("PI_OPENAI_STREAM_IDLE_TIMEOUT_MS")) {
+					env.PI_STREAM_IDLE_TIMEOUT_MS = "180000";
+				}
+			}
 			child = spawn(command, spawnArgs, {
 				stdio: ["pipe", "pipe", "pipe"],
-				env: dropUnsupportedProxies(
-					agentSpawnEnv({
-						...process.env,
-						// Login-shell PATH first so the GUI proxy pref (and inherited
-						// proxy env) keeps precedence over rc-file proxy exports.
-						...this.#shellEnvVars,
-						...this.#proxyEnvVars,
-						PI_RPC_EMIT_TITLE: "1",
-						PI_NO_PTY: "1",
-						PI_NOTIFICATIONS: "off",
-						PI_GUI_NATIVE_THINKING: "1",
-						// Registry defaults, not argv overrides: global/project/--config settings still win.
-						// Unattended scheduler runs retain the generic RPC defaults.
-						WISA_STUDIO_DEFAULTS: runPolicy ? "0" : "1",
-						WISA_GUI_TOOL_PROFILE: toolProfile,
-						WISA_GUI_EDIT_MODE: editMode,
-						WISA_BTW_WORKSPACE_READ: !runPolicy?.hostToolsOnly && (workspaceRead || runPolicy) ? "1" : "0",
-					}),
-				),
+				env: dropUnsupportedProxies(env),
 				cwd,
 				windowsHide: true,
 			});
@@ -678,7 +674,7 @@ export class SidecarManager extends EventEmitter {
 				// long-lived commands (dev servers) there.
 				if (!this.#options.runPolicy?.hostToolsOnly) {
 					void this.#rpcClient
-						.command({ type: "terminal_configure", interactiveCommands: true, agentTools: true })
+						.command({ type: "terminal_configure", interactiveCommands: true, agentTools: this.#terminalAgentTools })
 						.catch(() => {});
 				}
 			}

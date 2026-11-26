@@ -117,7 +117,6 @@ import {
 	SSH_TAB_ID,
 	UPDATES_TAB_ID,
 } from "./settings-window-model";
-import { ToolProfilesSetting } from "./ToolProfilesSetting";
 import { UpdatesSettingsPage } from "./UpdatesSettingsPage";
 
 const SETTINGS_NAV_ICONS: Record<string, typeof SlidersHorizontal> = {
@@ -1030,7 +1029,6 @@ export function SettingsWindow() {
 								/>
 								{searchGroups === null ? (
 									<>
-										{tab === "tools" && <ToolProfilesSetting key={reloadToken} />}
 										{tab === SKILLS_TAB_ID && <SkillsSettingsPage query={query} />}
 										{tab === MCP_TAB_ID && <ExtensionSettingsPage query={query} tabId="mcp" />}
 										{tab === RESOURCES_TAB_ID && (

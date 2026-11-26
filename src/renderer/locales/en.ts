@@ -815,10 +815,6 @@ export const en: Record<string, string> = {
 	"cmd.computer.on": "Enable",
 	"cmd.computer.off": "Disable",
 	"cmd.computer.status": "Status",
-	"cmd.browser": "Browser Mode",
-	"cmd.browser.desc": "Toggle headless vs visible",
-	"cmd.browser.headless": "Headless",
-	"cmd.browser.visible": "Visible",
 	"cmd.force": "Force Tool",
 	"cmd.force.desc": "Force next turn to use a specific tool",
 	"cmd.todo": "Todo List",
@@ -2512,15 +2508,6 @@ export const en: Record<string, string> = {
 	"computer.on": "Computer use: on",
 	"computer.off": "Computer use: off",
 
-	// /vision on|off|auto|status
-
-	// /browser headless|visible
-	"browser.headlessOn": "Browser mode: headless",
-	"browser.visibleOn": "Browser mode: visible",
-	"settings.browser.relayDesc": 'Make the external Chrome relay the default. Leave it off to opt in per task with app: "relay". Only use a Chrome profile you want the agent to access.',
-	"settings.browser.relayUrlDesc": "Enter the loopback URL of the running omp relay (http://127.0.0.1:<port>). WISA STUDIO does not discover the separate omp profile. Update the URL if the port changes.",
-	"settings.browser.relaySetup": "Browser relay setup",
-
 	// /mcp enable|disable|remove|reconnect
 	"mcpAction.enable": 'MCP server "{name}" enabled',
 	"mcpAction.disable": 'MCP server "{name}" disabled',
@@ -3036,6 +3023,7 @@ export const en: Record<string, string> = {
 	"chat.jumpToLatest": "Jump to latest",
 	"chat.process.title": "Tasks",
 	"chat.process.collapse": "Collapse process",
+	"chat.process.backgroundEvents": "Background events: {count}",
 	"chat.process.statusRunning": "{running} running - {total} step{plural}",
 	"chat.process.statusComplete": "{total} step{plural} complete",
 	"chat.process.statusFailed": "{failed} failed - {total} step{plural}",
@@ -3088,6 +3076,7 @@ export const en: Record<string, string> = {
 	"ansi.outputClipped": "… {count} earlier characters omitted …",
 	"chat.transcript.label": "Conversation transcript",
 	"chat.olderHistory.open": "View older history",
+	"chat.olderHistory.close": "Hide older history",
 	"chat.olderHistory.more": "View even older history",
 	"chat.olderHistory.loading": "Loading older history…",
 	"chat.olderHistory.failed": "Could not load older history. Try again.",
@@ -3158,6 +3147,7 @@ export const en: Record<string, string> = {
 	"chat.error.retryFailed": "Couldn't retry",
 	"chat.turnChanges.files": "{count} file{plural} edited this turn",
 	"chat.turnChanges.review": "Review",
+	"chat.turn.noReply": "The model stopped without writing a final reply.",
 	"chat.compaction.reason.overflow": "Context overflow detected, ",
 	"chat.compaction.reason.incomplete": "Response incomplete, ",
 	"chat.compaction.reason.idle": "Idle ",
@@ -3596,7 +3586,6 @@ export const en: Record<string, string> = {
 	"subagent.loadingTranscript": "Loading transcript…",
 	"subagent.noEntries": "No transcript entries yet.",
 	"subagent.messageSent": "Sent to subagent",
-	"subagent.messageReceived": "Subagent reply",
 	"subagent.loadMore": "Load more",
 
 	// Subagent panel
@@ -3691,14 +3680,6 @@ export const en: Record<string, string> = {
 	"agentHub.hub.backToHub": "Back to instances",
 	"agentHub.hub.kind.sub": "sub",
 
-	// Subagent DAG
-	"dag.main": "main session",
-	"dag.mainSub": "spawn origin",
-	"dag.closeTranscript": "Close transcript",
-	"dag.clickNode": "Click a node to view its transcript.",
-	"dag.unresolved":
-		"{count} nested {plural} shown at root - parent link unavailable; expanding transcripts resolves nesting.",
-
 	// Diff panel
 	"diffPanel.title": "Changes",
 	"diffPanel.mode.repository": "Working tree",
@@ -3753,7 +3734,6 @@ export const en: Record<string, string> = {
 	"panel.tabs.diff": "Changes",
 	"panel.tabs.files": "Files",
 	"panel.tabs.terminal": "Terminal",
-	"terminal.new": "New terminal",
 	"terminal.close": "Close terminal",
 	"terminal.agentWaiting": "The agent ran this command interactively and is waiting for it. Type here to answer it.",
 	"terminal.agentBackground":
@@ -3768,7 +3748,6 @@ export const en: Record<string, string> = {
 	"terminal.state.input": "Waiting for you",
 	"terminal.openFailed": "Couldn't start a terminal: {error}",
 	"terminal.emptyTitle": "No terminal open",
-	"terminal.emptyHint": "Start a shell in this workspace. Interactive commands the agent runs open here too.",
 	"terminal.unavailableTitle": "Terminal unavailable",
 	"terminal.unavailableHint": "This session's core isn't running.",
 	"terminal.exited": "[process exited]",
@@ -3817,11 +3796,6 @@ export const en: Record<string, string> = {
 	"pendingBubble.remove": "Remove from queue",
 	"pendingBubble.removeFailed": "Failed to remove queued message",
 
-	// Todo snapshot rows (transcript archive of todo changes)
-	"todoSnapshot.title": "Todos updated",
-	"todoSnapshot.cleared": "Todos cleared",
-	"todoSnapshot.progress": "{done}/{total} done",
-
 	// Usage window additions
 	"usage.notConnected": "Agent not connected",
 	"usage.valueRemaining": "{value} remaining",
@@ -3863,12 +3837,21 @@ export const en: Record<string, string> = {
 	"voice.dictation.preparing": "Loading the speech model…",
 	"voice.dictation.downloading": "Downloading the speech model - {percent}%",
 	"voice.dictation.listening": "Listening…",
+	"voice.dictation.cloud": "Listening — audio will be sent to {provider} when you finish",
 	"voice.dictation.finishing": "Finishing…",
 	"voice.dictation.done": "Done",
 	"voice.dictation.discard": "Discard",
 	"voice.dictation.cancel": "Cancel",
 	"voice.dictation.nothingHeard": "No speech detected",
 	"voice.speak.failed": "Speech playback failed",
+	"voice.speak.stop": "Stop speaking",
+	"voice.speak.missingVoice": "No installed local voice for {language}. Install one in your system settings or choose a compatible voice.",
+	"voice.viVoice.label": "Vietnamese read-aloud voice",
+	"voice.viVoice.description": "Playback runs on this device. VAIS-1000 may need a one-time model download.",
+	"voice.viVoice.auto": "Automatic (VAIS-1000 first)",
+	"voice.viVoice.vais1000": "Northern Vietnamese (VAIS-1000)",
+	"voice.viVoice.system": "Installed system voice",
+	"voice.viVoice.preview": "Preview voice",
 
 	// MCP server management (C1: add wizard, test connection, re-authorize)
 	"mcp.add": "Add server",
@@ -4247,16 +4230,6 @@ export const en: Record<string, string> = {
 	"input.deliveryUnknown":
 		"Delivery was not confirmed. The task may already be running. Check its transcript and queue before sending this draft again.",
 	"input.allowResend": "I checked; allow sending",
-	"titlebar.openBrowser": "Open WISA Browser",
-	"titlebar.browserFailed": "Could not open WISA Browser",
-	"browserWorkspace.tabs": "Browser tabs",
-	"browserWorkspace.newTab": "New tab",
-	"browserWorkspace.back": "Back",
-	"browserWorkspace.forward": "Forward",
-	"browserWorkspace.address": "Enter a web address",
-	"browserWorkspace.driven": "Agent is using this tab",
-	"browserWorkspace.error.address": "Could not open this address",
-	"browserWorkspace.error.action": "Browser action failed",
 	"titlebar.togglePanel": "Right sidebar",
 	"diffPanel.scope.aria": "Choose which changes to show",
 	"diffPanel.layout": "Diff layout",
@@ -4386,8 +4359,25 @@ export const en: Record<string, string> = {
 	"memory.other.body":
 		"This window manages WISA STUDIO's local memory. {backend} keeps its own store - manage it in Memory settings, or switch to local memory here.",
 	"memory.other.switch": "Use local memory",
-	"memory.knowledge.title": "What WISA STUDIO brings into every task",
-	"memory.knowledge.caption": "Rebuilt from your sessions - to change it, add a note below or forget a source.",
+	"memory.knowledge.title": "Project knowledge",
+	"memory.knowledge.caption": "Choose where approved project knowledge lives. Automatic Memory remains separate.",
+	"memory.knowledge.sourceLocal": "Approved knowledge source: local Memory",
+	"memory.knowledge.sourceObsidian": "Approved knowledge source: Obsidian",
+	"memory.knowledge.sourceHint":
+		"Choose an existing Obsidian Vault. WISA writes only approved entries to its project folder and does not move old notes or export sessions. With local Memory on, approved entries are available to new tasks within the token budget.",
+	"memory.knowledge.vaultDisabled": "Obsidian Vault access is off for this project. See Settings → Tools → Obsidian Vault.",
+	"memory.knowledge.vaultUnavailable":
+		"The vault or project Markdown folder is unavailable. No local notes are substituted. Restore the folder or explicitly choose a different source.",
+	"memory.knowledge.chooseVault": "Choose Obsidian Vault…",
+	"memory.knowledge.useLocal": "Use local Memory",
+	"memory.knowledge.refreshVault": "Refresh source",
+	"memory.knowledge.approvedLessons": "Approved lessons",
+	"memory.knowledge.addLesson": "Add approved lesson",
+	"memory.knowledge.lessonPlaceholder": "Write a lesson you want to keep in Obsidian…",
+	"memory.knowledge.legacyNotes": "Previous local notes (kept, not used with Obsidian)",
+	"memory.knowledge.automaticLessons": "Captured by automatic Memory and kept locally; these are not approved Obsidian lessons.",
+	"memory.knowledge.eraseLocal":
+		"This only erases operational Memory and previous local notes. Sessions, the Obsidian source, and its Markdown stay intact.",
 	"memory.meter.label": "{used} of {budget} tokens",
 	"memory.meter.notes": "Notes",
 	"memory.meter.summary": "Summary",
@@ -4853,6 +4843,8 @@ export const en: Record<string, string> = {
 	"agents.openHint": "Click to open - ⌥-click to open beside",
 	"agents.chip.label": "{parent}, agent: {title}, {state}",
 	"agents.dock.toggleTranscript": "Show the transcript here",
+	"agents.dock.replied": "Replied",
+	"agents.dock.reused": "Reused",
 	"agents.now.retrying": "Retrying {attempt} of {max} - {error}",
 	"agents.page.from": "From {parent}",
 	"agents.page.fromConversation": "From the conversation",
@@ -4876,8 +4868,6 @@ export const en: Record<string, string> = {
 	"agents.page.closePage": "Close page",
 	"agents.page.showAll": "Show all",
 	"agents.page.showLess": "Show less",
-	"panel.tabs.agents": "Agents",
-	"agents.tab.label": "{label}, {state}",
 	"agents.hover.retrying": "Retrying",
 	"agents.sidebar.more": "{count} more",
 	"agents.sidebar.moreWorking": "{count} working",
@@ -4886,26 +4876,6 @@ export const en: Record<string, string> = {
 	"agents.sidebar.collapse": "Hide agents",
 	"agents.sidebar.expand": "Show agents",
 	"agents.sidebar.pill": "{count} agents this turn",
-	"agents.roster.filter": "Which agents",
-	"agents.roster.thisTurn": "This turn",
-	"agents.roster.all": "All",
-	"agents.roster.pause": "Pause agents",
-	"agents.roster.resumeAgents": "Resume agents",
-	"agents.roster.resume": "Resume",
-	"agents.roster.paused": "Agents are paused",
-	"agents.roster.stopTurn": "Stop the turn",
-	"agents.roster.expandAll": "Expand all",
-	"agents.roster.collapseAll": "Collapse all",
-	"agents.roster.empty": "No subagents yet",
-	"agents.roster.emptyBody": "When the agent hands work to subagents, they appear here while they run.",
-	"agents.roster.turnEmpty": "Nothing this turn",
-	"agents.roster.turnEmptyBody": "Agents from earlier turns are under All.",
-	"agents.roster.showAll": "Show all",
-	"agents.roster.refreshFailed": "Couldn't refresh the agents",
-	"agents.roster.loadFailed": "Couldn't load the agents",
-	"agents.roster.loadFailedBody": "The agent didn't answer.",
-	"agents.roster.failedAnnounce": "{title} failed",
-	"agents.page.showInAgents": "Show in Agents",
 	"templates.title": "Templates",
 	"templates.search": "Search templates",
 	"templates.clearSearch": "Clear search",
@@ -5004,24 +4974,6 @@ export const en: Record<string, string> = {
 		"This is a third-party server. Only continue if you trust its operator and are willing to let it provide tools that may receive data you send to them.",
 	"mcp.registry.trustConfirm": "Trust and install",
 	"mcp.registry.removeConfigured": "Remove {name}",
-	"settings.toolProfiles.title": "Tool profiles",
-	"settings.toolProfiles.availability":
-		"Profiles choose available tools; Core settings, approvals and restricted paths still apply.",
-	"settings.toolProfiles.restart": "New tabs use these settings. Restart existing sidecars to apply changes.",
-	"settings.toolProfiles.coding": "Coding",
-	"settings.toolProfiles.codingDesc":
-		"Coding enables the built-in tools supported by Core. Subagents use the task tool; setting task.maxRecursionDepth to 0 disables it. A workspace tool list can further restrict Coding tools.",
-	"settings.toolProfiles.subagents": "Subagents (task)",
-	"settings.toolProfiles.work": "Work",
-	"settings.toolProfiles.workDesc":
-		"The desktop tool is always included in Work; the global Computer setting and desktop approvals still apply. Read, search, and task tracking are on by default. Shell, general-purpose scripts, and subagents stay off; enable file editing, writing, or learning here as needed.",
-	"settings.toolProfiles.editMode": "Coding edit style",
-	"settings.toolProfiles.edit.hashline": "Anchored lines (recommended)",
-	"settings.toolProfiles.edit.replace": "Text replacement",
-	"settings.toolProfiles.edit.core": "Follow Core settings",
-	"settings.toolProfiles.editDesc":
-		"Anchors make small edits concise and reject stale lines. Text replacement is easier for models that struggle with anchors; Core mode uses global edit settings and model-specific fallbacks.",
-	"settings.toolProfiles.reset": "Restore defaults",
 	"todoPanel.dragInstructions":
 		"Press Space or Enter to pick up or drop a task. Use the arrow keys to move it, or Escape to cancel.",
 	"todoPanel.dragPicked": "Picked up: {task}",

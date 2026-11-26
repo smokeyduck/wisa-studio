@@ -684,7 +684,7 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"Emma (British female)": "Emma（英国女声）",
 	"George (British male)": "George（英国男声）",
 	"Fable (British male)": "Fable（英国男声）",
-	"All (messages + thinking)": "全部（消息 + 思考）",
+	"All (messages + thinking)": "全部（消息和工具结果）",
 	"Assistant messages": "助手消息",
 	"Final message only": "仅最终消息",
 	"Online (TINY role, else @smol)": "在线（TINY 角色，否则使用 @smol）",
@@ -907,8 +907,8 @@ export const ZH_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"3 operations": "3 个操作",
 	"4 operations": "4 个操作",
 	// judge 相关
-	"Enable when the judge role resolves to a native TypeSafe jev model":
-		"当 judge 角色解析为原生 TypeSafe jev 模型时启用",
+	"Enable when the first available judge candidate uses a native backend":
+		"当 judge 角色的首个可用候选使用原生评判后端时启用",
 	"Always enable, whichever model the judge role resolves to": "无论 judge 角色解析为哪个模型都启用",
 	"Judge only when the judge role resolves to a native TypeSafe jev model":
 		"仅当 judge 角色解析为原生 TypeSafe jev 模型时才判定",

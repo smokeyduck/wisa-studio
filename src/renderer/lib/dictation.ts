@@ -29,6 +29,7 @@ export interface DictationView {
 	/** Words still being recognized; replaced as more audio arrives. */
 	partial: string;
 	download?: { label: string; percent: number };
+	cloudProvider?: string;
 }
 
 /** The composer edits a capture makes. */
@@ -149,6 +150,7 @@ export class DictationSession {
 		if (this.#ended) return;
 		switch (frame.type) {
 			case "host_dictation_state":
+				this.#update({ cloudProvider: frame.cloudProvider });
 				if (frame.state === "recording") this.#beginRecording();
 				else if (frame.state === "transcribing") {
 					this.#sidecarRecording = false;

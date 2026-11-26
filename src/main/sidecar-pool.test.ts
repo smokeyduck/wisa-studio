@@ -16,6 +16,7 @@ class FakeSidecar extends EventEmitter {
 	/** Side-channel frames written via sendSideChannel (F-UI-ORIGIN assertions). */
 	sentFrames: object[] = [];
 	rpcCommands: RpcCommand[] = [];
+	allowsInteractiveHostTools = true;
 	constructor(public cwd: string) {
 		super();
 	}
@@ -1029,6 +1030,82 @@ describe("SidecarPool session cwd tracking", () => {
 		expect(pool.adoptSessionCwd("tab-a", "")).toBe(false);
 		expect(sidecars[0]?.cwd).toBe("/live-b");
 		expect(fw.sentTo(IPC_EVENTS.TAB_STATUS)).toHaveLength(1);
+	});
+});
+
+describe("workspace_peer", () => {
+	function setup() {
+		const { pool, sidecars } = fakePool();
+		const { win } = fakeWindow(1);
+		const cwd = "/project";
+		const group = { firstTabId: "a", secondTabId: "b", axis: "columns", ratio: 0.5 } as const;
+		pool.acquire(cwd, win, "a");
+		pool.acquire(cwd, win, "b");
+		const [a, b] = sidecars as [FakeSidecar, FakeSidecar];
+		const confirm = (tabId: string, sessionId: string, path = cwd) =>
+			pool.adoptSessionCwd(tabId, path, { sessionId, epoch: pool.peerCwdEpoch(tabId) });
+		a.emitStatus("ready");
+		b.emitStatus("ready");
+		a.emitSessionInfo({ sessionId: "first", title: "Writer" });
+		b.emitSessionInfo({ sessionId: "second", title: "Reviewer" });
+		confirm("a", "first");
+		confirm("b", "second");
+		const split = () => pool.setTabView(win, "a", ["a", "b"], [group]);
+		const call = (sidecar: FakeSidecar, action: string, message?: string) => {
+			sidecar.emit("hostToolCall", {
+				type: "host_tool_call",
+				id: "peer-call",
+				toolName: "workspace_peer",
+				arguments: { action, message },
+			});
+			const reply = sidecar.sentFrames.pop() as { result: { content: [{ text: string }] }; isError: boolean };
+			return { text: reply.result.content[0].text, error: reply.isError };
+		};
+		return { pool, win, a, b, split, confirm, call };
+	}
+
+	it("reports peer activity and delivers only the handoff without starting a turn", () => {
+		const { a, b, split, call } = setup();
+		expect(call(a, "status").error).toBe(true);
+		split();
+		b.emitAgentEvents(["agent_start"]);
+		b.emit("events", [{ type: "tool_execution_start", toolCallId: "tool", toolName: "read", args: { path: "private" } }]);
+		expect(JSON.parse(call(a, "status").text)).toEqual({
+			sessionId: "second",
+			title: "Reviewer",
+			status: "working",
+			activeTools: ["read"],
+			unreadMessages: 0,
+		});
+		expect(call(a, "send", "  Test the patch  ").error).toBe(false);
+		expect(JSON.parse(call(a, "receive").text)).toEqual({ messages: [] });
+		expect(JSON.parse(call(b, "receive").text)).toEqual({ messages: ["Test the patch"] });
+		expect(JSON.parse(call(b, "receive").text)).toEqual({ messages: [] });
+		expect(b.rpcCommands).toEqual([]);
+	});
+
+	it("clears unread messages on unlink and refuses stale session or different workspace state", () => {
+		const { pool, win, a, b, split, confirm, call } = setup();
+		split();
+		call(a, "send", "Before unlink");
+		pool.setTabView(win, "a", ["a"], []);
+		split();
+		expect(JSON.parse(call(b, "receive").text)).toEqual({ messages: [] });
+
+		call(a, "send", "For the old session");
+		const epoch = pool.peerCwdEpoch("b");
+		const finish = pool.beginPeerSessionChange("b");
+		expect(call(a, "send", "During switch").error).toBe(true);
+		b.emitSessionInfo({ sessionId: "new" });
+		finish?.(true);
+		pool.adoptSessionCwd("b", "/project", { sessionId: "second", epoch });
+		expect(call(a, "status").error).toBe(true);
+		confirm("b", "new", "/elsewhere");
+		expect(call(a, "status").error).toBe(true);
+		confirm("b", "new");
+		expect(JSON.parse(call(b, "receive").text)).toEqual({ messages: [] });
+		b.allowsInteractiveHostTools = false;
+		expect(call(a, "send", "Excluded session").error).toBe(true);
 	});
 });
 

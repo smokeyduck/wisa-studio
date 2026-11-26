@@ -6,7 +6,6 @@ import os from "node:os";
 import path from "node:path";
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, net, shell } from "electron";
 import Store from "electron-store";
-import type { BrowserWorkspaceAction } from "../shared/browser-workspace";
 import { CONFIG_EDITOR_PREF, readConfigEditor } from "../shared/config-editor";
 import { KEYMAP_DISABLED_PREF, KEYMAP_OVERRIDES_PREF } from "../shared/hotkeys";
 import type {
@@ -75,10 +74,10 @@ import { parseLaunchProfile } from "../shared/launch-profile";
 import type { DroppedProxy } from "../shared/proxy";
 import type { RpcCommand, RpcSessionState } from "../shared/rpc-types";
 import { isSessionOutputPath } from "../shared/session-output";
-import { CODING_TOOL_PROFILE_PREF, WORK_TOOL_PROFILE_PREF } from "../shared/tool-profiles";
+import { vietnameseVoicePreference } from "../shared/speech-language";
 import { quitRisk, requestQuit, requestRestart } from "./app-quit";
 import { BenchmarkRunner } from "./benchmark-runner";
-import { BrowserWorkspace } from "./browser-workspace";
+import type { BrowserUseHost } from "./browser-use-host";
 import type { CollabPhoneHost } from "./collab-phone";
 import type { ConversationIndex } from "./conversation-index";
 import { type CustomThemesWatcher, deleteCustomTheme, readCustomThemes, saveCustomTheme } from "./custom-themes";
@@ -93,9 +92,9 @@ import { listMcpCatalog } from "./mcp-catalog";
 import type { MemoryWatcher } from "./memory-watcher";
 import { createMenu } from "./menu";
 import { deleteModelsProvider, listModelsProviders, modelsPath, upsertModelsProvider } from "./models-config";
-import { speakWithOsVoice } from "./os-speech";
+import { MissingSpeechVoice, speakWithOsVoice } from "./os-speech";
+import { openSystemTerminal } from "./os-terminal";
 import type { PhoneHub } from "./phone-hub";
-import { preparePiper } from "./piper";
 import { PluginCatalog } from "./plugin-catalog";
 import { runProjectAudit } from "./project-audit";
 import { quitNeedsConfirmation } from "./quit-guard";
@@ -124,6 +123,7 @@ import { resolveExistingPath, resolveWithin, toAbsolutePath } from "./workspace-
 
 export interface IpcDeps {
 	sidecarPool: SidecarPool;
+	browserUse: BrowserUseHost;
 	sessionIndex: SessionIndex;
 	statsClient: StatsClient;
 	/** Demand-driven revive for the bundled stats server (no server → "exhausted"). */
@@ -212,8 +212,6 @@ const RESETTABLE_GUI_PREFS: ReadonlySet<string> = new Set([
 	CONFIG_EDITOR_PREF,
 	KEYMAP_DISABLED_PREF,
 	KEYMAP_OVERRIDES_PREF,
-	CODING_TOOL_PROFILE_PREF,
-	WORK_TOOL_PROFILE_PREF,
 	"approvalMode",
 	"codeLineNumbers",
 	"collapseLargePastes",
@@ -476,22 +474,6 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	const { sidecarPool, sessionIndex, statsClient, logWatcher, memoryWatcher, customThemesWatcher, windowManager } =
 		deps;
 	const prefsStore = new Store<PrefsSchema>({ name: "prefs" });
-	const browser = new BrowserWorkspace();
-	ipcMain.handle(IPC_COMMANDS.BROWSER_OPEN, (event, tabId: string | null) => {
-		const win = BrowserWindow.fromWebContents(event.sender);
-		if (!win || !windowManager.recordFor(win) || event.senderFrame !== event.sender.mainFrame) return;
-		const targetTabId = tabId ?? sidecarPool.activeTabForWindow(win);
-		return browser.show(() => {
-			const tab = targetTabId ? sidecarPool.sidecarForTab(win, targetTabId) : null;
-			return tab && tab.status === "ready" && sidecarPool.tabForSidecar(tab)?.kind === "agent"
-				? tab.rpcClient
-				: null;
-		});
-	});
-	ipcMain.handle(IPC_COMMANDS.BROWSER_ACTION, (event, action: BrowserWorkspaceAction) => {
-		if (!browser.owns(event.sender.id) || event.senderFrame !== event.sender.mainFrame) return;
-		return browser.action(action);
-	});
 
 	// Drop a closed window's tray/progress snapshot so the aggregate reflects
 	// only live windows (and re-render the tray with the new aggregate).
@@ -511,6 +493,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	// boolean tells the pool whether the tool was answered inline; only
 	// renderer-forwarded calls get request-id → origin tracking (F-UI-ORIGIN).
 	sidecarPool.hostToolExecutor = (sidecar, request, win) => {
+		if (deps.browserUse.handleToolCall(sidecar, request)) return true;
 		if (deps.schedulerHost?.handleToolCall(sidecar, request, sidecarPool.tabForSidecar(sidecar))) return true;
 		const result = executeGuiHostTool(request.toolName, request.arguments);
 		if (result !== undefined) {
@@ -690,23 +673,27 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 				};
 			}
 		}
-		if (
-			cmd.type === "switch_session" ||
-			cmd.type === "new_session" ||
-			cmd.type === "drop_session" ||
-			cmd.type === "fresh"
-		) {
-			browser.disconnect(client);
-		}
+		const peerEpoch = issuerTabId && cmd.type === "get_state" ? sidecarPool.peerCwdEpoch(issuerTabId) : undefined;
+		const finishPeerChange =
+			issuerTabId &&
+			(cmd.type === "switch_session" ||
+				cmd.type === "new_session" ||
+				cmd.type === "drop_session" ||
+				cmd.type === "branch" ||
+				cmd.type === "fork")
+				? sidecarPool.beginPeerSessionChange(issuerTabId)
+				: undefined;
+		let peerChanged = true;
 		try {
 			const response = await client.command({ ...cmd, id: _id } as RpcCommand, payload.timeoutMs);
+			const cancelled = (response.data as { cancelled?: boolean } | undefined)?.cancelled === true;
+			peerChanged = response.success && !cancelled;
 			// F-OWN registration points carried by this passthrough: a successful
 			// switch_session attaches the issuer to that file; get_state is how
 			// the renderer's attach/hydrate reports the file (session_info_update
 			// itself carries only the session id, never the path).
 			if (issuerTabId && response.success) {
 				if (cmd.type === "switch_session") {
-					const cancelled = (response.data as { cancelled?: boolean } | undefined)?.cancelled ?? false;
 					if (!cancelled) sidecarPool.noteSessionFile(issuerTabId, cmd.sessionPath);
 				} else if (cmd.type === "get_state") {
 					const state = response.data as RpcSessionState | undefined;
@@ -718,7 +705,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 					// the same tail as a project switch, minus the respawn.
 					if (
 						state?.cwd &&
-						sidecarPool.adoptSessionCwd(issuerTabId, state.cwd) &&
+						sidecarPool.adoptSessionCwd(
+							issuerTabId,
+							state.cwd,
+							peerEpoch !== undefined && state.sessionId ? { sessionId: state.sessionId, epoch: peerEpoch } : undefined,
+						) &&
 						issuerTabId === sidecarPool.activeTabForWindow(win)
 					) {
 						windowManager.setRecordCwd(win, state.cwd);
@@ -734,6 +725,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 				code: "rpc_delivery_unknown",
 				error: err instanceof Error ? err.message : String(err),
 			};
+		} finally {
+			finishPeerChange?.(peerChanged);
 		}
 	};
 
@@ -1056,6 +1049,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		}
 	});
 	ipcMain.handle(IPC_COMMANDS.SYSTEM_FETCH_REMOTE_IMAGE, (_event, url: unknown) => fetchRemoteImage(url));
+	ipcMain.handle(IPC_COMMANDS.SYSTEM_OPEN_TERMINAL, async (event, tabId: unknown): Promise<IpcOpenPathResult> => {
+		if (typeof tabId !== "string" || !tabId.trim()) return { ok: false, error: "invalid-tab" };
+		const cwd = cwdFor(deps, event, tabId);
+		if (!cwd) return { ok: false, error: "invalid-tab" };
+		return openSystemTerminal(cwd);
+	});
 
 	// Tool-card path links — open a file in the system editor. "~" expands,
 	// relative paths resolve inside the calling window's workspace (escapes
@@ -1147,18 +1146,34 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		}
 	});
 
-	ipcMain.handle(IPC_COMMANDS.SYSTEM_SPEAK, async (_event, payload: { text?: string; language?: string }) => {
+	const speaking = new WeakMap<Electron.WebContents, AbortController>();
+	ipcMain.handle(IPC_COMMANDS.SYSTEM_STOP_SPEECH, event => {
+		speaking.get(event.sender)?.abort();
+	});
+	ipcMain.handle(IPC_COMMANDS.SYSTEM_SPEAK, async (event, payload: { text?: string; language?: string; voice?: unknown }) => {
+		const sender = event.sender;
+		speaking.get(sender)?.abort();
+		const controller = new AbortController();
+		speaking.set(sender, controller);
+		const onDestroyed = () => controller.abort();
+		sender.once("destroyed", onDestroyed);
 		try {
-			await speakWithOsVoice(String(payload.text ?? ""), String(payload.language ?? "en"));
+			await speakWithOsVoice(
+				String(payload.text ?? ""),
+				String(payload.language ?? "en"),
+				vietnameseVoicePreference(payload.voice),
+				controller.signal,
+			);
 			return { ok: true };
 		} catch (cause) {
+			if (controller.signal.aborted) return { ok: true };
+			if (cause instanceof MissingSpeechVoice) return { ok: false, missingVoice: true };
 			return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
+		} finally {
+			if (!sender.isDestroyed()) sender.removeListener("destroyed", onDestroyed);
+			if (speaking.get(sender) === controller) speaking.delete(sender);
 		}
 	});
-
-	ipcMain.handle(IPC_COMMANDS.SYSTEM_PREWARM_SPEECH, async (_event, payload: { language?: string }) => ({
-		ok: (await preparePiper(String(payload.language ?? "en"))) !== null,
-	}));
 
 	ipcMain.handle(IPC_COMMANDS.SYSTEM_NOTIFY, (event, payload: IpcNotifyPayload) => {
 		if (typeof payload.title === "string") {
@@ -1232,12 +1247,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		}
 		prefsStore.set(payload.key, payload.value);
 		// Spawn-time preferences must also replace a spare booted under the old values.
-		if (
-			payload.key === "proxyUrl" ||
-			payload.key === "proxyDirect" ||
-			payload.key === CODING_TOOL_PROFILE_PREF ||
-			payload.key === WORK_TOOL_PROFILE_PREF
-		) {
+		if (payload.key === "proxyUrl" || payload.key === "proxyDirect") {
 			sidecarPool.refreshSpare();
 		}
 		if (payload.key === "language" && isLanguage(payload.value)) {

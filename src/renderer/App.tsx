@@ -642,8 +642,18 @@ export function App() {
 					!event.defaultPrevented &&
 					!overlayOpen &&
 					!document.querySelector('[role="dialog"]')
-				)
-					void abortActiveTurn();
+				) {
+					if (
+						ui.panelVisible &&
+						ui.panelOwnerTabId === useTabsStore.getState().activeTabId &&
+						!useSessionStore.getState().isStreaming
+					) {
+						event.preventDefault();
+						ui.closePanel();
+					} else {
+						void abortActiveTurn();
+					}
+				}
 				return;
 			}
 

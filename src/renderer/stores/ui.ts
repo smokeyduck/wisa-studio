@@ -6,6 +6,7 @@ import type { SidecarRestartProgress } from "../../shared/rpc-types";
 import { effectiveOverrides, type KeymapOverrides, sanitizeDisabled, sanitizeOverrides } from "../lib/keymap";
 import { readPrepaintThemeMode, type ThemeMode } from "../lib/theme";
 import type { CustomThemeSelection } from "../lib/themes";
+import { useSessionStore } from "./session";
 import { useSidebarPrefs } from "./sidebar-prefs";
 import { useTabsStore } from "./tabs";
 import { isWorkCwd, useWorkspaceMode } from "./workspace-mode";
@@ -13,7 +14,7 @@ import { isWorkCwd, useWorkspaceMode } from "./workspace-mode";
 export type { ThemeMode };
 
 /** The inspector's session views. */
-export type PanelTab = "overview" | "plan" | "agents" | "btw" | "diff" | "files" | "terminal";
+export type PanelTab = "overview" | "plan" | "btw" | "diff" | "files" | "terminal";
 const CLOSED_WORKSPACE_PAGES = {
 	activeToolsOpen: false,
 	agentHubOpen: false,
@@ -110,6 +111,7 @@ interface UiStore {
 	logsOpen: boolean;
 	/** Local file currently shown in the Files drawer. */
 	filePreviewPath: string | null;
+	filePreviewScope: { tabId: string | null; cwd: string } | null;
 	filePreviewRequestId: number;
 	filePreviewImage: { src: string; label: string } | null;
 	/** 1-based line the preview scrolls to and marks, when a link named one. */
@@ -233,6 +235,7 @@ interface UiStore {
 	toolsExpandAll: { expanded: boolean; seq: number };
 	toggleSidebar: () => void;
 	togglePanel: () => void;
+	closePanel: () => void;
 	toggleToolsExpandAll: () => void;
 	setPanelTab: (tab: PanelTab) => void;
 	setDiffScope: (scope: DiffScope) => void;
@@ -391,8 +394,8 @@ interface UiStore {
 }
 
 /**
- * The drawer tab a tool-free chat tab can actually show: Changes, shells and
- * agent browsing need tools, so they fall back to Files.
+ * The drawer tab a tool-free chat tab can actually show: Changes, Plans
+ * and tool-driven terminal output fall back to Files.
  */
 function clampPanelTab(tab: PanelTab): PanelTab {
 	if (CHAT_PANEL_TABS.has(tab)) return tab;
@@ -420,6 +423,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	logsOpen: false,
 	filePreviewPath: null,
 	filePreviewRequestId: 0,
+	filePreviewScope: null,
 	filePreviewImage: null,
 	filePreviewLine: null,
 	commandPaletteOpen: false,
@@ -456,6 +460,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 				: { panelVisible: true, panelOwnerTabId: owner, panelTab: clampPanelTab(state.defaultPanelTab) }),
 		});
 	},
+	closePanel: () => set({ panelVisible: false, panelOwnerTabId: null }),
 	toolsExpandAll: { expanded: false, seq: 0 },
 	toggleToolsExpandAll: () =>
 		set({ toolsExpandAll: { expanded: !get().toolsExpandAll.expanded, seq: get().toolsExpandAll.seq + 1 } }),
@@ -486,6 +491,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 		set({
 			...workspacePagePatch(null),
 			filePreviewPath: path,
+			filePreviewScope: { tabId: useTabsStore.getState().activeTabId, cwd: useSessionStore.getState().cwd },
 			filePreviewRequestId: get().filePreviewRequestId + 1,
 			filePreviewLine: line ?? null,
 			filePreviewImage: null,
@@ -497,13 +503,15 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 		set({
 			...workspacePagePatch(null),
 			filePreviewPath: null,
+			filePreviewScope: { tabId: useTabsStore.getState().activeTabId, cwd: useSessionStore.getState().cwd },
 			filePreviewLine: null,
 			filePreviewImage: { src, label },
 			panelTab: "files",
 			panelVisible: true,
 			panelOwnerTabId: useTabsStore.getState().activeTabId,
 		}),
-	closeFilePreview: () => set({ filePreviewPath: null, filePreviewLine: null, filePreviewImage: null }),
+	closeFilePreview: () =>
+		set({ filePreviewScope: null, filePreviewPath: null, filePreviewLine: null, filePreviewImage: null }),
 	todoRibbonRequest: 0,
 	focusTodoRibbon: () => set(state => ({ todoRibbonRequest: state.todoRibbonRequest + 1 })),
 	openCommandPalette: () => set({ commandPaletteOpen: true }),

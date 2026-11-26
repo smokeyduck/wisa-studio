@@ -6,7 +6,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AvailableCommand } from "../../shared/rpc-types";
+import { useSessionStore } from "../stores/session";
 import { useTabsStore } from "../stores/tabs";
+import { useUiStore } from "../stores/ui";
 import { buildCurrentCommandMenu, type CommandMenuItem, commandArgPrefill } from "./command-registry";
 import { translate } from "./i18n";
 
@@ -96,6 +98,20 @@ describe("native rows vs sidecar-advertised duplicates", () => {
 		const affordance = menuItem("git").affordance;
 		if (affordance.kind !== "unavailable") throw new Error("git is executable in a chat tab");
 		expect(affordance.reason).toBe(CHAT_REASON);
+	});
+
+	it("keeps /plan-review an explicit way to open the plan inspector", async () => {
+		seedTab("agent");
+		useSessionStore.setState({ planModeEnabled: true });
+		const review = menuItem("plan-review").affordance;
+		if (review.kind !== "action") throw new Error("plan-review is not executable");
+		try {
+			await review.run();
+			expect(useUiStore.getState()).toMatchObject({ panelTab: "plan", panelVisible: true });
+		} finally {
+			useUiStore.getState().closePanel();
+			useSessionStore.setState({ planModeEnabled: false });
+		}
 	});
 
 	it("drops a sidecar row whose name is a native alias instead of listing a dead duplicate", () => {

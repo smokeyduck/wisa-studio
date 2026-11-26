@@ -102,7 +102,8 @@ const TERMINAL_DISPLAY_SETTINGS = new Set([
 ]);
 
 export function isSettingSupportedInGui(entry: { path?: string; tuiOnly?: boolean }): boolean {
-	return entry.tuiOnly !== true && !TERMINAL_DISPLAY_SETTINGS.has(entry.path ?? "");
+	const path = entry.path ?? "";
+	return entry.tuiOnly !== true && !path.startsWith("browser.") && !TERMINAL_DISPLAY_SETTINGS.has(path);
 }
 
 export function isSettingVisibleInGui(entry: SettingEntry, values: Record<string, unknown>): boolean {

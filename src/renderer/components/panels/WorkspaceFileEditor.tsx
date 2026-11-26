@@ -5,6 +5,7 @@ import { drawSelection, EditorView, highlightActiveLineGutter, keymap, lineNumbe
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import type { FileEditFailure } from "../../../shared/ipc-types";
+import { useInvalidateWorkspace } from "../../hooks/use-workspace-revision";
 import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -79,6 +80,7 @@ export function WorkspaceFileEditor({
 	lineRequest?: number;
 }) {
 	const t = useT();
+	const invalidateWorkspace = useInvalidateWorkspace();
 	const draft = useFileDrafts(s => s.drafts.get(draftId));
 	const host = useRef<HTMLDivElement>(null);
 	const currentView = useRef<EditorView | null>(null);
@@ -94,6 +96,7 @@ export function WorkspaceFileEditor({
 				reason: "io",
 				detail: describeError(error),
 			}));
+		if (response.ok) invalidateWorkspace();
 		const latest = useFileDrafts.getState().drafts.get(draftId);
 		if (!latest) return;
 		if (!response.ok) {

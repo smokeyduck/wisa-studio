@@ -22,10 +22,14 @@ export const SubagentHistoryCard = memo(function SubagentHistoryCard({
 	agentId,
 	full,
 	onOpen,
+	replied = false,
+	reused = false,
 }: {
 	agentId: string;
 	full: boolean;
 	onOpen: (id: string) => void;
+	replied?: boolean;
+	reused?: boolean;
 }) {
 	const agent = useSubagentsStore(state => state.subagents.get(agentId));
 	const now = useNowTick(!!agent && agent.live !== false && isLiveSubagentStatus(agent.status));
@@ -40,14 +44,12 @@ export const SubagentHistoryCard = memo(function SubagentHistoryCard({
 	const facts = subagentFacts(agent, t("sessionInfo.tokens"));
 
 	return (
-		<div className="relative my-2 ms-(--omp-editorial-inset) w-fit max-w-[calc(100%-var(--omp-editorial-inset)-var(--omp-editorial-edge))] overflow-hidden rounded-lg border border-(--omp-border-muted) bg-transparent transition-colors duration-150 hover:bg-(--omp-bg-tertiary)">
-			<span
-				aria-hidden
-				className={cx(
-					"absolute inset-y-2 left-0 w-0.5 rounded-full",
-					meta.variant === "info" ? "bg-(--omp-link)" : "bg-(--omp-border)",
-				)}
-			/>
+		<div
+			className={cx(
+				"omp-chat-activity-card my-2 ms-(--omp-editorial-inset) w-fit max-w-[calc(100%-var(--omp-editorial-inset)-var(--omp-editorial-edge))]",
+				meta.variant === "info" && "[--omp-activity-rail:var(--omp-link)]",
+			)}
+		>
 			<button
 				aria-haspopup="dialog"
 				className="omp-pressable flex w-full min-w-0 items-start gap-2 px-2.5 py-2 text-left focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--omp-accent)"
@@ -71,7 +73,11 @@ export const SubagentHistoryCard = memo(function SubagentHistoryCard({
 						{facts.model && <span className="min-w-0 truncate">- {facts.model}</span>}
 						{facts.usage && <span className="shrink-0 tabular-nums">- {facts.usage}</span>}
 						{elapsed !== null && <span className="ml-auto shrink-0 tabular-nums">{formatElapsed(elapsed)}</span>}
+						{reused && <span className="shrink-0">· {t("agents.dock.reused")}</span>}
 					</span>
+					{replied && (
+						<span className="mt-1 block text-omp-xxs text-(--omp-muted)">{t("agents.dock.replied")}</span>
+					)}
 					{detail && detail !== title && (
 						<span className="mt-1 block truncate text-omp-xs text-(--omp-muted)" title={detail}>
 							{detail}
@@ -98,6 +104,7 @@ export function SubagentHistoryDialog({
 	const agent = useSubagentsStore(state => (agentId ? state.subagents.get(agentId) : undefined));
 	return (
 		<Modal
+			bodyClassName="omp-transcript-editorial"
 			host={dialogHost}
 			onClose={onClose}
 			open={agent !== undefined}

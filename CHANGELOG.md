@@ -7,6 +7,23 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+- Replace the embedded WISA Browser with OMP’s `browser_use` tool. Ask the agent to browse instead of using the toolbar globe. Studio bundles the official Browser Use 1.0.8 Python package and local Chromium with a separate temporary profile per browsing session. It requires no Browser Use account or cloud browser, does not read personal Chrome profiles, and leaves existing WISA Browser data untouched.
+- Check for stable Browser Use releases on GitHub at startup and daily. Activate a new version for new agent sessions only after a local Chromium check passes; failed updates leave the working version in place.
+- Remove GUI Tool Profiles. Coding uses Core tool and edit settings; Work keeps a smaller tool set with `computer` available by default, subject to settings and approval.
+- Clarify that `find` in Auto mode is enabled when the first available judge candidate uses a native backend.
+- Add opt-in `task.judgeRouting`: the native Judge receives a bounded assignment excerpt and can pick an already approved subagent route, without overriding explicit pins or receiving the parent transcript.
+- Let each project use an existing Obsidian vault as the sole store for reviewed notes and lessons, separate from automatic Memory. No migration or fallback writes.
+- Default Studio dictation to on-device Whisper Small and Vietnamese unless configured otherwise. Cloud dictation requires an explicit cloud model selection.
+- Add local Vietnamese voice selection and preview, and queue read-aloud in message order with per-run stop. Windows only uses a system voice if its installed language matches.
+- Split Agent sessions in the same workspace can check each other's status and exchange short handoffs with `workspace_peer`. Messages stay in memory and never start a turn.
+- Overlay the right sidebar without resizing the conversation, keep Plan mode in the composer, and preserve recent Git and file previews when reopening the sidebar. Remove the Agents sidebar tab; subagent cards remain in the conversation.
+- Stack split panes in narrow windows and distinguish their session names and status. Open the system terminal from the selected workspace; agent-owned interactive commands still use the embedded terminal panel.
+- Use Core’s first-event and idle stream timeouts for interactive tabs: five minutes before the first event and three minutes thereafter unless explicitly configured. Do not replay the prompt from the UI.
+- Keep Handoff and compaction success on their summary cards, including after reload. Hide built-in style reminders without hiding project rules.
+- Group reasoning, background updates and intermediate reports in one compact activity disclosure. Keep the final reply visible, show failures and background counts, and leave successful checklist updates in the todo panel.
+- Keep subagent narration and results in the owning card, including after compaction. Reusing an agent adds a card to the new turn; its transcript opens read-only with instructions on the right and replies on the left.
+- Keep replies visible during todo reminders and show when a run finishes without a final reply. Leave space above the composer and hide Jump to latest at the bottom.
+
 ## [1.0.1] - 2026-11-26
 
 Core source: `smokeyduck/oh-my-pi@321709b5cee9e55654083086c2f9cc9097737618` (Core 19.2.1 with WISA patches, synced with upstream stable `v19.2.1`).

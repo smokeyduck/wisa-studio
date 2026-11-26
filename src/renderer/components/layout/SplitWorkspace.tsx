@@ -31,7 +31,8 @@ import { useComposerFiles } from "./use-composer-files";
 
 const DIVIDER_SIZE = 5;
 const RATIO_STEP = 0.05;
-const MIN_COLUMN_SPLIT_WIDTH = 680;
+const MIN_COLUMN_PANE_WIDTH = 420;
+const MIN_COLUMN_SPLIT_WIDTH = 2 * MIN_COLUMN_PANE_WIDTH + DIVIDER_SIZE;
 
 function placementFromPointer(event: DragEvent<HTMLDivElement>): SplitPlacement {
 	const bounds = event.currentTarget.getBoundingClientRect();
@@ -149,8 +150,12 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 							className={cx("omp-signal-light omp-tab-signal", signalActive && "omp-signal-light--active")}
 							style={{ color: signalColor, left: "0.5rem" }}
 						/>
-						<span className="min-w-0 flex-1 truncate font-medium text-[var(--omp-text)]">{label}</span>
-						<span className="omp-session-pane-cwd max-w-[45%] truncate text-[var(--omp-dim)]">{tab.cwd}</span>
+						<span className="min-w-0 flex-1 truncate font-medium text-[var(--omp-text)]" title={label}>
+							{label}
+						</span>
+						<span className="omp-session-pane-cwd max-w-[35%] truncate text-[var(--omp-dim)]" title={tab.cwd}>
+							{tab.cwd}
+						</span>
 						<button
 							aria-label={t("titlebar.togglePanel")}
 							aria-pressed={active && panelVisible}
@@ -281,8 +286,17 @@ export function SplitWorkspace() {
 	const replacePane = useTabsStore(state => state.replacePane);
 	const setSplitRatio = useTabsStore(state => state.setSplitRatio);
 	const rootRef = useRef<HTMLDivElement>(null);
-	const [narrow, setNarrow] = useState(false);
+	const [workspaceWidth, setWorkspaceWidth] = useState(0);
+	const narrow = workspaceWidth > 0 && workspaceWidth < MIN_COLUMN_SPLIT_WIDTH;
 	const axis = split?.axis === "rows" || narrow ? "rows" : "columns";
+	// Clamp the rendered divider, not the saved split. Resizing the window back
+	// restores the user's ratio and axis without writing to the tabs store.
+	const minRatio =
+		axis === "columns" && workspaceWidth >= MIN_COLUMN_SPLIT_WIDTH
+			? Math.max(0.2, MIN_COLUMN_PANE_WIDTH / (workspaceWidth - DIVIDER_SIZE))
+			: 0.2;
+	const clampRatio = (ratio: number) => Math.min(1 - minRatio, Math.max(minRatio, ratio));
+	const renderedRatio = clampRatio(split?.ratio ?? 0.5);
 	const draggingRef = useRef(false);
 	const pendingRatioRef = useRef<number | null>(null);
 	const frameRef = useRef<number | null>(null);
@@ -293,18 +307,25 @@ export function SplitWorkspace() {
 	const [dropPane, setDropPane] = useState<string | null>(null);
 	const sessionsById = useMemo(() => new Map(sessions.map(session => [session.id, session])), [sessions]);
 	const sessionsByPath = useMemo(() => new Map(sessions.map(session => [session.path, session])), [sessions]);
-	const pane = (tabId: string, isSplit: boolean) => {
-		const tab = tabs.find(entry => entry.id === tabId);
-		if (!tab) return null;
+	const titleOf = (tab: (typeof tabs)[number]) => {
 		const indexedSession =
 			(tab.sessionPath ? sessionsByPath.get(tab.sessionPath) : undefined) ??
 			(tab.sessionId ? sessionsById.get(tab.sessionId) : undefined);
+		return tabDisplayTitle(tab, tabs, indexedSession, t("sidebar.untitled"));
+	};
+	const pane = (tabId: string, isSplit: boolean) => {
+		const tab = tabs.find(entry => entry.id === tabId);
+		if (!tab) return null;
+		const title = titleOf(tab);
+		const first = split?.firstTabId === tabId;
+		const other = split && tabs.find(entry => entry.id === (first ? split.secondTabId : split.firstTabId));
+		const label = other && titleOf(other) === title ? title + (first ? " #1" : " #2") : title;
 		return (
 			<SessionPane
 				key={tabId}
 				tabId={tabId}
 				split={isSplit}
-				label={tabDisplayTitle(tab, tabs, indexedSession, t("sidebar.untitled"))}
+				label={label}
 			/>
 		);
 	};
@@ -318,12 +339,10 @@ export function SplitWorkspace() {
 	useLayoutEffect(() => {
 		if (!activeTabId) return;
 		const root = rootRef.current;
-		if (!root || typeof ResizeObserver === "undefined") return;
-		const update = () => {
-			const width = root.getBoundingClientRect().width;
-			if (width > 0) setNarrow(width < MIN_COLUMN_SPLIT_WIDTH);
-		};
+		if (!root) return;
+		const update = () => setWorkspaceWidth(root.clientWidth);
 		update();
+		if (typeof ResizeObserver === "undefined") return;
 		const observer = new ResizeObserver(update);
 		observer.observe(root);
 		return () => observer.disconnect();
@@ -351,11 +370,11 @@ export function SplitWorkspace() {
 	const paneFromPointer = (event: DragEvent<HTMLDivElement>): string | null => {
 		if (!split) return null;
 		const bounds = event.currentTarget.getBoundingClientRect();
-		const along =
+		const first =
 			axis === "columns"
-				? (event.clientX - bounds.left) / bounds.width
-				: (event.clientY - bounds.top) / bounds.height;
-		return along < split.ratio ? split.firstTabId : split.secondTabId;
+				? event.clientX - bounds.left < (bounds.width - DIVIDER_SIZE) * renderedRatio + DIVIDER_SIZE / 2
+				: event.clientY - bounds.top < (bounds.height - DIVIDER_SIZE) * renderedRatio + DIVIDER_SIZE / 2;
+		return first ? split.firstTabId : split.secondTabId;
 	};
 	const dropProps = {
 		onDragOver: (event: DragEvent<HTMLDivElement>) => {
@@ -400,34 +419,34 @@ export function SplitWorkspace() {
 	};
 	const ratioFromPointer = (event: PointerEvent<HTMLDivElement>) => {
 		const bounds = rootRef.current?.getBoundingClientRect();
-		if (!bounds) return split.ratio;
-		const raw =
-			axis === "columns"
-				? (event.clientX - bounds.left) / bounds.width
-				: (event.clientY - bounds.top) / bounds.height;
-		return Math.min(0.8, Math.max(0.2, raw));
+		if (!bounds) return renderedRatio;
+		const space = (axis === "columns" ? bounds.width : bounds.height) - DIVIDER_SIZE;
+		if (space <= 0) return renderedRatio;
+		const along = axis === "columns" ? event.clientX - bounds.left : event.clientY - bounds.top;
+		return clampRatio((along - DIVIDER_SIZE / 2) / space);
 	};
 	const finishDrag = (event: PointerEvent<HTMLDivElement>) => {
 		if (!draggingRef.current) return;
 		draggingRef.current = false;
 		event.currentTarget.releasePointerCapture(event.pointerId);
-		const ratio = pendingRatioRef.current ?? split.ratio;
+		const ratio = pendingRatioRef.current;
 		pendingRatioRef.current = null;
-		setSplitRatio(ratio);
+		if (ratio !== null && ratio !== renderedRatio) setSplitRatio(ratio);
 	};
 	const adjustFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
 		const decrement = axis === "columns" ? event.key === "ArrowLeft" : event.key === "ArrowUp";
 		const increment = axis === "columns" ? event.key === "ArrowRight" : event.key === "ArrowDown";
 		if (!decrement && !increment) return;
 		event.preventDefault();
-		setSplitRatio(split.ratio + (increment ? RATIO_STEP : -RATIO_STEP));
+		const ratio = clampRatio(renderedRatio + (increment ? RATIO_STEP : -RATIO_STEP));
+		if (ratio !== renderedRatio) setSplitRatio(ratio);
 	};
 
 	return (
 		<div
 			ref={rootRef}
 			className="omp-split-workspace relative grid min-h-0 flex-1"
-			style={splitGrid(axis, split.ratio)}
+			style={splitGrid(axis, renderedRatio)}
 			{...dropProps}
 		>
 			{pane(split.firstTabId, true)}
@@ -436,13 +455,12 @@ export function SplitWorkspace() {
 				tabIndex={0}
 				aria-label={t("split.resize")}
 				aria-orientation={axis === "columns" ? "vertical" : "horizontal"}
-				aria-valuemin={20}
-				aria-valuemax={80}
-				aria-valuenow={Math.round(split.ratio * 100)}
+				aria-valuemin={Math.round(minRatio * 100)}
+				aria-valuemax={Math.round((1 - minRatio) * 100)}
+				aria-valuenow={Math.round(renderedRatio * 100)}
 				onKeyDown={adjustFromKeyboard}
 				onPointerDown={event => {
 					draggingRef.current = true;
-					pendingRatioRef.current = split.ratio;
 					event.currentTarget.setPointerCapture(event.pointerId);
 				}}
 				onPointerMove={event => {
@@ -461,7 +479,7 @@ export function SplitWorkspace() {
 			</div>
 			{pane(split.secondTabId, true)}
 			{showDrop && dropPane && (
-				<PaneDropOverlay axis={axis} ratio={split.ratio} firstPane={dropPane === split.firstTabId} />
+				<PaneDropOverlay axis={axis} ratio={renderedRatio} firstPane={dropPane === split.firstTabId} />
 			)}
 		</div>
 	);

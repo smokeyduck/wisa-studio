@@ -1,5 +1,6 @@
 appId: org.wisa.studio
 productName: WISA STUDIO
+beforePack: scripts/build-browser-use.cjs
 afterPack: scripts/after-pack.cjs
 directories:
   buildResources: resources
@@ -10,6 +11,12 @@ files:
 extraResources:
   - from: resources/omp
     to: omp
+  - from: resources/browser-use
+    to: browser-use
+  - from: resources/browser-use-bridge.py
+    to: browser-use-bridge.py
+  - from: resources/studio-agent.yml
+    to: studio-agent.yml
   - from: .
     to: licenses
     filter: [LICENSE, NOTICE, LICENSE-SCOPE.md, LICENSE-POLYFORM-STRICT]

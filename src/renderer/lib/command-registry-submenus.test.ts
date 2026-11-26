@@ -92,6 +92,12 @@ function affordanceOf(name: string): CommandAffordance {
 }
 
 describe("nativized command affordances", () => {
+	it("does not offer the Core terminal browser command in Studio", () => {
+		const availableCommands = [{ name: "browser", source: "builtin", description: "Legacy browser mode" }] as const;
+		const menu = buildCommandMenu({ ...ctx, availableCommands: [...availableCommands] });
+		expect(menu.map(item => item.name)).not.toContain("browser");
+	});
+
 	it.each([
 		["dump", "action"],
 		["changelog", "window"],
@@ -108,8 +114,6 @@ describe("nativized command affordances", () => {
 		["computer on", "action"],
 		["computer off", "action"],
 		["computer status", "action"],
-		["browser headless", "action"],
-		["browser visible", "action"],
 		["todo edit", "action"],
 		["todo copy", "action"],
 		["todo export", "action"],

@@ -37,6 +37,8 @@ export interface SettingsStore {
 	showProgress: boolean;
 	/** Agent `speech.enabled` setting: speak assistant output. */
 	speechEnabled: boolean;
+	speechMode: "all" | "assistant" | "yield";
+	speechSpeed: number;
 	/** Agent `stt.enabled` setting: microphone input in the composer. */
 	sttEnabled: boolean;
 	/** Agent `paste.largeMenuThreshold` setting: line count at which a paste offers the menu (0 = never). */
@@ -81,6 +83,8 @@ const initialState = {
 	// Schema defaults: progress/speech/stt/tight/colorblind all off.
 	showProgress: false,
 	speechEnabled: false,
+	speechMode: "assistant" as const,
+	speechSpeed: 1,
 	sttEnabled: false,
 	// Schema default (settings-schema.ts paste.largeMenuThreshold): menu at 100 lines.
 	pasteMenuThreshold: 100,
@@ -165,8 +169,7 @@ const PINNED_AGENTS_PATH = "display.pinnedAgents";
  */
 const SEED_DEFAULTS: ReadonlyArray<readonly [string, unknown]> = [
 	["stt.enabled", true],
-	// Empty = let the model detect the language (Whisper); English-only models ignore it.
-	["stt.language", ""],
+	["stt.language", "vi"],
 	// The emoji picker stays out of the composer until it is asked for.
 	["emojiAutocomplete", false],
 	// No emoji badge on the agent's bubble.
@@ -176,7 +179,9 @@ const SEED_DEFAULTS: ReadonlyArray<readonly [string, unknown]> = [
 ];
 const SEED_KEYS = SEED_DEFAULTS.map(([path]) => path);
 /** Every setting this sync needs: display reads plus the seed candidates, once each. */
-const SYNC_KEYS = [...new Set([...DISPLAY_SYNC_KEYS, ...DISPLAY_NUM_KEYS, PINNED_AGENTS_PATH, ...SEED_KEYS])];
+const SYNC_KEYS = [
+	...new Set([...DISPLAY_SYNC_KEYS, ...DISPLAY_NUM_KEYS, PINNED_AGENTS_PATH, ...SEED_KEYS, "speech.mode", "speech.speed"]),
+];
 
 /**
  * Read the live display config settings into the store. Re-run on session
@@ -213,6 +218,10 @@ async function syncDisplaySettings(
 				const value = values?.[path];
 				if (typeof value === "number") partial[field] = value;
 			}
+			const mode = values?.["speech.mode"];
+			if (mode === "all" || mode === "assistant" || mode === "yield") partial.speechMode = mode;
+			const speed = values?.["speech.speed"];
+			if (typeof speed === "number" && Number.isFinite(speed)) partial.speechSpeed = speed;
 			const pinnedAgents = values?.[PINNED_AGENTS_PATH];
 			if (typeof pinnedAgents === "string" && PINNED_AGENTS_MODES.has(pinnedAgents))
 				partial.pinnedAgents = pinnedAgents as PinnedAgentsMode;

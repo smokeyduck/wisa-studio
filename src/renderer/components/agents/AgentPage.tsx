@@ -16,7 +16,7 @@ import { copyText, cx, formatCost, formatTokens, sanitizeToolText } from "../../
 import { useT } from "../../lib/i18n";
 import { useNowTick } from "../../lib/now-tick";
 import { useTabRpc } from "../../lib/tab-rpc";
-import { markFailuresSeen, useAgentPagesStore } from "../../stores/agent-pages";
+import { useAgentPagesStore } from "../../stores/agent-pages";
 import type { MessagesStore } from "../../stores/messages";
 import { useSessionStore } from "../../stores/session";
 import { SessionRuntimeProvider } from "../../stores/session-runtime-context";
@@ -24,7 +24,6 @@ import { useSubagentsStore } from "../../stores/subagents";
 import { ensureTabRuntime } from "../../stores/tab-runtime";
 import { useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
-import { useUiStore } from "../../stores/ui";
 import { ChatStream } from "../chat/ChatStream";
 import { ReadOnlyTranscriptContext } from "../chat/transcript-mode";
 import { Spinner } from "../common";
@@ -131,12 +130,6 @@ export function AgentPage({ tabId, agentId, beside = false }: { tabId: string; a
 		const timer = window.setInterval(() => void refresh(), ROSTER_POLL_MS);
 		return () => window.clearInterval(timer);
 	}, [parentStreaming, refresh]);
-
-	// Opening a failed agent's page is seeing the failure.
-	const failed = agent?.status === "failed";
-	useEffect(() => {
-		if (failed) markFailuresSeen([agentId]);
-	}, [agentId, failed]);
 
 	if (!agent) {
 		return (
@@ -344,11 +337,6 @@ function AgentBar({
 			id: "copy",
 			label: t("agents.page.copyTranscript"),
 			onSelect: () => void copyText(transcriptText(messages())),
-		},
-		{
-			id: "roster",
-			label: t("agents.page.showInAgents"),
-			onSelect: () => useUiStore.getState().setPanelTab("agents"),
 		},
 	];
 	const openMenu = (event: MouseEvent<HTMLButtonElement>) => {

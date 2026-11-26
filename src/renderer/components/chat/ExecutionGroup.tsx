@@ -1,4 +1,4 @@
-import { ChevronRight, X } from "lucide-react";
+import { Activity, ChevronRight, Radio, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
@@ -8,6 +8,7 @@ import { Collapse, CollapseButton } from "../common/Collapse";
 interface ExecutionGroupProps {
 	children: ReactNode;
 	className?: string;
+	backgroundEvents?: number;
 	expanded: boolean;
 	failureCount?: number;
 	live?: boolean;
@@ -24,6 +25,7 @@ interface ExecutionGroupProps {
 export function ExecutionGroup({
 	children,
 	className,
+	backgroundEvents = 0,
 	expanded,
 	failureCount = 0,
 	live = false,
@@ -60,6 +62,8 @@ export function ExecutionGroup({
 				: failed > 0
 					? t("chat.process.statusFailed", counts)
 					: t("chat.process.statusComplete", counts);
+	const backgroundLabel =
+		backgroundEvents > 0 ? t("chat.process.backgroundEvents", { count: backgroundEvents }) : undefined;
 
 	return (
 		<section className={cx("omp-execution-group", className)} data-state={state}>
@@ -68,15 +72,14 @@ export function ExecutionGroup({
 				className="omp-execution-group-header omp-pressable flex w-full min-w-0 items-center gap-1.5 text-left"
 				onClick={() => onExpandedChange(!expanded)}
 				type="button"
-				aria-label={`${t("chat.process.title")}: ${summary}`}
+				aria-label={`${t("chat.process.title")}: ${summary}${backgroundLabel ? ` · ${backgroundLabel}` : ""}`}
 				title={expanded ? t("common.close") : undefined}
 			>
-				{active && (
+				{active ? (
 					<span aria-hidden="true" className="omp-execution-group-live-dot omp-working-dot omp-working-dot--sm" />
+				) : (
+					<Activity aria-hidden="true" className="shrink-0" size={12} />
 				)}
-				<span className="omp-execution-group-title shrink-0 text-omp-sm font-medium text-[var(--omp-text)]">
-					{t("chat.process.title")}
-				</span>
 				<span
 					aria-atomic="true"
 					aria-live="polite"
@@ -90,6 +93,12 @@ export function ExecutionGroup({
 				>
 					{summary}
 				</span>
+				{backgroundLabel && (
+					<span aria-hidden="true" className="omp-execution-group-events" title={backgroundLabel}>
+						<Radio size={11} />
+						{backgroundEvents}
+					</span>
+				)}
 				{expanded ? (
 					<X aria-hidden="true" className="shrink-0 text-[var(--omp-dim)]" size={12} />
 				) : (

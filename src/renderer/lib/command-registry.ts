@@ -1016,20 +1016,6 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		},
 	});
 	add({
-		name: "browser",
-		label: t("cmd.browser"),
-		description: t("cmd.browser.desc"),
-		category: "tools",
-		affordance: {
-			kind: "submenu",
-			// Same set_setting mutation the SettingsWindow browser.headless toggle uses.
-			items: [
-				subAction("browser headless", () => writeSetting("browser.headless", true, t("browser.headlessOn"))),
-				subAction("browser visible", () => writeSetting("browser.headless", false, t("browser.visibleOn"))),
-			],
-		},
-	});
-	add({
 		name: "force",
 		label: t("cmd.force"),
 		description: t("cmd.force.desc"),
@@ -1738,7 +1724,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 	// a native item · as its name OR one of its aliases · is dropped: `/models`
 	// and `/modes` must not appear as dead rows next to the working picker.
 	for (const cmd of ctx.availableCommands) {
-		if (cmd.name === "fast" || claimed.has(cmd.name)) continue;
+		if (cmd.name === "fast" || isLegacyBrowserCommand(cmd) || claimed.has(cmd.name)) continue;
 		// Keep terminal-only commands visible as disabled rows. The palette is
 		// the GUI's command index; hiding a command makes its client limitation opaque.
 		if (cmd.textModeExecutable === false) {
@@ -2001,15 +1987,20 @@ export async function forkSessionFromGui(): Promise<void> {
 	toast({ variant: "success", message: translate("fork.success") });
 }
 
+function isLegacyBrowserCommand(command: AvailableCommand): boolean {
+	return command.source === "builtin" && command.name === "browser";
+}
+
 /**
  * Slash commands the GUI runs itself. The sidecar never advertises them, so the
  * composer's `/` menu and submit planner list them next to the sidecar's own.
  */
 export function withGuiNativeCommands(commands: AvailableCommand[]): AvailableCommand[] {
-	if (commands.some(command => command.name === "phone")) return commands;
+	const supported = commands.filter(command => !isLegacyBrowserCommand(command));
+	if (supported.some(command => command.name === "phone")) return supported;
 	return [
 		{ name: "phone", description: translate("cmd.phone.desc"), source: "builtin", textModeExecutable: false },
-		...commands,
+		...supported,
 	];
 }
 

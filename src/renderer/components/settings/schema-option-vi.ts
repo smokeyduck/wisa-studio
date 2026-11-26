@@ -366,7 +366,7 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"George (British male)": "George (giọng nam Anh)",
 	"Fable (British male)": "Fable (giọng nam Anh)",
 	"1× (normal)": "1× (bình thường)",
-	"All (messages + thinking)": "Tất cả (tin nhắn + Thinking)",
+	"All (messages + thinking)": "Tất cả (tin nhắn và kết quả công cụ)",
 	"Assistant messages": "Tin nhắn của trợ lý",
 	"Final message only": "Chỉ tin nhắn cuối",
 	"Priority: native > trafilatura > lynx > parallel > firecrawl > jina":
@@ -661,8 +661,8 @@ export const VI_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"3 lines": "3 dòng",
 	"5 lines": "5 dòng",
 	"10 lines": "10 dòng",
-	"Enable when the judge role resolves to a native TypeSafe jev model":
-		"Bật khi vai trò judge phân giải thành mô hình TypeSafe jev gốc",
+	"Enable when the first available judge candidate uses a native backend":
+		"Bật khi ứng viên khả dụng đầu tiên của vai judge dùng bộ đánh giá native",
 	"Always enable, whichever model the judge role resolves to":
 		"Luôn bật, bất kể vai trò judge phân giải thành mô hình nào",
 	"Disable the find tool": "Tắt công cụ find",

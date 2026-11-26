@@ -417,6 +417,10 @@
 	container: omp-workspace / size;
 }
 
+.omp-session-pane .omp-column {
+	--omp-column-pad: clamp(16px, 4cqw, 40px);
+}
+
 .omp-session-pane--active {
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--omp-accent) 62%, transparent);
 }
@@ -463,11 +467,33 @@
 	background: transparent;
 }
 
+.omp-chat-activity-card {
+	position: relative;
+	overflow: hidden;
+	border: 1px solid var(--omp-border-muted);
+	border-radius: 0.5rem;
+	background: transparent;
+	transition: background-color 150ms;
+}
+
+.omp-chat-activity-card:hover {
+	background: var(--omp-bg-tertiary);
+}
+
+.omp-chat-activity-card::before {
+	position: absolute;
+	inset-block: 0.5rem;
+	inset-inline-start: 0;
+	width: 2px;
+	border-radius: 9999px;
+	background: var(--omp-activity-rail, var(--omp-border));
+	pointer-events: none;
+	content: "";
+}
+
 .omp-transcript-editorial {
 	--omp-editorial-inset: var(--omp-column-pad);
 	--omp-editorial-edge: var(--omp-column-pad);
-	/* Flex resolves this viewport's size; containment does not size its content. */
-	container-type: size;
 }
 
 /* One budget for all execution cards, including focused/full views. The
@@ -825,7 +851,7 @@
 }
 
 .omp-transcript-editorial [data-transcript-kind="process"] > .omp-transcript-row {
-	padding-block: 4px;
+	padding-block: 2px;
 }
 
 .omp-transcript-editorial .omp-process-group {
@@ -846,11 +872,16 @@
 	transition: color var(--omp-motion-fast) var(--omp-ease), background-color var(--omp-motion-fast) var(--omp-ease);
 }
 
-.omp-execution-group-header[aria-expanded="true"] {
-	position: sticky;
-	inset-block-start: 0;
-	z-index: 2;
-	background: var(--omp-bg-primary);
+.omp-execution-group-events {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 4px;
+	border-inline-start: 1px solid var(--omp-border-muted);
+	padding-inline-start: 6px;
+	color: var(--omp-dim);
+	font-size: var(--text-omp-xs);
+	font-variant-numeric: tabular-nums;
 }
 
 .omp-execution-group-header:hover {
@@ -862,6 +893,10 @@
 .omp-transcript-editorial .omp-execution-group-header {
 	width: auto;
 	max-width: 100%;
+	gap: 6px;
+	padding: 2px 7px;
+	border: 1px solid var(--omp-border-muted);
+	border-radius: 8px;
 }
 
 .omp-transcript-editorial .omp-execution-group-header .omp-execution-group-summary {
@@ -877,8 +912,9 @@
 	padding: 0 0 1px 8px;
 }
 
-.omp-transcript-editorial .omp-execution-group-title {
-	display: none;
+.omp-execution-group[data-state="failed"] > .omp-execution-group-header,
+.omp-execution-group[data-state="failed"] > .omp-execution-group-header:hover .omp-execution-group-summary {
+	color: var(--omp-error);
 }
 
 .omp-transcript-editorial .omp-execution-group-summary {
@@ -1231,19 +1267,12 @@
 
 .omp-transcript-editorial .omp-thinking-block {
 	margin: 3px 0 9px;
-	border: 0 !important;
-	border-radius: 0;
-	background: transparent !important;
 }
 
 .omp-transcript-editorial .omp-thinking-header {
 	min-height: 26px;
-	padding: 2px 0;
+	padding: 4px 10px;
 	font-size: var(--text-omp-md);
-}
-
-.omp-transcript-editorial .omp-thinking-header:hover {
-	background: transparent;
 }
 
 .omp-transcript-editorial .omp-thinking-body {
@@ -1284,6 +1313,9 @@
 }
 
 .omp-transcript-editorial .omp-thinking-block--pulse {
+	border: 0 !important;
+	border-radius: 0;
+	background: transparent !important;
 	padding-left: 12px;
 }
 

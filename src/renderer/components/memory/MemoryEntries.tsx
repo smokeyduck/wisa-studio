@@ -60,9 +60,11 @@ function outcomeMessage(t: (key: string) => string, outcome: RpcMemoryEditOutcom
 export function AddNote({
 	onAdd,
 	full,
+	kind = "note",
 }: {
 	onAdd: (text: string) => Promise<RpcMemoryEditOutcome | null>;
 	full: boolean;
+	kind?: "note" | "lesson";
 }) {
 	const t = useT();
 	const [text, setText] = useState("");
@@ -95,7 +97,7 @@ export function AddNote({
 			<div className="flex items-start gap-2">
 				<div className="min-w-0 flex-1">
 					<TextArea
-						aria-label={t("memory.notes.add")}
+						aria-label={t(kind === "note" ? "memory.notes.add" : "memory.knowledge.addLesson")}
 						autoGrow
 						className="min-h-10 overflow-hidden py-[0.4375rem] leading-6"
 						disabled={full || saving}
@@ -106,7 +108,13 @@ export function AddNote({
 							if (problem) setProblem(null);
 						}}
 						onKeyDown={editorKeys(() => void commit())}
-						placeholder={full ? t("memory.notes.full") : t("memory.notes.placeholder")}
+						placeholder={t(
+							kind === "lesson"
+								? "memory.knowledge.lessonPlaceholder"
+								: full
+									? "memory.notes.full"
+									: "memory.notes.placeholder",
+						)}
 						ref={ref}
 						rows={1}
 						value={text}
@@ -120,7 +128,7 @@ export function AddNote({
 					size="md"
 					variant="primary"
 				>
-					{t("memory.notes.addButton")}
+					{t(kind === "note" ? "memory.notes.addButton" : "memory.knowledge.addLesson")}
 				</Button>
 			</div>
 			{problem ? (

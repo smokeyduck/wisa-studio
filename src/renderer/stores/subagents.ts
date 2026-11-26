@@ -16,6 +16,9 @@ export type SubagentNode = SubagentSnapshot;
 
 export interface SubagentsStore {
 	subagents: Map<string, SubagentNode>;
+	/** Latest live reply per agent, including relays Core does not persist. */
+	replyTimes: ReadonlyMap<string, number>;
+	noteReply: (id: string) => void;
 	/** Why the roster could not be read. Rows stay on screen when set; an empty
 	    roster plus an error is "couldn't load", never "nothing spawned". */
 	error: string | null;
@@ -85,6 +88,8 @@ export const createSubagentsStore = (command: TabCommand = activeTabCommand) => 
 	let refreshVersion = 0;
 	return createStore<SubagentsStore>()((set, get) => ({
 		subagents: new Map(),
+		replyTimes: new Map(),
+		noteReply: id => set(state => ({ replyTimes: new Map(state.replyTimes).set(id, Date.now()) })),
 		error: null,
 		applyFrame: frame => {
 			// Copy-on-first-write: frames that match no known subagent leave the
@@ -204,7 +209,7 @@ export const createSubagentsStore = (command: TabCommand = activeTabCommand) => 
 		},
 		reset: () => {
 			refreshVersion++;
-			set({ subagents: new Map(), error: null });
+			set({ subagents: new Map(), replyTimes: new Map(), error: null });
 		},
 	}));
 };

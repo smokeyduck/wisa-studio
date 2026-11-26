@@ -13,6 +13,10 @@ dist/
 resources/omp
 resources/omp.*
 
+# Generated offline Browser Use payload and its temporary staging directory
+/resources/browser-use/
+/resources/.browser-use-*/
+
 # Logs & OS cruft
 *.log
 .DS_Store

@@ -10,8 +10,7 @@
  * offline machine does not retry a multi-hundred-megabyte download every launch.
  */
 import { useSettingsStore } from "../stores/settings";
-
-const PREWARM_PREF = "sttPrewarm";
+const PREWARM_PREF = "sttHostPrewarm";
 const MAX_ATTEMPTS = 3;
 /** One second of silence at the STT pipeline's native rate (16 kHz mono PCM16). */
 const SILENCE_SECONDS = 1;
@@ -57,11 +56,15 @@ export function silentWavBase64(seconds = SILENCE_SECONDS): string {
 export async function prewarmDictation(): Promise<void> {
 	if (started) return;
 	started = true;
-	if (!(await dictationEnabled())) return;
+	if (!(await dictationEnabled())) {
+		started = false;
+		return;
+	}
 	const state = ((await window.omp.prefs.get(PREWARM_PREF)) ?? {}) as PrewarmState;
 	if (state.done || (state.attempts ?? 0) >= MAX_ATTEMPTS) return;
 	try {
 		const response = await window.omp.rpc.transcribeSpeech(silentWavBase64());
+		if (!response.success && response.code === "stt_cloud_selected") return;
 		await window.omp.prefs.set(
 			PREWARM_PREF,
 			response.success ? { done: true } : { attempts: (state.attempts ?? 0) + 1 },

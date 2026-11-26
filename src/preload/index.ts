@@ -5,7 +5,6 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { BrowserWorkspaceState } from "../shared/browser-workspace";
 import type { DocumentPreviewResult } from "../shared/document-preview";
 import type {
 	ConversationSearchResponse,
@@ -389,6 +388,8 @@ const api: OmpApi = {
 		fetchRemoteImage: (url: string) =>
 			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_FETCH_REMOTE_IMAGE, url) as Promise<string | null>,
 		openPath: (path: string) => ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_OPEN_PATH, path) as Promise<IpcOpenPathResult>,
+		openTerminal: (tabId: string) =>
+			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_OPEN_TERMINAL, tabId) as Promise<IpcOpenPathResult>,
 		resolvePaths: (paths: string[], tabId?: string) =>
 			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_RESOLVE_PATHS, { paths, tabId }) as Promise<
 				Array<IpcResolvedPath | null>
@@ -405,13 +406,13 @@ const api: OmpApi = {
 		notify: (title: string, body?: string) => {
 			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_NOTIFY, { title, body });
 		},
-		speak: (text: string, language: string) =>
-			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_SPEAK, { text, language }) as Promise<{
+		speak: (text, language, voice) =>
+			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_SPEAK, { text, language, voice }) as Promise<{
 				ok: boolean;
 				error?: string;
+				missingVoice?: boolean;
 			}>,
-		prewarmSpeech: (language: string) =>
-			ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_PREWARM_SPEECH, { language }) as Promise<{ ok: boolean }>,
+		stopSpeech: () => ipcRenderer.invoke(IPC_COMMANDS.SYSTEM_STOP_SPEECH),
 	},
 
 	themes: {
@@ -472,11 +473,6 @@ const api: OmpApi = {
 	},
 
 	platform: process.platform,
-	browser: {
-		open: tabId => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_OPEN, tabId),
-		action: action => ipcRenderer.invoke(IPC_COMMANDS.BROWSER_ACTION, action),
-		onState: callback => subscribe<BrowserWorkspaceState>(IPC_EVENTS.BROWSER_STATE, callback),
-	},
 	windowChrome: {
 		isFullScreen: () => ipcRenderer.invoke(IPC_COMMANDS.WINDOW_IS_FULLSCREEN) as Promise<boolean>,
 		onFullScreenChange: (callback: (fullScreen: boolean) => void) =>

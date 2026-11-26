@@ -8,6 +8,18 @@ This file governs the **WISA STUDIO GUI sub-repository**. Read it before any edi
 - **Remote layout:** `origin` = `smokeyduck/wisa-studio` (push here). The surrounding monorepo's remotes are NOT this repo's remotes — never `git push` from inside `packages/gui/` expecting monorepo changes to go anywhere, and never push anything to `can1357`.
 - **What must never change in a rebrand:** the sidecar binaries (`resources/omp*`, `extraResources.to: omp`, `bundled-omp-path.ts`, `scripts/build-bundled-omp.ts`, `build:omp*`), the `omp://` scheme, `~/.omp` / `.omp/` / `PI_CODING_AGENT_DIR` / `models.yml` / MCP config, provider and model ids, `@oh-my-pi/*`, `OMP_*` env vars, and `window.omp`. WISA replaces names, language, the seeded gateway and release metadata — nothing that the agent or its configuration depends on.
 
+### Nhánh làm việc duy nhất: `main`
+
+- Nghiêm cấm tạo nhánh, worktree hoặc checkout dev song song để triển khai tính năng, sửa lỗi hoặc chuẩn bị release. Chỉ phát triển, kiểm thử, commit và push trên `main` của checkout chính. Tag release trỏ vào commit trên `main`, không dùng nhánh release.
+- Không đổi checkout để né thay đổi chưa commit. Tích hợp ngay trên checkout chính và bảo toàn công việc hiện có; không stash, reset hay ghi đè thay đổi của người dùng.
+- GUI và OMP Core vẫn là hai repo riêng, mỗi repo chỉ làm việc trên `main`. Kiểm thử GUI với đúng Core đã ghim; push `origin/main` của Core trước rồi mới push GUI. Không push vào upstream.
+
+### OMP Core owns agent behavior
+
+- Before adding a GUI preference or launch override, check the pinned Core's settings, defaults, and RPC contract. Present the Core setting when one exists; do not mirror its tool lists, edit strategy, model selection, or memory policy in GUI preferences.
+- Keep Studio-specific behavior at the host boundary. Prefer a scoped default or a supported extension point over forcing a setting. Preserve explicit user and workspace configuration, tool approvals, and restricted session policies.
+- Change Core only for a demonstrated gap that its public settings, RPC, or extension points cannot cover. Record the gap and verify the smallest Core-side change separately in the Core repository.
+
 ### The repos — never confuse them
 
 | Repo | Role | Push? | Pull/sync from? |
@@ -125,6 +137,8 @@ Cross-compilation is not runtime verification — smoke-test each binary on a co
 An npm natives leaf may ship only one x64 variant (`pi-natives-darwin-x64@18.8.0` carries `baseline` only); `build:omp` sets aside a stale local sibling for the build so the embedder doesn't reject it, then restores it.
 
 ### Phase 5 — Installers
+
+Build the offline Browser Use payload on each target OS and architecture with `bun run build:browser-use` before invoking electron-builder. The package hook rejects an absent or mismatched payload. Verify the bundled Core calls `browser_use` with `e2e/browser-use.e2e.ts` against the packaged executable; source-mode smoke does not cover the installer payload.
 
 ```bash
 bun run package:mac:arm64 -- --publish never

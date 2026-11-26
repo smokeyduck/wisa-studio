@@ -15,6 +15,7 @@ import { I18nProvider } from "../../lib/i18n";
 import { clearPathResolutionCache } from "../../lib/path-resolver";
 import { useSessionStore } from "../../stores/session";
 import { setFocusedSessionRuntime } from "../../stores/session-runtime-context";
+import { useTabsStore } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
 import { LinkMenuHost } from "../common/LinkMenu";
 import { FilesPanel } from "./FilesPanel";
@@ -66,6 +67,8 @@ afterEach(async () => {
 	document.body.innerHTML = "";
 	delete ompWindow.omp;
 	setFocusedSessionRuntime(null);
+	useSessionStore.getState().reset();
+	useTabsStore.getState().reset();
 	clearPathResolutionCache();
 	useUiStore.getState().closeFilePreview();
 	useFileTabs.setState({ workspaces: new Map() });
@@ -115,6 +118,38 @@ describe("FilesPanel right-click", () => {
 		await dispatch(reveal as unknown as Element, new Event("click", { bubbles: true, cancelable: true }));
 		expect(revealPath).toHaveBeenCalledWith("/work/b/README.md");
 	});
+});
+
+it("reuses the directory listing on reopen, but not after switching or refreshing the workspace", async () => {
+	const explore = vi.fn(async () => {
+		const name = useSessionStore.getState().cwd.slice(1) + ".txt";
+		return { ok: true, truncated: false, entries: [{ kind: "file", name, path: name }] };
+	});
+	ompWindow.omp = { fs: { explore } };
+	useSessionStore.setState({ cwd: "/alpha" });
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	root = createRoot(host as unknown as Element);
+	const render = async (open: boolean) => {
+		await act(async () => root?.render(<I18nProvider>{open && <FilesPanel />}</I18nProvider>));
+		await flush();
+	};
+	await render(true);
+	await render(false);
+	await render(true);
+	expect(explore).toHaveBeenCalledTimes(1);
+	expect(document.querySelector('[data-tree-id="file:alpha.txt"]')).not.toBeNull();
+
+	await act(async () => useSessionStore.setState({ cwd: "/beta" }));
+	await flush();
+	expect(document.querySelector('[data-tree-id="file:alpha.txt"]')).toBeNull();
+	expect(document.querySelector('[data-tree-id="file:beta.txt"]')).not.toBeNull();
+	expect(explore).toHaveBeenCalledTimes(2);
+
+	const refresh = document.querySelector('button[aria-label="Refresh file tree"]');
+	if (!refresh) throw new Error("missing file tree refresh button");
+	await dispatch(refresh as unknown as Element, new Event("click", { bubbles: true }));
+	expect(explore).toHaveBeenCalledTimes(3);
 });
 
 describe("FilesPanel preview", () => {
@@ -184,6 +219,7 @@ describe("FilesPanel preview", () => {
 	it("draws a binary image from the tab's workspace, not a notice or line numbers", async () => {
 		const readImage = vi.fn(async () => ({ ok: true, dataUrl: PNG_URL, mime: "image/png", size: 2048 }));
 		setFocusedSessionRuntime("tab-b");
+		useTabsStore.setState({ activeTabId: "tab-b" });
 
 		await open("assets/shot.png", { read: vi.fn(async () => binary()), readImage });
 

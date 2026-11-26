@@ -184,16 +184,13 @@ export function ThinkingBlock({ text, live = false, startTime, endTime, level }:
 	const countLabel = `${t("chat.thinking.words", { count: words.toLocaleString(), plural: words === 1 ? "" : "s" })} - ${t("chat.thinking.lines", { count: lines.toLocaleString(), plural: lines === 1 ? "" : "s" })}`;
 
 	return (
-		<div
-			className="omp-thinking-block mb-2 overflow-hidden rounded-md border-l-2 transition-colors"
-			style={{ borderLeftColor: `var(--omp-thinking-${tokenLevel})` }}
-		>
+		<div className="omp-thinking-block omp-chat-activity-card mb-2 w-fit max-w-full">
 			<button
 				type="button"
 				aria-expanded={open}
 				aria-label={t(open ? "chat.thinking.hide" : "chat.thinking.show")}
 				onClick={() => setOpen(v => !v)}
-				className="omp-thinking-header flex w-full items-center gap-1.5 px-2 py-1 text-left text-omp-sm text-[var(--omp-muted)] transition-colors hover:bg-[var(--omp-bg-tertiary)]"
+				className="omp-thinking-header flex w-full items-center gap-1.5 px-2.5 py-1 text-left text-omp-sm text-[var(--omp-muted)] focus-visible:-outline-offset-2"
 			>
 				<ChevronRight
 					aria-hidden

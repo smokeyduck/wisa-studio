@@ -107,6 +107,17 @@ function harness(
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe("DictationSession", () => {
+	it("carries the selected cloud provider through recording and transcription", async () => {
+		const h = harness();
+		h.session.start();
+		await settle();
+		h.frame({ type: "host_dictation_state", state: "recording", cloudProvider: "openai" });
+		expect(h.views.at(-1)).toMatchObject({ phase: "recording", cloudProvider: "openai" });
+		h.frame({ type: "host_dictation_state", state: "transcribing", cloudProvider: "openai" });
+		expect(h.views.at(-1)).toMatchObject({ phase: "transcribing", cloudProvider: "openai" });
+		h.session.cancel();
+	});
+
 	it("sends what was said while the model loaded, then streams, and inserts final words", async () => {
 		const h = harness();
 		h.session.start();

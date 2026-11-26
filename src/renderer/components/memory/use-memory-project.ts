@@ -52,7 +52,8 @@ export function useMemoryProject(open: boolean, cwd: string | null): MemoryProje
 	const sidecarReady = useSessionStore(state => state.status === "ready");
 	const routeReady = useActiveTabRouteReady();
 	const connected = sidecarReady && routeReady;
-	const [overview, setOverview] = useState<RpcMemoryOverview | null>(null);
+	const [loaded, setLoaded] = useState<{ overview: RpcMemoryOverview; cwd: string } | null>(null);
+	const overview = loaded && loaded.cwd === cwd ? loaded.overview : null;
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const request = useRef(0);
@@ -62,12 +63,12 @@ export function useMemoryProject(open: boolean, cwd: string | null): MemoryProje
 	/** Accept an overview only for the project still on screen. */
 	const accept = useCallback((next: RpcMemoryOverview | undefined, forCwd: string) => {
 		if (!next || cwdRef.current !== forCwd) return;
-		setOverview(next);
+		setLoaded({ overview: next, cwd: forCwd });
 		setError(null);
 	}, []);
 
 	const reload = useCallback(async () => {
-		if (!cwd || !connected) return;
+		if (!cwd || !connected || cwdRef.current !== cwd) return;
 		const id = ++request.current;
 		try {
 			const response = await rpc.getMemoryOverview(cwd);
@@ -85,7 +86,7 @@ export function useMemoryProject(open: boolean, cwd: string | null): MemoryProje
 	// A new project starts from a blank page rather than the previous one's data.
 	useEffect(() => {
 		request.current += 1;
-		setOverview(null);
+		setLoaded(null);
 		setError(null);
 		if (!open || !cwd) return;
 		setLoading(true);
@@ -102,8 +103,11 @@ export function useMemoryProject(open: boolean, cwd: string | null): MemoryProje
 				const response = await rpc.getMemoryActivity(cwd);
 				if (stopped || !response.success || cwdRef.current !== cwd) return;
 				const activity = (response.data as { activity?: RpcMemoryActivity } | undefined)?.activity;
-				if (activity) setOverview(current => (current ? { ...current, activity } : current));
-				else void reload();
+				if (activity) {
+					setLoaded(current =>
+						current && current.cwd === cwd ? { ...current, overview: { ...current.overview, activity } } : current,
+					);
+				} else void reload();
 			} catch {
 				// A missed tick is retried on the next one.
 			}
@@ -136,15 +140,17 @@ export function useMemoryProject(open: boolean, cwd: string | null): MemoryProje
 
 	const edit = useCallback(
 		async (change: RpcMemoryEdit): Promise<RpcMemoryEditOutcome | null> => {
-			if (!cwd) return null;
+			if (!cwd || cwdRef.current !== cwd) return null;
 			try {
 				const response = await rpc.editMemory(change, cwd);
 				const problem = failure(response);
 				if (problem) {
 					reportFailure(problem);
+					if (change.kind === "knowledge-source" || change.kind === "knowledge-entry") await reload();
 					return null;
 				}
 				const data = response.data as RpcMemoryEditResult;
+				if (cwdRef.current === cwd) request.current += 1;
 				accept(data.overview, cwd);
 				return data.result;
 			} catch (cause) {
@@ -152,7 +158,7 @@ export function useMemoryProject(open: boolean, cwd: string | null): MemoryProje
 				return null;
 			}
 		},
-		[accept, cwd, reportFailure, rpc],
+		[accept, cwd, reload, reportFailure, rpc],
 	);
 
 	const update = useCallback(async (): Promise<boolean> => {

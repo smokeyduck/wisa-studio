@@ -29,8 +29,12 @@ it("opens only the focused project's plan on transitions and honors close throug
   await act(async () => { useTabsStore.setState({ activeTabId: "plan-b" }); root.render(<SessionRuntimeProvider runtime={b}><Reveal /></SessionRuntimeProvider>); });
   expect(useUiStore.getState().panelVisible).toBe(false);
   await act(async () => sa.setState({ isStreaming: true })); expect(useUiStore.getState().panelVisible).toBe(false);
-  await act(async () => sb.setState({ planModeEnabled: true })); expect(useUiStore.getState().panelVisible).toBe(true);
-  await act(async () => useUiStore.getState().togglePanel());
+  await act(async () => sb.setState({ planModeEnabled: true }));
+  expect(useUiStore.getState().panelVisible).toBe(false);
+  await act(async () => { sb.setState({ planModeEnabled: false }); sb.setState({ isStreaming: true }); });
+  await act(async () => sb.setState({ planModeEnabled: true }));
+  expect(useUiStore.getState().panelVisible).toBe(false);
+  await act(async () => sb.setState({ isStreaming: false }));
  const write: ToolEntry = { toolName: "write", args: {}, streamingArgs: '{"path":"local://new-plan.md","content":"# Plan', status: "pending", partialResult: null, result: null, isError: false, startTime: 0, endTime: null };
  await act(async () => tools.setState({ activeTools: new Map([["write", write]]) }));
  expect(useUiStore.getState().panelVisible).toBe(true);

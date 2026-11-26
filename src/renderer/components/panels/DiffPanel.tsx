@@ -29,7 +29,6 @@ import { DiffView, parseDiff } from "../../lib/diff";
 import { cx, formatClock, formatTimeAgo, resultDetails, resultText } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { PREVIEW_TEXT_CHARS } from "../../lib/preview";
-import { useSessionStore } from "../../stores/session";
 import { type ToolEntry, useToolsStore } from "../../stores/tools";
 import { type DiffScope, useUiStore } from "../../stores/ui";
 import { ContextMenu, type ContextMenuAnchor } from "../common/ContextMenu";
@@ -507,7 +506,6 @@ export function DiffPanel() {
 	const mode = useUiStore(state => state.diffScope);
 	const setMode = useUiStore(state => state.setDiffScope);
 	const [scopeMenu, setScopeMenu] = useState<ContextMenuAnchor | null>(null);
-	const sessionId = useSessionStore(state => state.sessionId);
 	const allCandidates = useMemo(() => buildEditCandidates(activeTools), [activeTools]);
 	const candidates = useMemo(
 		() => allCandidates.filter(entry => (mode === "artifacts" ? entry.isVirtual : !entry.isVirtual)),
@@ -568,7 +566,7 @@ export function DiffPanel() {
 			</PanelToolbar>
 
 			{mode === "repository" ? (
-				<RepositoryChanges key={sessionId} split={split} />
+				<RepositoryChanges split={split} />
 			) : candidates.length === 0 ? (
 				<div className="min-h-0 flex-1 overflow-y-auto">
 					<PanelEmpty

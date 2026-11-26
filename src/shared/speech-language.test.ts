@@ -36,6 +36,8 @@ describe("detectSpeechLanguage", () => {
 	it("speaks Vietnamese text in Vietnamese", () => {
 		expect(detectSpeechLanguage("Đã xong")).toBe("vi");
 		expect(detectSpeechLanguage("toi khong biet cach lam")).toBe("vi");
+		expect(detectSpeechLanguage("Xin chào")).toBe("vi");
+		expect(detectSpeechLanguage("XIN CHA\u0300O")).toBe("vi");
 	});
 
 	it("treats language-free text as English", () => {

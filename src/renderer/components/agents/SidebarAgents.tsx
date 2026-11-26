@@ -10,13 +10,12 @@
  */
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { useAgentPagesStore } from "../../stores/agent-pages";
 import { SessionRuntimeProvider, sessionRuntime } from "../../stores/session-runtime-context";
-import { useUiStore } from "../../stores/ui";
 import { subagentPrimaryLabel } from "../panels/subagent-graph";
 import { useAgentHoverCard } from "./AgentHoverCard";
 import { AgentSignal, useActivityLabel } from "./AgentPage";
@@ -165,8 +164,10 @@ function SidebarAgentRows({
 	layout: SidebarAgentsLayout;
 }) {
 	const t = useT();
+	const [showAll, setShowAll] = useState(false);
 	const cut = useMemo(() => cutAgentTree(rows, SIDEBAR_AGENT_LIMIT), [rows]);
-	const openDrawer = () => useUiStore.getState().setPanelTab("agents");
+	const visibleRows = showAll ? rows : cut.rows;
+	const hasOverflow = !showAll && cut.hidden > 0;
 	return (
 		<div className="omp-sidebar-agents relative" role="group">
 			{layout.lines.map(x => (
@@ -177,21 +178,21 @@ function SidebarAgentRows({
 					style={{ left: x, top: -1 }}
 				/>
 			))}
-			{cut.rows.map((row, index) => (
+			{visibleRows.map((row, index) => (
 				<SidebarAgentRow
-					hasNextSibling={hasNextSibling(cut.rows, index) || ((cut.hidden > 0 || layout.trunk) && row.depth === 0)}
+					hasNextSibling={hasNextSibling(visibleRows, index) || ((hasOverflow || layout.trunk) && row.depth === 0)}
 					key={row.agent.id}
 					offset={layout.offset}
-					rootGuide={row.depth > 0 && (cut.hidden > 0 || layout.trunk || laterRoot(cut.rows, index))}
+					rootGuide={row.depth > 0 && (hasOverflow || layout.trunk || laterRoot(visibleRows, index))}
 					row={row}
 					selected={shownPage === row.agent.id}
 					tabId={tabId}
 				/>
 			))}
-			{cut.hidden > 0 && (
+			{hasOverflow && (
 				<button
 					className="omp-sidebar-agent-row omp-color-fade relative flex h-7 w-full items-center rounded-lg pr-2 text-left text-omp-sm text-[var(--omp-dim)] hover:bg-[var(--omp-sidebar-item-hover)]"
-					onClick={openDrawer}
+					onClick={() => setShowAll(true)}
 					style={{ paddingLeft: 8 + INDENT + 16 + 8 + layout.offset }}
 					type="button"
 				>

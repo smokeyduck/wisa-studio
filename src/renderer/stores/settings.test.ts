@@ -115,7 +115,7 @@ describe("settings store display sync", () => {
 });
 
 describe("speech defaults seeding", () => {
-	it("turns dictation on and lets the model detect the language, once", async () => {
+	it("turns dictation on with Vietnamese when the settings are unset", async () => {
 		// No layers = the profile never chose; the schema defaults are what it reads.
 		getSettings.mockResolvedValue({
 			type: "response",
@@ -134,7 +134,7 @@ describe("speech defaults seeding", () => {
 		});
 		await useSettingsStore.getState().syncDisplaySettings();
 		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "stt.enabled", value: true });
-		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "stt.language", value: "" });
+		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "stt.language", value: "vi" });
 		// The display defaults travel with the same seed pass.
 		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "emojiAutocomplete", value: false });
 		expect(setSetting).toHaveBeenCalledWith({ type: "set_setting", path: "tui.reactions", value: false });

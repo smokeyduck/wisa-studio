@@ -31,6 +31,14 @@ const GROUPS = { ru: RU_GROUP_TITLES, vi: VI_GROUP_TITLES };
 const OPTIONS = { ru: RU_SCHEMA_OPTION_TEXT, vi: VI_SCHEMA_OPTION_TEXT };
 
 describe("schema translation tables", () => {
+	it("translates Judge routing consent while retaining the English CLI schema fallback", () => {
+		for (const language of ["ru", "vi", "zh", "th"] as const) {
+			const translation = settingTranslation(language, "task.judgeRouting");
+			expect(translation?.label).toBeTruthy();
+			expect(translation?.description).toContain("Judge");
+		}
+		expect(settingTranslation("en", "task.judgeRouting")).toBeUndefined();
+	});
 	it("carries a nonempty label and description for every entry both locales list", () => {
 		// A missing key silently falls back to the English wire string, which is
 		// how ru and vi drifted a whole sidecar release behind. check:locale

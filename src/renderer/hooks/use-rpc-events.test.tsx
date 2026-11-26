@@ -973,7 +973,7 @@ describe("useRpcEvents awaiting-model marker", () => {
 });
 
 describe("useRpcEvents todo lifecycle", () => {
-	it("archives a todo tool result immediately without waiting for agent_end", async () => {
+	it("updates the active todo list immediately without waiting for agent_end", async () => {
 		const { emitBatch } = installMockOmp();
 		await mount(<RpcEventsProbe />);
 		await flush();
@@ -996,11 +996,9 @@ describe("useRpcEvents todo lifecycle", () => {
 
 		const state = useTodoStore.getState();
 		expect(state.phases[0]?.tasks[0]?.status).toBe("pending");
-		expect(state.history).toHaveLength(1);
-		expect(state.history[0]?.phases).toEqual(pending);
 	});
 
-	it("keeps one completed snapshot when automatic cleanup clears the live todos", async () => {
+	it("clears the active todo list and reminder after automatic cleanup", async () => {
 		const { emitBatch } = installMockOmp();
 		await mount(<RpcEventsProbe />);
 		useTodoStore.getState().reset();
@@ -1018,27 +1016,41 @@ describe("useRpcEvents todo lifecycle", () => {
 		expect(state.phases).toEqual([]);
 		expect(state.reminderVisible).toBe(false);
 		expect(state.reminderTodos).toEqual([]);
-		expect(state.history).toHaveLength(1);
-		expect(state.history[0]?.phases[0]?.tasks[0]?.status).toBe("completed");
 	});
 });
 
 describe("useRpcEvents non-transcript frames", () => {
-	it("surfaces text-mode slash-command output as a local custom message", async () => {
+	it("keeps normal output and failures, but not redundant compaction success", async () => {
 		const { emitCommandOutput } = installMockOmp();
 		await mount(<RpcEventsProbe />);
 
 		await act(async () => {
 			emitCommandOutput({ type: "command_output", text: "Enabled models: gpt-5.6" });
+			emitCommandOutput({ type: "command_output", text: "Compaction complete." });
+			emitCommandOutput({ type: "command_output", text: "Compaction complete. Tokens: 194693 -> 32316 (saved 162377)." });
+			emitCommandOutput({ type: "command_output", text: "Compaction failed: model unavailable" });
 		});
 
-		expect(useMessagesStore.getState().messages).toContainEqual(
-			expect.objectContaining({
-				role: "custom",
-				customType: "command",
-				content: [{ type: "text", text: "Enabled models: gpt-5.6" }],
-			}),
-		);
+		expect(useMessagesStore.getState().messages.map(message => message.content)).toEqual([
+			[{ type: "text", text: "Enabled models: gpt-5.6" }],
+			[{ type: "text", text: "Compaction failed: model unavailable" }],
+		]);
+	});
+
+	it("omits the redundant compaction success line but keeps failures visible", async () => {
+		const { emitCommandOutput } = installMockOmp();
+		await mount(<RpcEventsProbe />);
+		const error = "Compaction failed: model unavailable";
+
+		await act(async () => {
+			emitCommandOutput({ type: "command_output", text: "Compaction complete." });
+			emitCommandOutput({ type: "command_output", text: "Compaction complete. Tokens: 71718 -> 24776 (saved 46942)." });
+			emitCommandOutput({ type: "command_output", text: error });
+		});
+
+		expect(useMessagesStore.getState().messages).toMatchObject([
+			{ role: "custom", customType: "command", content: [{ type: "text", text: error }] },
+		]);
 	});
 
 	it("keeps a retried run's prompt and hands the retry row to the retried run", async () => {
@@ -1312,6 +1324,24 @@ describe("IRC notifications", () => {
 			"Agent ModelSurface replied.",
 			"An agent replied.",
 		]);
+	});
+
+	it("routes a known relay to its agent instead of toasting, unless agent cards are off", async () => {
+		const { emitBatch } = installMockOmp();
+		await mount(<RpcEventsProbe />);
+		await flush();
+		const id = "SoCaiVaNguon";
+		useSubagentsStore.getState().setSnapshots([{ id, index: 1, agent: "task", status: "running", lastUpdate: 1 }]);
+		const event: AgentSessionEvent = {
+			type: "irc_message",
+			message: { role: "custom", customType: "irc:relay", details: { from: id } },
+		};
+		await act(async () => emitBatch([event, event]));
+		expect([...useSubagentsStore.getState().replyTimes.keys()]).toEqual([id]);
+		expect(useToastStore.getState().toasts).toEqual([]);
+		useSettingsStore.setState({ pinnedAgents: "off" });
+		await act(async () => emitBatch([event]));
+		expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual([`Agent ${id} replied.`]);
 	});
 });
 

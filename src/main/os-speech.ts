@@ -1,25 +1,11 @@
-/**
- * Speech for the languages the sidecar's local TTS cannot speak.
- *
- * The bundled local voice (Phonon 31M) is English-only, so a Vietnamese reply
- * synthesized there comes out as English phonemes reading Vietnamese letters.
- * Non-English utterances go to Piper — a neural voice downloaded on first use
- * (see `piper.ts`) — and only fall back to the platform engine when that is
- * unavailable. The order matters: `espeak-ng`, the only engine a bare Linux
- * install has, pronounces Vietnamese correctly and still sounds like a machine,
- * which is exactly the complaint Piper answers. macOS `say` and Windows SAPI
- * ship neural voices of their own, so there the platform engine is used when
- * Piper has no voice for the language.
- *
- * Nothing here touches a shell: arguments are passed to `execFile`, and the
- * utterance itself goes through stdin (never argv).
- */
-import { execFile } from "node:child_process";
+/** Local speech playback for languages outside the sidecar voice's coverage. */
+import { execFile, type ExecFileOptions } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { app } from "electron";
+import type { VietnameseVoice } from "../shared/speech-language";
 import { synthesizeWithPiper } from "./piper";
 
 const run = promisify(execFile);
@@ -33,20 +19,9 @@ const ESPEAK_VOICES: Record<string, string> = {
 	zh: "cmn",
 };
 
-/** A long reply would otherwise hold the audio device for minutes. */
-const MAX_SPEECH_CHARS = 4000;
-
-/**
- * espeak-ng arguments for one utterance. `-w` is deliberately absent: without
- * it espeak-ng speaks through the audio backend and exits when it is done.
- */
-export function espeakArgs(language: string, text: string): string[] {
-	return ["-v", ESPEAK_VOICES[language] ?? language, text];
-}
-
 /**
  * The macOS `say` voice for `language`, from the `say -v '?'` listing
- * (`Name  en_US  # comment`). Falls back to `null` → `say`'s default voice.
+ * (`Name  en_US  # comment`). Never substitute a voice in another language.
  */
 export function sayVoiceFor(listing: string, language: string): string | null {
 	for (const line of listing.split("\n")) {
@@ -58,67 +33,73 @@ export function sayVoiceFor(listing: string, language: string): string | null {
 	return null;
 }
 
-/** PowerShell that speaks stdin through SAPI, the default installed voice. */
+/** Use only enabled, locally installed SAPI voices with the requested language. */
 const SAPI_SCRIPT =
+	"$ErrorActionPreference = 'Stop'; " +
+	"[Console]::InputEncoding = New-Object System.Text.UTF8Encoding; " +
 	"Add-Type -AssemblyName System.Speech; " +
 	"$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; " +
-	"$s.Speak([Console]::In.ReadToEnd())";
+	"$voice = $s.GetInstalledVoices() | Where-Object { $_.Enabled -and " +
+	"$_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq $env:WISA_SPEECH_LANGUAGE } | Select-Object -First 1; " +
+	"if (-not $voice) { exit 3 }; " +
+	"$s.SelectVoice($voice.VoiceInfo.Name); $s.Speak([Console]::In.ReadToEnd())";
+
+export class MissingSpeechVoice extends Error {}
 
 /**
  * Speak `text` with the OS voice, resolving once playback finished. Rejects with
  * the engine's own message (missing binary included) so the caller can toast it.
  */
-export async function speakWithOsVoice(text: string, language: string): Promise<void> {
-	const trimmed = text.trim().slice(0, MAX_SPEECH_CHARS);
+export async function speakWithOsVoice(
+	text: string,
+	language: string,
+	preference: VietnameseVoice = "auto",
+	signal?: AbortSignal,
+): Promise<void> {
+	const trimmed = text.trim();
 	if (!trimmed) return;
-	// A neural voice first: the platform engine is the fallback, not the default.
-	const wav = await synthesizeWithPiper(trimmed, language);
-	if (wav) {
-		await playWav(wav);
-		return;
+	signal?.throwIfAborted();
+	if (language === "vi" && preference !== "system") {
+		const file = path.join(app.getPath("temp"), `wisa-speech-${randomUUID()}.wav`);
+		try {
+			if (await synthesizeWithPiper(trimmed, language, file, signal)) {
+				await playFile(file, signal);
+				return;
+			}
+		} finally {
+			await rm(file, { force: true });
+		}
+		if (preference === "vais1000") throw new Error("The VAIS-1000 voice is unavailable on this device.");
 	}
-	const options = { timeout: 120_000, maxBuffer: 1024 * 1024 } as const;
+	const options = { timeout: 120_000, maxBuffer: 1024 * 1024, signal, windowsHide: true } as const;
 	if (process.platform === "darwin") {
-		const voice = sayVoiceFor(await listSayVoices(), language);
-		const args = voice ? ["-v", voice] : [];
-		await runWithStdin("say", args, trimmed, options);
+		const voice = sayVoiceFor(await listSayVoices(signal), language);
+		if (!voice) throw new MissingSpeechVoice(language);
+		await runWithStdin("say", ["-v", voice], trimmed, options);
 		return;
 	}
 	if (process.platform === "win32") {
-		await runWithStdin(
-			"powershell.exe",
-			["-NoProfile", "-NonInteractive", "-Command", SAPI_SCRIPT],
-			trimmed,
-			options,
-		);
+		try {
+			await runWithStdin("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", SAPI_SCRIPT], trimmed, {
+				...options,
+				env: { ...process.env, WISA_SPEECH_LANGUAGE: language },
+			});
+		} catch (cause) {
+			if (cause instanceof Error && "code" in cause && cause.code === 3) throw new MissingSpeechVoice(language);
+			throw cause;
+		}
 		return;
 	}
 	try {
-		await run("espeak-ng", espeakArgs(language, trimmed), options);
+		await runWithStdin("espeak-ng", ["-v", ESPEAK_VOICES[language] ?? language, "--stdin"], trimmed, options);
 	} catch (cause) {
-		// espeak-ng absent: speech-dispatcher is the other engine desktops ship.
-		if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
-		await run("spd-say", ["-l", language, "-w", trimmed], options);
+		if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") throw new MissingSpeechVoice(language);
+		throw cause;
 	}
 }
 
-/**
- * Play a WAV through the platform's own player, resolving when it finishes.
- * Piper writes the file itself (`--output_file`), so nothing is held in memory
- * twice and every platform uses the player it already ships.
- */
-async function playWav(wav: Uint8Array): Promise<void> {
-	const file = path.join(app.getPath("temp"), `wisa-speech-${randomUUID()}.wav`);
-	await writeFile(file, wav);
-	try {
-		await playFile(file);
-	} finally {
-		await rm(file, { force: true });
-	}
-}
-
-async function playFile(file: string): Promise<void> {
-	const options = { timeout: 120_000, maxBuffer: 1024 * 1024 } as const;
+async function playFile(file: string, signal?: AbortSignal): Promise<void> {
+	const options = { timeout: 120_000, maxBuffer: 1024 * 1024, signal, windowsHide: true } as const;
 	if (process.platform === "darwin") {
 		await run("afplay", [file], options);
 		return;
@@ -130,10 +111,9 @@ async function playFile(file: string): Promise<void> {
 				"-NoProfile",
 				"-NonInteractive",
 				"-Command",
-				"$p = New-Object System.Media.SoundPlayer $args[0]; $p.PlaySync()",
-				file,
+				"$ErrorActionPreference = 'Stop'; $p = New-Object System.Media.SoundPlayer $env:WISA_SPEECH_WAV; $p.PlaySync()",
 			],
-			options,
+			{ ...options, env: { ...process.env, WISA_SPEECH_WAV: file } },
 		);
 		return;
 	}
@@ -146,10 +126,11 @@ async function playFile(file: string): Promise<void> {
 	}
 }
 
-async function listSayVoices(): Promise<string> {
+async function listSayVoices(signal?: AbortSignal): Promise<string> {
 	try {
-		return (await run("say", ["-v", "?"], { timeout: 10_000 })).stdout;
+		return (await run("say", ["-v", "?"], { timeout: 10_000, signal })).stdout;
 	} catch {
+		signal?.throwIfAborted();
 		return "";
 	}
 }
@@ -159,10 +140,11 @@ function runWithStdin(
 	file: string,
 	args: string[],
 	input: string,
-	options: { timeout: number; maxBuffer: number },
-): Promise<unknown> {
-	return new Promise((resolve, reject) => {
-		const child = execFile(file, args, options, error => (error ? reject(error) : resolve(undefined)));
-		child.stdin?.end(input);
-	});
+	options: ExecFileOptions,
+): Promise<void> {
+	const { promise, resolve, reject } = Promise.withResolvers<void>();
+	const child = execFile(file, args, options, error => (error ? reject(error) : resolve()));
+	child.stdin?.on("error", () => undefined);
+	child.stdin?.end(input);
+	return promise;
 }

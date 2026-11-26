@@ -4,7 +4,6 @@ import {
 	FolderOpen,
 	Gauge,
 	GitBranch,
-	Globe,
 	Info,
 	Menu,
 	MoreHorizontal,
@@ -23,8 +22,7 @@ import { headerHasAppMenu } from "../../lib/window-chrome";
 import { useMessagesStore } from "../../stores/messages";
 import { type SessionStore, useSessionStore } from "../../stores/session";
 import { sessionRuntimeStore, useRuntimeTabId } from "../../stores/session-runtime-context";
-import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
-import { toast } from "../../stores/toast";
+import { useActiveTabKind } from "../../stores/tabs";
 import { useToolsStore } from "../../stores/tools";
 import { useUiStore } from "../../stores/ui";
 import { ContextMenu, type ContextMenuAnchor, type ContextMenuItem } from "../common/ContextMenu";
@@ -56,7 +54,6 @@ export function TitleBar() {
 	const tools = useToolsStore(s => s.activeTools);
 	const sidebarVisible = useUiStore(s => s.sidebarVisible);
 	const toggleSidebar = useUiStore(s => s.toggleSidebar);
-	const activeTabId = useTabsStore(s => s.activeTabId);
 	const openCommandPalette = useUiStore(s => s.openCommandPalette);
 	const openUsage = useUiStore(s => s.openUsage);
 	const openStatsDashboard = useUiStore(s => s.openStatsDashboard);
@@ -299,19 +296,6 @@ export function TitleBar() {
 				className={iconButton}
 			>
 				<PanelLeft size={18} className={cx(sidebarVisible && "text-[var(--omp-text)]")} />
-			</button>
-			<button
-				type="button"
-				aria-label={t("titlebar.openBrowser")}
-				title={t("titlebar.openBrowser")}
-				onClick={() => {
-					void window.omp.browser
-						.open(activeTabId)
-						.catch(() => toast({ variant: "error", message: t("titlebar.browserFailed") }));
-				}}
-				className={iconButton}
-			>
-				<Globe aria-hidden="true" size={18} />
 			</button>
 			{/* The sidebar carries the labelled Command Center entry; this shortcut
 			    only stands in for it while the sidebar is hidden. */}

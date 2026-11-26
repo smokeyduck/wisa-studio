@@ -8,11 +8,12 @@ import { I18nProvider } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
 import { useSessionStore } from "../../stores/session";
 import { useTabsStore } from "../../stores/tabs";
+import { useToastStore } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
 import { useFileTabs } from "../panels/file-tabs";
 import { PanelContainer } from "./PanelContainer";
 
-// xterm's bundle (the Terminal view) reads `self` when it loads, before any test code runs.
+// Tool-driven terminal output still loads xterm; the launcher button does not use it.
 vi.hoisted(() => {
 	(globalThis as Record<string, unknown>).self = globalThis;
 });
@@ -46,8 +47,9 @@ async function flush(): Promise<void> {
 	});
 }
 
-async function mount(element: ReactElement): Promise<void> {
+async function mount(element: ReactElement, paneWidth?: number): Promise<void> {
 	container = document.createElement("div") as unknown as TestElement;
+	if (paneWidth !== undefined) Object.defineProperty(container, "clientWidth", { value: paneWidth });
 	document.body.appendChild(container as never);
 	root = createRoot(container as unknown as Element);
 	await act(async () => {
@@ -67,6 +69,7 @@ afterEach(async () => {
 	useTabsStore.getState().reset();
 	useFileTabs.setState({ workspaces: new Map() });
 	useUiStore.setState({ panelTab: "files", panelVisible: true, filePreviewPath: null, filePreviewLine: null });
+	useToastStore.setState({ toasts: [] });
 	if (initialOmp === undefined) delete ompWindow.omp;
 	else ompWindow.omp = initialOmp;
 	Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
@@ -105,10 +108,10 @@ describe("PanelContainer chat tab filter", () => {
 		const labels = drawerTabLabels();
 		expect(labels).toContain("Files");
 		expect(labels).toContain("Side questions");
-		// Agents, diff, shells and plan need a tool-enabled session.
-		for (const agentOnly of ["Agents", "Changes", "Terminal", "Browser"]) {
+		for (const agentOnly of ["Agents", "Changes", "Plan", "Browser"]) {
 			expect(labels).not.toContain(agentOnly);
 		}
+		expect(document.querySelector('aside > header button[aria-label="Terminal"]')).toBeNull();
 	});
 
 	it("falls back to the files surface when the agent-only diff tab was selected before entering chat", async () => {
@@ -125,14 +128,54 @@ describe("PanelContainer chat tab filter", () => {
 		await mount(<PanelContainer />);
 
 		const labels = drawerTabLabels();
-		for (const visible of ["Plan", "Agents", "Side questions", "Changes", "Files", "Terminal"]) {
+		for (const visible of ["Plan", "Side questions", "Changes", "Files"]) {
 			expect(labels).toContain(visible);
 		}
-		expect(labels).not.toContain("Browser");
-		// Live-execution tabs stay in chat; plans belong exclusively to the inspector.
-		for (const moved of ["Todo", "Queue", "Logs"]) {
-			expect(labels).not.toContain(moved);
+		for (const absent of ["Agents", "Browser", "Todo", "Queue", "Logs", "Terminal"]) {
+			expect(labels).not.toContain(absent);
 		}
+		expect(document.querySelector('aside > header button[aria-label="Agents"]')).toBeNull();
+	});
+
+	it("launches the OS terminal for the active tab without selecting a view or closing the drawer", async () => {
+		seedActiveTab("agent");
+		const openTerminal = vi.fn(async () => ({ ok: false, error: "Launcher failed" }));
+		ompWindow.omp = { system: { openTerminal } };
+		useUiStore.getState().setPanelTab("files");
+		await mount(<PanelContainer />);
+
+		const terminal = document.querySelector('aside > header button[aria-label="Terminal"]');
+		expect(terminal?.hasAttribute("aria-pressed")).toBe(false);
+		await act(async () => terminal?.dispatchEvent(new Event("click", { bubbles: true, cancelable: true })));
+		expect(openTerminal).toHaveBeenCalledExactlyOnceWith("t0");
+		expect(useUiStore.getState()).toMatchObject({ panelTab: "files", panelVisible: true, panelOwnerTabId: "t0" });
+		expect(useToastStore.getState().toasts).toEqual([
+			expect.objectContaining({ variant: "error", message: "Couldn't start a terminal: Launcher failed" }),
+		]);
+	});
+
+	it("consumes Escape inside the inspector and clears its owner", async () => {
+		seedActiveTab("agent");
+		useUiStore.getState().setPanelTab("files");
+		await mount(<PanelContainer />);
+		const event = new Event("keydown", { bubbles: true, cancelable: true });
+		Object.defineProperties(event, {
+			key: { value: "Escape" },
+			eventPhase: { value: 0, writable: true, configurable: true },
+		});
+		await act(async () => document.querySelector('aside > header button[aria-label="Files"]')?.dispatchEvent(event));
+		expect(event.defaultPrevented).toBe(true);
+		expect(useUiStore.getState()).toMatchObject({ panelTab: "files", panelVisible: false, panelOwnerTabId: null });
+	});
+
+	it("sizes an overlay against its pane body rather than the window", async () => {
+		seedActiveTab("agent");
+		useUiStore.getState().setPanelTab("files");
+		await mount(<PanelContainer />, 320);
+		const overlay = document.querySelector("aside.omp-inspector");
+		expect(overlay?.classList.contains("absolute")).toBe(true);
+		expect(overlay?.getAttribute("style")).toContain("width:320px");
+		expect(overlay?.querySelector('[role="separator"]')?.getAttribute("aria-valuemax")).toBe("320");
 	});
 
 	it("keeps the chosen view selected and lets the user close it from the same control", async () => {

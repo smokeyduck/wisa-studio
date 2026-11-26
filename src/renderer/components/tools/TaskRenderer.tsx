@@ -68,6 +68,7 @@ interface StatOpts {
 	contextWindow?: number;
 	cost?: number;
 	resolvedModel?: string;
+	resolvedModelRoute?: string;
 }
 
 /** Per-agent stats: `12 🔧 · 3 req · 5.1%/1M · $0.42 · model` (TUI appendAgentStats). */
@@ -102,6 +103,11 @@ function AgentStats({ stats }: { stats: StatOpts }) {
 			{model && (
 				<span className="truncate" title={stats.resolvedModel}>
 					{model}
+				</span>
+			)}
+			{stats.resolvedModelRoute && (
+				<span className="truncate" title={stats.resolvedModelRoute}>
+					{stats.resolvedModelRoute}
 				</span>
 			)}
 		</span>
@@ -395,6 +401,7 @@ function ProgressAgentRow({ row, depth, ctx }: { row: Record<string, unknown>; d
 							contextWindow: asNumber(row.contextWindow),
 							cost: asNumber(row.cost),
 							resolvedModel: asString(row.resolvedModel),
+							resolvedModelRoute: asString(row.resolvedModelRoute),
 						}}
 					/>
 				)}
@@ -563,6 +570,7 @@ function ResultAgentRow({ row, depth, ctx }: { row: Record<string, unknown>; dep
 						contextWindow: asNumber(row.contextWindow),
 						cost: resultCost(row),
 						resolvedModel: asString(row.resolvedModel),
+						resolvedModelRoute: asString(row.resolvedModelRoute),
 					}}
 				/>
 				<span className="shrink-0 font-mono text-omp-xxs text-[var(--omp-dim)] tabular-nums">

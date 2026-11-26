@@ -12,25 +12,23 @@ const LIVE_EDGE_PX = 200;
 test("a bottom-pinned transcript rides the stream, and 'jump to latest' re-engages it", async () => {
 	test.setTimeout(150_000);
 	const profile = await fs.mkdtemp(path.join(os.tmpdir(), "omp-gui-follow-"));
-	const desktop = path.join(profile, "desktop"),
-		agent = path.join(profile, "agent"),
-		project = path.join(profile, "project");
-	await Promise.all([fs.mkdir(desktop), fs.mkdir(agent), fs.mkdir(project)]);
-	await fs.writeFile(path.join(desktop, "prefs.json"), JSON.stringify({ language: "en" }));
+	const desktop = path.join(profile, "appData", "wisa-studio-dev");
+	const project = path.join(profile, "project");
+	await Promise.all([fs.mkdir(desktop, { recursive: true }), fs.mkdir(project)]);
+	await fs.writeFile(path.join(desktop, "prefs.json"), JSON.stringify({ language: "en", firstRunComplete: true }));
 	const env = {
 		...process.env,
-		PI_CODING_AGENT_DIR: agent,
-		PI_CONFIG_DIR: path.relative(os.homedir(), profile),
-		OMP_PROFILE: "",
-		PI_PROFILE: "",
-		OMP_BUNDLED_OMP: path.resolve("e2e/sidecar-fixture.ts"),
+		WISA_PROFILE_ROOT: profile,
+		OMP_SIDECAR: "source",
+		OMP_SIDECAR_CLI: path.resolve("e2e/sidecar-fixture.ts"),
+		OMP_BUNDLED_OMP: path.resolve(process.platform === "win32" ? "resources/omp.exe" : "resources/omp"),
 		// Enough history that an abort leaves something to scroll up through, which is
 		// the state a reader is actually in when they send the next message.
 		OMP_GUI_TEST_HISTORY: "300",
 	};
 	Reflect.deleteProperty(env, "ELECTRON_RUN_AS_NODE");
 	const app = await electron.launch({
-		args: [path.resolve("out/main/index.js"), project, `--user-data-dir=${desktop}`],
+		args: [path.resolve("out/main/index.js"), project],
 		env,
 	});
 	const page = await app.firstWindow();
@@ -44,9 +42,11 @@ test("a bottom-pinned transcript rides the stream, and 'jump to latest' re-engag
 		const gap = () => scroll.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
 		const height = () => scroll.evaluate(node => node.scrollHeight);
 		const jump = page.getByRole("button", { name: "Jump to latest", exact: true });
-		// The control is always mounted and fades out while pinned, so Playwright's
-		// visibility check cannot tell "offered" from "hidden"; interactivity can.
-		const jumpOffered = () => jump.evaluate(node => getComputedStyle(node).pointerEvents !== "none");
+		await expect.poll(async () => (await page.evaluate(() => window.omp.sidecar.getStatus())).status).toBe("ready");
+		await expect.poll(() => page.evaluate(() => window.omp.rpc.getState())).toMatchObject({
+			success: true,
+			data: { cwd: project },
+		});
 		const send = async (text: string) => {
 			await input.fill(text);
 			await page.getByRole("button", { name: "Send (Enter)", exact: true }).click();
@@ -59,7 +59,7 @@ test("a bottom-pinned transcript rides the stream, and 'jump to latest' re-engag
 		const scrollUp = async () => {
 			await scroll.hover();
 			await page.mouse.wheel(0, -1500);
-			await expect.poll(jumpOffered).toBe(true);
+			await expect(jump).toBeVisible();
 			expect(await gap()).toBeGreaterThan(LIVE_EDGE_PX);
 		};
 		// The fixture streams a chunk every 16ms, so a handful of samples proves
@@ -102,7 +102,7 @@ test("a bottom-pinned transcript rides the stream, and 'jump to latest' re-engag
 		// Send reclaims the live edge, and every later chunk has to keep it.
 		await expect.poll(gap).toBeLessThan(LIVE_EDGE_PX);
 		await ridesTheStream(12);
-		expect(await jumpOffered()).toBe(false);
+		await expect(jump).toHaveCount(0);
 
 		await scrollUp();
 		const heldHeight = await height();
@@ -112,14 +112,14 @@ test("a bottom-pinned transcript rides the stream, and 'jump to latest' re-engag
 		// Re-engaged means it keeps following, not that it jumped once.
 		await jump.click();
 		await expect.poll(gap).toBeLessThan(LIVE_EDGE_PX);
-		expect(await jumpOffered()).toBe(false);
+		await expect(jump).toHaveCount(0);
 		await ridesTheStream(6);
 
 		// Scrolling back down to the tail re-engages on its own: intent is a gesture
 		// toward the tail, so the reader never has to reach for the control.
 		await scrollUp();
-		for (let step = 0; step < 60 && (await jumpOffered()); step++) await page.mouse.wheel(0, 1_500);
-		expect(await jumpOffered()).toBe(false);
+		for (let step = 0; step < 60 && (await jump.isVisible()); step++) await page.mouse.wheel(0, 1_500);
+		await expect(jump).toHaveCount(0);
 		await ridesTheStream(6);
 		await abort();
 
@@ -128,7 +128,7 @@ test("a bottom-pinned transcript rides the stream, and 'jump to latest' re-engag
 		await scrollUp();
 		await send("fixture stream");
 		await expect.poll(gap).toBeLessThan(LIVE_EDGE_PX);
-		expect(await jumpOffered()).toBe(false);
+		await expect(jump).toHaveCount(0);
 		await ridesTheStream(6);
 		await abort();
 

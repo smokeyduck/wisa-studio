@@ -68,25 +68,39 @@ WISA STUDIO keeps its own agent data under `~/.wisa-studio/agent` (not `~/.omp`)
 - **Session overview:** context by category, cost, cache, speed, running subagents and MCP servers.
 - **MCP, Skills, plugins, hooks:** managed from Settings instead of hand-edited JSON.
 - **SSH hosts, custom themes, command palette, voice mode, relay collaboration.**
-- **Work mode:** read, search, track tasks and control the desktop by default, without shell or general-purpose eval. The `computer` tool remains part of customized Work profiles. The global **Computer** setting and input approval still apply.
+- **Work mode:** read, search, track tasks and control the desktop by default, without shell or general-purpose eval. The global **Computer** setting and input approval still apply.
 
 Known limits: separate tabs are not an OS security boundary; a split holds two panes, not an unlimited grid; approvals and security scans are not a sandbox. Model requests still go to the provider you configure.
 
-### Browse inside WISA STUDIO
+### Split Agent sessions (unreleased)
 
-The toolbar globe opens **WISA Browser**, a Chromium window inside Studio with a profile separate from Chrome or your default browser. It restores tabs and keeps persistent cookies and site storage across restarts. Restored addresses omit query strings and fragments; in-flight work and unsaved form input do not survive closing the browser.
+Open two Agent tabs in the same workspace, right-click a tab, and choose **Split right** or **Split below**. In a narrow window the panes stack without changing the saved layout. Ask either agent to check its peer or leave a handoff with `workspace_peer`. A handoff stays in memory and is read only when the recipient calls `receive`; it does not start or interrupt a turn. Unlinking the pair, switching sessions, or closing a tab discards unread messages.
 
-WISA Browser appears only after connecting to the agent tab that opened it; there is no sharing control or confirmation step. In Code mode with `eval` and Browser enabled, the agent can open new tabs and work with any WISA Browser tab, including signed-in pages. Close the window to disconnect. Your personal Chrome profile is not included.
+The right sidebar overlays the selected pane. **Shift+Tab** changes Plan mode in the composer without opening the sidebar. **Terminal** in the sidebar launches the operating system terminal at the selected tab's workspace. Interactive commands run by the agent still use Studio's terminal panel.
 
-On secure pages that publish WebMCP tools, the agent can use `webmcpList()` to discover them and `webmcpInvoke()` to call a selected tool. Tool descriptions and results come from the page and are untrusted. Pages without WebMCP can still be used through normal browser controls.
+### Work and Coding tools (unreleased)
 
-### Use your own Chrome session (optional)
+Coding uses the Core tool configuration and `edit.mode` / `edit.modelVariants`. Studio no longer reads the old GUI Tool Profiles preferences. Work uses a smaller tool set with `computer` on by default; `computer.enabled: false`, tool approvals and `--no-tools` still apply.
 
-To let an agent use a signed-in tab, opt in to the [omp browser relay](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). If you don't already have it, run `omp browser-relay install --no-chrome` from a compatible omp CLI, then in the Chrome profile you want to use go to `chrome://extensions`, turn on **Developer mode**, and choose the printed folder with **Load unpacked**. The relay can act as you in that profile; use a separate work profile and approve only tasks you intend to run there. Do not expose the relay beyond your machine.
+`task.judgeRouting` is off by default. Turning it on allows the configured native Judge to see a bounded excerpt of each unpinned subagent assignment, not the parent transcript. It can only choose an already approved route. Explicit pins and the normal Core fallback still apply.
 
-In WISA STUDIO, set **Browser Relay URL** in **Settings → Tools** to your relay's `http://127.0.0.1:<port>` address. For a standard omp installation, the running native host publishes `<pid>-<port>` in `~/.omp/browser-relay/endpoints/`. WISA does not read that separate profile; enter the URL yourself and update it if the port changes. Leave **Browser Relay** off to opt in per task: ask the agent to use `app: "relay"` for the approved browser work. Enable **Browser Relay** only if you want it to be the default for sessions using these settings.
+### Project Knowledge in Obsidian (unreleased)
 
-Installing the extension authorizes browser access for clients that can reach the local relay port. It does not ask anew for each action. Enabling the relay by default can also expose that Chrome profile to background agent runs. Keep the default off if you only want occasional use, and disable the extension in Chrome when you want to revoke that access.
+In Memory → Project Knowledge, choose an existing Obsidian Vault after enabling `vault.enabled`. The selected project stores reviewed notes and lessons as Markdown in the vault, without writing a duplicate to local Memory. If the vault is disabled or unavailable, Studio reports it instead of silently changing sources. Automatic Memory remains separate; selecting a vault does not copy or delete past data.
+
+### Vietnamese dictation and read-aloud (unreleased)
+
+Studio defaults to local Whisper Small with Vietnamese for dictation unless you configure a model or language. Cloud dictation requires explicitly selecting a cloud model; a local error does not send the recording to a cloud service.
+
+In Settings → Providers → Services, choose the Vietnamese voice and use **Preview** to hear it. VAIS-1000 is a Northern Vietnamese voice that may need a one-time download; text is synthesized locally. The system option uses an installed Vietnamese voice or reports that one is missing. Read-aloud plays new messages in order, can be stopped for the current run, and does not replay loaded history.
+
+### Browse with Browser Use (unreleased)
+
+Enter a request in the Agent tab, for example: “Use `browser_use` to open https://example.com and tell me the page title.” The agent calls OMP’s `browser_use` tool; there is no longer a toolbar globe or an embedded WISA Browser window.
+
+Studio ships the official [Browser Use](https://github.com/browser-use/browser-use) Python package (initially 1.0.8) and local Chromium. Each browsing session uses a separate temporary profile. Browser Use does not require sign-in, use a cloud browser, or read your personal Chrome profile. Studio neither imports nor deletes the old WISA Browser’s history, cookies, or site data.
+
+Studio checks GitHub for the latest stable release at startup and each day it remains open. After the install and a Chromium check succeed, new agent sessions use the upgrade; existing sessions keep their version. You do not need Python or a Chromium download on first launch. Offline or failed updates leave the working version in place.
 
 ## Install
 
@@ -150,6 +164,8 @@ bun run build
 Development-only overrides, unpackaged runs only: `OMP_BUNDLED_OMP=<path>` runs that binary instead of `resources/omp`, and `OMP_SIDECAR=source` runs the coding-agent source from a monorepo checkout through bun. Packaged builds ignore both. The app does not check that an override honors `PI_CONFIG_SOURCES` / `PI_PROJECT_CONFIG_DIR` or the isolated profile; using one is your responsibility.
 
 ## Packaging and releases
+
+Run `bun run build:browser-use` on the target OS and architecture before packaging or testing browser actions in development. This stages the official Python package and a pinned, open-source Chromium build in `resources/browser-use`.
 
 ```bash
 bun run package:mac:arm64 -- --publish never   # dist/wisa-studio-<ver>-arm64.dmg

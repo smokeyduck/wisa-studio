@@ -239,7 +239,7 @@ export function MemoryWindow() {
 	const pendingSkills = usePendingSkillReviews();
 	const cwd = useUiStore(state => state.memoryCwd);
 	const setCwd = (memoryCwd: string | null) => useUiStore.setState({ memoryCwd });
-	const [eraseOpen, setEraseOpen] = useState(false);
+	const [eraseCwd, setEraseCwd] = useState<string | null>(null);
 	const [erasing, setErasing] = useState(false);
 	const [updating, setUpdating] = useState(false);
 
@@ -303,11 +303,12 @@ export function MemoryWindow() {
 	const erase = async () => {
 		setErasing(true);
 		try {
+			if (cwd !== eraseCwd) return;
 			const result = await project.edit({ kind: "erase" });
 			if (result?.ok) toast({ variant: "success", message: t("memory.toast.erased") });
 		} finally {
 			setErasing(false);
-			setEraseOpen(false);
+			setEraseCwd(null);
 		}
 	};
 
@@ -350,12 +351,19 @@ export function MemoryWindow() {
 				</div>
 			);
 		}
-		if (!local) return <OtherBackend backend={overview.backend} onSwitch={() => void project.setEnabled(true)} />;
-		if (!overview.enabled) return <MemoryIntro overview={overview} onEnable={() => project.setEnabled(true)} />;
-		if (tab === "sources") return <SourcesView onOpenSession={close} overview={overview} project={project} />;
+		const operationalNotice = !local ? (
+			<OtherBackend backend={overview.backend} onSwitch={() => void project.setEnabled(true)} />
+		) : !overview.enabled ? (
+			<MemoryIntro overview={overview} onEnable={() => project.setEnabled(true)} />
+		) : null;
+		if (tab === "sources") {
+			return operationalNotice ?? <SourcesView onOpenSession={close} overview={overview} project={project} />;
+		}
 		return (
 			<KnowledgeView
+				key={cwd}
 				onUpdate={() => void runUpdate()}
+				operationalNotice={operationalNotice}
 				overview={overview}
 				project={project}
 				updating={updating || running}
@@ -408,7 +416,7 @@ export function MemoryWindow() {
 					)}
 					{tab !== "skills" &&
 						(cwd !== null ? (
-							<ProjectActions onErase={() => setEraseOpen(true)} project={project} />
+							<ProjectActions onErase={() => setEraseCwd(cwd)} project={project} />
 						) : (
 							<Button
 								aria-label={t("memory.menu.settings")}
@@ -428,11 +436,13 @@ export function MemoryWindow() {
 				busy={erasing}
 				confirmLabel={t("memory.erase.confirm")}
 				message={t("memory.erase.message")}
-				onCancel={() => setEraseOpen(false)}
+				onCancel={() => setEraseCwd(null)}
 				onConfirm={() => void erase()}
-				open={eraseOpen}
+				open={eraseCwd !== null && eraseCwd === cwd}
 				title={t("memory.erase.title")}
-				warning={t("memory.erase.warning")}
+				warning={
+					overview?.knowledge.source === "obsidian" ? t("memory.knowledge.eraseLocal") : t("memory.erase.warning")
+				}
 			/>
 		</Modal>
 	);

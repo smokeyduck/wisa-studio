@@ -190,6 +190,7 @@ jobs:
         # The monorepo's bun install hoists deps to the workspace root, so the
         # cli.js lives two levels up, not in packages/gui/node_modules.
         run: |
+          bun run build:browser-use
           bun run build
           bun ../../node_modules/electron-builder/cli.js \
             --config electron-builder.win.yml --win --x64 --publish never
@@ -208,7 +209,7 @@ jobs:
 
       - name: Verify unpacked, installed NSIS, and portable GUI settings persistence
         working-directory: oh-my-pi/packages/gui
-        timeout-minutes: 16
+        timeout-minutes: 26
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -244,12 +245,15 @@ jobs:
           if ($installer.ExitCode -ne 0) { throw 'NSIS installation failed' }
           $installedExe = Join-Path $installDir $executables[0].Name
           # Check the installed payload against the exact candidate, not a previous installation.
-          foreach ($relative in @($executables[0].Name, 'resources\app.asar', 'resources\omp.exe', 'locales\en-US.pak')) {
+          $payload = Get-Content 'dist\win-unpacked\resources\browser-use\version.json' -Raw | ConvertFrom-Json
+          foreach ($relative in @($executables[0].Name, 'resources\app.asar', 'resources\omp.exe', 'locales\en-US.pak', 'resources\browser-use-bridge.py', 'resources\studio-agent.yml', 'resources\browser-use\version.json', "resources\browser-use\$($payload.executable -replace '/', '\')")) {
             $installed = Join-Path $installDir $relative
             $unpacked = Join-Path 'dist\win-unpacked' $relative
             if (-not (Test-Path $installed -PathType Leaf)) { throw 'NSIS payload is incomplete' }
             if ((Get-FileHash $installed).Hash -ne (Get-FileHash $unpacked).Hash) { throw 'NSIS payload differs from candidate' }
           }
+          node scripts/build-browser-use.cjs --verify (Join-Path $installDir 'resources\browser-use')
+          if ($LASTEXITCODE -ne 0) { throw 'Installed Browser Use payload proof failed' }
           # WScript.Shell can expose the ANSI target of a Unicode shortcut.
           $shell = New-Object -ComObject Shell.Application
           foreach ($folder in @('Desktop', 'Programs')) {
@@ -261,6 +265,10 @@ jobs:
           }
           node scripts/smoke-packaged-gui.mjs $installedExe
           if ($LASTEXITCODE -ne 0) { throw 'Installed NSIS GUI settings proof failed' }
+          $env:OMP_GUI_TEST_APP = $installedExe
+          node ../../node_modules/@playwright/test/cli.js test e2e/browser-use.e2e.ts
+          if ($LASTEXITCODE -ne 0) { throw 'Installed Browser Use call through OMP Core failed' }
+          Remove-Item Env:OMP_GUI_TEST_APP
           # Execute the shipped wrapper: NSIS forwards Playwright's launch flags to its extracted GUI.
           node scripts/smoke-packaged-gui.mjs $portables[0].FullName
           if ($LASTEXITCODE -ne 0) { throw 'Portable wrapper GUI settings proof failed' }

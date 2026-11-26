@@ -1,22 +1,6 @@
 /**
- * Piper: a neural (VITS) voice, run locally.
- *
- * The platform engines are a mixed bag. macOS `say` and Windows SAPI ship
- * neural voices and sound natural; Linux usually has only `espeak-ng`, a
- * formant synthesizer — it pronounces Vietnamese correctly and sounds like a
- * machine. Piper is the offline neural engine that fixes that: a 25 MB binary
- * and a 63 MB voice, both pinned and checksum-verified here, run at roughly
- * 8× real time (a six-second sentence synthesizes in 0.8 s).
- *
- * Only Vietnamese is wired up: `detectSpeechLanguage` sends English to the
- * sidecar's own Phonon model, so `vi` is the one language with no neural
- * engine behind it. Adding a language means one more {@link PIPER_VOICES}
- * entry; nothing else changes.
- *
- * Everything is fetched into the user-data directory on first use and reused
- * afterwards. A failed download is remembered (three attempts, like the
- * dictation warm-up) so an offline machine does not retry 90 MB on every
- * launch — the caller falls back to the platform engine instead.
+ * Offline Vietnamese neural voice. Piper and the pinned model artifacts are downloaded and
+ * checksum-verified before use. Reply text goes to the local process through stdin.
  */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -82,13 +66,12 @@ interface PiperVoice {
 
 /**
  * vais1000 (medium, 22.05 kHz) — a Vietnamese corpus read by one speaker,
- * CC-BY 4.0 (see NOTICE). `huayan`/`irina`/`tsync2` exist for the other
- * shipped locales but stay unused while only Vietnamese needs a neural voice.
+ * CC BY 4.0 (see NOTICE). The published VAIS-1000 corpus documents a Northern accent.
  */
 const PIPER_VOICES: Partial<Record<string, PiperVoice>> = {
 	vi: {
 		model: "vi_VN-vais1000-medium",
-		url: "https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/vais1000/medium/vi_VN-vais1000-medium",
+		url: "https://huggingface.co/rhasspy/piper-voices/resolve/217ddc79818708b078d0d14a8fae9608b9d77141/vi/vi_VN/vais1000/medium/vi_VN-vais1000-medium",
 		onnxSha256: "ec7c89e2c85f4d1edc24b6120c18aaf1bda614f06b511567eb9c7c0de15e2dab",
 		configSha256: "fafb9da1354ed4b77c31af228ed41fb41cd825c14cffa105454b25e6ae751ee0",
 	},
@@ -119,7 +102,7 @@ function voiceDir(voice: PiperVoice): string {
 }
 
 function attemptsPath(): string {
-	return path.join(rootDir(), "attempts");
+	return path.join(rootDir(), "vais1000-attempts");
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -158,9 +141,9 @@ async function extract(archive: string, dir: string, asset: string): Promise<voi
 				"-NoProfile",
 				"-NonInteractive",
 				"-Command",
-				`Expand-Archive -LiteralPath '${archive}' -DestinationPath '${dir}' -Force`,
+				"$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath $env:WISA_PIPER_ARCHIVE -DestinationPath $env:WISA_PIPER_BUILD -Force",
 			],
-			options,
+			{ ...options, env: { ...process.env, WISA_PIPER_ARCHIVE: archive, WISA_PIPER_BUILD: dir } },
 		);
 		return;
 	}
@@ -231,7 +214,7 @@ export function preparePiper(language: string): Promise<PiperEngine | null> {
 		return { exec, model };
 	})();
 	preparing.set(language, task);
-	void task.finally(() => preparing.delete(language));
+	void task.then(() => preparing.delete(language), () => preparing.delete(language));
 	return task;
 }
 
@@ -259,39 +242,33 @@ async function recordFailure(): Promise<void> {
 }
 
 /**
- * Speak `text` with Piper and return a WAV file. `null` means the engine is not
- * available for this platform or language (or the download gave up), so the
- * caller should use the platform voice instead.
+ * Render directly to a WAV file: Piper only sets stdout to binary mode for raw PCM on Windows.
  */
-export async function synthesizeWithPiper(text: string, language: string): Promise<Uint8Array | null> {
+export async function synthesizeWithPiper(
+	text: string,
+	language: string,
+	file: string,
+	signal?: AbortSignal,
+): Promise<boolean> {
 	const prepared = await preparePiper(language);
-	if (!prepared) return null;
+	signal?.throwIfAborted();
+	if (!prepared) return false;
 	try {
-		const wav = await runWithStdin(
+		const { promise, resolve, reject } = Promise.withResolvers<void>();
+		const child = execFile(
 			prepared.exec,
-			["--model", prepared.model, "--output_file", "-", "--quiet"],
-			text,
-			{ timeout: 120_000, maxBuffer: 32 * 1024 * 1024 },
+			["--model", prepared.model, "--output_file", file, "--quiet"],
+			{ timeout: 120_000, maxBuffer: 1024 * 1024, signal, windowsHide: true },
+			error => (error ? reject(error) : resolve()),
 		);
-		const bytes = new Uint8Array(wav);
-		return bytes.length > 44 ? bytes : null;
+		child.stdin?.on("error", () => undefined);
+		child.stdin?.end(text);
+		await promise;
+		return existsSync(file);
 	} catch (cause) {
+		signal?.throwIfAborted();
 		console.warn(`[piper] synthesis failed (${language}): ${String(cause)}`);
-		return null;
+		return false;
 	}
 }
 
-/** Run a command that reads the utterance from stdin (never from argv). */
-function runWithStdin(
-	file: string,
-	args: string[],
-	input: string,
-	options: { timeout: number; maxBuffer: number },
-): Promise<Buffer> {
-	return new Promise((resolve, reject) => {
-		const child = execFile(file, args, { ...options, encoding: "buffer" }, (error, stdout) =>
-			error ? reject(error) : resolve(stdout as Buffer),
-		);
-		child.stdin?.end(input);
-	});
-}

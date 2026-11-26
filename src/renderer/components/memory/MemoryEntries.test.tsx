@@ -4,12 +4,17 @@
  * second click.
  */
 import { parseHTML } from "linkedom";
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RpcMemoryEditOutcome, RpcMemoryListEntry } from "../../../shared/rpc-types";
+import type { RpcMemoryEditOutcome, RpcMemoryListEntry, RpcMemoryOverview } from "../../../shared/rpc-types";
 import { I18nProvider } from "../../lib/i18n";
+import { pickWorkspaceDirectory } from "../../lib/workspace-dirs";
+import { KnowledgeView } from "./KnowledgeView";
 import { MemoryEntryRow, useArmed } from "./MemoryEntries";
+import type { MemoryProject } from "./use-memory-project";
+
+vi.mock("../../lib/workspace-dirs", () => ({ pickWorkspaceDirectory: vi.fn() }));
 
 const { document, window, Event, HTMLElement, Node } = parseHTML("<html><body></body></html>");
 const globals = globalThis as Record<string, unknown>;
@@ -83,16 +88,12 @@ function Row({
 	);
 }
 
-async function mount(props: Parameters<typeof Row>[0]): Promise<void> {
+async function mount(component: ReactNode): Promise<void> {
 	container = document.createElement("div") as unknown as HTMLElement;
 	document.body.appendChild(container);
 	root = createRoot(container);
 	await act(async () => {
-		root.render(
-			<I18nProvider>
-				<Row {...props} />
-			</I18nProvider>,
-		);
+		root.render(<I18nProvider>{component}</I18nProvider>);
 	});
 	await flush();
 }
@@ -108,7 +109,7 @@ const enter = (composing = false) => ({ key: "Enter", shiftKey: false, nativeEve
 describe("MemoryEntryRow", () => {
 	it("saves on Enter but not while composing, and keeps a stale edit open with the reason", async () => {
 		const onSave = vi.fn(async (): Promise<RpcMemoryEditOutcome> => ({ ok: false, reason: "not_found" }));
-		await mount({ onSave, onDelete: vi.fn(async () => null) });
+		await mount(<Row onDelete={vi.fn(async () => null)} onSave={onSave} />);
 
 		await call(button("Edit"), "onClick");
 		const editor = container.querySelector("textarea");
@@ -128,11 +129,101 @@ describe("MemoryEntryRow", () => {
 
 	it("deletes only on the second click", async () => {
 		const onDelete = vi.fn(async (): Promise<RpcMemoryEditOutcome> => ({ ok: true }));
-		await mount({ onSave: vi.fn(async () => null), onDelete });
+		await mount(<Row onDelete={onDelete} onSave={vi.fn(async () => null)} />);
 
 		await call(button("Delete"), "onClick");
 		expect(onDelete).not.toHaveBeenCalled();
 		await call(button("Delete?"), "onClick");
 		expect(onDelete).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("Project knowledge sources", () => {
+	function render(knowledge: RpcMemoryOverview["knowledge"]) {
+		const overview: RpcMemoryOverview = {
+			cwd: "/project",
+			root: "/memory",
+			backend: "local",
+			enabled: true,
+			notes: [entry],
+			lessons: [{ line: "automatic", text: "Automatic lesson" }],
+			knowledge,
+			summary: "",
+			full: "",
+			playbooks: [],
+			injection: {
+				tokens: { notes: 0, summary: 0, learned: 0, budget: 5000 },
+				notesIncluded: 1,
+				lessonsIncluded: 1,
+				summaryTruncated: false,
+			},
+			sources: [],
+			consolidation: { pending: false },
+			limits: { idleHours: 12, maxAgeDays: 30, perUpdate: 64 },
+			models: {},
+		};
+		const edit = vi.fn<MemoryProject["edit"]>().mockResolvedValue({ ok: true });
+		const reload = vi.fn<MemoryProject["reload"]>().mockResolvedValue(undefined);
+		const project = {
+			overview,
+			edit,
+			reload,
+			connected: true,
+			loading: false,
+			error: null,
+			update: vi.fn(),
+			setEnabled: vi.fn(),
+		};
+		return {
+			edit,
+			reload,
+			mounted: mount(<KnowledgeView onUpdate={vi.fn()} overview={overview} project={project} updating={false} />),
+		};
+	}
+
+	it("binds the vault only after explicitly choosing an existing directory", async () => {
+		vi.mocked(pickWorkspaceDirectory).mockResolvedValueOnce("/vault");
+		const { edit, mounted } = render({ source: "local", vaultEnabled: true });
+		await mounted;
+		expect(edit).not.toHaveBeenCalled();
+		await call(button("Choose Obsidian Vault…"), "onClick");
+		expect(edit).toHaveBeenCalledWith({ kind: "knowledge-source", vault: "/vault", previous: null });
+	});
+
+	it("keeps automatic lessons separate and writes approved entries only to the selected vault", async () => {
+		const { edit, mounted } = render({
+			source: "obsidian",
+			vault: "/vault",
+			status: "ready",
+			notes: [],
+			lessons: [{ line: "revision", text: "Approved lesson" }],
+		});
+		await mounted;
+		expect(container.textContent).toContain("Automatic lesson");
+		expect(container.textContent).toContain("Approved lesson");
+		const editor = container.querySelector('textarea[aria-label="Add approved lesson"]');
+		await call(editor, "onChange", { target: { value: "New approved lesson" } });
+		await call(button("Add approved lesson"), "onClick");
+		expect(edit).toHaveBeenCalledExactlyOnceWith({
+			kind: "knowledge-entry",
+			action: "add",
+			entryKind: "lesson",
+			vault: "/vault",
+			text: "New approved lesson",
+		});
+	});
+
+	it.each(["disabled", "unavailable"] as const)("does not offer CRUD or local fallback when the vault is %s", async status => {
+		const { edit, reload, mounted } = render({ source: "obsidian", vault: "/vault", status });
+		await mounted;
+		expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+			status === "disabled" ? "Obsidian Vault access is off" : "project Markdown folder is unavailable",
+		);
+		expect(container.querySelector("textarea")).toBeNull();
+		expect(edit).not.toHaveBeenCalled();
+		await call(button("Refresh source"), "onClick");
+		expect(reload).toHaveBeenCalledTimes(1);
+		await call(button("Use local Memory"), "onClick");
+		expect(edit).toHaveBeenCalledExactlyOnceWith({ kind: "knowledge-source", vault: null, previous: "/vault" });
 	});
 });

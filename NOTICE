@@ -43,10 +43,20 @@ What WISA adds
 
 Bundled and downloaded components
 ---------------------------------
-Piper (https://github.com/rhasspy/piper, MIT) and the Vietnamese voice model
-vi_VN-vais1000-medium (CC BY 4.0, from rhasspy/piper-voices) are downloaded on
-first use, not shipped in the installer. Neither is committed to this
-repository; both are verified against a pinned SHA-256 before use.
+Piper (https://github.com/rhasspy/piper, MIT) and its Vietnamese voice model
+vi_VN-vais1000-medium are downloaded on first use, not shipped in the
+installer. The exact upstream revision and SHA-256 checksums are pinned in
+src/main/piper.ts. Its model card documents fine-tuning from Lessac and uses
+Truong Do's Northern Vietnamese VAIS-1000 corpus, CC BY 4.0:
+https://doi.org/10.21227/H2B887
+https://creativecommons.org/licenses/by/4.0/
+https://huggingface.co/rhasspy/piper-voices/blob/217ddc79818708b078d0d14a8fae9608b9d77141/vi/vi_VN/vais1000/medium/MODEL_CARD
+
+Browser Use (https://github.com/browser-use/browser-use, MIT) ships as the
+unmodified upstream Python distribution. The package's license is in its
+wheel metadata. The local browser is Chromium from the official snapshots
+archive, not Google Chrome. Its BSD license is at `browser-use/chromium/LICENSE`
+in the app resources; Chromium lists third-party notices at `chrome://credits`.
 
 Manufacturer icons
 ------------------

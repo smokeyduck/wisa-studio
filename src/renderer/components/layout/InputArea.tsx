@@ -2,6 +2,7 @@ import {
 	ArrowUp,
 	Check,
 	ChevronDown,
+	ClipboardList,
 	History,
 	ListEnd,
 	Loader2,
@@ -11,6 +12,7 @@ import {
 	SlidersHorizontal,
 	Square,
 	SquarePen,
+	VolumeX,
 	X,
 	Zap,
 } from "lucide-react";
@@ -46,6 +48,7 @@ import { parseQueueShorthand, splitQueuedMessages } from "../../lib/queue-input"
 import { insertQuote } from "../../lib/quote-selection";
 import { supportsFastMode, supportsPriorityMode, supportsUltrafastMode } from "../../lib/service-tier";
 import { useTabRpc } from "../../lib/tab-rpc";
+import { stopTabSpeech, useSpeechPlaying } from "../../lib/voice";
 import { composerFileKey, useComposerStore } from "../../stores/composer";
 import { useInputHistoryStore } from "../../stores/input-history";
 import { type ModelSpeed, useModelStore } from "../../stores/model";
@@ -93,6 +96,7 @@ export function InputArea() {
 	const activeTabId = useTabsStore(state => state.activeTabId);
 	const runtimeTabId = contextTabId ?? activeTabId;
 	const routeReady = runtimeTabId !== null;
+	const speechPlaying = useSpeechPlaying(runtimeTabId);
 	/** Chat tabs are tool-free: approval/mode chrome is meaningless there. */
 	const tabKind = useActiveTabKind();
 	const isChat = tabKind === "chat";
@@ -666,7 +670,6 @@ export function InputArea() {
 						toast({ variant: "error", title: t("palette.failed"), message: String(cause) }),
 					);
 				}
-				useUiStore.getState().setPanelTab("plan");
 			} else {
 				void runSessionCommand(rpc.cycleThinkingLevel(), t("palette.failed"), data => {
 					if (!data || typeof data !== "object" || !("thinkingLevel" in data)) return;
@@ -1015,6 +1018,19 @@ export function InputArea() {
 								{t("collab.readOnlyInput")}
 							</div>
 						)}
+						{!isChat && planModeEnabled && (
+							<div className="px-3 pt-1">
+								<span
+									data-composer-plan-mode
+									role="status"
+									title={t("titlebar.planMode")}
+									className="inline-flex items-center gap-1.5 rounded-full bg-(--omp-accent-dim) px-2 py-0.5 text-omp-sm font-medium text-(--omp-text)"
+								>
+									<ClipboardList aria-hidden size={13} />
+									{t("input.plan.label")}
+								</span>
+							</div>
+						)}
 
 						<div
 							ref={composerToolbarRef}
@@ -1220,6 +1236,18 @@ export function InputArea() {
 											},
 										]}
 									/>
+								)}
+
+								{runtimeTabId && speechPlaying && (
+									<button
+										type="button"
+										onClick={() => stopTabSpeech(runtimeTabId)}
+										aria-label={t("voice.speak.stop")}
+										title={t("voice.speak.stop")}
+										className="omp-pressable flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-(--omp-muted) hover:bg-(--omp-selected-bg) hover:text-(--omp-text)"
+									>
+										<VolumeX size={16} />
+									</button>
 								)}
 
 								{((sttEnabled && !compactRunSettings) || dictating) && (

@@ -806,12 +806,11 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	},
 	"speech.enabled": {
 		label: "Đọc to phản hồi",
-		description: "Đọc to phản hồi của trợ lý qua loa ngay khi phản hồi đến",
+		description: "Đọc to phản hồi mới ngay trên thiết bị",
 	},
 	"speech.mode": {
 		label: "Chế độ đọc to",
-		description:
-			"Nội dung đọc to: all = tin nhắn của trợ lý và Reasoning; assistant = chỉ tin nhắn; yield = chỉ tin nhắn cuối cùng ở cuối lượt",
+		description: "Tất cả: tin nhắn trợ lý và kết quả công cụ. Trợ lý: chỉ tin nhắn trợ lý. Cuối lượt: chỉ tin nhắn trợ lý cuối cùng.",
 	},
 	"speech.enhanced": {
 		label: "Cải thiện văn bản để đọc to",
@@ -819,12 +818,12 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 			"Chuyển phản hồi của trợ lý thành lời nói tự nhiên, khẩu ngữ bằng mô hình tiny/smol trước khi tổng hợp giọng nói (mô tả mã, xóa liên kết và Markdown). Khi thất bại, dùng bước làm sạch cơ học.",
 	},
 	"speech.voice": {
-		label: "Giọng đọc to",
-		description: "Giọng Kokoro để đọc to phản hồi của trợ lý",
+		label: "Giọng đọc tiếng Anh",
+		description: "Giọng Phonon cục bộ, chỉ dùng cho tiếng Anh",
 	},
 	"speech.speed": {
-		label: "Tốc độ đọc to",
-		description: "Tốc độ đọc to phản hồi của trợ lý. 1 = bình thường; giới hạn trong khoảng 0.5–2.5",
+		label: "Tốc độ đọc tiếng Anh",
+		description: "Tốc độ phát giọng Phonon: 1 = bình thường (0,8–1,3).",
 	},
 	"providers.fetch": {
 		label: "Nhà cung cấp Fetch",
@@ -1569,7 +1568,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	"find.enabled": {
 		label: "Tìm kiếm (grep ngữ nghĩa)",
 		description:
-			"Bật công cụ find: tìm kiếm tệp và phạm vi dòng bằng ngôn ngữ tự nhiên, do mô hình đóng vai judge đánh giá. Chế độ Auto chỉ bật công cụ này khi mô hình gốc TypeSafe jev được chọn cho vai judge",
+			"Tìm tệp và phạm vi dòng theo ý nghĩa, thay vì chỉ khớp chữ như grep. Chế độ Tự động bật find khi ứng viên khả dụng đầu tiên của vai judge dùng bộ đánh giá native, chẳng hạn TypeSafe Jev.",
 	},
 	"debug.enabled": {
 		label: "Gỡ lỗi",
@@ -2332,7 +2331,7 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 	},
 	"stt.language": {
 		label: "Ngôn ngữ nhận dạng giọng nói",
-		description: "Để trống để model tự nhận diện ngôn ngữ bạn nói. Model chỉ hỗ trợ tiếng Anh sẽ bỏ qua mục này.",
+		description: "Dùng vi cho tiếng Việt hoặc để trống để mô hình tự nhận diện. Mô hình chỉ hỗ trợ tiếng Anh bỏ qua thiết lập này.",
 	},
 	"stt.submitTrigger": {
 		label: "Điều kiện gửi giọng nói đã nhận dạng",
@@ -2476,6 +2475,11 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		label: "Codex Daybreak Blue",
 		description:
 			"Tự động yêu cầu chương trình truy cập Daybreak Blue trên các tài khoản ChatGPT phù hợp. OpenAI có thể sử dụng nội dung các phiên Daybreak Blue để cải thiện mô hình. Không áp dụng cho các mô hình Daybreak Blue riêng lẻ (gpt-daybreak-blue-*), vốn vẫn có thể hoạt động như các phiên Daybreak.",
+	},
+	"task.judgeRouting": {
+		label: "Chọn tuyến mô hình bằng Judge",
+		description:
+			"Khi bật, một đoạn ngắn trong mô tả công việc của tác nhân con chưa ghim mô hình sẽ được gửi đến dịch vụ Judge gốc. Không gửi lịch sử hội thoại hoặc ngữ cảnh chung. Judge chỉ được chọn tuyến mô hình chat đã được cấu hình cho phép. Luôn ưu tiên lựa chọn đã ghim; nếu không dùng được Judge hoặc Judge không chọn, Core sẽ định tuyến như bình thường. Dự án không thể bật tùy chọn thay bạn.",
 	},
 	"task.perCallModel": {
 		label: "Mô hình cho từng lần gọi",

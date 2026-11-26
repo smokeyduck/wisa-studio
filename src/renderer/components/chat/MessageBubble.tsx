@@ -40,7 +40,7 @@ import { ZoomableImage } from "../common/ImageViewer";
 import { TechnicalDetails } from "../common/TechnicalDetails";
 import { type RunningIndicator, ToolCard } from "../tools/ToolCard";
 import { CustomMessageCard, isCustomMessageCardType } from "./CustomMessageCard";
-import { matchTodoReminder } from "./chat-stream-utils";
+import { matchTodoReminder, transcriptMessageContent } from "./chat-stream-utils";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { useReadOnlyTranscript } from "./transcript-mode";
 import { UsageRow } from "./UsageRow";
@@ -527,11 +527,8 @@ export const MessageBubble = memo(function MessageBubble({
 	}
 	if (message.role === "toolResult") return null;
 
-	const content: MessageContent[] = Array.isArray(message.content)
-		? message.content
-		: typeof message.content === "string"
-			? [{ type: "text", text: message.content }]
-			: [];
+	const content = transcriptMessageContent(message);
+	if (message.role === "developer" && content.length === 0) return null;
 	const reminder = matchTodoReminder(message);
 	if (reminder) {
 		return (

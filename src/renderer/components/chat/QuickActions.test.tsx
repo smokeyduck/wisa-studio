@@ -260,6 +260,7 @@ describe("older transcript history", () => {
 			);
 			expect(commandForTab).not.toHaveBeenCalled();
 			await click("chat.olderHistory.open");
+			expect(action("chat.olderHistory.close")?.getAttribute("aria-expanded")).toBe("true");
 			await click("chat.olderHistory.more");
 			await click("chat.olderHistory.more");
 			expect(action("chat.olderHistory.more")?.getAttribute("aria-disabled")).toBe("true");
@@ -270,12 +271,19 @@ describe("older transcript history", () => {
 				),
 			).toEqual([0, 1, 2]);
 			expect(messages.getState().messages).toBe(live);
+			await click("chat.olderHistory.close");
+			expect(action("chat.olderHistory.open")?.getAttribute("aria-expanded")).toBe("false");
+			expect(action("chat.olderHistory.more")).toBeUndefined();
+			expect(document.body.textContent).not.toContain(translate("chat.olderHistory.loaded", { count: 3 }));
+			await click("chat.olderHistory.open");
+			expect(commandForTab.mock.lastCall?.[1]).toMatchObject({ archive: { depth: 0 } });
+			expect(document.body.textContent).toContain(translate("chat.olderHistory.loaded", { count: 1 }));
 
 			await act(async () => {
 				messages.setState({ messages: [{ ...live[0], entryId: "second-boundary", method: "soft" }, live[1]] });
 			});
 			await click("chat.olderHistory.open");
-			expect(commandForTab).toHaveBeenCalledTimes(4);
+			expect(commandForTab).toHaveBeenCalledTimes(5);
 			await act(async () => {
 				session.setState({ switchPending: { fromId: "session-with-archive", toId: "different" } });
 				late.resolve({

@@ -23,7 +23,6 @@ import { useRuntimeTabId } from "../../stores/session-runtime-context";
 import { notePendingRestart, usePendingRestarts } from "../../stores/settings-restart";
 import { toast } from "../../stores/toast";
 import { Button, Input, TextArea } from "../common";
-import { WebLink } from "../common/Links";
 import { ArrayChipEditor } from "./editors/ArrayChipEditor";
 import { type EnumerableOption, EnumerableSelect } from "./editors/EnumerableSelect";
 import { ProviderLimitsEditor } from "./editors/ProviderLimitsEditor";
@@ -187,11 +186,7 @@ function SchemaSettingRow({
 	const description =
 		entry.path === "tui.renderMermaid"
 			? t("settings.gui.allowMermaidDesc")
-			: entry.path === "browser.relay"
-				? t("settings.browser.relayDesc")
-				: entry.path === "browser.relayUrl"
-					? t("settings.browser.relayUrlDesc")
-					: (localizedEntry?.description ?? entry.description);
+			: (localizedEntry?.description ?? entry.description);
 	const baseDraft = draftFor(entry, value);
 	const dirty = draft !== null && draft !== baseDraft;
 
@@ -700,14 +695,6 @@ function SchemaSettingRow({
 	return (
 		<div>
 			{renderControl()}
-			{entry.path === "browser.relayUrl" && (
-				<WebLink
-					className="mx-2 mb-2 inline-block text-omp-xs text-(--omp-link) underline-offset-2 hover:underline"
-					url="https://github.com/smokeyduck/wisa-studio/blob/main/README.en.md#use-your-own-chrome-session-optional"
-				>
-					{t("settings.browser.relaySetup")}
-				</WebLink>
-			)}
 			{entry.default === undefined && value !== undefined && (
 				<div className="pb-2">
 					<Button disabled={saving} onClick={() => void commit(undefined)} size="sm" variant="ghost">

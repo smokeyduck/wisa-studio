@@ -68,25 +68,39 @@ Dữ liệu của WISA STUDIO nằm riêng ở `~/.wisa-studio/agent` (không ph
 - **Tổng quan phiên:** ngữ cảnh theo nhóm, chi phí, cache, tốc độ, subagent và MCP server đang chạy.
 - **MCP, Skills, plugin, hook:** quản lý trong Cài đặt, không cần sửa JSON bằng tay.
 - **SSH host, theme tuỳ chỉnh, command palette, chế độ giọng nói, cộng tác qua relay.**
-- **Chế độ Làm việc:** mặc định cho phép đọc, tìm kiếm, theo dõi tác vụ và điều khiển màn hình nền mà không bật shell hay trình chạy mã đa dụng. Công cụ `computer` vẫn có trong hồ sơ Làm việc đã tùy chỉnh. Cài đặt **Máy tính** dùng chung và yêu cầu phê duyệt thao tác vẫn áp dụng.
+- **Chế độ Làm việc:** mặc định cho phép đọc, tìm kiếm, theo dõi tác vụ và điều khiển màn hình nền mà không bật shell hay trình chạy mã đa dụng. Cài đặt **Máy tính** dùng chung và yêu cầu phê duyệt thao tác vẫn áp dụng.
 
 Giới hạn cần biết: các tab không phải ranh giới bảo mật của hệ điều hành; chia đôi là hai khung, không phải lưới vô hạn; phê duyệt và quét bảo mật không thay cho sandbox. Request mô hình vẫn đi tới nhà cung cấp bạn cấu hình.
 
-### Duyệt web trong WISA STUDIO
+### Chia khung cho hai phiên Agent (chưa phát hành)
 
-Nút hình quả địa cầu trên thanh công cụ mở **Trình duyệt WISA**, một cửa sổ Chromium trong Studio với hồ sơ tách biệt khỏi Chrome hoặc trình duyệt mặc định. Trình duyệt khôi phục tab và giữ cookie lâu dài cùng dữ liệu trang qua các lần khởi động. Địa chỉ khôi phục không có chuỗi truy vấn hoặc phần neo; công việc đang chạy và dữ liệu biểu mẫu chưa lưu không được giữ khi đóng cửa sổ.
+Mở hai tab Agent trong cùng workspace, bấm chuột phải lên một tab rồi chọn chia sang phải hoặc chia xuống dưới. Với cửa sổ hẹp, Studio xếp hai khung theo chiều dọc mà không đổi bố cục đã lưu. Bạn có thể yêu cầu một phiên xem trạng thái hoặc gửi lời nhắn bàn giao qua `workspace_peer`. Lời nhắn nằm trong bộ nhớ và chỉ được đọc khi phiên nhận gọi `receive`; nó không bắt đầu hay ngắt lượt đang chạy. Bỏ chia khung, chuyển phiên hoặc đóng tab sẽ xóa lời nhắn chưa đọc.
 
-Trình duyệt WISA chỉ hiện khi đã kết nối với tab agent mở nó; không có nút chia sẻ hay bước xác nhận. Trong chế độ Code có bật `eval` và Browser, agent có thể mở tab mới và thao tác với mọi tab WISA Browser, kể cả trang đã đăng nhập. Đóng cửa sổ để ngắt kết nối. Phạm vi này không bao gồm hồ sơ Chrome cá nhân.
+Thanh bên phải phủ lên khung đang chọn. **Shift+Tab** đổi chế độ Kế hoạch tại ô soạn mà không mở thanh bên. Nút **Terminal** trên thanh bên mở terminal của hệ điều hành tại workspace của tab đang chọn. Lệnh tương tác do agent chạy vẫn dùng bảng terminal của Studio.
 
-Trên trang có ngữ cảnh bảo mật và đăng ký công cụ WebMCP, agent có thể dùng `webmcpList()` để tìm công cụ và `webmcpInvoke()` để gọi công cụ đã chọn. Mô tả và kết quả đến từ trang, không phải dữ liệu đáng tin cậy. Với trang không có WebMCP, agent vẫn có thể thao tác bằng các công cụ trình duyệt thông thường.
+### Công cụ trong Work và Coding (chưa phát hành)
 
-### Dùng phiên Chrome của bạn (không bắt buộc)
+Coding dùng cấu hình công cụ và `edit.mode` / `edit.modelVariants` của Core. Studio không còn đọc tùy chọn Hồ sơ công cụ cũ của GUI. Work dùng bộ công cụ gọn hơn và bật `computer` mặc định; `computer.enabled: false`, yêu cầu phê duyệt và `--no-tools` vẫn có hiệu lực.
 
-Để cho agent dùng một thẻ đã đăng nhập, bạn có thể chủ động bật [relay trình duyệt omp](https://github.com/can1357/oh-my-pi/tree/main/packages/browser-relay). Nếu chưa có relay, chạy `omp browser-relay install --no-chrome` bằng omp CLI tương thích. Trong hồ sơ Chrome muốn dùng, mở `chrome://extensions`, bật **Chế độ dành cho nhà phát triển** rồi chọn thư mục đã in ra bằng **Tải tiện ích đã giải nén**. Relay có thể thao tác với quyền của bạn trong hồ sơ đó; nên dùng hồ sơ công việc riêng và chỉ phê duyệt những tác vụ bạn muốn chạy tại đó. Không mở relay ra ngoài máy của bạn.
+`task.judgeRouting` tắt mặc định. Khi bật, Judge native đã cấu hình có thể nhận một đoạn trích giới hạn của từng nhiệm vụ subagent chưa ghim, không nhận bản ghi hội thoại cha. Judge chỉ được chọn tuyến đã cấp quyền. Lựa chọn ghim và cách phân giải mặc định của Core vẫn có hiệu lực.
 
-Trong WISA STUDIO, vào **Cài đặt → Công cụ** và nhập địa chỉ `http://127.0.0.1:<cổng>` của relay vào **URL relay trình duyệt**. Với bản cài omp thông thường, tiến trình relay đang chạy tạo tệp tên `<pid>-<cổng>` trong `~/.omp/browser-relay/endpoints/`. WISA không đọc hồ sơ riêng đó; bạn tự nhập URL và cập nhật nếu cổng thay đổi. Để **Relay trình duyệt** ở trạng thái tắt nếu chỉ muốn bật theo từng tác vụ: yêu cầu agent dùng `app: "relay"` cho công việc đã phê duyệt. Chỉ bật **Relay trình duyệt** nếu muốn dùng làm mặc định cho các phiên dùng cấu hình này.
+### Kiến thức dự án trong Obsidian (chưa phát hành)
 
-Khi cài tiện ích, các tiến trình có thể kết nối cổng relay cục bộ sẽ có quyền truy cập trình duyệt; tiện ích không hỏi lại cho từng thao tác. Bật relay làm mặc định cũng có thể cấp quyền truy cập hồ sơ Chrome cho các lượt chạy agent ở chế độ nền. Hãy để mặc định tắt nếu chỉ dùng thỉnh thoảng, và tắt tiện ích trong Chrome khi muốn thu hồi quyền truy cập.
+Trong Memory → Kiến thức dự án, bật `vault.enabled` rồi chọn một Obsidian Vault có sẵn. Ghi chú và bài học đã duyệt của dự án được lưu thành Markdown trong vault, không ghi thêm một bản vào Memory cục bộ. Nếu vault bị tắt hoặc không truy cập được, Studio báo lỗi thay vì tự đổi nguồn. Memory tự động vẫn hoạt động riêng; chọn vault không sao chép hay xóa dữ liệu cũ.
+
+### Nhập chính tả và đọc to tiếng Việt (chưa phát hành)
+
+Studio mặc định dùng Whisper Small cục bộ với tiếng Việt nếu bạn chưa chọn mô hình hoặc ngôn ngữ. Chỉ dùng dịch vụ nhập chính tả đám mây khi bạn chọn rõ mô hình đám mây; lỗi cục bộ không làm bản ghi bị gửi lên dịch vụ.
+
+Vào Cài đặt → Nhà cung cấp → Dịch vụ, chọn **Giọng đọc tiếng Việt** rồi bấm **Nghe thử**. VAIS-1000 là giọng Bắc, có thể cần tải mô hình một lần; văn bản được tổng hợp tại máy. Tùy chọn giọng hệ thống dùng giọng tiếng Việt đã cài hoặc báo thiếu. Đọc to phát tin nhắn mới theo thứ tự, có thể dừng cho lượt đang chạy, và không đọc lại lịch sử đã tải.
+
+### Duyệt web bằng Browser Use (chưa phát hành)
+
+Nhập yêu cầu trong tab Agent, ví dụ: “Dùng `browser_use` mở https://example.com và cho tôi biết tiêu đề trang.” Agent gọi công cụ `browser_use` của OMP; không còn nút quả địa cầu hay cửa sổ Trình duyệt WISA tích hợp.
+
+Studio đi kèm gói Python chính thức [Browser Use](https://github.com/browser-use/browser-use) (bản 1.0.8 ban đầu) và Chromium cục bộ. Mỗi phiên duyệt dùng một hồ sơ tạm riêng. Browser Use không yêu cầu đăng nhập, không dùng trình duyệt đám mây và không đọc hồ sơ Chrome cá nhân. Studio không nhập hay xóa lịch sử, cookie hoặc dữ liệu trang của Trình duyệt WISA cũ.
+
+Studio kiểm tra bản ổn định mới nhất trên GitHub khi mở app và mỗi ngày app còn chạy. Nếu cài đặt và kiểm thử Chromium thành công, phiên Agent mở sau đó dùng bản mới; phiên đang duyệt tiếp tục dùng bản cũ. Không cần cài Python hay tải Chromium ở lần chạy đầu. Nếu mất mạng hoặc bản mới lỗi, Studio giữ nguyên bản đang hoạt động.
 
 ## Cài đặt
 
@@ -150,6 +164,8 @@ bun run build
 Ghi đè chỉ dành cho phát triển, chỉ với bản chưa đóng gói: `OMP_BUNDLED_OMP=<path>` chạy binary đó thay cho `resources/omp`, và `OMP_SIDECAR=source` chạy mã nguồn coding-agent của monorepo qua bun. Bản đóng gói bỏ qua cả hai. App không kiểm tra rằng bản ghi đè hiểu `PI_CONFIG_SOURCES` / `PI_PROJECT_CONFIG_DIR` hay profile cách ly; dùng chúng là trách nhiệm của bạn.
 
 ## Đóng gói và phát hành
+
+Chạy `bun run build:browser-use` trên đúng hệ điều hành và kiến trúc đích trước khi đóng gói hoặc thử công cụ duyệt web ở chế độ phát triển. Lệnh này chuẩn bị gói Python chính thức và bản Chromium mã nguồn mở đã ghim trong `resources/browser-use`.
 
 ```bash
 bun run package:mac:arm64 -- --publish never   # dist/wisa-studio-<ver>-arm64.dmg

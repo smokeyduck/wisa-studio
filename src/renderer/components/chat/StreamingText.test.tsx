@@ -85,7 +85,7 @@ describe("StreamingText presentation", () => {
 			streamingMessage: { role: "assistant", content: [], timestamp: "2026-08-22T00:00:00Z" },
 		});
 		useUiStore.setState({ transcriptDetail: "full" });
-		await mount("Answer stays selected", <StreamingRows expanded={false} onExpandedChange={() => {}} />);
+		await mount("Answer stays selected", <StreamingRows expanded onExpandedChange={() => {}} />);
 		const answer = container.querySelector(".omp-streaming-tail");
 		expect(container.querySelector(".omp-thinking-header")).toBeNull();
 
@@ -107,6 +107,35 @@ describe("StreamingText presentation", () => {
 		expect(container.querySelector(".omp-thinking-body strong")?.textContent).toBe("analysis");
 		expect(container.querySelector(".omp-thinking-header")).toBe(header);
 		expect(container.querySelector(".omp-transcript-content > .omp-streaming .omp-streaming-tail")).toBe(answer);
+	});
+
+	it("shows one disclosure for earlier work and live thinking, without hiding the answer", async () => {
+		useMessagesStore.setState({
+			streamingMessage: { role: "assistant", content: [], timestamp: 2 },
+			streamingThinking: "Current reasoning",
+		});
+		await mount(
+			"Live answer",
+			<StreamingRows
+				expanded={false}
+				onExpandedChange={() => {}}
+				process={{
+					kind: "process",
+					messages: [{ role: "assistant", content: "Earlier work", timestamp: 1 }],
+					stepCount: 3,
+					failedEvents: 1,
+					backgroundEvents: 2,
+					toolCallIds: [],
+					toolNames: [],
+				}}
+			/>,
+		);
+		const groups = container.querySelectorAll(".omp-execution-group-header");
+		expect(groups).toHaveLength(1);
+		expect(groups[0]?.textContent).toContain("1 failed - 4 steps");
+		expect(groups[0]?.getAttribute("aria-label")).toContain("Background events: 2");
+		expect(container.querySelector(".omp-thinking-header")).toBeNull();
+		expect(container.querySelector(".omp-streaming-tail")?.textContent).toContain("Live answer");
 	});
 
 	it("coalesces multiple incoming prefixes into one visible animation frame", async () => {

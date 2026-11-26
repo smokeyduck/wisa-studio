@@ -1,14 +1,12 @@
-/**
- * Knowledge tab: exactly what omp brings into every task for this project —
- * the person's notes, the summary omp rebuilt from past sessions, and the
- * lessons it captured — with the token budget they share.
- */
+/** Reviewed project knowledge and the separate operational Memory pipeline. */
 import { BookOpen, ChevronRight, Lightbulb, Pin, RefreshCw, Sparkles } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import type { RpcMemoryListEntry, RpcMemoryOverview } from "../../../shared/rpc-types";
+import { describeError } from "../../lib/errors";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
+import { pickWorkspaceDirectory } from "../../lib/workspace-dirs";
 import { toast } from "../../stores/toast";
 import { Button } from "../common";
 import { AddNote, MemoryEntryRow, useArmed } from "./MemoryEntries";
@@ -166,20 +164,145 @@ function Disclosure({ title, children }: { title: string; children: ReactNode })
 	);
 }
 
+function KnowledgeSource({ knowledge, project }: { knowledge: RpcMemoryOverview["knowledge"]; project: MemoryProject }) {
+	const t = useT();
+	const [busy, setBusy] = useState(false);
+	const vault = knowledge.source === "obsidian" ? knowledge.vault : null;
+	const canChoose = knowledge.source === "local" ? knowledge.vaultEnabled : knowledge.status !== "disabled";
+	const select = async (chooseVault: boolean) => {
+		setBusy(true);
+		try {
+			const selected = chooseVault ? await pickWorkspaceDirectory() : null;
+			if (selected === undefined) return;
+			const result = await project.edit({ kind: "knowledge-source", vault: selected, previous: vault });
+			if (result && !result.ok) toast({ variant: "warning", message: t(`memory.edit.${result.reason}`) });
+		} catch (error) {
+			toast({ variant: "error", title: t("memory.error.title"), message: describeError(error) });
+		} finally {
+			setBusy(false);
+		}
+	};
+	return (
+		<div className="omp-card flex flex-col gap-2 px-4 py-3">
+			<p className="text-omp-sm font-medium text-(--omp-text)">
+				{t(knowledge.source === "local" ? "memory.knowledge.sourceLocal" : "memory.knowledge.sourceObsidian")}
+			</p>
+			{vault && <p className="break-all text-omp-xs text-(--omp-muted)">{vault}</p>}
+			<p className="text-omp-sm text-(--omp-muted)">{t("memory.knowledge.sourceHint")}</p>
+			{!canChoose && (
+				<p className="text-omp-sm text-(--omp-warning)" role={vault ? "alert" : undefined}>
+					{t("memory.knowledge.vaultDisabled")}
+				</p>
+			)}
+			{knowledge.source === "obsidian" && knowledge.status === "unavailable" && (
+				<p className="text-omp-sm text-(--omp-warning)" role="alert">
+					{t("memory.knowledge.vaultUnavailable")}
+				</p>
+			)}
+			<div className="flex flex-wrap gap-2">
+				{canChoose && (
+					<Button disabled={busy} onClick={() => void select(true)} size="sm">
+						{t("memory.knowledge.chooseVault")}
+					</Button>
+				)}
+				{vault && (
+					<Button disabled={busy} onClick={() => void select(false)} size="sm">
+						{t("memory.knowledge.useLocal")}
+					</Button>
+				)}
+				{(vault || !canChoose) && (
+					<Button disabled={busy} icon={<RefreshCw size={12} />} onClick={() => void project.reload()} size="sm">
+						{t("memory.knowledge.refreshVault")}
+					</Button>
+				)}
+			</div>
+		</div>
+	);
+}
+
+function VaultEntries({
+	title,
+	entries,
+	vault,
+	kind,
+	project,
+	included,
+}: {
+	title: string;
+	entries: RpcMemoryListEntry[];
+	vault: string;
+	kind: "note" | "lesson";
+	project: MemoryProject;
+	included?: number;
+}) {
+	const { armed, arm } = useArmed();
+	return (
+		<Section
+			count={String(entries.length)}
+			icon={kind === "note" ? <Pin size={13} /> : <Lightbulb size={13} />}
+			title={title}
+		>
+			<div className="px-2">
+				<AddNote
+					full={false}
+					kind={kind}
+					onAdd={text => project.edit({ kind: "knowledge-entry", action: "add", entryKind: kind, vault, text })}
+				/>
+			</div>
+			{entries.length > 0 && (
+				<ul className="flex flex-col">
+					{entries.map((entry, index) => {
+						const overBudget = included !== undefined && index >= included;
+						return (
+							<MemoryEntryRow
+								armed={armed === entry.line}
+								dimmed={overBudget}
+								entry={entry}
+								key={entry.line}
+								kind={kind}
+								marker={overBudget ? <OverBudget /> : undefined}
+								onArm={() => arm(entry.line)}
+								onDelete={() => project.edit({ kind: "knowledge-entry", action: "delete", vault, line: entry.line })}
+								onSave={text => project.edit({ kind: "knowledge-entry", action: "update", vault, line: entry.line, text })}
+							/>
+						);
+					})}
+				</ul>
+			)}
+		</Section>
+	);
+}
+
+function ReadOnlyEntries({ entries }: { entries: RpcMemoryListEntry[] }) {
+	return (
+		<ul className="list-disc space-y-2 pl-6 text-omp-md text-(--omp-text)">
+			{entries.map(entry => (
+				<li className="break-words whitespace-pre-wrap" key={entry.line}>
+					{entry.text}
+					{entry.context && <p className="text-omp-xs text-(--omp-dim)">{entry.context}</p>}
+				</li>
+			))}
+		</ul>
+	);
+}
+
 export function KnowledgeView({
 	overview,
 	project,
 	onUpdate,
 	updating,
+	operationalNotice,
 }: {
 	overview: RpcMemoryOverview;
 	project: MemoryProject;
 	onUpdate: () => void;
 	updating: boolean;
+	operationalNotice?: ReactNode;
 }) {
 	const t = useT();
 	const { armed, arm } = useArmed();
 	const { injection } = overview;
+	const { knowledge } = overview;
 	const notesFull = overview.notes.length >= MAX_NOTES;
 
 	const keepAsNote = async (lesson: RpcMemoryListEntry) => {
@@ -199,100 +322,139 @@ export function KnowledgeView({
 					<h2 className="text-omp-lg font-semibold text-(--omp-text)">{t("memory.knowledge.title")}</h2>
 					<p className="mt-1 text-omp-sm leading-relaxed text-(--omp-muted)">{t("memory.knowledge.caption")}</p>
 				</div>
-				<BudgetMeter overview={overview} />
+				{!operationalNotice && <BudgetMeter overview={overview} />}
 			</div>
 
-			<Section
-				count={overview.notes.length > 0 ? `${overview.notes.length}/${MAX_NOTES}` : undefined}
-				icon={<Pin size={13} />}
-				title={t("memory.notes.title")}
-			>
-				<div className="px-2">
-					<AddNote full={notesFull} onAdd={text => project.edit({ kind: "note", action: "add", text })} />
-				</div>
-				{overview.notes.length > 0 ? (
-					<ul className="flex flex-col">
-						{overview.notes.map((note, index) => (
-							<MemoryEntryRow
-								armed={armed === `note:${note.line}`}
-								dimmed={index >= injection.notesIncluded}
-								entry={note}
-								key={note.line}
-								kind="note"
-								marker={index >= injection.notesIncluded ? <OverBudget /> : undefined}
-								onArm={() => arm(`note:${note.line}`)}
-								onDelete={() => project.edit({ kind: "note", action: "delete", line: note.line })}
-								onSave={text => project.edit({ kind: "note", action: "update", line: note.line, text })}
-							/>
-						))}
-					</ul>
-				) : (
-					<p className="px-2 text-omp-sm text-(--omp-dim)">{t("memory.notes.empty")}</p>
-				)}
-			</Section>
-
-			<Section
-				aside={
-					injection.summaryTruncated && overview.summary ? (
-						<span className="text-omp-xs text-(--omp-dim)" title={t("memory.summary.truncatedHint")}>
-							{t("memory.summary.truncated")}
-						</span>
-					) : undefined
-				}
-				icon={<BookOpen size={13} />}
-				title={t("memory.summary.title")}
-			>
-				{overview.summary ? (
-					<div className="omp-card px-4 py-3 text-omp-md">
-						<MarkdownRenderer content={overview.summary} />
+			<KnowledgeSource knowledge={knowledge} project={project} />
+			{knowledge.source === "obsidian" && knowledge.status === "ready" && (
+				<>
+					<VaultEntries
+						entries={knowledge.notes}
+						included={operationalNotice ? undefined : injection.notesIncluded}
+						key={`notes:${knowledge.vault}`}
+						kind="note"
+						project={project}
+						title={t("memory.notes.title")}
+						vault={knowledge.vault}
+					/>
+					<VaultEntries
+						entries={knowledge.lessons}
+						included={operationalNotice ? undefined : Math.max(0, injection.notesIncluded - knowledge.notes.length)}
+						key={`lessons:${knowledge.vault}`}
+						kind="lesson"
+						project={project}
+						title={t("memory.knowledge.approvedLessons")}
+						vault={knowledge.vault}
+					/>
+				</>
+			)}
+			{knowledge.source === "obsidian" && overview.notes.length > 0 && (
+				<Disclosure title={t("memory.knowledge.legacyNotes")}>
+					<ReadOnlyEntries entries={overview.notes} />
+				</Disclosure>
+			)}
+			{operationalNotice}
+			{!operationalNotice && knowledge.source === "local" && (
+				<Section
+					count={overview.notes.length > 0 ? `${overview.notes.length}/${MAX_NOTES}` : undefined}
+					icon={<Pin size={13} />}
+					title={t("memory.notes.title")}
+				>
+					<div className="px-2">
+						<AddNote full={notesFull} onAdd={text => project.edit({ kind: "note", action: "add", text })} />
 					</div>
-				) : (
-					<SummaryEmpty onUpdate={onUpdate} overview={overview} updating={updating} />
-				)}
-			</Section>
+					{overview.notes.length > 0 ? (
+						<ul className="flex flex-col">
+							{overview.notes.map((note, index) => (
+								<MemoryEntryRow
+									armed={armed === `note:${note.line}`}
+									dimmed={index >= injection.notesIncluded}
+									entry={note}
+									key={note.line}
+									kind="note"
+									marker={index >= injection.notesIncluded ? <OverBudget /> : undefined}
+									onArm={() => arm(`note:${note.line}`)}
+									onDelete={() => project.edit({ kind: "note", action: "delete", line: note.line })}
+									onSave={text => project.edit({ kind: "note", action: "update", line: note.line, text })}
+								/>
+							))}
+						</ul>
+					) : (
+						<p className="px-2 text-omp-sm text-(--omp-dim)">{t("memory.notes.empty")}</p>
+					)}
+				</Section>
+			)}
 
-			{overview.lessons.length > 0 && (
+			{!operationalNotice && (
+				<Section
+					aside={
+						injection.summaryTruncated && overview.summary ? (
+							<span className="text-omp-xs text-(--omp-dim)" title={t("memory.summary.truncatedHint")}>
+								{t("memory.summary.truncated")}
+							</span>
+						) : undefined
+					}
+					icon={<BookOpen size={13} />}
+					title={t("memory.summary.title")}
+				>
+					{overview.summary ? (
+						<div className="omp-card px-4 py-3 text-omp-md">
+							<MarkdownRenderer content={overview.summary} />
+						</div>
+					) : (
+						<SummaryEmpty onUpdate={onUpdate} overview={overview} updating={updating} />
+					)}
+				</Section>
+			)}
+
+			{!operationalNotice && overview.lessons.length > 0 && (
 				<Section
 					count={String(overview.lessons.length)}
 					icon={<Lightbulb size={13} />}
 					title={t("memory.lessons.title")}
 				>
-					<p className="-mt-1 px-2 text-omp-xs text-(--omp-dim)">{t("memory.lessons.caption")}</p>
-					<ul className="flex flex-col">
-						{overview.lessons.map((lesson, index) => (
-							<MemoryEntryRow
-								armed={armed === `lesson:${lesson.line}`}
-								dimmed={index >= injection.lessonsIncluded}
-								entry={lesson}
-								extraActions={[
-									{
-										id: "keep",
-										label: t("memory.lessons.keep"),
-										icon: <Pin size={13} />,
-										onClick: () => void keepAsNote(lesson),
-									},
-								]}
-								key={lesson.line}
-								kind="lesson"
-								marker={index >= injection.lessonsIncluded ? <OverBudget /> : undefined}
-								onArm={() => arm(`lesson:${lesson.line}`)}
-								onDelete={() => project.edit({ kind: "lesson", action: "delete", line: lesson.line })}
-								onSave={text =>
-									project.edit({
-										kind: "lesson",
-										action: "update",
-										line: lesson.line,
-										text,
-										context: lesson.context,
-									})
-								}
-							/>
-						))}
-					</ul>
+					<p className="-mt-1 px-2 text-omp-xs text-(--omp-dim)">
+						{t(knowledge.source === "obsidian" ? "memory.knowledge.automaticLessons" : "memory.lessons.caption")}
+					</p>
+					{knowledge.source === "obsidian" ? (
+						<ReadOnlyEntries entries={overview.lessons} />
+					) : (
+						<ul className="flex flex-col">
+							{overview.lessons.map((lesson, index) => (
+								<MemoryEntryRow
+									armed={armed === `lesson:${lesson.line}`}
+									dimmed={index >= injection.lessonsIncluded}
+									entry={lesson}
+									extraActions={[
+										{
+											id: "keep",
+											label: t("memory.lessons.keep"),
+											icon: <Pin size={13} />,
+											onClick: () => void keepAsNote(lesson),
+										},
+									]}
+									key={lesson.line}
+									kind="lesson"
+									marker={index >= injection.lessonsIncluded ? <OverBudget /> : undefined}
+									onArm={() => arm(`lesson:${lesson.line}`)}
+									onDelete={() => project.edit({ kind: "lesson", action: "delete", line: lesson.line })}
+									onSave={text =>
+										project.edit({
+											kind: "lesson",
+											action: "update",
+											line: lesson.line,
+											text,
+											context: lesson.context,
+										})
+									}
+								/>
+							))}
+						</ul>
+					)}
 				</Section>
 			)}
 
-			{(overview.full || overview.playbooks.length > 0) && (
+			{!operationalNotice && (overview.full || overview.playbooks.length > 0) && (
 				<Disclosure title={t("memory.full.title", { count: overview.playbooks.length })}>
 					<p className="text-omp-xs text-(--omp-dim)">{t("memory.full.caption")}</p>
 					{overview.full && (

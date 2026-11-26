@@ -16,8 +16,8 @@ export function usePlanSidebar(): void {
 	const streaming = useSessionStore(state => state.isStreaming);
 	const switching = useSessionStore(state => state.switchPending);
 	const proposal = usePlanApprovalStore(state => state.pending);
-	const writing = useToolsStore(state => enabled && livePlanWritePath(state.activeTools, null) !== null);
-	const seen = useRef<Map<string, { scope: string; enabled: boolean; running: boolean; proposal: typeof proposal }> | null>(null);
+	const writing = useToolsStore(state => livePlanWritePath(state.activeTools, null) !== null);
+	const seen = useRef<Map<string, { scope: string; running: boolean; proposal: typeof proposal }> | null>(null);
 	useEffect(() => {
 		if (!tabId || switching || (runtime && runtime.tabId !== tabId)) return;
 		const states = (seen.current ??= new Map());
@@ -29,10 +29,10 @@ export function usePlanSidebar(): void {
 		const before = previous?.scope === scope ? previous : undefined;
 		// Tool deltas can arrive through a parked tab's light stream before the
 		// renderer observes agent_start. Either edge is the same planning run.
-		const running = enabled && (streaming || writing);
-		if ((enabled && (!before?.enabled || (running && !before.running))) || (proposal && before?.proposal !== proposal)) {
+		const running = streaming || writing;
+		if ((enabled && running && !before?.running) || (proposal && before?.proposal !== proposal)) {
 			useUiStore.getState().setPanelTab("plan");
 		}
-		states.set(tabId, { scope, enabled, running, proposal });
+		states.set(tabId, { scope, running, proposal });
 	}, [tabId, scope, enabled, proposal, runtime, streaming, switching, writing]);
 }

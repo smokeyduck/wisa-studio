@@ -16,6 +16,7 @@
     "dev": "bun scripts/dev.ts",
     "build": "electron-vite build && bun scripts/check-main-bundle.ts",
     "preview": "electron-vite preview",
+    "build:browser-use": "node scripts/build-browser-use.cjs",
     "package": "bun run build && electron-builder",
     "package:mac": "bun run build && electron-builder --mac",
     "package:mac:arm64": "bun run build && electron-builder --mac --arm64",

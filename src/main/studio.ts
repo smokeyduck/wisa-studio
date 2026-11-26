@@ -11,6 +11,8 @@ import { app, BrowserWindow, desktopCapturer, nativeImage, session, webContents 
 import Store from "electron-store";
 import type { SessionKind } from "../shared/ipc-types";
 import { installQuitGuard, requestQuit } from "./app-quit";
+import { BROWSER_USE_TOOL, BrowserUseHost } from "./browser-use-host";
+import { BrowserUseRuntime } from "./browser-use-runtime";
 import { resolveBundledOmp } from "./bundled-omp-path";
 import { CollabPhoneHost } from "./collab-phone";
 import { type ConversationIndex, openConversationIndex } from "./conversation-index";
@@ -36,7 +38,7 @@ import { SessionIndex } from "./session-index";
 import { shellSpawnEnv } from "./shell-env";
 import { bindWindowToggle } from "./shortcuts";
 import { SidecarManager, type SidecarOptions } from "./sidecar";
-import { SidecarPool } from "./sidecar-pool";
+import { SidecarPool, WORKSPACE_PEER_TOOL } from "./sidecar-pool";
 import { StatsClient } from "./stats-client";
 import { StatsServerManager } from "./stats-server";
 import { type PersistedTabLayout, sanitizePersistedTabLayouts } from "./tab-layout";
@@ -153,6 +155,8 @@ let conversationIndex: ConversationIndex | null = null;
 let schedulerHost: SchedulerHost | null = null;
 let collabPhone: CollabPhoneHost | null = null;
 let phoneHub: PhoneHub | null = null;
+let browserUse: BrowserUseHost | undefined;
+let browserUseUpdateTimer: NodeJS.Timeout | undefined;
 
 function errorMessage(value: unknown): { message: string; stack?: string } {
 	if (value instanceof Error) return { message: value.message, stack: value.stack };
@@ -274,6 +278,23 @@ app.whenReady().then(() => {
 	// Missing resources/omp is actionable; never run an installed foreign CLI.
 	const bundledOmp = resolveBundledOmp(app.isPackaged, process.resourcesPath, app.getAppPath());
 	const sourceCli = resolveSourceCli();
+	const resources = app.isPackaged ? process.resourcesPath : join(import.meta.dirname, "..", "..", "resources");
+	const studioConfig = join(resources, "studio-agent.yml");
+	const browserRuntime = new BrowserUseRuntime(resources, app.getPath("userData"));
+	const browserHost = new BrowserUseHost(browserRuntime);
+	browserUse = browserHost;
+	if (app.isPackaged) {
+		const checkBrowserUpdate = () => {
+			browserRuntime.checkForUpdate().then(
+				version => {
+					if (version) writeRuntimeLog({ source: "browser-use", message: `Installed Browser Use ${version}` });
+				},
+				error => writeRuntimeLog({ source: "browser-use", ...errorMessage(error) }),
+			);
+		};
+		checkBrowserUpdate();
+		browserUseUpdateTimer = setInterval(checkBrowserUpdate, 86_400_000).unref();
+	}
 	// Finder-launched omp has no terminal, and a sidecar that dies before
 	// it can write its own log only speaks through stderr — land the tail
 	// in gui-runtime.jsonl so it is readable after the fact.
@@ -300,6 +321,7 @@ app.whenReady().then(() => {
 			binaryPath: bundledOmp ?? "",
 			packaged: app.isPackaged,
 			sourceCli: sourceCli ?? undefined,
+			studioConfig,
 			cwd,
 			kind,
 			fresh,
@@ -343,19 +365,23 @@ app.whenReady().then(() => {
 	});
 	sidecarPool.sidecarLifecycle = {
 		ready: tab => {
-			if (tab.kind === "agent" && schedulerHost) {
-				const tools = [SCHEDULE_TASK_TOOL_DEFINITION, MANAGE_TASKS_TOOL_DEFINITION];
-				void tab.sidecar.rpcClient
-					?.command({ type: "set_host_tools", tools: tools.map(stripEmptyEnumValues) })
-					.catch(error =>
-						writeRuntimeLog({ source: "sidecar", message: "set_host_tools failed", details: String(error) }),
-					);
+			if (tab.kind === "agent") {
+				const tools = schedulerHost ? [SCHEDULE_TASK_TOOL_DEFINITION, MANAGE_TASKS_TOOL_DEFINITION] : [];
+				if (browserHost.register(tab.tabId, tab.sidecar)) tools.push(BROWSER_USE_TOOL);
+				if (tab.sidecar.allowsInteractiveHostTools) tools.push(WORKSPACE_PEER_TOOL);
+				if (tools.length > 0) {
+					void tab.sidecar.rpcClient?.command({ type: "set_host_tools", tools: tools.map(stripEmptyEnumValues) }).then(response => {
+						if (!response.success) throw new Error(response.error ?? "Could not register host tools");
+					}).catch(error => writeRuntimeLog({ source: "sidecar", message: "set_host_tools failed", details: String(error) }));
+				}
 			}
 			void collabPhone?.ready(tab.tabId, tab.sidecar);
 		},
 		down: tabId => {
+			browserHost.close(tabId);
 			collabPhone?.down(tabId);
 		},
+		sessionChanged: tabId => browserHost.reset(tabId),
 	};
 	// A closed window's tabs have to leave the saved session with it, or the next
 	// launch resurrects a window the user deliberately shut.
@@ -366,6 +392,7 @@ app.whenReady().then(() => {
 			binaryPath: bundledOmp ?? "",
 			packaged: app.isPackaged,
 			sourceCli: sourceCli ?? undefined,
+			studioConfig,
 			cwd: spec.cwd,
 			kind: "agent",
 			fresh: true,
@@ -435,6 +462,7 @@ app.whenReady().then(() => {
 		createRunSidecar,
 		collabPhone,
 		phoneHub,
+		browserUse: browserHost,
 	});
 	schedulerHost?.start();
 
@@ -516,6 +544,8 @@ app.on("window-all-closed", () => {
 installQuitGuard(
 	() => (sidecarPool ? sidecarPool.tabInventory() : []),
 	() => {
+		clearInterval(browserUseUpdateTimer);
+		browserUse?.dispose();
 		schedulerHost?.dispose();
 		statsServer?.kill();
 		sidecarPool?.disposeAll();

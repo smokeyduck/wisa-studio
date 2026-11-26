@@ -73,18 +73,23 @@ function stopWrapper() {
 	}
 }
 
+// The portable wrapper extracts Chromium and Python before each Electron launch.
+// Keep the extraction budget separate from the sidecar and settings RPC deadlines.
+const portableLaunchTimeout = 300_000;
+// NSIS removes its extracted files only after Electron exits.
+const portableShutdownTimeout = 75_000;
 const watchdog = setTimeout(() => {
 	console.error("FAIL packaged GUI proof exceeded its deadline");
 	stopWrapper();
 	process.exit(1);
-}, 240_000);
+}, portable ? 2 * (portableLaunchTimeout + portableShutdownTimeout) + 240_000 : 240_000);
 
 async function closeGui() {
 	if (wrapper) {
 		try {
 			await bounded(
 				Promise.all([wrapperExit, portablePage?.evaluate(() => window.omp.app.quit()).catch(() => {})]),
-				15_000,
+				portableShutdownTimeout,
 			);
 		} catch {
 			cleanupFailed = true;
@@ -135,7 +140,7 @@ async function launchPortable(watchRenderer) {
 		exited = true;
 	};
 	void wrapperExit.then(markExited, markExited);
-	const deadline = Date.now() + 60_000;
+	const deadline = Date.now() + portableLaunchTimeout;
 	while (Date.now() < deadline) {
 		if (exited) {
 			await wrapperExit;

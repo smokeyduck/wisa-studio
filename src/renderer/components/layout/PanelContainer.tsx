@@ -1,5 +1,4 @@
 import {
-	Bot,
 	ClipboardList,
 	Diff,
 	FolderTree,
@@ -18,13 +17,15 @@ import {
 	useState,
 } from "react";
 import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
+import { describeError } from "../../lib/errors";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
+import { isImeKeyEvent } from "../../lib/ime";
 import { usePlanApprovalStore } from "../../stores/plan-approval";
 import { useSessionStore } from "../../stores/session";
 import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
+import { toast } from "../../stores/toast";
 import { CHAT_PANEL_TABS, type PanelTab, useUiStore } from "../../stores/ui";
-import { AgentRoster, useAgentsTabSignal } from "../agents/AgentRoster";
 import { PanelErrorBoundary } from "../common";
 import { Glide } from "../common/Glide";
 import { PlanApprovalPanel } from "../dialogs/PlanApprovalPanel";
@@ -41,29 +42,24 @@ const PANEL_WIDTH_PREF = "gui.panelWidth";
 const TABS: { id: PanelTab; labelKey: string; icon: typeof Diff }[] = [
 	{ id: "overview", labelKey: "panel.tabs.overview", icon: LayoutDashboard },
 	{ id: "plan", labelKey: "dock.plan", icon: ClipboardList },
-	{ id: "agents", labelKey: "panel.tabs.agents", icon: Bot },
 	{ id: "btw", labelKey: "panel.tabs.btw", icon: MessageCircleQuestion },
 	{ id: "diff", labelKey: "panel.tabs.diff", icon: Diff },
 	{ id: "files", labelKey: "panel.tabs.files", icon: FolderTree },
-	{ id: "terminal", labelKey: "panel.tabs.terminal", icon: SquareTerminal },
 ];
 
 interface InspectorTabProps {
 	label: string;
-	/** What a screen reader announces: the label, plus any news the tab carries. */
-	description: string;
 	icon: typeof Diff;
 	active: boolean;
-	signal: "error" | "working" | null;
 	onSelect: () => void;
 	ready: boolean;
 }
 
-function InspectorTab({ label, description, icon: Icon, active, signal, onSelect, ready }: InspectorTabProps) {
+function InspectorTab({ label, icon: Icon, active, onSelect, ready }: InspectorTabProps) {
 	return (
 		<button
 			disabled={!ready}
-			aria-label={description}
+			aria-label={label}
 			title={label}
 			aria-pressed={active}
 			type="button"
@@ -71,15 +67,6 @@ function InspectorTab({ label, description, icon: Icon, active, signal, onSelect
 			className="relative flex h-8 min-w-0 flex-1 items-center justify-center"
 		>
 			<Icon aria-hidden size={14} />
-			{signal && (
-				<span
-					aria-hidden
-					className={cx(
-						"absolute top-1 right-1 h-1.5 w-1.5 rounded-full",
-						signal === "error" ? "bg-[var(--omp-error)]" : "bg-[var(--omp-accent)]",
-					)}
-				/>
-			)}
 		</button>
 	);
 }
@@ -88,8 +75,6 @@ const InspectorContent = memo(function InspectorContent({ tab }: { tab: PanelTab
 	switch (tab) {
 		case "overview":
 			return <OverviewPanel />;
-		case "agents":
-			return <AgentRoster />;
 		case "btw":
 			return <BtwPanel />;
 		case "diff":
@@ -118,14 +103,24 @@ export function PanelContainer() {
 	const t = useT();
 	const panelTab = useUiStore(s => s.panelTab);
 	const setPanelTab = useUiStore(s => s.setPanelTab);
-	const togglePanel = useUiStore(s => s.togglePanel);
+	const closePanel = useUiStore(s => s.closePanel);
 	const activeTabId = useTabsStore(s => s.activeTabId);
+	const cwd = useSessionStore(s => s.cwd);
 	const routeReady = useActiveTabRouteReady();
-	/** Chat tabs expose only Overview, btw and Files — diffs, shells and agent browsing need tools. */
+	/** Chat tabs expose only Overview, btw and Files. */
 	const isChat = useActiveTabKind() === "chat";
 	const visibleTabs = isChat ? TABS.filter(tab => CHAT_PANEL_TABS.has(tab.id)) : TABS;
 	const visiblePanelTab = isChat && !CHAT_PANEL_TABS.has(panelTab) ? "files" : panelTab;
-	const agentsSignal = useAgentsTabSignal();
+	const terminalLabel = t("panel.tabs.terminal");
+	const openTerminal = async () => {
+		if (!activeTabId) return;
+		try {
+			const result = await window.omp.system.openTerminal(activeTabId);
+			if (!result.ok) throw new Error(result.error);
+		} catch (error) {
+			toast({ variant: "error", message: t("terminal.openFailed", { error: describeError(error) }) });
+		}
+	};
 
 	const panelRef = useRef<HTMLElement>(null);
 	const [paneWidth, setPaneWidth] = useState(0);
@@ -197,8 +192,21 @@ export function PanelContainer() {
 		<aside
 			aria-busy={!routeReady}
 			ref={panelRef}
-			className="omp-inspector relative z-30 flex max-w-full shrink-0 flex-col border-l border-[var(--omp-border-muted)]"
+			className="omp-inspector absolute inset-y-0 right-0 z-30 flex max-w-full flex-col border-l border-[var(--omp-border-muted)] shadow-xl"
 			style={{ width: paneWidth > 0 ? panelWidth : "100%" }}
+			onKeyDown={event => {
+				if (
+					event.key !== "Escape" ||
+					event.defaultPrevented ||
+					isImeKeyEvent(event) ||
+					!event.currentTarget.contains(event.target as Node) ||
+					document.querySelector('[role="dialog"]')
+				) {
+					return;
+				}
+				event.preventDefault();
+				closePanel();
+			}}
 		>
 			<header className="flex h-12 shrink-0 items-center border-b border-[var(--omp-border-muted)] px-3">
 				<h2 className="sr-only">
@@ -206,35 +214,32 @@ export function PanelContainer() {
 				</h2>
 				<div className="omp-segmented w-full">
 					<Glide activeKey={visiblePanelTab} selector='[aria-pressed="true"]' variant="thumb" />
-					{visibleTabs.map(({ id, labelKey, icon }) => {
-						const active = visiblePanelTab === id;
-						return (
-							<InspectorTab
-								key={id}
-								label={t(labelKey)}
-								description={
-									id === "agents" && agentsSignal.tone
-										? t("agents.tab.label", {
-												label: t(labelKey),
-												state:
-													agentsSignal.tone === "error"
-														? t("agents.sidebar.moreFailed", { count: agentsSignal.failed })
-														: t("agents.sidebar.moreWorking", { count: agentsSignal.working }),
-											})
-										: t(labelKey)
-								}
-								icon={icon}
-								active={active}
-								signal={id === "agents" && !active ? agentsSignal.tone : null}
-								onSelect={() => setPanelTab(id)}
-								ready={routeReady}
-							/>
-						);
-					})}
+					{visibleTabs.map(({ id, labelKey, icon }) => (
+						<InspectorTab
+							key={id}
+							label={t(labelKey)}
+							icon={icon}
+							active={visiblePanelTab === id}
+							onSelect={() => setPanelTab(id)}
+							ready={routeReady}
+						/>
+					))}
+					{!isChat && (
+						<button
+							aria-label={terminalLabel}
+							className="omp-pressable flex h-8 min-w-0 flex-1 items-center justify-center hover:bg-(--omp-selected-bg)"
+							disabled={!routeReady || !activeTabId}
+							onClick={() => void openTerminal()}
+							title={terminalLabel}
+							type="button"
+						>
+							<SquareTerminal aria-hidden size={14} />
+						</button>
+					)}
 					<button
 						aria-label={t("common.close")}
 						className="omp-pressable flex h-8 min-w-0 flex-1 items-center justify-center hover:bg-(--omp-selected-bg)"
-						onClick={togglePanel}
+						onClick={closePanel}
 						title={t("common.close")}
 						type="button"
 					>
@@ -244,7 +249,7 @@ export function PanelContainer() {
 			</header>
 			<div className="min-h-0 flex-1 overflow-hidden">
 				{routeReady && (
-					<PanelErrorBoundary key={`${activeTabId ?? "no-tab"}:${visiblePanelTab}`}>
+					<PanelErrorBoundary key={JSON.stringify([activeTabId, cwd, visiblePanelTab])}>
 						<InspectorContent tab={visiblePanelTab} />
 					</PanelErrorBoundary>
 				)}

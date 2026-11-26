@@ -1,26 +1,19 @@
 import "@xterm/xterm/css/xterm.css";
-import { Bot, Plus, SquareTerminal, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Bot, SquareTerminal, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { RpcTerminalInfo } from "../../../shared/rpc-types";
-import { describeError } from "../../lib/errors";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { scrollStripOnWheel, useActiveChipInView } from "../../lib/strip-scroll";
 import { useTabsStore } from "../../stores/tabs";
 import {
 	closeTerminal,
-	openTerminal,
 	setActiveTerminal,
 	syncTerminals,
 	terminalView,
 	useTabTerminals,
-	useTerminalsStore,
 } from "../../stores/terminals";
-import { Button } from "../common";
 import { PanelEmpty } from "./workspace-ui";
-
-/** Tabs that already got their first shell, so closing every terminal does not spawn another. */
-const autoOpenedTabs = new Set<string>();
 
 function TerminalChip({
 	terminal,
@@ -115,11 +108,8 @@ function SessionNotice({ terminal }: { terminal: RpcTerminalInfo }) {
 }
 
 /**
- * Terminal drawer view: login shells in the tab's workspace, plus the
- * commands the agent ran with `pty: true`, which wait here for the user to
- * answer them (passwords, prompts, editors), and long-lived commands the agent
- * started with its `terminal` tool. Shells keep running while the drawer is
- * closed or another tab is in front.
+ * Embedded terminal for Core's interactive commands, CLI surfaces and agent
+ * sessions. User-initiated workspace shells open in the OS terminal instead.
  */
 export function TerminalPanel() {
 	const t = useT();
@@ -131,37 +121,11 @@ export function TerminalPanel() {
 	const { terminals, activeId } = useTabTerminals(tabId);
 	const active = terminals.find(terminal => terminal.terminalId === activeId) ?? null;
 	const containerRef = useRef<HTMLDivElement>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [opening, setOpening] = useState(false);
 
-	const startShell = useCallback(async (): Promise<void> => {
-		if (!tabId) return;
-		setOpening(true);
-		setError(null);
-		try {
-			await openTerminal(tabId);
-		} catch (err) {
-			setError(describeError(err));
-		} finally {
-			setOpening(false);
-		}
-	}, [tabId]);
-
-	// Adopt terminals that started before this window loaded, then give a tab
-	// its first shell the first time the user looks at its terminal.
+	// Adopt Core terminals that started before the panel was shown.
 	useEffect(() => {
-		if (!tabId || !sidecarUp) return;
-		let cancelled = false;
-		void syncTerminals(tabId).then(async () => {
-			if (cancelled || autoOpenedTabs.has(tabId)) return;
-			autoOpenedTabs.add(tabId);
-			const existing = useTerminalsStore.getState().byTab[tabId]?.terminals.length ?? 0;
-			if (existing === 0) await startShell();
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [tabId, sidecarUp, startShell]);
+		if (tabId && sidecarUp) void syncTerminals(tabId);
+	}, [tabId, sidecarUp]);
 
 	// Show the active terminal's xterm and keep it sized to the drawer.
 	useLayoutEffect(() => {
@@ -209,16 +173,6 @@ export function TerminalPanel() {
 							onClose={() => void closeTerminal(tabId, terminal.terminalId)}
 						/>
 					))}
-				<button
-					type="button"
-					aria-label={t("terminal.new")}
-					title={t("terminal.new")}
-					disabled={!sidecarUp || opening}
-					onClick={() => void startShell()}
-					className="omp-pressable ml-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-(--omp-muted) hover:bg-(--omp-selected-bg) hover:text-(--omp-text) disabled:pointer-events-none disabled:opacity-40"
-				>
-					<Plus size={15} />
-				</button>
 			</div>
 			{active?.kind === "session" && active.running ? (
 				<SessionNotice terminal={active} />
@@ -230,11 +184,6 @@ export function TerminalPanel() {
 					</p>
 				)
 			)}
-			{error && (
-				<p className="shrink-0 border-b border-(--omp-border-muted) bg-(--omp-error-dim) px-3 py-1.5 text-omp-xs text-(--omp-error)">
-					{t("terminal.openFailed", { error })}
-				</p>
-			)}
 			{active ? (
 				<div className="omp-terminal-viewport min-h-0 flex-1 bg-(--omp-code-bg) py-1.5 pl-2" ref={containerRef} />
 			) : (
@@ -242,14 +191,7 @@ export function TerminalPanel() {
 					<PanelEmpty
 						icon={SquareTerminal}
 						title={sidecarUp ? t("terminal.emptyTitle") : t("terminal.unavailableTitle")}
-						hint={sidecarUp ? t("terminal.emptyHint") : t("terminal.unavailableHint")}
-						action={
-							sidecarUp ? (
-								<Button size="sm" variant="secondary" onClick={() => void startShell()} disabled={opening}>
-									{t("terminal.new")}
-								</Button>
-							) : undefined
-						}
+						hint={sidecarUp ? undefined : t("terminal.unavailableHint")}
 					/>
 				</div>
 			)}

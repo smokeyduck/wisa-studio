@@ -8,6 +8,7 @@ import type {
 	RpcCommand,
 	RpcSecurityDashboardResult,
 	RpcSessionState,
+	SubagentSnapshot,
 } from "../src/shared/rpc-types";
 
 // A local protocol peer. No provider credentials, external network, or user session files.
@@ -187,6 +188,7 @@ if (process.argv.includes("stats")) {
 		planModeEnabled: false,
 		agentsPaused: false,
 	};
+	const subagents: SubagentSnapshot[] = [];
 	let queue: { id: string; text: string; lane: string }[] = [];
 	let securityMode = "disabled";
 	let streamTimer: Timer | null = null;
@@ -230,7 +232,24 @@ if (process.argv.includes("stats")) {
 				ok({ messages });
 				break;
 			case "get_subagents":
-				ok({ subagents: [] });
+				ok({ subagents });
+				break;
+			case "get_subagent_messages":
+				ok({
+					messages: command.fromByte
+						? []
+						: [
+								{ role: "user", content: "Review the **local fixture**." },
+								{
+									role: "assistant",
+									content: [
+										{ type: "thinking", thinking: "Private fixture reasoning." },
+										{ type: "text", text: "The first review is complete." },
+									],
+								},
+							],
+					nextByte: 42,
+				});
 				break;
 			case "get_queue":
 				ok({ steering: [], followUp: [], entries: queue });
@@ -577,6 +596,20 @@ if (process.argv.includes("stats")) {
 				write({ type: "agent_end", messages: [], isTerminal: true });
 				break;
 			case "prompt": {
+				if (command.message === "fixture handoff output") {
+					const text = "Compaction complete. Tokens: 194693 -> 32316 (saved 162377).";
+					messages.push(
+						{
+							role: "compactionSummary", method: "handoff", summary: "Context carried forward",
+							tokensBefore: 194693, tokensAfter: 32316, entryId: crypto.randomUUID(),
+						},
+						{ role: "custom", customType: "command", content: text, entryId: crypto.randomUUID(), timestamp: Date.now() },
+					);
+					ok({ agentInvoked: false });
+					write({ type: "command_output", text });
+					write({ type: "prompt_result", agentInvoked: false });
+					break;
+				}
 				if (command.message === "fixture hold settings") {
 					holdSettings = true;
 					ok();
@@ -641,6 +674,170 @@ if (process.argv.includes("stats")) {
 						title: `Allow tool: bash\n${"x".repeat(2200)}\ncritical final argument`,
 						options: ["Approve", "Deny"],
 					});
+				} else if (command.message === "fixture no reply") {
+					const answer: AgentMessage = {
+						role: "assistant",
+						content: [{ type: "thinking", thinking: "Check the changes before writing a report." }],
+						timestamp: Date.now(),
+						entryId: crypto.randomUUID(),
+						stopReason: "stop",
+					};
+					messages.push(answer);
+					write({ type: "message_end", message: answer });
+					state.isStreaming = false;
+					write({ type: "agent_end", messages: [user, answer], isTerminal: true });
+				} else if (command.message === "fixture todo continuation") {
+					const assistant = (content: AgentMessage["content"], stopReason: string): AgentMessage => ({
+						role: "assistant",
+						content,
+						stopReason,
+						timestamp: Date.now(),
+						entryId: crypto.randomUUID(),
+					});
+					const first = assistant([{ type: "text", text: "I fixed the two buttons." }], "stop");
+					messages.push(first);
+					write({ type: "message_end", message: first });
+					write({
+						type: "todo_reminder",
+						todos: [{ content: "Verify the buttons", status: "pending" }],
+						attempt: 1,
+						maxAttempts: 3,
+					});
+					messages.push({
+						role: "developer",
+						attribution: "agent",
+						content: "<system-reminder>\nYou stopped with 1 incomplete todo item(s):\n- Checks\n  - Verify the buttons\n\nPlease continue working on these tasks or mark them complete if finished.\n(Reminder 1/3)\n</system-reminder>",
+						timestamp: Date.now(),
+						entryId: crypto.randomUUID(),
+					});
+					const check = assistant([{ type: "toolCall", id: "verify-buttons", name: "bash", arguments: {} }], "toolUse");
+					const last = assistant([{ type: "text", text: "I verified the buttons in Electron." }], "stop");
+					messages.push(check, last);
+					write({ type: "message_end", message: check });
+					write({ type: "message_end", message: last });
+					state.isStreaming = false;
+					write({ type: "agent_end", messages: [user, first, check, last], isTerminal: true });
+				} else if (command.message === "fixture delegate" || command.message === "fixture reuse") {
+					const reused = command.message === "fixture reuse";
+					const id = "fixture-review";
+					const toolCallId = reused ? "send-review" : "spawn-review";
+					const toolName = reused ? "write" : "task";
+					const time = Date.now();
+					const narration: AgentMessage = {
+						role: "assistant",
+						stopReason: "toolUse",
+						timestamp: time,
+						content: [
+							{
+								type: "text",
+								text: reused ? "I'll ask the same agent for another pass." : "I'll delegate the first review.",
+							},
+							{
+								type: "toolCall",
+								id: toolCallId,
+								name: toolName,
+								arguments: reused ? { path: `agent://${id}`, content: "Check once more." } : { agent: "scout" },
+							},
+						],
+					};
+					if (!reused) {
+						const agent = { id, agent: "scout", index: 0, description: "Fixture reviewer", status: "completed" };
+						subagents.push({ ...agent, spawnedAt: time, lastUpdate: time });
+						write({
+							type: "subagent_lifecycle",
+							payload: { ...agent, agentSource: "bundled", parentToolCallId: toolCallId },
+						});
+					}
+					const turn: AgentMessage[] = [
+						narration,
+						{
+							role: "toolResult",
+							timestamp: time + 1,
+							toolCallId,
+							toolName,
+							isError: false,
+							details: reused ? { message: { op: "send", from: "Main", to: id } } : undefined,
+						},
+						{
+							role: "custom",
+							customType: "irc:incoming",
+							timestamp: time + 2,
+							display: true,
+							details: { from: id },
+							content: "Review complete.",
+						},
+						{
+							role: "assistant",
+							timestamp: time + 3,
+							stopReason: "stop",
+							content: [{ type: "text", text: reused ? "Follow-up complete." : "Delegation complete." }],
+						},
+					];
+					for (const message of turn) {
+						message.entryId = crypto.randomUUID();
+						messages.push(message);
+						if (message.role === "toolResult") {
+							write({ type: "tool_execution_end", toolCallId, toolName, result: { details: message.details }, isError: false });
+						}
+						if (message.customType === "irc:incoming") write({ type: "irc_message", message });
+						write({ type: "message_end", message });
+					}
+					state.isStreaming = false;
+					write({ type: "agent_end", messages: [user, ...turn], isTerminal: true });
+				} else if (command.message === "fixture background cards") {
+					const deliveries: AgentMessage[] = [
+						{
+							role: "custom",
+							customType: "async-notify",
+							details: { reports: [{ id: "bg_62" }] },
+							content: "<system-notice>Waiting for the desktop build.</system-notice>",
+						},
+						{
+							role: "assistant",
+							content: [
+								{ type: "thinking", thinking: "Review the background build output." },
+								{ type: "text", text: "The desktop build is running." },
+							],
+						},
+						{
+							role: "custom",
+							customType: "async-notify",
+							details: { reports: [{ id: "bg_63" }] },
+							content: "<system-notice>Watching the desktop build.</system-notice>",
+						},
+						{
+							role: "custom",
+							customType: "async-result",
+							details: { jobs: [{ jobId: "bg_63", type: "bash", label: "bun run build", durationMs: 15_800 }] },
+							content: "<system-notice>Background job bg_63 completed.\nDesktop build passed.</system-notice>",
+						},
+						{
+							role: "assistant",
+							content: [{ type: "thinking", thinking: "Check the audit result too." }],
+						},
+						{
+							role: "custom",
+							customType: "launch-completion",
+							content: "The audit failed with exit code 1.",
+							details: { daemons: [{ name: "desktop-audit", state: "failed", exitCode: 1 }] },
+						},
+						{
+							role: "assistant",
+							stopReason: "stop",
+							content: [{ type: "text", text: "The desktop build passed; review the audit failure." }],
+						},
+					];
+					const delivered = deliveries.map((message, index) => ({
+						...message,
+						timestamp: Number(user.timestamp) + index + 1,
+						entryId: crypto.randomUUID(),
+					}));
+					for (const message of delivered) {
+						messages.push(message);
+						write({ type: "message_end", message });
+					}
+					state.isStreaming = false;
+					write({ type: "agent_end", messages: delivered, isTerminal: true });
 				} else if (command.message !== "fixture running") {
 					const answer: AgentMessage = {
 						role: "assistant",

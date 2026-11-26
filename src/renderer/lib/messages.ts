@@ -12,6 +12,7 @@ import { useTabsStore } from "../stores/tabs";
 import { toast } from "../stores/toast";
 import { translate } from "./i18n";
 import type { TabRpc } from "./tab-rpc";
+import { stopTabSpeech } from "./voice";
 
 /**
  * Message-level actions shared between the command palette and the global
@@ -72,6 +73,7 @@ export async function retryLastTurn(onEmpty: () => void): Promise<void> {
 		return;
 	}
 	const streaming = useSessionStore.getState().isStreaming;
+	if (streaming) stopTabSpeech();
 	const response = streaming ? await window.omp.rpc.abortAndPrompt(text) : await window.omp.rpc.prompt(text);
 	if (!response.success) throw new Error(response.error);
 }
@@ -81,6 +83,7 @@ export async function abortActiveTurn(
 	rpc: Pick<TabRpc, "abort" | "abortRetry"> = window.omp.rpc,
 	tabId?: string | null,
 ): Promise<RpcResponse> {
+	stopTabSpeech(tabId ?? undefined);
 	const retrying = useSessionStore.getState().retryInfo !== null;
 	if (retrying) {
 		resetRetryPending(tabId ?? undefined);

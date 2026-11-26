@@ -66,6 +66,46 @@ it("renders an approved plan as expandable Markdown without displaying the execu
 	expect(html).not.toContain("Recovery guidance");
 });
 
+describe("MessageBubble built-in style reminders", () => {
+	const reminder = [
+		'<system-reminder reason="rule_violation" rule="ts-promise-with-resolvers" path="builtin-defaults:ts-promise-with-resolvers.md">',
+		"Built-in style rule matched a pattern in tool-call arguments → tool ran.",
+		"",
+		"Prefer Promise.withResolvers().",
+		"</system-reminder>",
+	].join("\n");
+	const context: AgentMessage = {
+		role: "developer",
+		attribution: "agent",
+		content: [{ type: "text", text: reminder }],
+	};
+	const render = (message: AgentMessage) =>
+		renderToStaticMarkup(
+			<I18nProvider>
+				<MessageBubble message={message} />
+			</I18nProvider>,
+		);
+
+	it.each(["full", "compact"] as const)("does not reserve a %s transcript row or render a bubble", detail => {
+		expect(buildHistoryRows([context], detail)).toEqual([]);
+		expect(render(context)).toBe("");
+	});
+
+	it("preserves project rules in the same context and quotes from the user", () => {
+		const projectRule = [
+			'<system-reminder reason="rule_violation" rule="project" path="rules/project.md">',
+			"User-defined rule matched tool-call arguments.",
+			"Run the project tests.",
+			"</system-reminder>",
+		].join("\n");
+		const mixed = { ...context, content: `${reminder}\n\n${projectRule}\n\n${reminder}` };
+		const html = render(mixed);
+		expect(html).toContain("Run the project tests.");
+		expect(html).not.toContain("Prefer Promise.withResolvers().");
+		expect(render({ role: "user", content: reminder })).toContain("Prefer Promise.withResolvers().");
+	});
+});
+
 describe("MessageBubble todo reminder", () => {
 	it("localizes Core's developer reminder while preserving task text and model context", () => {
 		const source =

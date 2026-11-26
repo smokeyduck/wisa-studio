@@ -470,7 +470,7 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"1.75×": "1.75×",
 	"2×": "2×",
 	"2.5×": "2.5×",
-	"All (messages + thinking)": "Всё (сообщения и размышления)",
+	"All (messages + thinking)": "Всё (сообщения и результаты инструментов)",
 	"Assistant messages": "Сообщения ассистента",
 	"Final message only": "Только итоговое сообщение",
 	"Priority: native > trafilatura > lynx > parallel > firecrawl > jina":
@@ -814,8 +814,8 @@ export const RU_SCHEMA_OPTION_TEXT: Readonly<Record<string, string>> = {
 	"3 lines": "3 строки",
 	"5 lines": "5 строк",
 	"10 lines": "10 строк",
-	"Enable when the judge role resolves to a native TypeSafe jev model":
-		"Включать, если для роли judge выбрана нативная модель TypeSafe jev",
+	"Enable when the first available judge candidate uses a native backend":
+		"Включать, если первый доступный кандидат для роли judge использует нативный механизм оценки",
 	"Always enable, whichever model the judge role resolves to":
 		"Всегда включать, независимо от модели, выбранной для роли judge",
 	"Disable the find tool": "Отключить инструмент find",

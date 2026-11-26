@@ -31,6 +31,7 @@ import { isSelectAll } from "../../lib/keymap";
 import { MarkdownRenderer } from "../../lib/markdown";
 import { useSessionStore } from "../../stores/session";
 import { useRuntimeTabId } from "../../stores/session-runtime-context";
+import { useTabsStore } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
 import { Button, Spinner } from "../common";
 import { ConfirmDialog } from "../common/ConfirmDialog";
@@ -130,10 +131,13 @@ export function FilesPanel() {
 	const cwd = useSessionStore(state => state.cwd);
 	const sessionFile = useSessionStore(state => state.sessionFile);
 	const sessionScope = `${tabId ?? ""}\0${sessionFile ?? ""}`;
-	const requestedPath = useUiStore(s => s.filePreviewPath);
-	const requestedLine = useUiStore(s => s.filePreviewLine);
+	const activeTabId = useTabsStore(state => state.activeTabId);
+	const previewScope = useUiStore(s => s.filePreviewScope);
+	const inScope = previewScope?.tabId === (tabId ?? activeTabId) && previewScope?.cwd === cwd;
+	const requestedPath = useUiStore(s => inScope ? s.filePreviewPath : null);
+	const requestedLine = useUiStore(s => inScope ? s.filePreviewLine : null);
 	const requestId = useUiStore(s => s.filePreviewRequestId);
-	const filePreviewImage = useUiStore(s => s.filePreviewImage);
+	const filePreviewImage = useUiStore(s => inScope ? s.filePreviewImage : null);
 	const openFilePreview = useUiStore(s => s.openFilePreview);
 	const closeFilePreview = useUiStore(s => s.closeFilePreview);
 	const workspace = useFileTabs(state => state.workspaces.get(cwd) ?? EMPTY_FILE_TABS);
@@ -284,7 +288,7 @@ export function FilesPanel() {
 		return () => {
 			previewVersion.current++;
 		};
-	}, [filePreviewPath, openPreview]);
+	}, [cwd, filePreviewPath, openPreview]);
 
 	const insertMention = useCallback(
 		(path: string) => {

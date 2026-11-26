@@ -30,10 +30,25 @@ env:
 
 jobs:
   macos:
-    # arm64 runners build the arm64 artifacts natively and cross-compile the
-    # Intel sidecar; both DMGs are signed ad-hoc (`identity: "-"`), so no
-    # Developer ID certificate is needed and `notarize: false` stands.
-    runs-on: macos-15
+    # Each package includes native Python wheels and Chromium, built on the
+    # matching host. Both DMGs retain the existing ad-hoc signing policy.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            machine: arm64
+            config: electron-builder.yml
+            sidecar-script: build:omp
+            sidecar: resources/omp
+          - runner: macos-15-intel
+            arch: x64
+            machine: x86_64
+            config: electron-builder.x64.yml
+            sidecar-script: build:omp:x64
+            sidecar: resources/omp.x64
+    runs-on: ${{ matrix.runner }}
     outputs:
       tag: ${{ steps.refs.outputs.tag }}
     steps:
@@ -141,32 +156,22 @@ jobs:
             bun scripts/bazel-natives.ts darwin-all --dest packages/natives/native
           fi
 
-      - name: Build the bundled arm64 sidecar
-        working-directory: oh-my-pi
-        run: bun --cwd=packages/gui run build:omp
-
-      - name: Build the bundled Intel sidecar
-        working-directory: oh-my-pi
-        run: bun --cwd=packages/gui run build:omp:x64
-
-      - name: Smoke-test the arm64 sidecar (RPC handshake + settings round-trip)
+      - name: Build and smoke-test the matching sidecar
         working-directory: oh-my-pi/packages/gui
-        run: bun scripts/smoke-sidecar.mjs resources/omp
+        shell: bash
+        env:
+          MACHINE: ${{ matrix.machine }}
+          SIDECAR_SCRIPT: ${{ matrix.sidecar-script }}
+          SIDECAR: ${{ matrix.sidecar }}
+        run: |
+          test "$(uname -m)" = "$MACHINE"
+          bun run "$SIDECAR_SCRIPT"
+          file -b "$SIDECAR" | grep -q "$MACHINE"
+          bun scripts/smoke-sidecar.mjs "$SIDECAR"
 
       - name: Verify ru + vi cover every bundled setting
         working-directory: oh-my-pi/packages/gui
         run: bun run check:locale
-
-      - name: Verify sidecar architectures
-        working-directory: oh-my-pi/packages/gui
-        shell: bash
-        run: |
-          for file in resources/omp resources/omp.x64; do
-            printf '%s: ' "$file"
-            file -b "$file"
-          done
-          file -b resources/omp | grep -q arm64
-          file -b resources/omp.x64 | grep -q x86_64
 
       # The workflows check out the release tag, so a tag whose packaging config
       # is invalid ships nothing and reports the failure deep in the build log.
@@ -187,75 +192,42 @@ jobs:
             }
           '
 
-      - name: Build GUI + arm64 packages
+      - name: Build the native Browser Use payload and GUI packages
         working-directory: oh-my-pi/packages/gui
-        # NOTE: invoke electron-builder through bun — the bunx shim falls back
-        # to Node, which crashes on ESM deps under Node < 22 (see issue #10).
-        # The monorepo's bun install hoists deps to the workspace root, so the
-        # cli.js lives two levels up, not in packages/gui/node_modules.
+        # Run the hoisted electron-builder CLI under Bun (see issue #10).
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          CONFIG: ${{ matrix.config }}
         run: |
+          bun run build:browser-use
           bun run build
           bun ../../node_modules/electron-builder/cli.js \
-            --config electron-builder.yml --mac --arm64 --publish never
-          # Each electron-builder run rewrites latest-mac.yml for its own
-          # architecture only, so hold the arm64 feed aside; the merge step
-          # below combines both before anything is uploaded.
-          cp dist/latest-mac.yml dist/latest-mac-arm64.yml
-
-      - name: Build GUI + Intel packages
-        working-directory: oh-my-pi/packages/gui
-        # The x64 config points extraResources at resources/omp.x64; building
-        # Intel from the default config would ship the arm64 sidecar.
-        run: |
-          bun ../../node_modules/electron-builder/cli.js \
-            --config electron-builder.x64.yml --mac --x64 --publish never
-
-      - name: Merge both architectures into latest-mac.yml
-        working-directory: oh-my-pi/packages/gui
-        shell: bash
-        # The updater resolves DMGs from one latest-mac.yml and picks the file
-        # whose name matches the host architecture, so the feed must list both
-        # DMGs. electron-builder writes one feed per run; merge them here.
-        run: |
-          node -e '
-            const { load, dump } = require("js-yaml");
-            const fs = require("fs");
-            const arm = load(fs.readFileSync("dist/latest-mac-arm64.yml", "utf8"));
-            const x64 = load(fs.readFileSync("dist/latest-mac.yml", "utf8"));
-            const seen = new Set();
-            const files = [...(x64.files ?? []), ...(arm.files ?? [])].filter(file => {
-              if (seen.has(file.url)) return false;
-              seen.add(file.url);
-              return true;
-            });
-            if (!files.some(file => file.url.includes("arm64"))) throw new Error("no arm64 entry in the merged feed");
-            if (!files.some(file => !file.url.includes("arm64"))) throw new Error("no Intel entry in the merged feed");
-            const merged = { ...x64, files };
-            fs.writeFileSync("dist/latest-mac.yml", dump(merged));
-            console.log("latest-mac.yml:", files.map(file => file.url).join(", "));
-          '
+            --config "$CONFIG" --mac "--$ARCH" --publish never
 
       - name: Stage the exact packages and runtime probe
         working-directory: oh-my-pi/packages/gui
         shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
           version=$(jq -r .version package.json)
           mkdir -p release-proof
-          for arch in arm64 x64; do
-            for ext in dmg zip; do
-              file="dist/wisa-studio-$version-$arch.$ext"
-              test -s "$file"
-              cp "$file" release-proof/
-            done
+          for ext in dmg zip; do
+            file="dist/wisa-studio-$version-$ARCH.$ext"
+            test -s "$file"
+            cp "$file" release-proof/
           done
-          cp dist/latest-mac.yml scripts/smoke-sidecar.mjs scripts/smoke-packaged-gui.mjs release-proof/
-          node -e 'require("fs").writeFileSync("release-proof/package.json", JSON.stringify({private: true, dependencies: {playwright: require("playwright/package.json").version}}))'
+          node -e 'const fs = require("node:fs"); const yaml = require("js-yaml"); fs.writeFileSync("release-proof/latest-mac.json", JSON.stringify(yaml.load(fs.readFileSync("dist/latest-mac.yml", "utf8"))));'
+          cp scripts/smoke-sidecar.mjs scripts/smoke-packaged-gui.mjs scripts/build-browser-use.cjs release-proof/
+          cp e2e/browser-use.e2e.ts release-proof/browser-use.spec.ts
+          node -e 'require("fs").writeFileSync("release-proof/package.json", JSON.stringify({private: true, dependencies: {playwright: require("playwright/package.json").version, "@playwright/test": require("@playwright/test/package.json").version}}))'
           cp ../../package.json release-proof/core-package.json
 
       - name: Pass immutable packages to native runtime gates
         uses: actions/upload-artifact@v4
         with:
-          name: macos-release-proof
+          name: macos-release-proof-${{ matrix.arch }}
           path: oh-my-pi/packages/gui/release-proof/
           if-no-files-found: error
 
@@ -277,7 +249,7 @@ jobs:
       - name: Download the exact produced packages
         uses: actions/download-artifact@v4
         with:
-          name: macos-release-proof
+          name: macos-release-proof-${{ matrix.arch }}
           path: release-proof
 
       - name: Setup the pinned Core Bun for the runtime probe
@@ -354,10 +326,14 @@ jobs:
             codesign --verify --deep --strict --verbose=2 "$app"
             file -b "$executable" | grep -q "$MACHINE"
             file -b "$app/Contents/Resources/omp" | grep -q "$MACHINE"
+            node release-proof/build-browser-use.cjs --verify "$app/Contents/Resources/browser-use"
+            test -s "$app/Contents/Resources/browser-use-bridge.py"
+            test -s "$app/Contents/Resources/studio-agent.yml"
             echo 'probing packaged sidecar RPC and persistence'
             bun release-proof/smoke-sidecar.mjs "$app/Contents/Resources/omp"
             echo 'probing packaged GUI READY, settings IPC, persistence, and live renderer'
             node release-proof/smoke-packaged-gui.mjs "$executable"
+            (cd release-proof && OMP_GUI_TEST_APP="$executable" node node_modules/@playwright/test/cli.js test browser-use.spec.ts)
             rm -rf "$root/extracted"
           done
 
@@ -368,7 +344,7 @@ jobs:
       - name: Download packages proven on both native hosts
         uses: actions/download-artifact@v4
         with:
-          name: macos-release-proof
+          pattern: macos-release-proof-*
           path: release-proof
 
       - name: Upload macOS assets only after every runtime gate succeeds
@@ -380,7 +356,24 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          files=(*.dmg *.zip latest-mac.yml)
-          test "${#files[@]}" = 5
+          arm=macos-release-proof-arm64
+          intel=macos-release-proof-x64
+          files=("$arm"/*.dmg "$arm"/*.zip "$intel"/*.dmg "$intel"/*.zip)
+          test "${#files[@]}" = 4
+          # Keep both architecture entries so the built-in updater resolves
+          # the matching DMG. Upload only after both native gates succeeded.
+          # JSON is valid YAML; stage parsed feeds to merge without installing
+          # dependencies in the separate upload job.
+          node -e '
+            const fs = require("node:fs");
+            const [arm, intel] = process.argv.slice(1).map(file => JSON.parse(fs.readFileSync(file, "utf8")));
+            if (arm.version !== intel.version) throw new Error("mismatched release versions");
+            for (const [feed, arch] of [[arm, "arm64"], [intel, "x64"]]) {
+              if (!feed.files.some(file => file.url.endsWith(`-${arch}.dmg`))) throw new Error(`no ${arch} DMG in feed`);
+            }
+            intel.files = [...new Map([...intel.files, ...arm.files].map(file => [file.url, file])).values()];
+            fs.writeFileSync("latest-mac.yml", JSON.stringify(intel, null, 2) + "\n");
+          ' "$arm/latest-mac.json" "$intel/latest-mac.json"
+          files+=(latest-mac.yml)
           sha256sum "${files[@]}"
           gh release upload "$RELEASE_TAG" "${files[@]}" --repo "$GUI_REPO"

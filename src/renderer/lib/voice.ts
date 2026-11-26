@@ -1,26 +1,220 @@
-/**
- * Speech output for the GUI (agent settings `speech.*`); dictation lives in `dictation.ts`.
- *
- * Mirrors the TUI vocalizer/event-controller: `speech.mode` decides what gets
- * spoken — "assistant" speaks finalized assistant text, "all" also speaks
- * tool-result text, "yield" speaks only the last assistant message of a run.
- * Synthesis: English text goes through the sidecar's local TTS
- * (`synthesize_speech` RPC, played by a plain Audio element); any other
- * language goes through the OS voice, which is the only engine that can
- * pronounce it. A local-TTS failure falls back to the OS voice too.
- *
- * Playback policy: one utterance at a time — a speak request arriving while
- * another is still synthesizing or playing is DROPPED (documented choice;
- * the TUI vocalizer chains utterances, the GUI keeps the transport simple).
- */
-import type { SynthesizeSpeechResult } from "../../shared/rpc-types";
-import { detectSpeechLanguage } from "../../shared/speech-language";
-import { useMessagesStore } from "../stores/messages";
+import { useSyncExternalStore } from "react";
+import type { AgentSessionEvent, SynthesizeSpeechResult } from "../../shared/rpc-types";
+import {
+	detectSpeechLanguage,
+	type VietnameseVoice,
+	vietnameseVoicePreference,
+	VIETNAMESE_VOICE_PREF,
+} from "../../shared/speech-language";
 import { useSessionStore } from "../stores/session";
-import { useSettingsStore } from "../stores/settings";
+import { type SettingsStore, useSettingsStore } from "../stores/settings";
+import { useTabsStore } from "../stores/tabs";
 import { toast } from "../stores/toast";
-import { getCurrentLanguage, translate } from "./i18n";
+import { translate } from "./i18n";
 import { messageText } from "./messages";
+import { focusedTabRpc, type TabRpc } from "./tab-rpc";
+
+interface Utterance {
+	text: string;
+	rpc?: Pick<TabRpc, "synthesizeSpeech">;
+	voice?: VietnameseVoice;
+	speed?: number;
+}
+
+interface Playback {
+	tabId: string | null;
+	controller: AbortController;
+	queue: Utterance[];
+	osPlaying: boolean;
+}
+
+let playback: Playback | null = null;
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void): () => void {
+	listeners.add(listener);
+	return () => listeners.delete(listener);
+}
+
+export function useSpeechPlaying(tabId: string | null): boolean {
+	return useSyncExternalStore(subscribe, () => playback !== null && playback.tabId === tabId);
+}
+
+function announcePlayback(): void {
+	for (const listener of listeners) listener();
+}
+
+function stopPlayback(tabId: string | null): void {
+	const active = playback;
+	if (!active || active.tabId !== tabId) return;
+	playback = null;
+	active.controller.abort();
+	active.queue.length = 0;
+	if (active.osPlaying) void window.omp.system.stopSpeech().catch(() => undefined);
+	announcePlayback();
+}
+
+function enqueue(tabId: string | null, utterance: Utterance): void {
+	if (playback && playback.tabId === tabId) {
+		playback.queue.push(utterance);
+		return;
+	}
+	if (playback) stopPlayback(playback.tabId);
+	const active: Playback = { tabId, controller: new AbortController(), queue: [utterance], osPlaying: false };
+	playback = active;
+	announcePlayback();
+	void drain(active);
+}
+
+async function drain(active: Playback): Promise<void> {
+	const { signal } = active.controller;
+	while (!signal.aborted) {
+		const next = active.queue.shift();
+		if (!next) break;
+		const { text, rpc } = next;
+		const language = next.voice !== undefined ? "vi" : detectSpeechLanguage(text);
+		try {
+			if (language === "en" && rpc && (await speakLocally(rpc, text, next.speed ?? 1, signal))) continue;
+			if (signal.aborted) break;
+			const voice =
+				language === "vi"
+					? (next.voice ?? vietnameseVoicePreference(await window.omp.prefs.get(VIETNAMESE_VOICE_PREF)))
+					: undefined;
+			if (signal.aborted) break;
+			active.osPlaying = true;
+			const result = await window.omp.system.speak(text, language, voice);
+			if (!signal.aborted && !result.ok) {
+				toast({
+					variant: "error",
+					title: translate("voice.speak.failed"),
+					message: result.missingVoice ? translate("voice.speak.missingVoice", { language }) : result.error ?? "",
+				});
+			}
+		} catch (cause) {
+			if (!signal.aborted) toast({ variant: "error", title: translate("voice.speak.failed"), message: String(cause) });
+		} finally {
+			active.osPlaying = false;
+		}
+	}
+	if (playback === active) {
+		playback = null;
+		announcePlayback();
+	}
+}
+
+async function speakLocally(
+	rpc: Pick<TabRpc, "synthesizeSpeech">,
+	text: string,
+	speed: number,
+	signal: AbortSignal,
+): Promise<boolean> {
+	const response = await rpc.synthesizeSpeech(text).catch(() => undefined);
+	if (!response?.success || signal.aborted) return false;
+	const data = response.data as SynthesizeSpeechResult | undefined;
+	if (!data?.audioBase64) return false;
+	const url = URL.createObjectURL(new Blob([base64ToBytes(data.audioBase64)], { type: data.mimeType || "audio/wav" }));
+	const audio = new Audio(url);
+	audio.playbackRate = Math.max(0.8, Math.min(1.3, speed));
+	const done = Promise.withResolvers<boolean>();
+	const stop = () => {
+		audio.pause();
+		done.resolve(false);
+	};
+	audio.onended = () => done.resolve(true);
+	audio.onerror = () => done.resolve(false);
+	signal.addEventListener("abort", stop, { once: true });
+	try {
+		void audio.play().catch(() => done.resolve(false));
+		return await done.promise;
+	} finally {
+		signal.removeEventListener("abort", stop);
+		URL.revokeObjectURL(url);
+	}
+}
+
+interface SpeechRun {
+	tabId: string;
+	mode: SettingsStore["speechMode"];
+	last: string;
+	muted: boolean;
+}
+
+let run: SpeechRun | null = null;
+
+export function stopTabSpeech(tabId: string | null = useTabsStore.getState().activeTabId): void {
+	if (tabId === null) return;
+	if (run?.tabId === tabId) run.muted = true;
+	stopPlayback(tabId);
+}
+
+export function previewVietnameseVoice(voice: VietnameseVoice): void {
+	enqueue(null, { text: "Xin chào! Tôi là trợ lý WISA. Đây là bản nghe thử giọng tiếng Việt.", voice });
+}
+
+export function stopVoicePreview(): void {
+	stopPlayback(null);
+}
+
+/** Only live RPC events for the focused tab reach the speech queue; hydration never does. */
+export function handleVoiceEvent(tabId: string, event: AgentSessionEvent): void {
+	if (tabId !== (useTabsStore.getState().activeTabId ?? "")) return;
+	const { speechEnabled, speechMode, speechSpeed } = useSettingsStore.getState();
+	if (event.type === "agent_start") {
+		if (speechEnabled) run ??= { tabId, mode: speechMode, last: "", muted: false };
+		return;
+	}
+	if (run?.tabId !== tabId) return;
+	if (event.type === "message_end") {
+		const { message } = event;
+		if (message.stopReason === "aborted") {
+			stopTabSpeech(tabId);
+			return;
+		}
+		if (!speechEnabled || run.muted || (message.role !== "assistant" && message.role !== "toolResult")) return;
+		const text = messageText(message);
+		if (!text) return;
+		if (run.mode === "yield" && message.role === "assistant") run.last = text;
+		if (run.mode === "all" || (run.mode === "assistant" && message.role === "assistant")) {
+			enqueue(tabId, { text, rpc: focusedTabRpc(), speed: speechSpeed });
+		}
+	} else if (event.type === "agent_end" && event.isTerminal !== false) {
+		const finished = run;
+		run = null;
+		const aborted = event.messages?.findLast(message => message.role === "assistant")?.stopReason === "aborted";
+		if (aborted) stopPlayback(tabId);
+		else if (speechEnabled && finished.mode === "yield" && !finished.muted && finished.last) {
+			enqueue(tabId, { text: finished.last, rpc: focusedTabRpc(), speed: speechSpeed });
+		}
+	}
+}
+
+export function startVoiceAutoSpeak(): () => void {
+	const unsubscribeTabs = useTabsStore.subscribe((state, previous) => {
+		if (state.activeTabId === previous.activeTabId) return;
+		stopPlayback(previous.activeTabId ?? "");
+		run = null;
+	});
+	const unsubscribeSession = useSessionStore.subscribe((state, previous) => {
+		if (
+			state.sessionId !== previous.sessionId ||
+			state.switchPending ||
+			(state.status !== previous.status && state.status !== "ready")
+		) {
+			stopPlayback(useTabsStore.getState().activeTabId ?? "");
+			run = null;
+		}
+	});
+	const unsubscribeSettings = useSettingsStore.subscribe((state, previous) => {
+		if (!state.speechEnabled && previous.speechEnabled) stopTabSpeech();
+	});
+	return () => {
+		unsubscribeTabs();
+		unsubscribeSession();
+		unsubscribeSettings();
+		if (playback) stopPlayback(playback.tabId);
+		run = null;
+	};
+}
 
 function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
 	const binary = atob(base64);
@@ -29,149 +223,4 @@ function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
 	const bytes = new Uint8Array(new ArrayBuffer(binary.length));
 	for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
 	return bytes;
-}
-
-/** Read one agent setting at decision time (never cached across a run). */
-async function readSetting(path: string): Promise<unknown> {
-	try {
-		const response = await window.omp.rpc.getSettings([path]);
-		if (!response.success) return undefined;
-		return (response.data as { values?: Record<string, unknown> } | undefined)?.values?.[path];
-	} catch {
-		return undefined;
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Speech output (speech.enabled, speech.mode, speech.voice, tts.localModel)
-// ---------------------------------------------------------------------------
-
-let speaking = false;
-
-/**
- * Speak one utterance. English goes through the sidecar's local TTS (better
- * voice); anything else through the OS engine, which is the only one that can
- * pronounce it. Dropped silently when another utterance is still active (see
- * the module header); failures surface as an error toast.
- */
-export function speakText(text: string): void {
-	const trimmed = text.trim();
-	if (!trimmed || speaking) return;
-	speaking = true;
-	void (async () => {
-		const language = detectSpeechLanguage(trimmed);
-		try {
-			if (language === "en" && (await speakLocally(trimmed))) return;
-			const result = await window.omp.system.speak(trimmed, language);
-			if (!result.ok)
-				toast({ variant: "error", title: translate("voice.speak.failed"), message: result.error ?? "" });
-		} catch (cause) {
-			toast({ variant: "error", title: translate("voice.speak.failed"), message: String(cause) });
-		} finally {
-			speaking = false;
-		}
-	})();
-}
-
-/**
- * Synthesize with the sidecar's local TTS and play it. `false` means the local
- * path could not speak this utterance (model missing, RPC error), so the caller
- * falls back to the OS voice.
- */
-async function speakLocally(text: string): Promise<boolean> {
-	const response = await window.omp.rpc.synthesizeSpeech(text);
-	if (!response.success) return false;
-	const data = response.data as SynthesizeSpeechResult | undefined;
-	if (!data?.audioBase64) return false;
-	const url = URL.createObjectURL(new Blob([base64ToBytes(data.audioBase64)], { type: data.mimeType || "audio/wav" }));
-	const audio = new Audio(url);
-	const playback = Promise.withResolvers<void>();
-	const finish = (): void => {
-		URL.revokeObjectURL(url);
-		playback.resolve();
-	};
-	audio.onended = finish;
-	audio.onerror = finish;
-	// Autoplay-policy rejections are not user-facing failures.
-	audio.play().catch(finish);
-	await playback.promise;
-	return true;
-}
-
-// ---------------------------------------------------------------------------
-// Auto-speak watcher: finalized store messages → speakText, gated on
-// `speech.enabled` (synced store) and `speech.mode` (read at decision time).
-// ---------------------------------------------------------------------------
-
-/**
- * Subscribe to the messages store and speak new finalized output while
- * `speech.enabled` is on (TUI event-controller parity):
- * - assistant|all: each finalized assistant message speaks as it lands
- *   (all also speaks tool-result text);
- * - yield: only the last assistant message of a run speaks, when the run
- *   goes idle.
- * Returns the unsubscribe function.
- */
-export function startVoiceAutoSpeak(): () => void {
-	// Last assistant text of the in-flight run, buffered SYNCHRONOUSLY as
-	// messages land and spoken at run end (yield mode). Must not wait on the
-	// async mode read: agent_end flips isStreaming in the same batch tick as
-	// the final message_end append, ahead of any awaited continuation.
-	let lastRunAssistantText: string | null = null;
-
-	// The neural voice is ~85 MB, fetched on first use. Start that fetch the
-	// moment speech is switched on, so the first reply does not wait on it;
-	// a language Piper has no voice for resolves immediately.
-	const unsubscribeSettings = useSettingsStore.subscribe((state, previous) => {
-		if (!state.speechEnabled || previous.speechEnabled) return;
-		void window.omp.system.prewarmSpeech(getCurrentLanguage()).catch(() => undefined);
-	});
-
-	const unsubscribeMessages = useMessagesStore.subscribe((state, previous) => {
-		// lastAppended changes only on genuinely new finalized messages —
-		// hydration/pagination replaces `messages` without touching it, so
-		// history is never spoken.
-		if (state.lastAppended === previous.lastAppended) return;
-		const appended = state.lastAppended;
-		for (const message of appended) {
-			// TUI: never speak the aborted partial.
-			if (message.role === "assistant" && message.stopReason !== "aborted") {
-				const text = messageText(message);
-				if (text) lastRunAssistantText = text;
-			}
-		}
-		void (async () => {
-			if (!useSettingsStore.getState().speechEnabled) return;
-			const modeValue = await readSetting("speech.mode");
-			// Yield messages are spoken by the run-end watcher below.
-			if (modeValue === "yield") return;
-			const all = modeValue === "all";
-			for (const message of appended) {
-				if (message.stopReason === "aborted") continue;
-				const isAssistant = message.role === "assistant";
-				if (!isAssistant && !(all && message.role === "toolResult")) continue;
-				const text = messageText(message);
-				if (text) speakText(text);
-			}
-		})();
-	});
-
-	const unsubscribeSession = useSessionStore.subscribe((state, previous) => {
-		// Run end (agent_end): yield mode speaks the run's final assistant text.
-		if (!previous.isStreaming || state.isStreaming) return;
-		const pending = lastRunAssistantText;
-		lastRunAssistantText = null;
-		if (!pending) return;
-		void (async () => {
-			if (!useSettingsStore.getState().speechEnabled) return;
-			if ((await readSetting("speech.mode")) !== "yield") return;
-			speakText(pending);
-		})();
-	});
-
-	return () => {
-		unsubscribeMessages();
-		unsubscribeSession();
-		unsubscribeSettings();
-	};
 }

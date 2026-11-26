@@ -1,4 +1,17 @@
-import type { AgentSessionEvent } from "../../shared/rpc-types";
+import type { AgentMessage, AgentSessionEvent } from "../../shared/rpc-types";
+
+/** Core emits this alongside the structured compaction summary. */
+export function isLegacyCompactionSuccess(text: string): boolean {
+	return /^Compaction complete\.(?: Tokens: \d+ -> \d+ \(saved -?\d+\)\.)?$/.test(text.trim());
+}
+
+export function isLegacyCompactionCommandMessage(message: AgentMessage): boolean {
+	if (message.role !== "custom" || message.customType !== "command") return false;
+	const { content } = message;
+	if (typeof content === "string") return isLegacyCompactionSuccess(content);
+	const block = content?.length === 1 ? content[0] : undefined;
+	return block?.type === "text" && isLegacyCompactionSuccess(block.text);
+}
 
 export function isAgentStart(event: AgentSessionEvent): event is Extract<AgentSessionEvent, { type: "agent_start" }> {
 	return event.type === "agent_start";

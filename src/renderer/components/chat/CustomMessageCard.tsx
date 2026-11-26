@@ -115,11 +115,13 @@ function CompletionRows({ children, inProcess }: { children: ReactNode; inProces
 }
 
 function CompletionRow({
+	framed = false,
 	failed,
 	label,
 	meta,
 	output,
 }: {
+	framed?: boolean;
 	failed?: boolean;
 	label: string;
 	meta?: string;
@@ -145,11 +147,14 @@ function CompletionRow({
 			{meta && <span className="min-w-0 truncate font-mono text-omp-xs text-[var(--omp-dim)]">{meta}</span>}
 		</>
 	);
-	const rowClass = "flex min-h-8 w-full items-center gap-2 rounded-md px-1.5 py-1 text-left";
-	if (!output) return <div className={rowClass}>{content}</div>;
+	const frameClass = framed ? "omp-chat-activity-card w-fit max-w-full" : undefined;
+	const rowClass = cx("flex min-h-8 items-center gap-2 py-1 text-left", framed ? "px-2.5" : "rounded-md px-1.5");
+	if (!output) return <div className={cx(frameClass, rowClass)}>{content}</div>;
 	return (
-		<details className="group" onToggle={event => setExpanded(event.currentTarget.open)}>
-			<summary className={cx("omp-pressable cursor-pointer list-none", rowClass)}>
+		<details className={cx("group", frameClass)} onToggle={event => setExpanded(event.currentTarget.open)}>
+			<summary
+				className={cx("omp-pressable w-full cursor-pointer list-none", rowClass, framed && "focus-visible:-outline-offset-2")}
+			>
 				{content}
 				<ChevronRight
 					aria-hidden="true"
@@ -161,6 +166,7 @@ function CompletionRow({
 				<pre
 					className={cx(
 						"ml-6 mb-2 font-mono text-omp-sm break-words whitespace-pre-wrap text-[var(--omp-tool-output)]",
+						framed && "mr-2.5",
 						PREVIEW_SCROLL_MD,
 					)}
 				>
@@ -286,6 +292,7 @@ function AsyncNotifyCard({ message, inProcess }: { message: AgentMessage; inProc
 	return (
 		<CompletionRows inProcess={inProcess}>
 			<CompletionRow
+				framed
 				label={t("chat.custom.asyncNotify")}
 				meta={sources.join(" · ")}
 				output={noticeBody(message.content)}
@@ -358,7 +365,7 @@ function AsyncResultCard({ message, inProcess }: { message: AgentMessage; inProc
 	if (jobs.length === 0) {
 		return (
 			<CompletionRows inProcess={inProcess}>
-				<CompletionRow label={t("chat.custom.asyncDone")} output={body} />
+				<CompletionRow framed label={t("chat.custom.asyncDone")} output={body} />
 			</CompletionRows>
 		);
 	}
@@ -379,6 +386,7 @@ function AsyncResultCard({ message, inProcess }: { message: AgentMessage; inProc
 				return (
 					<CompletionRow
 						failed={false}
+						framed
 						key={job.jobId ?? index}
 						label={bash ? t("chat.custom.asyncDone") : (job.label ?? id)}
 						meta={meta}

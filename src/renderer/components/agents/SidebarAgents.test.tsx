@@ -1,7 +1,7 @@
 /**
  * Agents under their session in the sidebar. A regression here drops a
  * session's agents from the sidebar once a later turn spawns none, leaving no
- * way back to them short of the drawer.
+ * way to open their pages through the session tree.
  */
 
 import { parseHTML } from "linkedom";
@@ -148,5 +148,16 @@ describe("SessionAgentsScope", () => {
 			info?.toggle();
 		});
 		expect(agentRows()).toEqual(["Essay Rain", "Essay Field"]);
+	});
+
+	it("reveals overflow inline so older rows still open individual pages", async () => {
+		const ids = ["A", "B", "C", "D", "E", "F", "G"];
+		seed("t1", [user("write essays"), task("c1")], ids.map(id => ({ id, callId: "c1" })));
+		await mount("t1", "/sessions/many.jsonl");
+		await act(async () => info?.toggle());
+		expect(agentRows()).toEqual(["Essay A", "Essay B", "Essay C", "Essay D", "Essay E", "2 more"]);
+		const overflow = [...document.querySelectorAll("button")].find(button => button.textContent === "2 more");
+		await act(async () => overflow?.click());
+		expect(agentRows()).toEqual(ids.map(id => "Essay " + id));
 	});
 });

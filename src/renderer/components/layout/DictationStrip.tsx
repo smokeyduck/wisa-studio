@@ -32,7 +32,10 @@ export function DictationStrip({
 					: t("voice.dictation.preparing")
 				: view.phase === "transcribing"
 					? view.partial || t("voice.dictation.finishing")
-					: view.partial || t("voice.dictation.listening");
+					: view.partial ||
+						(view.cloudProvider
+							? t("voice.dictation.cloud", { provider: view.cloudProvider })
+							: t("voice.dictation.listening"));
 	const live = (recording || view.phase === "transcribing") && view.partial !== "";
 
 	return (

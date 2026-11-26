@@ -188,13 +188,21 @@ describe("InputArea Tab contract", () => {
 		expect(findTextarea().value).toBe("hello");
 	});
 
-	it("Shift+Tab toggles plan mode and opens the plan panel", async () => {
+	it.each([false, true])("Shift+Tab toggles plan mode without changing the inspector (open: %s)", async panelVisible => {
 		await mount();
-		useUiStore.setState({ panelTab: "diff", panelVisible: false });
+		useUiStore.setState({ panelTab: "diff", panelVisible });
 		await pressTab(findTextarea(), true);
 		await flush();
-		expect(useUiStore.getState().panelTab).toBe("plan");
-		expect(useUiStore.getState().panelVisible).toBe(true);
+		expect(setPlanMode).toHaveBeenCalledWith(true);
+		expect(useUiStore.getState()).toMatchObject({ panelTab: "diff", panelVisible });
+		const indicator = document.querySelector("[data-composer-plan-mode]");
+		expect(indicator?.textContent).toBe(translate("input.plan.label"));
+		expect(indicator?.getAttribute("title")).toBe(translate("titlebar.planMode"));
+		await pressTab(findTextarea(), true);
+		await flush();
+		expect(setPlanMode).toHaveBeenLastCalledWith(false);
+		expect(document.querySelector("[data-composer-plan-mode]")).toBeNull();
+		expect(useUiStore.getState()).toMatchObject({ panelTab: "diff", panelVisible });
 	});
 });
 async function click(element: TestElement): Promise<void> {

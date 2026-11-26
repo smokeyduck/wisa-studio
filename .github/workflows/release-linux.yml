@@ -158,6 +158,7 @@ jobs:
         # The monorepo's bun install hoists deps to the workspace root, so the
         # cli.js lives two levels up, not in packages/gui/node_modules.
         run: |
+          bun run build:browser-use
           bun run build
           bun ../../node_modules/electron-builder/cli.js \
             --config electron-builder.yml --linux AppImage deb --publish never
@@ -172,13 +173,16 @@ jobs:
           debs=("$PWD"/dist/*.deb)
           test "${#appimages[@]}" -eq 1
           test "${#debs[@]}" -eq 1
+          node scripts/build-browser-use.cjs --verify dist/linux-unpacked/resources/browser-use
           xvfb-run -a node scripts/smoke-packaged-gui.mjs dist/linux-unpacked/wisa-studio
           xvfb-run -a node scripts/smoke-packaged-gui.mjs "${appimages[0]}"
           sudo apt-get install -y "${debs[0]}"
           package=$(dpkg-deb -f "${debs[0]}" Package)
           executable=$(dpkg-query -L "$package" | grep -E '^/opt/.+/wisa-studio$')
           test -x "$executable"
+          node scripts/build-browser-use.cjs --verify "$(dirname "$executable")/resources/browser-use"
           xvfb-run -a node scripts/smoke-packaged-gui.mjs "$executable"
+          OMP_GUI_TEST_APP="$executable" xvfb-run -a node ../../node_modules/@playwright/test/cli.js test e2e/browser-use.e2e.ts
 
       - name: Upload Linux assets to the release
         working-directory: oh-my-pi/packages/gui/dist

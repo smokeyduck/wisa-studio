@@ -277,16 +277,6 @@ export function syncTerminals(tabId: string): Promise<void> {
 	return run;
 }
 
-/** Start a login shell in the tab's workspace and show it. */
-export async function openTerminal(tabId: string, size?: { cols: number; rows: number }): Promise<string | null> {
-	const response = await command(tabId, { type: "terminal_open", ...(size ?? {}) });
-	if (!response.success) throw new Error(response.error);
-	const info = response.data as RpcTerminalInfo;
-	if (!views.has(viewKey(tabId, info.terminalId))) createView(tabId, info);
-	upsertInfo(tabId, info, true);
-	return info.terminalId;
-}
-
 /** Close a terminal (kills a running program); its `terminal_closed` frame removes it. */
 export async function closeTerminal(tabId: string, terminalId: string): Promise<void> {
 	const response = await command(tabId, { type: "terminal_close", terminalId }).catch(() => null);

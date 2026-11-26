@@ -1,5 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import type { AgentMessage, AgentSessionEvent, MessagesPage } from "../../shared/rpc-types";
+import { isLegacyCompactionCommandMessage } from "../lib/event-parser";
 import { isStrippedCopyOf, messageIdentity, sameMessageContent } from "../lib/message-identity";
 import { createScopedStoreApi, useScopedStore } from "./session-runtime-context";
 
@@ -213,7 +214,7 @@ function restoreCommandOutput(transcript: AgentMessage[], current: AgentMessage[
 	let byAnchor: Map<string | null, AgentMessage[]> | undefined;
 	for (const message of current) {
 		const anchor = message.commandOutputAfterEntryId;
-		if (anchor === undefined) continue;
+		if (anchor === undefined || isLegacyCompactionCommandMessage(message)) continue;
 		byAnchor ??= new Map();
 		const group = byAnchor.get(anchor);
 		if (group) group.push(message);
@@ -234,7 +235,9 @@ function restoreCommandOutput(transcript: AgentMessage[], current: AgentMessage[
 	if (byAnchor.size > 0) {
 		for (const message of current) {
 			const anchor = message.commandOutputAfterEntryId;
-			if (anchor !== undefined && byAnchor.has(anchor)) next.push(message);
+			if (anchor !== undefined && byAnchor.has(anchor) && !isLegacyCompactionCommandMessage(message)) {
+				next.push(message);
+			}
 		}
 	}
 	return next;
@@ -292,6 +295,10 @@ export const createMessagesStore = () =>
 							streamingText = "";
 							streamingThinking = "";
 						}
+						break;
+					case "todo_reminder":
+						// Core persists the developer reminder without a message_end frame.
+						needsTranscriptSync = true;
 						break;
 					case "agent_end":
 						if (event.messages) {

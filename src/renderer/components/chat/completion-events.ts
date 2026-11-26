@@ -1,5 +1,7 @@
 import type { AgentMessage } from "../../../shared/rpc-types";
 import { resultDetails } from "../../lib/format";
+import { ircSenderId } from "../../lib/irc-notice";
+import { messageTimestampMs } from "../../lib/message-identity";
 
 export interface LaunchCompletionDaemon {
 	name: string;
@@ -40,16 +42,26 @@ export function launchCompletionFailureCount(message: AgentMessage): number {
 	).length;
 }
 
-/** Move only task results whose exact agent ID has a visible history card. */
-export function foldSubagentCompletions(
+/** Move replies and task results only when they have an owning history card. */
+export function foldSubagentNotices(
 	messages: AgentMessage[],
-	agents: ReadonlyMap<string, number>,
+	claimAgent: (id: string, message: AgentMessage) => boolean,
 	completions: Map<string, AgentMessage[]>,
+	replies: Map<string, number[]>,
 ): AgentMessage[] {
-	if (agents.size === 0) return messages;
 	return messages.flatMap(message => {
-		if (message.role !== "custom" || message.customType !== "async-result" || message.display === false)
-			return [message];
+		if (message.role !== "custom" || message.display === false) return [message];
+		const type = message.customType;
+		if (type === "irc:incoming" || type === "irc:autoreply" || type === "irc:relay") {
+			const from = ircSenderId(message);
+			if (!from || !claimAgent(from, message)) return [message];
+			const times = replies.get(from);
+			const timestamp = messageTimestampMs(message);
+			if (times) times.push(timestamp);
+			else replies.set(from, [timestamp]);
+			return [];
+		}
+		if (type !== "async-result") return [message];
 		const details = resultDetails(message);
 		const jobs: unknown = details?.jobs;
 		if (!Array.isArray(jobs)) return [message];
@@ -57,16 +69,18 @@ export function foldSubagentCompletions(
 		const matched = new Map<string, unknown[]>();
 		for (const value of jobs as unknown[]) {
 			const job = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
-			if (
-				job?.type === "task" &&
-				typeof job.jobId === "string" &&
-				typeof job.agentId === "string" &&
-				agents.has(job.agentId)
-			) {
-				const group = matched.get(job.agentId);
-				if (group) group.push(job);
-				else matched.set(job.agentId, [job]);
-			} else remaining.push(value);
+			if (job?.type === "task" && typeof job.jobId === "string") {
+				// Legacy deliveries use the job ID as the agent ID. An explicit ID
+				// takes precedence because the job ID can be renamed on collision.
+				const id = typeof job.agentId === "string" ? job.agentId : job.jobId;
+				if (claimAgent(id, message)) {
+					const group = matched.get(id);
+					if (group) group.push(job);
+					else matched.set(id, [job]);
+					continue;
+				}
+			}
+			remaining.push(value);
 		}
 		if (matched.size === 0) return [message];
 		for (const [id, results] of matched) {

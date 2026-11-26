@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { IpcFsListResult } from "../../../shared/ipc-types";
+import { useWorkspaceRevision } from "../../hooks/use-workspace-revision";
 import { describeError } from "../../lib/errors";
 
-// Reuse recent listings when the explorer remounts. Never cache search results or errors.
-const DIRECTORY_CACHE_TTL_MS = 5_000;
+// Keep successful listings and coalesce in-flight reads across drawer mounts.
+// Search results and failures never enter the reusable cache.
 const DIRECTORY_CACHE_LIMIT = 32;
 const EMPTY_DIRECTORIES: ReadonlyMap<string, IpcFsListResult> = new Map();
-const directoryCache = new Map<string, { result: IpcFsListResult; expires: number }>();
+const bridgeCaches = new WeakMap<object, Map<string, Promise<IpcFsListResult>>>();
 
 export function useWorkspaceExplorer(cwd: string, tabId: string | null, expanded: ReadonlySet<string>) {
 	const [query, setQuery] = useState("");
 	const [showIgnored, setShowIgnored] = useState(false);
-	const scope = `${JSON.stringify([tabId, cwd, showIgnored])}\0`;
+	const revision = useWorkspaceRevision();
+	const fs = window.omp?.fs;
+	let directoryCache = fs && bridgeCaches.get(fs);
+	if (fs && !directoryCache) {
+		directoryCache = new Map();
+		bridgeCaches.set(fs, directoryCache);
+	}
+	const workspacePrefix = JSON.stringify([tabId, cwd]).slice(0, -1) + ",";
+	const scope = workspacePrefix + showIgnored + "," + revision + "];";
 	const [listing, setListing] = useState({ scope, directories: EMPTY_DIRECTORIES });
 	const directories = listing.scope === scope ? listing.directories : EMPTY_DIRECTORIES;
 	const [search, setSearch] = useState<IpcFsListResult | null>(null);
@@ -20,14 +29,14 @@ export function useWorkspaceExplorer(cwd: string, tabId: string | null, expanded
 	const version = useRef(0);
 	const term = query.trim();
 	const refresh = useCallback(() => {
-		for (const key of directoryCache.keys()) {
-			if (key.startsWith(scope)) directoryCache.delete(key);
+		for (const key of directoryCache?.keys() ?? []) {
+			if (key.startsWith(workspacePrefix)) directoryCache?.delete(key);
 		}
 		version.current++;
 		active.current.clear();
 		setListing({ scope, directories: new Map() });
 		setSearchRevision(value => value + 1);
-	}, [scope]);
+	}, [directoryCache, scope, workspacePrefix]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: invalidate in-flight reads when the scope changes or unmounts.
 	useEffect(() => {
@@ -43,8 +52,6 @@ export function useWorkspaceExplorer(cwd: string, tabId: string | null, expanded
 		const list = async (path: string) => {
 			if (directories.has(path) || active.current.has(path)) return;
 			const key = scope + path;
-			const cacheable = tabId !== null || cwd !== "";
-			const cached = cacheable ? directoryCache.get(key) : undefined;
 			const publish = (result: IpcFsListResult) =>
 				setListing(current => ({
 					scope,
@@ -53,32 +60,31 @@ export function useWorkspaceExplorer(cwd: string, tabId: string | null, expanded
 						result,
 					),
 				}));
-			if (cached && cached.expires > Date.now()) {
-				publish(cached.result);
-				return;
-			}
 			active.current.add(path);
-			let result: IpcFsListResult;
-			try {
-				result = await window.omp.fs.explore({ path, tabId: tabId ?? undefined, showIgnored });
-			} catch (error) {
-				result = { ok: false, entries: [], truncated: false, error: describeError(error) };
-			}
-			if (requestVersion !== version.current) return;
-			active.current.delete(path);
-			if (cacheable && result.ok) {
-				directoryCache.delete(key);
-				directoryCache.set(key, { result, expires: Date.now() + DIRECTORY_CACHE_TTL_MS });
-				if (directoryCache.size > DIRECTORY_CACHE_LIMIT) {
-					const oldest = directoryCache.keys().next().value;
-					if (oldest !== undefined) directoryCache.delete(oldest);
+			let lookup = directoryCache?.get(key);
+			if (!lookup) {
+				lookup = Promise.resolve()
+					.then(() => window.omp.fs.explore({ path, tabId: tabId ?? undefined, showIgnored }))
+					.catch((error): IpcFsListResult => ({ ok: false, entries: [], truncated: false, error: describeError(error) }));
+				if (directoryCache && (tabId !== null || cwd !== "")) {
+					directoryCache.set(key, lookup);
+					if (directoryCache.size > DIRECTORY_CACHE_LIMIT) {
+						const oldest = directoryCache.keys().next().value;
+						if (oldest !== undefined) directoryCache.delete(oldest);
+					}
+					void lookup.then(result => {
+						if (!result.ok && directoryCache.get(key) === lookup) directoryCache.delete(key);
+					});
 				}
 			}
+			const result = await lookup;
+			if (requestVersion !== version.current) return;
+			active.current.delete(path);
 			publish(result);
 		};
 		void list("");
 		for (const id of expanded) void list(id.slice(4));
-	}, [cwd, directories, expanded, scope, showIgnored, tabId]);
+	}, [cwd, directories, directoryCache, expanded, scope, showIgnored, tabId]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reload on refresh and when a tab changes working directories.
 	useEffect(() => {

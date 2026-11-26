@@ -1107,18 +1107,18 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 		label: "本地 TTS 语速",
 		description: "本地 TTS 后端（tts 工具、omp say）的语速。1 = 正常；限制在 0.5–2.5",
 	},
-	"speech.enabled": { label: "语音朗读", description: "助手输出在流式到达时通过扬声器朗读出来" },
+	"speech.enabled": { label: "语音朗读", description: "在此设备上朗读新回复" },
 	"speech.mode": {
 		label: "语音朗读模式",
-		description: "朗读内容：all = 助手消息 + 思考；assistant = 仅消息；yield = 仅回合结束时的最终消息",
+		description: "全部：助手消息和工具结果。助手：仅助手消息。最终：回合结束时的最后一条助手消息。",
 	},
 	"speech.enhanced": {
 		label: "增强语音改写",
 		description:
 			"合成前用微型/smol 模型把助手输出改写为自然的口语文本（描述代码、去掉链接和 markdown）。失败时回退到机械式清理",
 	},
-	"speech.voice": { label: "语音朗读音色", description: "朗读助手输出时使用的 Kokoro 音色" },
-	"speech.speed": { label: "语音朗读语速", description: "朗读助手输出时的语速。1 = 正常；限制在 0.5–2.5" },
+	"speech.voice": { label: "英语朗读音色", description: "仅用于英语的本地 Phonon 音色" },
+	"speech.speed": { label: "英语朗读语速", description: "Phonon 播放速度：1 为正常（0.8–1.3）。" },
 	"providers.tinyModel": {
 		label: "微型模型",
 		description: "会话标题模型：默认在线（/models 中的 TINY 角色，否则为 @smol），或本地端侧模型",
@@ -1249,7 +1249,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	// 语音
 	"stt.language": {
 		label: "语音识别语言",
-		description: "留空则让模型自动识别你说的语言。仅支持英语的模型会忽略此项。",
+		description: "使用 vi 选择越南语，留空则自动检测。仅支持英语的模型会忽略此设置。",
 	},
 	// 压缩
 	"compaction.reserveTokens": {
@@ -1608,7 +1608,7 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 	},
 	"find.enabled": {
 		label: "Find（语义搜索）",
-		description: "启用语义工作区搜索工具，让代理用自然语言定位行为与符号；行为类查找优先于 grep/glob。",
+		description: "按语义查找文件和行号，而不是像 grep 一样只匹配文本。自动模式仅在 judge 角色的首个可用候选使用原生评判后端（例如 TypeSafe Jev）时启用。",
 	},
 	"loop.conditionTimeoutMs": {
 		label: "循环条件超时（毫秒）",
@@ -1927,6 +1927,11 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 		label: "Codex Daybreak Blue",
 		description:
 			"在符合条件的 ChatGPT 账号上自动申请 Daybreak Blue 网络安全访问计划。OpenAI 可能使用 Daybreak Blue 会话内容改进模型。不影响专用 Daybreak Blue 模型（gpt-daybreak-blue-*），它们仍可能以 Daybreak 会话运行。",
+	},
+	"task.judgeRouting": {
+		label: "由 Judge 选择模型路由",
+		description:
+			"启用后，未固定模型的子代理会将任务说明的一小段发送给原生 Judge 服务，不会发送对话记录或共享上下文。Judge 仅能选择配置已允许的聊天模型路由。始终优先使用明确指定的模型。Judge 不可用或放弃选择时，使用常规模型路由。项目设置不能替你启用此功能。",
 	},
 	"task.perCallModel": {
 		label: "按调用指定模型",

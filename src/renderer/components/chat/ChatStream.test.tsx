@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMessage } from "../../../shared/rpc-types";
-import type { TodoSnapshot } from "../../stores/todo";
 import {
 	buildConversationAnchors,
 	buildHistoryRowKeys,
@@ -14,14 +13,13 @@ import {
 	isTranscriptAtLiveEdge,
 	LIVE_EDGE_SLACK_PX,
 	locateEntryRow,
-	mergeTodoSnapshots,
 	ROW_ENTRANCE_TAIL_ROWS,
 	shouldRePinTranscript,
 	summarizeTurnChanges,
 	tabAwaitsTranscript,
 } from "./ChatStream";
 import { mergeSubagentRows, processExpansionKey } from "./chat-stream-utils";
-import { foldSubagentCompletions } from "./completion-events";
+import { foldSubagentNotices } from "./completion-events";
 
 const at = "2026-08-05T04:00:00.000Z";
 
@@ -43,6 +41,12 @@ function toolResult(toolCallId: string, isError = false): AgentMessage {
 it("keeps a subagent at its spawn when later replies and mixed job results arrive", () => {
 	const prompt: AgentMessage = { role: "user", content: "Delegate the review", timestamp: 10 };
 	const reply: AgentMessage = { role: "assistant", content: "Continuing the main turn", timestamp: 30 };
+	const notice: AgentMessage = {
+		role: "custom",
+		customType: "irc:incoming",
+		details: { from: "review" },
+		timestamp: 36,
+	};
 	const delivery: AgentMessage = {
 		role: "custom",
 		customType: "async-result",
@@ -51,27 +55,65 @@ it("keeps a subagent at its spawn when later replies and mixed job results arriv
 		details: {
 			jobs: [
 				{ type: "task", jobId: "review-2", agentId: "review" },
+				{ type: "task", jobId: "notes" },
 				{ type: "bash", jobId: "shell" },
-				{ type: "task", jobId: "elsewhere", agentId: "not-in-this-transcript" },
+				{ type: "task", jobId: "review", agentId: "not-in-this-transcript" },
 			],
 		},
 	};
-	const agents = new Map([["review", 20]]);
+	const agents = new Map([
+		["review", 20],
+		["notes", 35],
+	]);
 	const completions = new Map<string, AgentMessage[]>();
-	const before = mergeSubagentRows(buildHistoryRows([prompt], "full"), agents);
-	const messages = foldSubagentCompletions([prompt, reply, delivery], agents, completions);
+	const before = mergeSubagentRows(buildHistoryRows([prompt], "full"), new Map([["review", 20]]));
+	const replies = new Map<string, number[]>();
+	const messages = foldSubagentNotices([prompt, reply, notice, delivery], id => agents.has(id), completions, replies);
+	expect(replies.get("review")).toEqual([36]);
 	const after = mergeSubagentRows(buildHistoryRows(messages, "full"), agents);
 	expect(buildHistoryRowKeys(after).slice(0, 2)).toEqual(buildHistoryRowKeys(before));
-	expect(after.map(row => row.kind)).toEqual(["message", "subagent", "message", "message"]);
+	expect(after.map(row => row.kind)).toEqual(["message", "subagent", "message", "subagent", "message"]);
 	expect(messages[2]?.details).toEqual({
 		jobs: [
 			{ type: "bash", jobId: "shell" },
-			{ type: "task", jobId: "elsewhere", agentId: "not-in-this-transcript" },
+			{ type: "task", jobId: "review", agentId: "not-in-this-transcript" },
 		],
 	});
 	expect(completions.get("review")?.[0]?.details).toEqual({
 		jobs: [{ type: "task", jobId: "review-2", agentId: "review" }],
 	});
+	expect(completions.get("notes")?.[0]?.details).toEqual({ jobs: [{ type: "task", jobId: "notes" }] });
+});
+
+it("adds one row per later turn that successfully reuses the agent", () => {
+	const user = (timestamp: number): AgentMessage => ({ role: "user", timestamp, content: "Review this." });
+	const send = (id: string, timestamp: number, isError = false): AgentMessage => ({
+		...toolResult(id, isError),
+		toolName: "write",
+		timestamp,
+		details: { message: { op: "send", from: "Main", to: "review" } },
+	});
+	const agents = new Map([["review", 12]]);
+	const firstTurn = [user(10), send("same-turn", 13)];
+	const history = [
+		...firstTurn,
+		user(30),
+		send("failed", 32, true),
+		send("reuse", 33),
+		send("second", 34),
+		user(40),
+		send("again", 41),
+	];
+	for (const detail of ["compact", "full"] as const) {
+		const rows = mergeSubagentRows(buildHistoryRows(history, detail, undefined, agents), agents);
+		const first = mergeSubagentRows(buildHistoryRows(firstTurn, detail, undefined, agents), agents);
+		expect(buildHistoryRowKeys(rows).slice(0, first.length)).toEqual(buildHistoryRowKeys(first));
+		expect(rows.flatMap(row => (row.kind === "subagent" ? [[row.timestamp, row.reuse]] : []))).toEqual([
+			[12, undefined],
+			[33, "reuse"],
+			[41, "again"],
+		]);
+	}
 });
 
 const toolRun: AgentMessage[] = [
@@ -119,6 +161,79 @@ describe("compact transcript rows", () => {
 		expect(process.stepCount).toBe(1);
 		expect(process.messages[0]?.content).toEqual([{ type: "thinking", thinking: "Check the boundary first." }]);
 		expect(answer.message.content).toEqual([{ type: "text", text: "The public answer." }]);
+	});
+
+	it("keeps one workflow disclosure before the report and leaves successful checklist updates to the panel", () => {
+		const prompt: AgentMessage = { role: "user", content: "Measure backend startup.", timestamp: 1 };
+		const first = assistant([
+			{ type: "thinking", thinking: "Prepare a clean run." },
+			{ type: "toolCall", id: "prep", name: "bash", arguments: {} },
+		]);
+		const progress = assistant([{ type: "text", text: "The backend is starting; I will check readiness." }]);
+		const background: AgentMessage = { role: "custom", customType: "async-result", content: "Startup job finished" };
+		const verify = assistant([{ type: "toolCall", id: "verify", name: "bash", arguments: {} }]);
+		const answer = assistant([{ type: "text", text: "Ready in 8.16 seconds; voice generation not tested." }]);
+		const checklist = assistant([
+			{ type: "thinking", thinking: "Close the checklist." },
+			{ type: "toolCall", id: "checklist", name: "todo", arguments: { op: "done" } },
+		]);
+		const success: AgentMessage = {
+			...toolResult("checklist"),
+			toolName: "todo",
+			details: { phases: [{ name: "Checks", tasks: [{ content: "Measure startup", status: "completed" }] }] },
+		};
+		const followUp: AgentMessage = { role: "user", content: "Was generation tested?", timestamp: 2 };
+		const secondAnswer = assistant([{ type: "text", text: "No." }]);
+		const rows = buildHistoryRows(
+			[prompt, first, progress, background, verify, answer, checklist, success, followUp, secondAnswer],
+			"compact",
+		);
+		expect(rows).toMatchObject([
+			{ kind: "message", message: prompt },
+			{ kind: "process", stepCount: 3, toolCallIds: ["prep", "verify"], messages: [first, progress, background, verify] },
+			{ kind: "message", message: answer },
+			{ kind: "message", message: followUp },
+			{ kind: "message", message: secondAnswer },
+		]);
+
+		const failure = { ...success, isError: true };
+		for (const [result, detail] of [[failure, "compact"], [success, "full"]] as const) {
+			expect(buildHistoryRows([checklist, result], detail)).toMatchObject([
+				{ kind: "process", toolCallIds: ["checklist"] },
+			]);
+		}
+	});
+
+	it("keeps a public report visible when the model ends with reasoning only", () => {
+		const report = assistant([{ type: "text", text: "The site checks passed." }]);
+		const emptyStop = {
+			...assistant([{ type: "thinking", thinking: "Nothing more to check." }]),
+			stopReason: "stop",
+		};
+		expect(buildHistoryRows([...toolRun.slice(0, -1), report, emptyStop], "compact")).toMatchObject([
+			{ kind: "process", toolCallIds: ["call-read", "call-write"] },
+			{ kind: "message", message: report },
+		]);
+	});
+
+	it("keeps completed replies outside the work of an automatic continuation", () => {
+		const first = { ...assistant([{ type: "text", text: "I fixed the two buttons." }]), stopReason: "stop" };
+		const check = assistant([{ type: "toolCall", id: "verify-buttons", name: "bash", arguments: {} }]);
+		const last = { ...assistant([{ type: "text", text: "I verified the buttons in Electron." }]), stopReason: "stop" };
+		expect(buildHistoryRows([first, check, toolResult("verify-buttons"), last], "compact")).toMatchObject([
+			{ kind: "message", message: first },
+			{ kind: "process", toolCallIds: ["verify-buttons"] },
+			{ kind: "message", message: last },
+		]);
+	});
+
+	it("does not hide a final answer just because a background notice arrived later", () => {
+		const answer = assistant([{ type: "text", text: "The requested checks passed." }]);
+		const notice: AgentMessage = { role: "custom", customType: "async-result", content: "Extra job finished" };
+		expect(buildHistoryRows([answer, notice], "compact")).toEqual([
+			{ kind: "message", message: answer },
+			{ kind: "message", message: notice },
+		]);
 	});
 
 	it("omits punctuation filler instead of allocating an invisible virtual row", () => {
@@ -196,9 +311,62 @@ describe("compact transcript rows", () => {
 		]);
 		expect(buildTimelineMarkers(rows)[0]?.state).toBe("error");
 	});
+
+	it("keeps intermediate prose with related work without swallowing the final answer or its trailing notice", () => {
+		const prompt: AgentMessage = { role: "user", content: "Check the desktop build." };
+		const thought = assistant([
+			{ type: "thinking", thinking: "Look at the native runner." },
+			{ type: "text", text: "The runner started." },
+		]);
+		const event: AgentMessage = { role: "custom", customType: "async-notify", content: "Runner output ready." };
+		const followUp = assistant([{ type: "thinking", thinking: "Check the second platform too." }]);
+		const answer = assistant([{ type: "text", text: "Both platforms built successfully." }]);
+		const trailing: AgentMessage = { role: "custom", customType: "async-notify", content: "Unrelated log arrived." };
+		const rows = buildHistoryRows([prompt, thought, event, followUp, answer, trailing], "compact");
+
+		expect(rows.map(row => row.kind)).toEqual(["message", "process", "message", "message"]);
+		const process = rows[1];
+		if (process?.kind !== "process") throw new Error("process row missing");
+		expect(process.stepCount).toBe(2);
+		expect(process.backgroundEvents).toBe(1);
+		expect(process.messages[1]?.content).toEqual([{ type: "text", text: "The runner started." }]);
+		expect(process.messages.slice(2)).toEqual([event, followUp]);
+		expect(rows.slice(2)).toEqual([{ kind: "message", message: answer }, { kind: "message", message: trailing }]);
+
+		const completed = { ...answer, stopReason: "stop" };
+		const next = buildHistoryRows([followUp, completed, followUp], "compact");
+		expect(next[1]).toEqual({ kind: "message", message: completed });
+		expect(next[2]?.kind).toBe("process");
+
+		const reminder: AgentMessage = {
+			role: "developer",
+			attribution: "agent",
+			content:
+				"<system-reminder>\nYou stopped with 1 incomplete todo item(s):\n- Check the build\n\nPlease continue working on these tasks or mark them complete if finished.\n(Reminder 1/3)\n</system-reminder>",
+		};
+		expect(buildHistoryRows([followUp, answer, reminder], "compact").slice(1)).toEqual([
+			{ kind: "message", message: answer, todoReminders: [reminder] },
+		]);
+	});
 });
 
 describe("full transcript rows", () => {
+	it("keeps queued background job output inside its process group", () => {
+		const tool = assistant([{ type: "toolCall", id: "check", name: "bash", arguments: {} }]);
+		const notice: AgentMessage = { role: "custom", customType: "async-result", content: "Job completed" };
+		const answer = assistant([{ type: "text", text: "Done." }]);
+		const rows = buildHistoryRows([tool, notice, answer], "full");
+		expect(rows).toMatchObject([{ kind: "process", messages: [tool, notice] }, { kind: "message", message: answer }]);
+	});
+
+	it.each(["compact", "full"] as const)("only hides the duplicate command row in %s history", detail => {
+		const content = "Compaction complete. Tokens: 194693 -> 32316 (saved 162377).";
+		const quote: AgentMessage = { role: "user", content };
+		const summary: AgentMessage = { role: "compactionSummary", method: "handoff", summary: "Context" };
+		const rows = buildHistoryRows([summary, { role: "custom", customType: "command", content }, quote], detail);
+		expect(rows).toEqual([{ kind: "message", message: summary }, { kind: "message", message: quote }]);
+	});
+
 	it("moves an opening assistant emoji onto the preceding user message", () => {
 		const rows = buildHistoryRows(
 			[
@@ -515,42 +683,6 @@ describe("conversation navigation anchors", () => {
 		expect(anchor?.rowIndex).toBe(0);
 		expect(anchor?.preview.length).toBeLessThanOrEqual(180);
 		expect(anchor?.preview.endsWith("…")).toBe(true);
-	});
-});
-
-describe("mergeTodoSnapshots", () => {
-	function snapshot(id: string, ts: number): TodoSnapshot {
-		return { id, ts, phases: [{ name: "Build", tasks: [{ content: "task", status: "pending" }] }] };
-	}
-
-	it("interleaves snapshots by timestamp and tails the newest changes", () => {
-		const rows = buildHistoryRows(
-			[
-				{ role: "user", content: [{ type: "text", text: "One" }], timestamp: 100 },
-				{ role: "user", content: [{ type: "text", text: "Two" }], timestamp: 300 },
-			],
-			"full",
-		);
-		const merged = mergeTodoSnapshots(rows, [snapshot("s1", 50), snapshot("s2", 200), snapshot("s3", 400)]);
-		expect(merged.map(row => row.kind)).toEqual([
-			"todoSnapshot",
-			"message",
-			"todoSnapshot",
-			"message",
-			"todoSnapshot",
-		]);
-		expect(merged.map(row => (row.kind === "todoSnapshot" ? row.entry.id : null))).toEqual([
-			"s1",
-			null,
-			"s2",
-			null,
-			"s3",
-		]);
-	});
-
-	it("passes rows through untouched when there are no snapshots", () => {
-		const rows = buildHistoryRows([assistant([{ type: "text", text: "Solo" }])], "full");
-		expect(mergeTodoSnapshots(rows, [])).toEqual(rows);
 	});
 });
 

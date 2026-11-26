@@ -12,7 +12,7 @@ import type {
 	SubagentSnapshot,
 } from "../../../shared/rpc-types";
 import { createSubagentsStore } from "../../stores/subagents";
-import { type AgentTreeRow, agentNowLine, cutAgentTree, subagentActivity, visibleTreeRows } from "./agent-activity";
+import { type AgentTreeRow, agentNowLine, cutAgentTree, subagentActivity } from "./agent-activity";
 import { projectAgents } from "./use-agent-tree";
 
 let nextIndex = 0;
@@ -246,20 +246,6 @@ describe("All", () => {
 });
 
 describe("tree cuts", () => {
-	it("hides a collapsed parent's descendants and nothing after them", () => {
-		const projection = project(
-			[
-				agent("parent", { parentToolCallId: "c" }),
-				agent("child", { parentSubagentId: "parent" }),
-				agent("grandchild", { parentSubagentId: "child" }),
-				agent("sibling", { parentToolCallId: "c" }),
-			],
-			[user("go"), task("c")],
-		);
-
-		expect(outline(visibleTreeRows(projection.all, new Set(["parent"])))).toEqual(["parent", "sibling"]);
-	});
-
 	it("says how many hidden members work or failed, without counting context rows", () => {
 		const projection = project(
 			[

@@ -10,6 +10,7 @@ let page: Page;
 let profile: string;
 let record: string;
 const errors: string[] = [];
+const legacyBrowserData = JSON.stringify({ tabs: { urls: ["https://example.com/"], active: 0 } });
 
 async function command(text: string) {
 	const composer = page.locator("textarea").first();
@@ -32,6 +33,7 @@ test.beforeAll(async () => {
 	await Promise.all([fs.mkdir(project), fs.mkdir(userData, { recursive: true })]);
 	record = path.join(profile, "rpc.jsonl");
 	await fs.writeFile(path.join(userData, "prefs.json"), JSON.stringify({ language: "en", firstRunComplete: true }));
+	await fs.writeFile(path.join(userData, "browser-workspace.json"), legacyBrowserData);
 	const fixture = path.resolve("e2e/sidecar-fixture.ts");
 	const env = {
 		...process.env,
@@ -50,6 +52,10 @@ test.beforeAll(async () => {
 	page.on("pageerror", error => errors.push(error.message));
 	await page.waitForFunction(() => window.omp?.rpc != null);
 	await expect.poll(async () => (await page.evaluate(() => window.omp.sidecar.getStatus())).status).toBe("ready");
+	await expect.poll(() => page.evaluate(() => window.omp.rpc.getState())).toMatchObject({
+		success: true,
+		data: { cwd: project },
+	});
 	await page.screenshot({ path: "test-results/desktop-start.png", scale: "css", animations: "disabled" });
 });
 
@@ -61,9 +67,64 @@ test.afterAll(async () => {
 });
 
 test("the desktop does not start or expose an embedded agent browser", async () => {
+	await expect(page.getByRole("button", { name: "Open WISA Browser", exact: true })).toHaveCount(0);
 	expect(await page.evaluate(() => "browser" in window.omp)).toBe(false);
 	expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
 	expect(await recorded("browser_host_start")).toHaveLength(0);
+	expect(await fs.readFile(path.join(profile, "appData", "wisa-studio-dev", "browser-workspace.json"), "utf8")).toBe(
+		legacyBrowserData,
+	);
+});
+
+test("delegation opens a read-only chat and later reuse keeps the original row", async () => {
+	const scroll = page.locator(".omp-transcript-scroll");
+	const cards = scroll.locator('[data-transcript-kind="subagent"] button[aria-haspopup="dialog"]');
+	await command("fixture delegate");
+	await expect(scroll.getByText("I'll delegate the first review.", { exact: true })).toBeVisible();
+	await expect(scroll.getByText("Delegation complete.", { exact: true })).toBeVisible();
+	await expect(cards).toHaveCount(1);
+	await expect(cards.first()).toContainText("Replied");
+	await scroll.hover();
+	await page.mouse.wheel(0, -120);
+	await expect(page.getByRole("button", { name: "Jump to latest", exact: true })).toHaveCount(0);
+
+	await command("fixture reuse");
+	await expect(scroll.getByText("I'll ask the same agent for another pass.", { exact: true })).toBeVisible();
+	const last = scroll.getByText("Follow-up complete.", { exact: true });
+	await expect(last).toBeInViewport();
+	await expect(cards).toHaveCount(2);
+	await expect(cards.first()).toContainText("Replied");
+	await expect(cards.first()).not.toContainText("Reused");
+	await expect(cards.last()).toContainText("Reused");
+	await expect(cards.last()).toContainText("Replied");
+	const lastBox = await last.boundingBox();
+	const scrollBox = await scroll.boundingBox();
+	if (!lastBox || !scrollBox) throw new Error("Missing transcript geometry");
+	expect(scrollBox.y + scrollBox.height - lastBox.y - lastBox.height).toBeGreaterThanOrEqual(16);
+	await page.screenshot({ path: "test-results/subagent-transcript.png", scale: "css", animations: "disabled" });
+
+	await cards.last().click();
+	const dialog = page.getByRole("dialog", { name: "Fixture reviewer" });
+	await expect(dialog.getByText("Review the local fixture.", { exact: true })).toBeVisible();
+	await expect(dialog.getByText("The first review is complete.", { exact: true })).toBeVisible();
+	await expect(dialog.getByText("Private fixture reasoning.", { exact: true })).toHaveCount(0);
+	await expect(dialog.getByRole("button", { name: "Branch from here" })).toHaveCount(0);
+	const bubble = await dialog.locator(".omp-user-bubble").boundingBox();
+	const reply = await dialog.locator(".omp-assistant-turn .markdown-body").boundingBox();
+	if (!bubble || !reply) throw new Error("Missing dialog message geometry");
+	expect(bubble.x).toBeGreaterThan(reply.x);
+	await dialog.screenshot({ path: "test-results/subagent-conversation.png", animations: "disabled" });
+	await dialog.getByRole("button", { name: "Close" }).click();
+	await expect(dialog).toHaveCount(0);
+});
+
+test("shows the Handoff summary once without replaying the legacy command row", async () => {
+	await command("fixture handoff output");
+	for (let load = 0; load < 2; load++) {
+		if (load > 0) await page.reload();
+		await expect(page.getByText(/^Handed off/)).toHaveCount(1);
+		await expect(page.getByText(/^Compaction complete\./)).toHaveCount(0);
+	}
 });
 
 test("the Jobs panel receives focus and Escape closes it", async () => {
@@ -74,6 +135,28 @@ test("the Jobs panel receives focus and Escape closes it", async () => {
 	await expect.poll(() => panel.evaluate(node => node.contains(document.activeElement))).toBe(true);
 	await page.keyboard.press("Escape");
 	await expect(panel).toHaveCount(0);
+});
+
+test("a finished turn with no reply is explicit and never resends the prompt", async () => {
+	const before = (await recorded("prompt")).length;
+	await command("fixture no reply");
+	const notice = page.getByText("The model stopped without writing a final reply.", { exact: true });
+	await expect(notice).toBeVisible();
+	await expect(page.getByRole("button", { name: "Abort", exact: true })).toHaveCount(0);
+	await command("fixture normal reply");
+	await expect(page.getByText("Local fixture reply", { exact: true })).toBeVisible();
+	await expect(notice).toHaveCount(0);
+	expect((await recorded("prompt")).slice(before).map(entry => entry.message)).toEqual([
+		"fixture no reply",
+		"fixture normal reply",
+	]);
+});
+
+test("a todo continuation keeps both replies and the saved reminder visible without reloading", async () => {
+	await command("fixture todo continuation");
+	await expect(page.getByText("I verified the buttons in Electron.", { exact: true })).toBeVisible();
+	await expect(page.getByText("I fixed the two buttons.", { exact: true })).toBeVisible();
+	await expect(page.getByText("Reminder 1/3", { exact: true })).toBeVisible();
 });
 
 test("opening sharing performs local preview only, upload needs a button click", async () => {
@@ -261,6 +344,44 @@ test("quoting keeps the draft caret, preserves formula source and excludes the l
 	await expect(quote).toHaveCount(0);
 	await page.getByRole("button", { name: "Abort", exact: true }).click();
 	expect(errors).toEqual([]);
+});
+
+test("adjacent background updates and reasoning share one activity summary with visible failures", async () => {
+	await command("fixture background cards");
+	const notices = page.locator("details").filter({ hasText: "Background log update" });
+	const standalone = notices.filter({ hasText: "bg_62" });
+	await expect(standalone).toBeVisible();
+	const activity = page.getByRole("button", { name: /^Tasks:.*Background events:/ });
+	const answer = page.getByText("The desktop build passed; review the audit failure.", { exact: true });
+	await expect(answer).toBeVisible();
+	await expect(activity).toHaveAccessibleName("Tasks: 1 failed - 2 steps · Background events: 3");
+	await expect(activity).toHaveCount(1);
+	await expect(page.getByText("The desktop build is running.")).toHaveCount(0);
+	await page.screenshot({ path: "test-results/background-activity-summary.png", scale: "css", animations: "disabled" });
+	await activity.click();
+	await expect(page.getByText("The desktop build is running.")).toBeVisible();
+	const group = page.locator(".omp-execution-group").filter({ has: activity });
+	const nested = group.locator("details").filter({ hasText: "bg_63" }).filter({ hasText: "Background log update" });
+	const result = group.locator("details").filter({ hasText: "Background job completed" });
+	const thoughts = group.locator(".omp-thinking-block").filter({ hasText: "Thought" });
+	await expect(thoughts).toHaveCount(2);
+	const thought = thoughts.first();
+	for (const card of [standalone, nested, result, thought]) {
+		await expect(card).toBeVisible();
+		await expect(card).toHaveCSS("border-top-style", "solid");
+		await expect(card).toHaveCSS("border-left-width", "1px");
+		await expect(card).toHaveCSS("border-top-left-radius", "8px");
+	}
+	await expect(result).toContainText("bg_63 - [bash] - 15.8s");
+	await expect(page.getByText("Desktop build passed.", { exact: false })).toHaveCount(0);
+	await result.locator("summary").click();
+	await expect(result).toContainText("Desktop build passed.");
+	await thought.getByRole("button", { name: "Show reasoning" }).click();
+	await expect(thought.getByText("Review the background build output.")).toBeVisible();
+	await page.screenshot({ path: "test-results/background-activity-cards.png", scale: "css", animations: "disabled" });
+	await activity.click();
+	await expect(nested).toHaveCount(0);
+	await expect(answer).toBeVisible();
 });
 
 test("all named themes apply with readable primary text and no stale scheme tokens", async () => {

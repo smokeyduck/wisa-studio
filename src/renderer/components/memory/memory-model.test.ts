@@ -20,6 +20,7 @@ function overview(patch: Partial<RpcMemoryOverview>): RpcMemoryOverview {
 		enabled: true,
 		notes: [],
 		lessons: [],
+		knowledge: { source: "local", vaultEnabled: false },
 		summary: "",
 		full: "",
 		playbooks: [],

@@ -1,0 +1,4 @@
+# Studio registers Browser Use as an OMP host tool. Do not advertise the old
+# Core browser prelude in Studio, including when the Browser Use payload is unavailable.
+browser:
+  enabled: false

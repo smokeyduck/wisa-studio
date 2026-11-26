@@ -3,7 +3,6 @@
  * Type-safe contract for the contextBridge API.
  */
 
-import type { BrowserWorkspaceAction, BrowserWorkspaceState } from "./browser-workspace";
 import type { CollabAutoStartMode, CollabPhoneEntry, CollabPhoneSnapshot } from "./collab-phone";
 import type { DocumentPreviewResult } from "./document-preview";
 import type { Language } from "./languages";
@@ -20,6 +19,7 @@ import type {
 	IpcSkillsCommunityPreviewPayload,
 	IpcSkillsCommunityPreviewResult,
 } from "./skills-community";
+import type { VietnameseVoice } from "./speech-language";
 import type { IpcTemplateInstallPayload, IpcTemplateInstallResult, IpcTemplatesCatalogResult } from "./templates";
 
 export type IpcProjectAuditResponse =
@@ -98,7 +98,6 @@ import type {
 // ============================================================================
 
 export const IPC_EVENTS = {
-	BROWSER_STATE: "browser-workspace:state",
 	/** Global interface language changed in any app window. */
 	LANGUAGE_CHANGED: "prefs:language-changed",
 	/** The user's saved shortcuts changed in some app window. */
@@ -182,8 +181,6 @@ export const IPC_EVENTS = {
 // ============================================================================
 
 export const IPC_COMMANDS = {
-	BROWSER_OPEN: "browser-workspace:open",
-	BROWSER_ACTION: "browser-workspace:action",
 	WINDOW_IS_FULLSCREEN: "window:is-fullscreen",
 	/** Persist a renderer runtime failure in the main-process crash log */
 	RUNTIME_ERROR_REPORT: "runtime:error-report",
@@ -249,6 +246,8 @@ export const IPC_COMMANDS = {
 	SYSTEM_FETCH_REMOTE_IMAGE: "system:fetch-remote-image",
 	/** Open a file path in the system editor (relative resolves against the workspace) */
 	SYSTEM_OPEN_PATH: "system:open-path",
+	/** Open the system terminal in a workspace owned by the calling window. */
+	SYSTEM_OPEN_TERMINAL: "system:open-terminal",
 	/** Resolve paths named in replies and tool output: absolute form, file or folder, existence */
 	SYSTEM_RESOLVE_PATHS: "system:resolve-paths",
 	/** Show a file or folder in the system file manager */
@@ -263,8 +262,8 @@ export const IPC_COMMANDS = {
 	SYSTEM_NOTIFY: "system:notify",
 	/** Speak text with the OS voice (the local TTS is English-only) */
 	SYSTEM_SPEAK: "system:speak",
-	/** Fetch the neural voice for a language ahead of the first utterance */
-	SYSTEM_PREWARM_SPEECH: "system:prewarm-speech",
+	/** Cancel local OS speech originating from this renderer. */
+	SYSTEM_STOP_SPEECH: "system:stop-speech",
 	/** Read the custom themes folder (IpcCustomThemes) */
 	THEMES_LIST: "themes:list",
 	/** Create the custom themes folder if needed and open it in the file manager */
@@ -1342,11 +1341,6 @@ export interface OmpApi {
 	platform: string;
 	/** Native startup language, resolved before the first renderer paint. */
 	initialLanguage?: Language;
-	browser: {
-		open(tabId: string | null): Promise<void>;
-		action(action: BrowserWorkspaceAction): Promise<BrowserWorkspaceState>;
-		onState(callback: (state: BrowserWorkspaceState) => void): () => void;
-	};
 	windowChrome: {
 		isFullScreen(): Promise<boolean>;
 		onFullScreenChange(callback: (fullScreen: boolean) => void): () => void;
@@ -1732,6 +1726,8 @@ export interface OmpApi {
 		fetchRemoteImage(url: string): Promise<string | null>;
 		/** Open a file in the system editor; relative paths resolve against the workspace. */
 		openPath(path: string): Promise<IpcOpenPathResult>;
+		/** Open the OS terminal at this tab's current workspace. */
+		openTerminal(tabId: string): Promise<IpcOpenPathResult>;
 		/** Resolve paths like fs reads do (tab workspace for relative ones); null for paths that do not exist. */
 		resolvePaths(paths: string[], tabId?: string): Promise<Array<IpcResolvedPath | null>>;
 		/** Show a file or folder in the system file manager. */
@@ -1746,13 +1742,12 @@ export interface OmpApi {
 		recorderSave(path: string, data: ArrayBuffer): Promise<{ ok: boolean; error?: string }>;
 		notify(title: string, body?: string): void;
 		/** Speak text with the OS voice; resolves once playback finished, or with the engine's error. */
-		speak(text: string, language: string): Promise<{ ok: boolean; error?: string }>;
-		/**
-		 * Fetch the neural voice for `language` in the background, so the first
-		 * utterance is not preceded by a download. Resolves when it is ready (or
-		 * immediately when the platform has no such voice).
-		 */
-		prewarmSpeech(language: string): Promise<{ ok: boolean }>;
+		speak(text: string, language: string, voice?: VietnameseVoice): Promise<{
+			ok: boolean;
+			error?: string;
+			missingVoice?: boolean;
+		}>;
+		stopSpeech(): Promise<void>;
 	};
 	themes: {
 		list(): Promise<IpcCustomThemes>;

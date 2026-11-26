@@ -1,12 +1,11 @@
 import { ChevronsDownUp, ChevronsUpDown, CircleCheck, FolderX, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RpcGitChanges, RpcGitDiff } from "../../../shared/rpc-types";
+import { useWorkingTreeChanges } from "../../hooks/use-working-tree-changes";
 import { describeError } from "../../lib/errors";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
-import type { TabRpc } from "../../lib/tab-rpc";
 import { useTabRpc } from "../../lib/tab-rpc";
-import { useSessionStore } from "../../stores/session";
 import { useRuntimeTabId } from "../../stores/session-runtime-context";
 import { showPathMenu } from "../common/LinkMenu";
 import {
@@ -33,92 +32,72 @@ type DiffState =
 	| { state: "ready"; diff: RpcGitDiff; adds: number; removes: number }
 	| { state: "error"; error: string };
 
+// A new list (run completion, focus or manual refresh) also invalidates its diff bodies.
+const cachedDiffs = new WeakMap<RpcGitChanges, Map<string, Extract<DiffState, { state: "ready" }>>>();
+const EMPTY_DIFFS: ReadonlyMap<string, DiffState> = new Map();
+
 export function RepositoryChanges({ split = false }: { split?: boolean }) {
 	const t = useT();
 	const rpc = useTabRpc();
 	const tabId = useRuntimeTabId();
-	const [refresh, setRefresh] = useState(0);
-	const [changes, setChanges] = useState<RpcGitChanges | null>(null);
+	const { data: changes, loading, error, refresh } = useWorkingTreeChanges();
 	const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-	const [diffs, setDiffs] = useState<ReadonlyMap<string, DiffState>>(new Map());
-	const [error, setError] = useState<string | null>(null);
-	const [loading, setLoading] = useState(true);
+	const [loaded, setLoaded] = useState<{ changes: RpcGitChanges; diffs: ReadonlyMap<string, DiffState> } | null>(null);
 	const [query, setQuery] = useState("");
-	const loadedFor = useRef<TabRpc | null>(null);
-	/** Bumped per successful list load; stale diff responses from an older list are dropped. */
-	const generation = useRef(0);
+	const currentList = useRef<RpcGitChanges | null>(null);
 	const requested = useRef(new Set<string>());
+	const diffs = loaded && loaded.changes === changes ? loaded.diffs : EMPTY_DIFFS;
 
-	// A run that just settled may have changed the checkout: re-read it, so an
-	// open drawer follows the agent's work without a manual refresh.
-	const isStreaming = useSessionStore(state => state.isStreaming);
-	const wasStreaming = useRef(isStreaming);
-	useEffect(() => {
-		if (wasStreaming.current && !isStreaming) setRefresh(value => value + 1);
-		wasStreaming.current = isStreaming;
-	}, [isStreaming]);
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: refresh explicitly reloads the checkout.
-	useEffect(() => {
-		let active = true;
-		setLoading(true);
-		// A reload is not an initial load: only switching to another session's
-		// client wipes the rows, so a failed refresh keeps the last good diff up.
-		const switched = loadedFor.current !== rpc;
-		if (switched) {
-			setChanges(null);
+	useLayoutEffect(() => {
+		const first = currentList.current?.root !== changes?.root || currentList.current === null;
+		currentList.current = changes;
+		requested.current.clear();
+		if (!changes) {
+			setLoaded(null);
 			setExpanded(new Set());
+			return;
 		}
-		setError(null);
-		void Promise.resolve()
-			.then(() => rpc.getGitChanges())
-			.then(response => {
-				if (!active) return;
-				if (!response.success) throw new Error(response.error ?? t("rpc.failed"));
-				const next = response.data as RpcGitChanges;
-				const first = loadedFor.current !== rpc;
-				loadedFor.current = rpc;
-				generation.current++;
-				requested.current = new Set();
-				setDiffs(new Map());
-				setChanges(next);
-				const paths = new Set(next.files.map(file => file.path));
-				setExpanded(previous =>
-					first && next.files.length <= AUTO_EXPAND_LIMIT
-						? paths
-						: new Set([...previous].filter(path => paths.has(path))),
-				);
-			})
-			.catch(cause => {
-				if (active) setError(describeError(cause));
-			})
-			.finally(() => {
-				if (active) setLoading(false);
-			});
-		return () => {
-			active = false;
-		};
-	}, [rpc, refresh, t]);
+		const cached = cachedDiffs.get(changes);
+		if (cached) for (const path of cached.keys()) requested.current.add(path);
+		setLoaded({ changes, diffs: cached ?? EMPTY_DIFFS });
+		const paths = new Set(changes.files.map(file => file.path));
+		setExpanded(previous => {
+			if (first) return changes.files.length <= AUTO_EXPAND_LIMIT ? paths : new Set();
+			return new Set([...previous].filter(path => paths.has(path)));
+		});
+	}, [changes]);
 
 	const loadDiff = useCallback(
 		async (path: string) => {
-			if (requested.current.has(path)) return;
+			if (!changes || requested.current.has(path)) return;
 			requested.current.add(path);
-			const owner = generation.current;
-			setDiffs(previous => new Map(previous).set(path, { state: "loading" }));
+			const publish = (entry: DiffState) => {
+				if (currentList.current !== changes) return;
+				setLoaded(previous => ({ changes, diffs: new Map(previous?.diffs).set(path, entry) }));
+			};
+			publish({ state: "loading" });
 			try {
 				const response = await rpc.getGitDiff(path);
 				if (!response.success) throw new Error(response.error ?? t("rpc.failed"));
 				const diff = response.data as RpcGitDiff;
 				const counts = diff.kind === "text" ? countDiffLines(diff.diff) : { adds: 0, removes: 0 };
-				if (owner !== generation.current) return;
-				setDiffs(previous => new Map(previous).set(path, { state: "ready", diff, ...counts }));
+				const entry = { state: "ready", diff, ...counts } as const;
+				let cached = cachedDiffs.get(changes);
+				if (!cached) {
+					cached = new Map();
+					cachedDiffs.set(changes, cached);
+				}
+				cached.set(path, entry);
+				if (cached.size > 64) {
+					const oldest = cached.keys().next().value;
+					if (oldest !== undefined) cached.delete(oldest);
+				}
+				publish(entry);
 			} catch (cause) {
-				if (owner !== generation.current) return;
-				setDiffs(previous => new Map(previous).set(path, { state: "error", error: describeError(cause) }));
+				publish({ state: "error", error: describeError(cause) });
 			}
 		},
-		[rpc, t],
+		[changes, rpc, t],
 	);
 
 	// Fetch diff bodies only for opened cards; collapsed paths need only Git status.
@@ -172,7 +151,7 @@ export function RepositoryChanges({ split = false }: { split?: boolean }) {
 	const fileCount = changes?.files.length ?? 0;
 
 	const refreshButton = (
-		<ToolbarIconButton label={t("common.refresh")} disabled={loading} onClick={() => setRefresh(value => value + 1)}>
+		<ToolbarIconButton label={t("common.refresh")} disabled={loading} onClick={refresh}>
 			<RefreshCw size={14} className={cx(loading && changes && "animate-spin")} />
 		</ToolbarIconButton>
 	);

@@ -313,6 +313,20 @@ describe("transcript hydration", () => {
 		expect(mergeFetchedTranscript([b, c], merged, merged)).toEqual([first, b, c, second, third]);
 	});
 
+	it("does not restore a compaction success row even when another output shares its missing anchor", () => {
+		const old = userMessage("old");
+		const latest = userMessage("latest");
+		const legacy: AgentMessage = {
+			role: "custom",
+			customType: "command",
+			content: [{ type: "text", text: "Compaction complete. Tokens: 155925 -> 33321 (saved 122604)." }],
+			commandOutputAfterEntryId: old.entryId,
+		};
+		const other = { ...legacy, content: "Enabled models: gpt-5.6" };
+		const current = [old, legacy, other, latest];
+		expect(mergeFetchedTranscript([latest], current, current)).toEqual([latest, other]);
+	});
+
 	it("clears delivered live rows after idle hydration but preserves local echo", () => {
 		const optimistic: AgentMessage = { role: "user", content: "pending", timestamp: 1, optimistic: true };
 		const delivered: AgentMessage = { role: "assistant", content: "stale", timestamp: 2 };
