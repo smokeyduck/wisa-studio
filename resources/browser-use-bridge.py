@@ -42,8 +42,8 @@ def node_id(params):
 
 
 class Session:
-    def __init__(self, executable, headless=None):
-        self.browser = Browser('chromium', executable_path=executable, headless=headless, live_view=False)
+    def __init__(self, executable):
+        self.browser = Browser('chromium', executable_path=executable, headless=True, live_view=False)
         self.ax = None
 
     async def start(self):
@@ -140,7 +140,7 @@ def send(reply):
 async def main():
     executable = sys.argv[1]
     check = sys.argv[2] if len(sys.argv) == 3 else None
-    session = Session(executable, True if check else None)
+    session = Session(executable)
     try:
         if check:
             if version('browser-use') != check:

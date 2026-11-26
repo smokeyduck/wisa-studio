@@ -7,7 +7,7 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
-- Replace the embedded WISA Browser with OMP’s `browser_use` tool. Ask the agent to browse instead of using the toolbar globe. Studio bundles the official Browser Use 1.0.8 Python package and local Chromium with a separate temporary profile per browsing session. It requires no Browser Use account or cloud browser, does not read personal Chrome profiles, and leaves existing WISA Browser data untouched.
+- Replace the embedded WISA Browser with OMP’s `browser_use` tool. Ask the agent to browse instead of using the toolbar globe. Studio bundles the official Browser Use 1.0.8 Python package and local headless Chromium with a separate temporary profile per browsing session. It requires no Browser Use account or cloud browser, does not read personal Chrome profiles, and leaves existing WISA Browser data untouched.
 - Check for stable Browser Use releases on GitHub at startup and daily. Activate a new version for new agent sessions only after a local Chromium check passes; failed updates leave the working version in place.
 - Remove GUI Tool Profiles. Coding uses Core tool and edit settings; Work keeps a smaller tool set with `computer` available by default, subject to settings and approval.
 - Clarify that `find` in Auto mode is enabled when the first available judge candidate uses a native backend.
