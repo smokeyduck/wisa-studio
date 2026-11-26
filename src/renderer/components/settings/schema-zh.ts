@@ -734,6 +734,11 @@ export const ZH_SETTINGS: Record<string, { label: string; description?: string }
 		label: "Bash 自动后台",
 		description: "自动将长时间运行的 bash 命令转入后台，稍后交付结果",
 	},
+	"bash.reapBackground": {
+		label: "清理后台进程",
+		description:
+			"在智能体停止时提醒它仍在运行的 Bash 后台进程（`cmd &`、`nohup`），并在会话结束时终止未注册为服务的 `&` 进程。RPC 模式下关闭。",
+	},
 	"bash.patterns": {
 		label: "Bash 审批模式",
 		description: "有序的 bash 命令审批规则。每项含 match 和 approval 字段；仅支持 '*' 通配符。",

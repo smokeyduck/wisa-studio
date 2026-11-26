@@ -7,7 +7,12 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-26
+
+Core source: `smokeyduck/oh-my-pi@321709b5cee9e55654083086c2f9cc9097737618` (Core 19.2.1 with WISA patches, synced with upstream stable `v19.2.1`).
+
 - Keep left-sidebar projects in a stable order when switching sessions. Drag-and-drop still saves the chosen order.
+- Keep queued input visible while its request starts, until the transcript records it.
 
 ## [1.0.0] - 2026-11-25
 

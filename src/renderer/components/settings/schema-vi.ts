@@ -1799,6 +1799,11 @@ export const VI_SETTINGS: Record<string, { label?: string; description?: string 
 		label: "Tự động chạy Bash nền",
 		description: "Tự động chuyển các lệnh bash chạy lâu sang chế độ chạy nền và gửi kết quả sau",
 	},
+	"bash.reapBackground": {
+		label: "Dọn tiến trình nền",
+		description:
+			"Nhắc agent về tiến trình Bash còn chạy nền (`cmd &`, `nohup`) và dừng các tiến trình chạy bằng `&` khi kết thúc phiên, trừ tiến trình đã đăng ký làm dịch vụ. Tắt trong chế độ RPC.",
+	},
 	"bash.gitGuard": {
 		label: "Bảo vệ Git",
 		description:

@@ -10,10 +10,10 @@ Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding age
 
 | Platform | Package |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-1.0.0-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.0.0) |
-| macOS Intel | `wisa-studio-1.0.0-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.0.0) |
-| Windows x64 | [`wisa-studio-1.0.0-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.0.0/wisa-studio-1.0.0-setup.exe) |
-| Linux x64 | [`wisa-studio-1.0.0.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.0.0/wisa-studio-1.0.0.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.0.1-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.0.1) |
+| macOS Intel | `wisa-studio-1.0.1-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.0.1) |
+| Windows x64 | [`wisa-studio-1.0.1-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.0.1/wisa-studio-1.0.1-setup.exe) |
+| Linux x64 | [`wisa-studio-1.0.1.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.0.1/wisa-studio-1.0.1.AppImage) |
 
 [All releases](https://github.com/smokeyduck/wisa-studio/releases) · [Install guide (vi)](docs/vi/cai-dat.md)
 
@@ -21,11 +21,9 @@ macOS builds are ad-hoc signed (not notarized) and Windows builds are unsigned, 
 
 **Windows requirements:** Windows 10 x64 version 1809 (build 17763) or later, including Windows 11, and an x86-64-v2 CPU with SSE4.2. This minimum comes from the Electron, Bun and native-addon runtime requirements; it is not a claim that this release was tested on a Windows 10 machine.
 
-### What's new in 1.0.0
+### What's new in 1.0.1
 
-This release ships Core 19.2.0. Agent questions appear one step at a time and keep your answers when you go back; Core pauses automatic cache refreshes while it waits for your reply. The right sidebar opens beside the chat instead of covering it.
-
-Local and private model providers bypass the proxy. You can collapse long blocks from the footer, and built-in slash-command output stays visible when the conversation reloads. See the [changelog](CHANGELOG.md#100---2026-11-25).
+This release ships Core 19.2.1. Switching sessions no longer reorders projects in the left sidebar; drag and drop still sets their order. Queued input stays visible until it is recorded in the conversation. See the [changelog](CHANGELOG.md#101---2026-11-26).
 
 ## Get an API key
 

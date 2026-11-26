@@ -1817,6 +1817,11 @@ export const RU_SETTINGS: Record<string, { label?: string; description?: string 
 		label: "Автоматически запускать Bash в фоне",
 		description: "Автоматически переводить долгие команды bash в фоновый режим и позднее передавать результат",
 	},
+	"bash.reapBackground": {
+		label: "Завершать фоновые процессы",
+		description:
+			"Напоминать агенту о запущенных через Bash фоновых процессах (`cmd &`, `nohup`) и при завершении сессии останавливать процессы, запущенные через `&`, если они не зарегистрированы как службы. В режиме RPC отключено.",
+	},
 	"bash.gitGuard": {
 		label: "Защита Git",
 		description:
