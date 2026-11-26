@@ -125,7 +125,6 @@ interface WorkspaceGroup {
 	cwd: string;
 	name: string;
 	sessions: SessionInfo[];
-	lastUsed: number;
 }
 
 /** A delete the row, context menu or selection bar queued, awaiting the confirmation dialog. */
@@ -305,7 +304,6 @@ export function Sidebar() {
 	const archivedPaths = useSidebarPrefs(s => s.archivedSessions);
 	const archived = useMemo(() => new Set(archivedPaths), [archivedPaths]);
 	const groupAliases = useSidebarPrefs(s => s.groupAliases);
-	const workspaceLastUsed = useSidebarPrefs(s => s.workspaceLastUsed);
 	const workspaceOrder = useSidebarPrefs(s => s.workspaceOrder);
 	const collapsed = useSidebarPrefs(s => s.collapsedLists);
 	const expandedLists = useSidebarPrefs(s => s.expandedLists);
@@ -463,7 +461,7 @@ export function Sidebar() {
 	);
 	const laneArchived = useMemo(() => archivedSessions.filter(inLane), [archivedSessions, inLane]);
 
-	// Keep pinned workspaces first. Explicit positions win over recency inside each partition.
+	// Pinned workspaces stay first. Paths give unranked workspaces a stable order independent of activity.
 	const groups = useMemo<WorkspaceGroup[]>(() => {
 		const byCwd = new Map<string, SessionInfo[]>();
 		for (const session of projectSessions) {
@@ -478,10 +476,6 @@ export function Sidebar() {
 		const result: WorkspaceGroup[] = [...byCwd.entries()].map(([groupCwd, groupSessions]) => ({
 			cwd: groupCwd,
 			name: groupAliases[groupCwd] ?? (basename(groupCwd) || groupCwd),
-			lastUsed: groupSessions.reduce(
-				(latest, session) => Math.max(latest, recencyForSession(session)),
-				workspaceLastUsed[groupCwd] ?? 0,
-			),
 			sessions: [...groupSessions].sort((a, b) => {
 				const aPinned = pinnedSessions.includes(a.path) ? 0 : 1;
 				const bPinned = pinnedSessions.includes(b.path) ? 0 : 1;
@@ -496,7 +490,7 @@ export function Sidebar() {
 			if (aPinned !== bPinned) return aPinned - bPinned;
 			const aPosition = positions.get(a.cwd) ?? positions.size;
 			const bPosition = positions.get(b.cwd) ?? positions.size;
-			return aPosition - bPosition || b.lastUsed - a.lastUsed;
+			return aPosition - bPosition || (a.cwd < b.cwd ? -1 : a.cwd > b.cwd ? 1 : 0);
 		});
 		return result;
 	}, [
@@ -508,7 +502,6 @@ export function Sidebar() {
 		pinnedSessions,
 		registeredWorkspaces,
 		recencyForSession,
-		workspaceLastUsed,
 		workspaceOrder,
 	]);
 	function isCollapsedGroup(groupCwd: string): boolean {

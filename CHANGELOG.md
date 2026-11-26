@@ -7,6 +7,8 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+- Keep left-sidebar projects in a stable order when switching sessions. Drag-and-drop still saves the chosen order.
+
 ## [1.0.0] - 2026-11-25
 
 Core source: `smokeyduck/oh-my-pi@31da293d40d1bf502bc2f7aac6b581aae8fd6f8a` (Core 19.2.0 with WISA patches, synced with upstream stable `v19.2.0`).

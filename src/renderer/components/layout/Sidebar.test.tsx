@@ -350,7 +350,7 @@ describe("Sidebar menus and pinned ordering", () => {
 		expect(useUiStore.getState().settingsOpen).toBe(true);
 	});
 
-	it("moves the most recently used session and its workspace to the front immediately", async () => {
+	it("keeps workspace positions fixed while moving the active session to the front within its workspace", async () => {
 		const omp = installMockOmp(LIST);
 		useSessionStore.setState({ sessionId: "", cwd: "/neutral", isStreaming: false });
 		useTabsStore.setState({
@@ -370,7 +370,7 @@ describe("Sidebar menus and pinned ordering", () => {
 				element => element.textContent ?? "",
 			);
 
-		expect(workspaceOrder()).toEqual(["/work/beta", "/work/alpha"]);
+		expect(workspaceOrder()).toEqual(["/work/alpha", "/work/beta"]);
 		expect(alphaSessionOrder()[0]).toContain("Session /work/alpha/one");
 
 		await act(async () => {
@@ -382,6 +382,19 @@ describe("Sidebar menus and pinned ordering", () => {
 				sessionId: "/work/alpha/two.jsonl",
 				sessionFile: "/work/alpha/two.jsonl",
 				cwd: "/work/alpha",
+			});
+		});
+		await flush();
+
+		await act(async () => {
+			useTabsStore.setState({
+				tabs: [{ id: "beta", cwd: "/work/beta", status: "ready", kind: "agent", unreadDone: false }],
+				activeTabId: "beta",
+			});
+			useSessionStore.setState({
+				sessionId: "/work/beta/three.jsonl",
+				sessionFile: "/work/beta/three.jsonl",
+				cwd: "/work/beta",
 			});
 		});
 		await flush();
@@ -406,7 +419,7 @@ describe("Sidebar menus and pinned ordering", () => {
 			activeTabId: "chat",
 			bundles: new Map(),
 		});
-		useSidebarPrefs.setState({ hydrated: true });
+		useSidebarPrefs.setState({ hydrated: true, workspaceOrder: ["/work/beta", "/work/alpha"] });
 		await mount(<SidebarWithRecency />);
 		const workspaceOrder = () =>
 			[...container.querySelectorAll("[data-workspace-group]")].map(element =>
