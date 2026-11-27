@@ -128,7 +128,16 @@ function resolveTarget(): SidecarTarget {
 		const platformTag = `${process.platform}-${process.arch}`;
 		return {
 			platformTag,
-			out: path.join(guiRoot, "resources", process.platform === "win32" ? "omp.exe" : "omp"),
+			// Keep the named target's packaging path even when Bun can compile for the host.
+			out: path.join(
+				guiRoot,
+				"resources",
+				targetFlag
+					? sidecarOutName(process.platform, process.arch)
+					: process.platform === "win32"
+						? "omp.exe"
+						: "omp",
+			),
 			addonFilenames: addonFilenamesFor(platformTag),
 		};
 	}

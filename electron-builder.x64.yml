@@ -27,9 +27,10 @@ protocols:
     schemes:
       - wisa-studio
 asar: true
-compression: maximum
 
 mac:
+  # Match the Apple Silicon updater ZIP compression level.
+  compression: normal
   category: public.app-category.developer-tools
   icon: resources/icon.icns
   # Seal the complete bundle even when no Developer ID certificate is available.

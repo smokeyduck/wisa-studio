@@ -31,6 +31,8 @@ asar: true
 compression: maximum
 
 mac:
+  # Keep updater ZIP compression at the normal level; maximum runs 15 Deflate passes.
+  compression: normal
   category: public.app-category.developer-tools
   icon: resources/icon.icns
   # Seal the complete bundle even when no Developer ID certificate is available.

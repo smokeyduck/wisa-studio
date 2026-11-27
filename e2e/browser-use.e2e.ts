@@ -147,7 +147,16 @@ test("the bundled Core delegates web navigation to Browser Use without enabling 
 		expect(pageVisits).toBe(1);
 	} finally {
 		try {
-			await app?.close();
+			const page = app?.windows().find(window => !window.isClosed());
+			if (app && page) {
+				// Quit through Studio so its sidecar and Chromium shut down first.
+				await Promise.all([
+					app.waitForEvent("close", { timeout: 15_000 }),
+					page.evaluate(() => window.omp.app.quit()).catch(() => {}),
+				]);
+			} else {
+				await app?.close();
+			}
 		} finally {
 			server.closeAllConnections();
 			await new Promise<void>(resolveClose => server.close(() => resolveClose()));
