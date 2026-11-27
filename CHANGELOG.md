@@ -7,6 +7,10 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-11-27
+
+Core source: `smokeyduck/oh-my-pi@70b0a534cacc3ea6d6d1b67c696970d92ba6a86a` (Core 19.2.1 with WISA patches, based on upstream stable `v19.2.1`).
+
 - Browser Use opens a separate Chromium window you can see and interact with. Background update checks stay headless.
 - In interactive Studio sessions, Computer uses the normal tool approval policy instead of asking on every action. Core can bring the target forward when needed; explicit restrictions and Escape still apply.
 

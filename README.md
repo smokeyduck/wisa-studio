@@ -10,10 +10,10 @@ GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một
 
 | Nền tảng | Gói |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-1.1.4-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.4) |
-| macOS Intel | `wisa-studio-1.1.4-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.4) |
-| Windows x64 | [`wisa-studio-1.1.4-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.4/wisa-studio-1.1.4-setup.exe) |
-| Linux x64 | [`wisa-studio-1.1.4.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.4/wisa-studio-1.1.4.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.1.5-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.5) |
+| macOS Intel | `wisa-studio-1.1.5-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.5) |
+| Windows x64 | [`wisa-studio-1.1.5-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.5/wisa-studio-1.1.5-setup.exe) |
+| Linux x64 | [`wisa-studio-1.1.5.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.5/wisa-studio-1.1.5.AppImage) |
 
 [Tất cả bản phát hành](https://github.com/smokeyduck/wisa-studio/releases) · [Hướng dẫn cài đặt](docs/vi/cai-dat.md)
 
@@ -21,9 +21,9 @@ Bản macOS được ký ad-hoc (chưa notarize) và bản Windows chưa ký, n�
 
 **Yêu cầu Windows:** Windows 10 x64 phiên bản 1809 (build 17763) trở lên, bao gồm Windows 11, và CPU x86-64-v2 có SSE4.2. Mức tối thiểu này dựa trên yêu cầu của Electron, Bun và native addon; không có nghĩa bản phát hành đã được kiểm thử trên máy Windows 10 thực tế.
 
-### Có gì mới trong 1.1.4
+### Có gì mới trong 1.1.5
 
-Browser Use thay trình duyệt nhúng: agent dùng Chromium riêng, không đụng đến hồ sơ Chrome cá nhân. Hộp thoại Computer hiển thị cửa sổ đích và thao tác; Core từ chối gửi input nếu đích đổi trong lúc chờ duyệt. Câu trả lời cuối vẫn hiển thị khi lượt chạy tiếp tục do checklist, không cần tải lại. Xem [changelog](CHANGELOG.md#114---2026-11-27).
+Browser Use mở cửa sổ Chromium riêng để bạn nhìn thấy và tương tác; kiểm tra cập nhật nền vẫn chạy headless. Trong phiên Studio tương tác, Computer dùng chính sách duyệt công cụ thông thường thay vì hỏi lại sau mỗi thao tác; Core có thể đưa cửa sổ đích lên trước khi cần. Hạn chế đặt riêng và phím Escape vẫn có hiệu lực. Xem [changelog](CHANGELOG.md#115---2026-11-27).
 
 ## Lấy API key
 
@@ -137,7 +137,7 @@ Cùng tồn tại:
 
 ## Phát triển
 
-Repo này là GUI repo. Agent nằm ở monorepo upstream và được biên dịch thành sidecar; muốn dựng sidecar từ mã nguồn, clone monorepo vào thư mục anh em rồi:
+Repo này là GUI repo. Agent trong monorepo OMP Core được biên dịch thành sidecar. Chạy các lệnh sau từ `packages/gui` trong monorepo; với checkout GUI độc lập, đặt `WISA_CORE_ROOT` thành đường dẫn tuyệt đối tới checkout Core khi dựng sidecar hoặc chạy `scripts/sync-upstream.sh`:
 
 ```bash
 bun install

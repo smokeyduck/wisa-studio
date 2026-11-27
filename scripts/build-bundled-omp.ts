@@ -9,13 +9,9 @@
  * sidecar. The packaged GUI NEVER falls back to a system-installed omp
  * (src/main/index.ts resolveBundledOmp).
  *
- * REQUIRES the omp monorepo: this file resolves `../../coding-agent` and
- * `../../natives` relative to packages/gui, so the GUI repo must sit at
- * `packages/gui/` inside a monorepo checkout (the nested-layout contract in
- * AGENTS.md). A standalone GUI clone can package only by dropping a prebuilt
- * sidecar into resources/ — see README → Build from source. The compile-binary
- * import is dynamic precisely so this prerequisite failure prints setup
- * instructions instead of a bare module-not-found.
+ * REQUIRES the OMP monorepo: by default this GUI must sit at `packages/gui/`.
+ * In a standalone checkout, set `WISA_CORE_ROOT` to the absolute path to
+ * Core. The dynamic import lets us diagnose a missing Core checkout.
  *
  * What it does:
  *   1. Verifies the monorepo neighbors exist (fails with setup instructions).
@@ -44,7 +40,8 @@ import { createRequire } from "node:module";
 import * as path from "node:path";
 
 const guiRoot = path.join(import.meta.dir, "..");
-const repoRoot = path.join(guiRoot, "..", "..");
+const repoRoot = process.env.WISA_CORE_ROOT ?? path.join(guiRoot, "..", "..");
+if (!path.isAbsolute(repoRoot)) throw new Error("WISA_CORE_ROOT must be an absolute path.");
 const codingAgentDir = path.join(repoRoot, "packages", "coding-agent");
 const statsDir = path.join(repoRoot, "packages", "stats");
 const collabWebDir = path.join(repoRoot, "packages", "collab-web");
@@ -60,10 +57,9 @@ if (!existsSync(compileBinaryModulePath) || !existsSync(path.join(nativesDir, "s
 	console.error(
 		[
 			"",
-			"  build:omp cannot find the omp monorepo next to this checkout.",
-			"",
-			"  This script compiles the GUI's bundled agent sidecar from monorepo source,",
-			"  so the GUI repo must sit at packages/gui/ inside a monorepo clone:",
+			"  build:omp cannot find the OMP monorepo.",
+			"  Set WISA_CORE_ROOT to the absolute path to the OMP Core checkout,",
+			"  or place the GUI at packages/gui/ inside the monorepo:",
 			"",
 			"    git clone https://github.com/can1357/oh-my-pi.git omp-monorepo",
 			"    cd omp-monorepo && bun install",

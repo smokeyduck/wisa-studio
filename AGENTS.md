@@ -61,7 +61,7 @@ oh-my-pi/                    ← monorepo (upstream sync + sidecar source)
 
 - The monorepo exists for **upstream feature sync and building the sidecar**; the GUI repo is **the only commit/release target**.
 - `git status` / `git log` / `git push` run inside `packages/gui/` act on the GUI repo. Anything outside `packages/gui/` acts on the monorepo.
-- Do not move this directory out of the monorepo: `scripts/build-bundled-omp.ts` resolves `../../coding-agent` relative to it. If you clone standalone, building the sidecar requires the monorepo next to it (see README → Build from source).
+- The standard build resolves Core from a nested `packages/gui` checkout. In a standalone main checkout, pass the absolute Core path as `WISA_CORE_ROOT` to `scripts/sync-upstream.sh` and `build:omp`; do not create a second development checkout.
 
 ## Sidecar & Packaging Rules
 
@@ -97,6 +97,7 @@ bash packages/gui/scripts/sync-upstream.sh        # upstream/main integration
 # To ship the published Core (and its matching npm native addons), sync the official
 # stable tag in a clean release checkout based on the fork before any post-tag commits:
 # UPSTREAM_TAG=vX.Y.Z bash packages/gui/scripts/sync-upstream.sh
+# From a standalone GUI main, set WISA_CORE_ROOT to the absolute Core path and run bash scripts/sync-upstream.sh.
 # merge conflict → resolve at the MONOREPO root → git add -A && git commit →
 SKIP_MERGE=1 bash packages/gui/scripts/sync-upstream.sh
 ```

@@ -1,5 +1,5 @@
 /** Compile-time contracts: each stats HTTP reply must satisfy the GUI type that reads it. */
-import type * as Server from "../../../stats/src/types";
+import type * as Server from "wisa-protocol-core/stats/src/types";
 import type * as Gui from "../../src/shared/stats-types";
 
 type Wire<T> = T extends string ? `${T}` : T extends object ? { [K in keyof T]: Wire<T[K]> } : T;

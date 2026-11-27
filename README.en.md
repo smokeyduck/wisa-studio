@@ -10,10 +10,10 @@ Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding age
 
 | Platform | Package |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-1.1.4-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.4) |
-| macOS Intel | `wisa-studio-1.1.4-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.4) |
-| Windows x64 | [`wisa-studio-1.1.4-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.4/wisa-studio-1.1.4-setup.exe) |
-| Linux x64 | [`wisa-studio-1.1.4.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.4/wisa-studio-1.1.4.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.1.5-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.5) |
+| macOS Intel | `wisa-studio-1.1.5-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.5) |
+| Windows x64 | [`wisa-studio-1.1.5-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.5/wisa-studio-1.1.5-setup.exe) |
+| Linux x64 | [`wisa-studio-1.1.5.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.5/wisa-studio-1.1.5.AppImage) |
 
 [All releases](https://github.com/smokeyduck/wisa-studio/releases) · [Install guide (vi)](docs/vi/cai-dat.md)
 
@@ -21,9 +21,9 @@ macOS builds are ad-hoc signed (not notarized) and Windows builds are unsigned, 
 
 **Windows requirements:** Windows 10 x64 version 1809 (build 17763) or later, including Windows 11, and an x86-64-v2 CPU with SSE4.2. This minimum comes from the Electron, Bun and native-addon runtime requirements; it is not a claim that this release was tested on a Windows 10 machine.
 
-### What's new in 1.1.4
+### What's new in 1.1.5
 
-Browser Use replaces the embedded browser: the agent uses a separate Chromium instance without touching personal Chrome profiles. Computer approvals identify the target window and action; Core refuses to send input if the target changes while awaiting approval. Final replies stay visible during checklist continuations without reloading. See the [changelog](CHANGELOG.md#114---2026-11-27).
+Browser Use opens a separate Chromium window you can see and interact with; background update checks stay headless. In interactive Studio sessions, Computer uses the normal tool approval policy instead of asking on every action, and Core can bring the target forward when needed. Explicit restrictions and Escape still apply. See the [changelog](CHANGELOG.md#115---2026-11-27).
 
 ## Get an API key
 
@@ -137,7 +137,7 @@ Coexistence:
 
 ## Development
 
-This repository is the GUI repo. The agent lives in the upstream monorepo and is compiled into a sidecar; to build the sidecar from source, clone the monorepo as a sibling directory and run:
+This is the GUI repo. The agent in the OMP Core monorepo is compiled into a sidecar. Run these commands from `packages/gui` in the monorepo; for a standalone GUI checkout, set `WISA_CORE_ROOT` to the absolute path to the Core checkout when building the sidecar or running `scripts/sync-upstream.sh`:
 
 ```bash
 bun install

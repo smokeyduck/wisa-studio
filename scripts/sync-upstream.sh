@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # omp upstream → GUI feature-sync.
 #
-# Merges the latest omp upstream into the current (GUI release) branch, then
-# re-runs the GUI-specific rebuild steps a plain `git merge` can't do. Run from
-# the repo root: `bash packages/gui/scripts/sync-upstream.sh`.
+# Merges upstream into the current Core main, then re-provisions the sidecar
+# and verifies the GUI. Run from a nested checkout, or set WISA_CORE_ROOT to
+# the absolute path of the separate Core checkout.
 #
 # Steps:
 #   1. fetch upstream, show what's incoming
@@ -14,9 +14,13 @@
 #   6. build:omp (rebuild the bundled sidecar with upstream + local changes)
 #   7. build the GUI renderer + typecheck + tests
 set -euo pipefail
-cd "$(dirname "$0")/../../.."
-
-GUI=packages/gui
+GUI="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${WISA_CORE_ROOT:-$GUI/../..}"
+if [ ! -f packages/coding-agent/scripts/compile-binary.ts ]; then
+	echo "Set WISA_CORE_ROOT to the OMP Core checkout before syncing from a standalone GUI checkout." >&2
+	exit 1
+fi
+export WISA_CORE_ROOT="$(node -p 'process.cwd()')"
 # WISA natives cache root. Exported so every child step (bun install, build:omp) sees one value.
 export PI_NATIVES_DIR="${PI_NATIVES_DIR:-$HOME/.wisa-studio/natives}"
 say() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
@@ -59,53 +63,59 @@ fi
 say "3/7 bun install"
 bun install
 
-new_version="$(cd packages/coding-agent && node -p "require('./package.json').version" 2>/dev/null || true)"
-say "4/7 pi_natives for v$new_version"
-# build:omp (step 6) now stages the matching-version addon itself — including
-# replacing stale addons whose version sentinel doesn't match — so this step is
-# only an early, explicit check that the new version is available somewhere.
+new_version="$(node -p "require('./packages/natives/package.json').version")"
+host="$(node -p '`${process.platform}-${process.arch}`')"
+addon="pi_natives.$host"
+if [[ "$host" == *-x64 ]]; then addon+=-baseline; fi
+addon+=.node
+say "4/7 pi_natives for v$new_version ($host)"
 native_dir="$PI_NATIVES_DIR/$new_version"
-if [ -n "$new_version" ] && [ ! -f "$native_dir/pi_natives.darwin-arm64.node" ]; then
-	tmp="$(mktemp -d)"
-	bun add --no-cache --registry=https://registry.npmjs.org --os=darwin --cpu=arm64 "@oh-my-pi/pi-natives-darwin-arm64@$new_version" --cwd "$tmp" || \
-		echo "WARN: natives $new_version not on npm yet — build:omp will fail unless you build from crates/pi-natives"
-	mkdir -p "$native_dir"
-	cp "$tmp"/node_modules/@oh-my-pi/pi-natives-darwin-arm64/pi_natives.darwin-arm64.node "$native_dir/" 2>/dev/null || true
-else
-	echo "natives present (or version unchanged)"
-fi
-# Source runs and tests (`bun test`, `bun src/cli.ts`) load the workspace addon, and
-# build:omp restores whatever it found there after compiling — so an addon from an older
-# release would stay put and fail every test that needs a newer native export.
-workspace_addon="packages/natives/native/pi_natives.darwin-arm64.node"
-if [ -f "$native_dir/pi_natives.darwin-arm64.node" ] && ! bun -e '
-	const vs = require("./packages/natives/native/version-sentinel.js");
-	const bytes = require("node:fs").readFileSync(process.argv[1]);
-	process.exit(vs.containsVersionStamp(bytes, process.argv[2]) ? 0 : 1);
-' "$workspace_addon" "$new_version" 2>/dev/null; then
-	cp "$native_dir/pi_natives.darwin-arm64.node" "$workspace_addon"
+workspace_addon="packages/natives/native/$addon"
+valid_addon() {
+	[ -f "$1" ] && bun -e '
+		const { containsVersionStamp, containsLegacyVersionSentinel } = require("./packages/natives/native/version-sentinel.js");
+		const [file, version] = process.argv.slice(1);
+		const bytes = await Bun.file(file).bytes();
+		process.exit(containsVersionStamp(bytes, version) || containsLegacyVersionSentinel(bytes, version) ? 0 : 1);
+	' "$1" "$new_version"
+}
+if ! valid_addon "$workspace_addon"; then
+	if ! valid_addon "$native_dir/$addon"; then
+		tmp="$(mktemp -d)"
+		trap 'rm -rf -- "$tmp"' EXIT
+		leaf="@oh-my-pi/pi-natives-$host"
+		(cd "$tmp" && bun add --no-cache --registry=https://registry.npmjs.org "$leaf@$new_version")
+		mkdir -p "$native_dir"
+		cp "$tmp/node_modules/$leaf/$addon" "$native_dir/$addon"
+		valid_addon "$native_dir/$addon"
+	fi
+	cp "$native_dir/$addon" "$workspace_addon"
 	echo "workspace addon refreshed to v$new_version"
+else
+	echo "workspace addon already matches v$new_version"
 fi
 
 say "5/7 gen:stats (embed stats dashboard)"
 bun --cwd=packages/stats run gen:stats
 
 say "6/7 build:omp (rebuild bundled sidecar)"
-bun --cwd="$GUI" run build:omp
-"$GUI/resources/omp" --smoke-test
+sidecar=omp
+build=build:omp
+if [[ "$host" == win32-x64 ]]; then
+	sidecar=omp.exe
+	build=build:omp:win
+elif [[ "$host" == win32-* ]]; then
+	sidecar=omp.exe
+fi
+(cd "$GUI" && bun run "$build" && "./resources/$sidecar" --smoke-test)
 
 say "7/7 GUI build + typecheck + tests"
-bun --cwd="$GUI" run build
-# `bun --cwd x tsc|vitest` resolves tsconfig/vitest.config by the SHELL's cwd,
-# not --cwd — from the repo root that picks the monorepo's root configs and
-# fails (TS6306) or runs the wrong suite. `run <script>` cds properly.
-bun --cwd="$GUI" run check:types
-bun --cwd="$GUI" run test
+(cd "$GUI" && bun run build && bun run check:types && bun run test)
 
 # Record the monorepo commit the bundled sidecar was built from. The Linux
 # release workflow (release-linux.yml) checks this file out at the release tag
 # to reproduce the exact sidecar CI-side.
-printf '{"repo": "%s", "commit": "%s"}\n' \
+printf '{\n  "repo": "%s",\n  "commit": "%s"\n}\n' \
 	"$(git remote get-url origin | sed -E 's#.*github.com[/:]##; s#\.git$##')" \
 	"$(git rev-parse HEAD)" > "$GUI/sidecar-source.json"
 
