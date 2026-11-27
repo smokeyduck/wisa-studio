@@ -7,6 +7,10 @@ name: Release Linux builds
 # in that GUI revision's sidecar-source.json.
 
 on:
+  # Warm the exact pinned Core addons on the default branch; never package on push.
+  push:
+    branches: [main]
+    paths: [sidecar-source.json, .github/workflows/release-linux.yml]
   # Build against a draft; publishing must not enqueue another upload.
   workflow_dispatch:
     inputs:
@@ -21,7 +25,7 @@ on:
         required: false
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   GUI_REPO: smokeyduck/wisa-studio
@@ -41,7 +45,7 @@ jobs:
         shell: bash
         env:
           TAG: ${{ inputs.tag }}
-          GUI_REF: ${{ inputs.gui_ref || inputs.tag }}
+          GUI_REF: ${{ inputs.gui_ref || inputs.tag || github.sha }}
         run: |
           printf 'tag=%s\ngui_ref=%s\n' "$TAG" "$GUI_REF" >> "$GITHUB_OUTPUT"
 
@@ -114,36 +118,61 @@ jobs:
           path: oh-my-pi
           persist-credentials: false
 
+      - name: Cache the source-built ${{ matrix.variant }} addon
+        id: native-cache
+        uses: actions/cache@v5
+        with:
+          path: oh-my-pi/packages/natives/native/pi_natives.linux-x64-${{ matrix.variant }}.node
+          key: wisa-natives-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.variant }}-${{ needs.source.outputs.core_sha }}
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: oh-my-pi/package.json
 
       - name: Install Core dependencies
+        if: steps.native-cache.outputs.cache-hit != 'true'
         working-directory: oh-my-pi
         run: bun install
 
       - name: Build ${{ matrix.variant }} natives from the pinned Core source
+        if: steps.native-cache.outputs.cache-hit != 'true'
         working-directory: oh-my-pi
         shell: bash
         env:
           OMP_NATIVE_CARGO_PROFILE: ci
           PI_NATIVE_VARIANT: ${{ matrix.variant }}
+        run: bun --cwd=packages/natives run build
+
+      - name: Verify the addon loads and reports the pinned version
+        working-directory: oh-my-pi
+        shell: bash
+        env:
+          PI_NATIVE_VARIANT: ${{ matrix.variant }}
         run: |
-          bun --cwd=packages/natives run build
-          test -s "packages/natives/native/pi_natives.linux-x64-$PI_NATIVE_VARIANT.node"
+          bun -e '
+            import { resolve } from "node:path";
+            import { verifyHostAddonLoads } from "./scripts/bazel-natives.ts";
+            import { nativesPackageVersion } from "./scripts/stamp-native-version.ts";
+            const addon = resolve(`packages/natives/native/pi_natives.linux-x64-${process.env.PI_NATIVE_VARIANT}.node`);
+            await verifyHostAddonLoads(addon, undefined, await nativesPackageVersion());
+          '
 
       - name: Stage the native addon for packaging
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: linux-natives-${{ matrix.variant }}
           path: oh-my-pi/packages/natives/native/pi_natives.linux-x64-${{ matrix.variant }}.node
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
 
   linux:
+    if: github.event_name == 'workflow_dispatch'
     needs: [source, natives]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout the pinned monorepo
         uses: actions/checkout@v6

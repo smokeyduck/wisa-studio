@@ -5,13 +5,13 @@ build is based on, so `0.9.46` here is the first WISA STUDIO release and also
 the point where the upstream GUI's history ends in this file. Release notes for
 earlier versions belong to that project; see [NOTICE](NOTICE).
 
-## [1.1.3] - 2026-11-27
+## [1.1.4] - 2026-11-27
 
-Core source: `smokeyduck/oh-my-pi@b254b7a6185b6ecd213ffe71d4be6b33c59982d9` (Core 19.2.1 with WISA patches, synced with upstream stable `v19.2.1`).
+Core source: `smokeyduck/oh-my-pi@5ed3cc798c0d4f06ef641e4bd177c1202cdec98c` (Core 19.2.1 with WISA patches, synced with upstream stable `v19.2.1`).
 
 Intel packaging now uses the same `resources/omp.x64` binary for smoke tests, locale coverage, and bundling. macOS updater ZIPs use normal compression to shorten packaging time.
 
-The Windows Browser Use installer probe resolves the temporary directory's long path before comparing it with Core's workspace path.
+The packaged Browser Use probe compares real workspace paths on both sides, so Windows 8.3 and macOS `/var` aliases do not fail an otherwise correct assertion. Release CI warms source-built Windows and Linux native addons for the exact pinned Core commit without skipping runtime checks.
 
 - The context strategy skips image archiving when an OpenAI Chat Completions route is configured to strip images. The capability badge reports declared support, not a live provider check.
 - Stop inferring image input for custom OpenAI-compatible routes from fuzzy matches on other providers. Explicit model configuration and provider-reported modalities still take precedence.

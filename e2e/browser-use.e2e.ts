@@ -14,7 +14,7 @@ const answer = "Verified the local Browser Use action.";
 
 test("the bundled Core delegates web navigation to Browser Use without enabling the old browser", async () => {
 	test.setTimeout(140_000);
-	// Windows runners can supply TEMP through an 8.3 alias; Core reports the real path.
+	// Resolve aliases in the runner's temporary root before launching Studio.
 	const profile = await mkdtemp(join(await realpath(tmpdir()), "wisa-browser-proof-"));
 	const project = join(profile, "project");
 	const executablePath = process.env.OMP_GUI_TEST_APP;
@@ -97,6 +97,7 @@ test("the bundled Core delegates web navigation to Browser Use without enabling 
 		if (!port || typeof port === "string") throw new Error("Local fixture has no TCP port");
 		address = `http://127.0.0.1:${port.port}`;
 		await Promise.all([mkdir(project), mkdir(agent, { recursive: true }), mkdir(userData, { recursive: true })]);
+		const canonicalProject = await realpath(project);
 		await Promise.all([
 			writeFile(join(userData, "prefs.json"), JSON.stringify({ language: "en", firstRunComplete: true, proxyDirect: true })),
 			writeFile(join(agent, "config.yml"), "browser:\n  enabled: true\n"),
@@ -122,8 +123,10 @@ test("the bundled Core delegates web navigation to Browser Use without enabling 
 		await page.waitForFunction(() => window.omp?.rpc != null);
 		await expect.poll(async () => {
 			const response = await page.evaluate(() => window.omp.rpc.getState());
-			return (response.data as RpcSessionState | undefined)?.cwd;
-		}, { timeout: 60_000 }).toBe(project);
+			const cwd = (response.data as RpcSessionState | undefined)?.cwd;
+			// Core can return the same directory through an alias, e.g. /var on macOS.
+			return response.success && cwd ? await realpath(cwd) : undefined;
+		}, { timeout: 60_000 }).toBe(canonicalProject);
 		await expect.poll(async () => {
 			const response = await page.evaluate(() => window.omp.rpc.getActiveTools());
 			return (response.data as RpcActiveToolsResult | undefined)?.tools.map(tool => tool.name);

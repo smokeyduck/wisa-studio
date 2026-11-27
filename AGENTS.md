@@ -122,6 +122,8 @@ git push origin main && git push origin vX.Y.Z
 
 Both checkouts must be clean before any artifact is produced.
 
+Push the final Core pin to `main` as early as release prep allows. Changes to `sidecar-source.json` or the corresponding workflow start Windows and Linux native-addon cache warming on `main`, with no installer build or release access. Finish the local checks while warming runs. Wait for it before dispatching the tag if the pin changed. The cache key uses the exact Core commit, OS, architecture, and native variant; a miss (including after eviction) builds from the pin. A tag's cache cannot warm a different tag.
+
 ### Phase 4 — Sidecars (all three, every release)
 
 ```bash
@@ -156,7 +158,7 @@ Inspect every artifact before publishing:
 
 ### Phase 6 — Publish
 
-Create a GitHub Release **draft** for `vX.Y.Z`. Dispatch `release-macos.yml`, `release-windows.yml`, and `release-linux.yml` at that tag, with only the `tag` input. Do not override `gui_ref` or `monorepo_sha` for a new release. The workflows are manual-only and must not replace existing assets. The draft needs:
+Create a GitHub Release **draft** for `vX.Y.Z`. Dispatch `release-macos.yml`, `release-windows.yml`, and `release-linux.yml` at that tag, with only the `tag` input. Do not override `gui_ref` or `monorepo_sha` for a new release. Installation packages and uploads run only on manual dispatch and must not replace existing assets. For a transient Windows or Linux packaging failure on unchanged source, rerun only failed jobs while the staged native addons are retained (seven days). A source fix still requires a new tag. The draft needs:
 
 - `wisa-studio-X.Y.Z-arm64.dmg` and `wisa-studio-X.Y.Z-x64.dmg`, plus both macOS ZIPs
 - `wisa-studio-X.Y.Z-setup.exe` and `wisa-studio-X.Y.Z-portable.exe`
