@@ -101,7 +101,8 @@ test("the bundled Core delegates web navigation to Browser Use without enabling 
 			writeFile(join(agent, "config.yml"), "browser:\n  enabled: true\n"),
 			writeFile(join(agent, "models.yml"), `providers:\n  proof:\n    baseUrl: ${address}/v1\n    api: openai-completions\n    apiKey: proof-local-only\n    models:\n      - id: ${model}\n        contextWindow: 65536\n        maxTokens: 4096\n`),
 		]);
-		const env: Record<string, string> = { WISA_PROFILE_ROOT: profile };
+		// Exercise the package's bundled Browser Use, not a release fetched during the test.
+		const env: Record<string, string> = { WISA_PROFILE_ROOT: profile, WISA_BROWSER_USE_AUTO_UPDATE: "0" };
 		for (const key of ["PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "DISPLAY", "XAUTHORITY", "LANG", "TEMP", "TMP"]) {
 			const value = process.env[key];
 			if (value !== undefined) env[key] = value;

@@ -283,7 +283,7 @@ app.whenReady().then(() => {
 	const browserRuntime = new BrowserUseRuntime(resources, app.getPath("userData"));
 	const browserHost = new BrowserUseHost(browserRuntime);
 	browserUse = browserHost;
-	if (app.isPackaged) {
+	if (app.isPackaged && process.env.WISA_BROWSER_USE_AUTO_UPDATE !== "0") {
 		const checkBrowserUpdate = () => {
 			browserRuntime.checkForUpdate().then(
 				version => {

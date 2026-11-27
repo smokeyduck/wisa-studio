@@ -94,13 +94,15 @@ Studio defaults to local Whisper Small with Vietnamese for dictation unless you 
 
 In Settings → Providers → Services, choose the Vietnamese voice and use **Preview** to hear it. VAIS-1000 is a Northern Vietnamese voice that may need a one-time download; text is synthesized locally. The system option uses an installed Vietnamese voice or reports that one is missing. Read-aloud plays new messages in order, can be stopped for the current run, and does not replay loaded history.
 
-### Browse with Browser Use (unreleased)
+### Browse with Browser Use
 
 Enter a request in the Agent tab, for example: “Use `browser_use` to open https://example.com and tell me the page title.” The agent calls OMP’s `browser_use` tool; there is no longer a toolbar globe or an embedded WISA Browser window.
 
 Studio ships the official [Browser Use](https://github.com/browser-use/browser-use) Python package (initially 1.0.8) and local Chromium. Each browsing session uses a separate temporary profile. Browser Use does not require sign-in, use a cloud browser, or read your personal Chrome profile. Studio neither imports nor deletes the old WISA Browser’s history, cookies, or site data.
 
 Studio checks GitHub for the latest stable release at startup and each day it remains open. After the install and a Chromium check succeed, new agent sessions use the upgrade; existing sessions keep their version. You do not need Python or a Chromium download on first launch. Offline or failed updates leave the working version in place.
+
+For offline or deterministic runs, start Studio with `WISA_BROWSER_USE_AUTO_UPDATE=0` to disable Browser Use updates without disabling browsing.
 
 ## Install
 

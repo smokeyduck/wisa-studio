@@ -94,13 +94,15 @@ Studio mặc định dùng Whisper Small cục bộ với tiếng Việt nếu b
 
 Vào Cài đặt → Nhà cung cấp → Dịch vụ, chọn **Giọng đọc tiếng Việt** rồi bấm **Nghe thử**. VAIS-1000 là giọng Bắc, có thể cần tải mô hình một lần; văn bản được tổng hợp tại máy. Tùy chọn giọng hệ thống dùng giọng tiếng Việt đã cài hoặc báo thiếu. Đọc to phát tin nhắn mới theo thứ tự, có thể dừng cho lượt đang chạy, và không đọc lại lịch sử đã tải.
 
-### Duyệt web bằng Browser Use (chưa phát hành)
+### Duyệt web bằng Browser Use
 
 Nhập yêu cầu trong tab Agent, ví dụ: “Dùng `browser_use` mở https://example.com và cho tôi biết tiêu đề trang.” Agent gọi công cụ `browser_use` của OMP; không còn nút quả địa cầu hay cửa sổ Trình duyệt WISA tích hợp.
 
 Studio đi kèm gói Python chính thức [Browser Use](https://github.com/browser-use/browser-use) (bản 1.0.8 ban đầu) và Chromium cục bộ. Mỗi phiên duyệt dùng một hồ sơ tạm riêng. Browser Use không yêu cầu đăng nhập, không dùng trình duyệt đám mây và không đọc hồ sơ Chrome cá nhân. Studio không nhập hay xóa lịch sử, cookie hoặc dữ liệu trang của Trình duyệt WISA cũ.
 
 Studio kiểm tra bản ổn định mới nhất trên GitHub khi mở app và mỗi ngày app còn chạy. Nếu cài đặt và kiểm thử Chromium thành công, phiên Agent mở sau đó dùng bản mới; phiên đang duyệt tiếp tục dùng bản cũ. Không cần cài Python hay tải Chromium ở lần chạy đầu. Nếu mất mạng hoặc bản mới lỗi, Studio giữ nguyên bản đang hoạt động.
+
+Để chạy ngoại tuyến hoặc kiểm thử với phiên bản cố định, mở Studio với `WISA_BROWSER_USE_AUTO_UPDATE=0`. Thiết lập này chỉ tắt cập nhật Browser Use, không tắt công cụ duyệt web.
 
 ## Cài đặt
 

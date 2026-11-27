@@ -40,6 +40,7 @@ Object.assign(env, {
 	TMP: temporary,
 	TEMP: temporary,
 	WISA_PROFILE_ROOT: root,
+	WISA_BROWSER_USE_AUTO_UPDATE: "0",
 });
 // CI runners may not allow FUSE mounts. The AppImage itself still starts
 // and extracts the shipped payload, rather than exercising linux-unpacked.
@@ -189,11 +190,16 @@ async function launchGui() {
 	stage = "own sidecar READY";
 	const readyDeadline = Date.now() + 90_000;
 	while (
-		!(await page.evaluate(async () => {
-			if (!window.omp?.tabs) return false;
-			const tabs = await window.omp.tabs.list();
-			return tabs.some(tab => tab.active === true && tab.status === "ready");
-		}))
+		!(await bounded(
+			page.evaluate(async () => {
+				if (!window.omp?.tabs) return false;
+				const tabs = await window.omp.tabs.list();
+				if (!tabs.some(tab => tab.active === true && tab.status === "ready")) return false;
+				// READY can precede a usable active-tab route during startup and restore.
+				return (await window.omp.rpc.getState()).success;
+			}),
+			15_000,
+		))
 	) {
 		if (Date.now() > readyDeadline) throw new Error("own-sidecar-ready-timeout");
 		await delay(250);
@@ -297,6 +303,9 @@ try {
 			"settings-not-connected",
 			"settings-response-failed",
 			"settings-boolean-missing",
+			"own-sidecar-ready-timeout",
+			"GUI shutdown failed",
+			"portable shutdown failed",
 			"operation timed out",
 		].find(value => message.includes(value)) ??
 		(error instanceof Error && ["TypeError", "AssertionError", "TimeoutError"].includes(error.name)
@@ -306,10 +315,19 @@ try {
 } finally {
 	try {
 		await closeGui();
-		if (!cleanupFailed) await fs.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 });
-	} catch {
+	} catch (error) {
 		cleanupFailed = true;
-		console.error("FAIL packaged GUI proof: cleanup");
+		const reason = error.message === "portable shutdown failed" ? error.message : "GUI shutdown failed";
+		console.error(`FAIL packaged GUI proof: ${reason}`);
+	}
+	if (!cleanupFailed) {
+		try {
+			// Windows may still be releasing child process handles after Electron exits.
+			await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+		} catch (error) {
+			cleanupFailed = true;
+			console.error(`FAIL packaged GUI proof: remove isolated profile; code=${error.code ?? "unclassified"}`);
+		}
 	}
 	clearTimeout(watchdog);
 }

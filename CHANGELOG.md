@@ -16,6 +16,7 @@ Intel packaging now uses the same `resources/omp.x64` binary for smoke tests, lo
 - Show the target and action in Computer approvals. Core blocks input if the approved target changes while the dialog is open, and defaults to background-only desktop input unless a takeover mode is explicitly configured.
 - Replace the embedded WISA Browser with OMP’s `browser_use` tool. Ask the agent to browse instead of using the toolbar globe. Studio bundles the official Browser Use 1.0.8 Python package and local headless Chromium with a separate temporary profile per browsing session. It requires no Browser Use account or cloud browser, does not read personal Chrome profiles, and leaves existing WISA Browser data untouched.
 - Check for stable Browser Use releases on GitHub at startup and daily. Activate a new version for new agent sessions only after a local Chromium check passes; failed updates leave the working version in place.
+- Support `WISA_BROWSER_USE_AUTO_UPDATE=0` for offline or deterministic runs; release smoke tests use it to exercise the bundled version.
 - Remove GUI Tool Profiles. Coding uses Core tool and edit settings; Work keeps a smaller tool set with `computer` available by default, subject to settings and approval.
 - Clarify that `find` in Auto mode is enabled when the first available judge candidate uses a native backend.
 - Add opt-in `task.judgeRouting`: the native Judge receives a bounded assignment excerpt and can pick an already approved subagent route, without overriding explicit pins or receiving the parent transcript.
