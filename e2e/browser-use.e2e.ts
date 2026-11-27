@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -14,7 +14,8 @@ const answer = "Verified the local Browser Use action.";
 
 test("the bundled Core delegates web navigation to Browser Use without enabling the old browser", async () => {
 	test.setTimeout(140_000);
-	const profile = await mkdtemp(join(tmpdir(), "wisa-browser-proof-"));
+	// Windows runners can supply TEMP through an 8.3 alias; Core reports the real path.
+	const profile = await mkdtemp(join(await realpath(tmpdir()), "wisa-browser-proof-"));
 	const project = join(profile, "project");
 	const executablePath = process.env.OMP_GUI_TEST_APP;
 	const name = executablePath ? "wisa-studio" : "wisa-studio-dev";

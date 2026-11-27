@@ -10,10 +10,10 @@ Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding age
 
 | Platform | Package |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-1.1.2-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.2) |
-| macOS Intel | `wisa-studio-1.1.2-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.2) |
-| Windows x64 | [`wisa-studio-1.1.2-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.2/wisa-studio-1.1.2-setup.exe) |
-| Linux x64 | [`wisa-studio-1.1.2.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.2/wisa-studio-1.1.2.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.1.3-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.3) |
+| macOS Intel | `wisa-studio-1.1.3-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.3) |
+| Windows x64 | [`wisa-studio-1.1.3-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.3/wisa-studio-1.1.3-setup.exe) |
+| Linux x64 | [`wisa-studio-1.1.3.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.3/wisa-studio-1.1.3.AppImage) |
 
 [All releases](https://github.com/smokeyduck/wisa-studio/releases) · [Install guide (vi)](docs/vi/cai-dat.md)
 
@@ -21,9 +21,9 @@ macOS builds are ad-hoc signed (not notarized) and Windows builds are unsigned, 
 
 **Windows requirements:** Windows 10 x64 version 1809 (build 17763) or later, including Windows 11, and an x86-64-v2 CPU with SSE4.2. This minimum comes from the Electron, Bun and native-addon runtime requirements; it is not a claim that this release was tested on a Windows 10 machine.
 
-### What's new in 1.1.2
+### What's new in 1.1.3
 
-Browser Use replaces the embedded browser: the agent uses a separate Chromium instance without touching personal Chrome profiles. Computer approvals identify the target window and action; Core refuses to send input if the target changes while awaiting approval. Final replies stay visible during checklist continuations without reloading. See the [changelog](CHANGELOG.md#112---2026-11-27).
+Browser Use replaces the embedded browser: the agent uses a separate Chromium instance without touching personal Chrome profiles. Computer approvals identify the target window and action; Core refuses to send input if the target changes while awaiting approval. Final replies stay visible during checklist continuations without reloading. See the [changelog](CHANGELOG.md#113---2026-11-27).
 
 ## Get an API key
 
