@@ -98,7 +98,7 @@ In Settings → Providers → Services, choose the Vietnamese voice and use **Pr
 
 Enter a request in the Agent tab, for example: “Use `browser_use` to open https://example.com and tell me the page title.” The agent calls OMP’s `browser_use` tool; there is no longer a toolbar globe or an embedded WISA Browser window.
 
-Studio ships the official [Browser Use](https://github.com/browser-use/browser-use) Python package (initially 1.0.8) and local Chromium. Each browsing session uses a separate temporary profile. Browser Use does not require sign-in, use a cloud browser, or read your personal Chrome profile. Studio neither imports nor deletes the old WISA Browser’s history, cookies, or site data.
+Studio ships the official [Browser Use](https://github.com/browser-use/browser-use) Python package and local Chromium. When the agent starts browsing, Chromium opens a separate window where you can click, type, and switch tabs yourself. Each browsing session uses a temporary profile, not a cloud browser or your personal Chrome profile. Studio neither imports nor deletes the old WISA Browser’s data.
 
 Studio checks GitHub for the latest stable release at startup and each day it remains open. After the install and a Chromium check succeed, new agent sessions use the upgrade; existing sessions keep their version. You do not need Python or a Chromium download on first launch. Offline or failed updates leave the working version in place.
 

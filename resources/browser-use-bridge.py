@@ -42,13 +42,15 @@ def node_id(params):
 
 
 class Session:
-    def __init__(self, executable):
-        self.browser = Browser('chromium', executable_path=executable, headless=True, live_view=False)
+    def __init__(self, executable, *, headless):
+        self.browser = Browser('chromium', executable_path=executable, headless=headless, live_view=False)
         self.ax = None
 
     async def start(self):
         env = await self.browser.start()
         harness_cloud.route(env['BU_NAME'])
+        if not self.browser.headless:
+            helpers.activate_tab(helpers.current_tab())
         self.ax = AxHelpers(helpers.cdp, log=lambda _: None)
 
     async def stop(self):
@@ -140,7 +142,7 @@ def send(reply):
 async def main():
     executable = sys.argv[1]
     check = sys.argv[2] if len(sys.argv) == 3 else None
-    session = Session(executable)
+    session = Session(executable, headless=check is not None)
     try:
         if check:
             if version('browser-use') != check:

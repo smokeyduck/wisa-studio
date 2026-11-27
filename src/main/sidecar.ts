@@ -425,6 +425,7 @@ export class SidecarManager extends EventEmitter {
 				// Registry defaults, not argv overrides: global/project/--config settings still win.
 				WISA_STUDIO_DEFAULTS: runPolicy ? "0" : "1",
 				WISA_RPC_HOST_MODE: runPolicy?.hostToolsOnly ? "host-tools-only" : work ? "work" : "",
+				WISA_RPC_INTERACTIVE_COMPUTER: this.#allowsInteractiveHostTools ? "1" : "0",
 				WISA_BTW_WORKSPACE_READ: !chat && !runPolicy?.hostToolsOnly ? "1" : "0",
 			});
 			if (!runPolicy) {

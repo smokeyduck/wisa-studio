@@ -1,8 +1,10 @@
+import { execFile } from "node:child_process";
 import { once } from "node:events";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import { _electron as electron } from "playwright";
 import type { RpcActiveToolsResult, RpcSessionState } from "../src/shared/rpc-types";
@@ -12,7 +14,7 @@ const button = "Confirm Browser Use";
 const clicked = "Browser action completed";
 const answer = "Verified the local Browser Use action.";
 
-test("the bundled Core delegates web navigation to Browser Use without enabling the old browser", async () => {
+test("the bundled Core opens Chromium for the user and delegates navigation to Browser Use", async () => {
 	test.setTimeout(140_000);
 	// Resolve aliases in the runner's temporary root before launching Studio.
 	const profile = await mkdtemp(join(await realpath(tmpdir()), "wisa-browser-proof-"));
@@ -26,11 +28,12 @@ test("the bundled Core delegates web navigation to Browser Use without enabling 
 	let pageVisits = 0;
 	let app: Awaited<ReturnType<typeof electron.launch>> | undefined;
 	let address: string;
+	let title: string;
 	const server = createServer(async (req, res) => {
 		if (req.url === "/page") {
 			pageVisits++;
 			res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(`<!doctype html>
-				<title>Local Browser Use proof</title><button onclick="this.replaceWith(document.createTextNode('${clicked}'))">${button}</button>`);
+				<title>${title}</title><button onclick="this.replaceWith(document.createTextNode('${clicked}'))">${button}</button>`);
 			return;
 		}
 		if (req.method !== "POST" || req.url !== "/v1/chat/completions") {
@@ -53,7 +56,17 @@ test("the bundled Core delegates web navigation to Browser Use without enabling 
 				expect(tool?.description).toContain("Do not open a system browser");
 				args = { action: "navigate", url: `${address}/page` };
 			} else if (turn === 2) {
-				expect(toolOutput).toContain("Local Browser Use proof");
+				expect(toolOutput).toContain(title);
+				if (process.platform === "win32") {
+					// Headless Chromium returns AX and screenshots too, but has no native top-level window.
+					await expect.poll(async () => {
+						const { stdout } = await promisify(execFile)("powershell.exe", [
+							"-NoProfile", "-NonInteractive", "-Command",
+							"Get-Process -Name chrome -ErrorAction SilentlyContinue | Where-Object MainWindowHandle | ForEach-Object MainWindowTitle",
+						], { windowsHide: true, timeout: 5_000 });
+						return stdout;
+					}, { timeout: 8_000 }).toContain(title);
+				}
 				const element = /\[(\d+)\] button/.exec(toolOutput)?.[1];
 				expect(toolOutput).toContain(button);
 				expect(element).toBeDefined();
@@ -96,6 +109,7 @@ test("the bundled Core delegates web navigation to Browser Use without enabling 
 		const port = server.address();
 		if (!port || typeof port === "string") throw new Error("Local fixture has no TCP port");
 		address = `http://127.0.0.1:${port.port}`;
+		title = `Local Browser Use proof ${port.port}`;
 		await Promise.all([mkdir(project), mkdir(agent, { recursive: true }), mkdir(userData, { recursive: true })]);
 		const canonicalProject = await realpath(project);
 		await Promise.all([
@@ -104,11 +118,13 @@ test("the bundled Core delegates web navigation to Browser Use without enabling 
 			writeFile(join(agent, "models.yml"), `providers:\n  proof:\n    baseUrl: ${address}/v1\n    api: openai-completions\n    apiKey: proof-local-only\n    models:\n      - id: ${model}\n        contextWindow: 65536\n        maxTokens: 4096\n`),
 		]);
 		// Exercise the package's bundled Browser Use, not a release fetched during the test.
-		const env: Record<string, string> = { WISA_PROFILE_ROOT: profile, WISA_BROWSER_USE_AUTO_UPDATE: "0" };
-		for (const key of ["PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "DISPLAY", "XAUTHORITY", "LANG", "TEMP", "TMP"]) {
-			const value = process.env[key];
-			if (value !== undefined) env[key] = value;
-		}
+		const env = Object.fromEntries(
+			Object.entries(process.env).filter((entry): entry is [string, string] =>
+				entry[1] !== undefined && !/^(OMP_|PI_|WISA_|ELECTRON_RUN_AS_NODE$)/i.test(entry[0]),
+			),
+		);
+		env.WISA_PROFILE_ROOT = profile;
+		env.WISA_BROWSER_USE_AUTO_UPDATE = "0";
 		app = await electron.launch({
 			...(executablePath ? { executablePath } : {}),
 			args: executablePath ? [project] : [resolve("."), project],
@@ -156,7 +172,7 @@ test("the bundled Core delegates web navigation to Browser Use without enabling 
 			if (app && page) {
 				// Quit through Studio so its sidecar and Chromium shut down first.
 				await Promise.all([
-					app.waitForEvent("close", { timeout: 15_000 }),
+					once(app.process(), "exit", { signal: AbortSignal.timeout(15_000) }),
 					page.evaluate(() => window.omp.app.quit()).catch(() => {}),
 				]);
 			} else {

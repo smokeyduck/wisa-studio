@@ -5,6 +5,11 @@ build is based on, so `0.9.46` here is the first WISA STUDIO release and also
 the point where the upstream GUI's history ends in this file. Release notes for
 earlier versions belong to that project; see [NOTICE](NOTICE).
 
+## [Unreleased]
+
+- Browser Use opens a separate Chromium window you can see and interact with. Background update checks stay headless.
+- In interactive Studio sessions, Computer uses the normal tool approval policy instead of asking on every action. Core can bring the target forward when needed; explicit restrictions and Escape still apply.
+
 ## [1.1.4] - 2026-11-27
 
 Core source: `smokeyduck/oh-my-pi@5ed3cc798c0d4f06ef641e4bd177c1202cdec98c` (Core 19.2.1 with WISA patches, synced with upstream stable `v19.2.1`).

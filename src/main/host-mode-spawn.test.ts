@@ -81,26 +81,32 @@ it("selects the Work host policy without changing Coding, Chat, or scheduled lau
 	fixture.prefs.set("launchProfiles", { [work.cwd]: { tools: ["bash", "write"] } });
 	const launch = () => {
 		const [, args, { env }] = fixture.spawn.mock.lastCall!;
-		return { args, mode: env.WISA_RPC_HOST_MODE, defaults: env.WISA_STUDIO_DEFAULTS, btw: env.WISA_BTW_WORKSPACE_READ };
+		return {
+			args,
+			mode: env.WISA_RPC_HOST_MODE,
+			defaults: env.WISA_STUDIO_DEFAULTS,
+			btw: env.WISA_BTW_WORKSPACE_READ,
+			computer: env.WISA_RPC_INTERACTIVE_COMPUTER,
+		};
 	};
 	const baseArgs = ["--mode", "rpc-ui"];
 	const overlay = ["--config", studioConfig];
 
 	work.start();
-	expect(launch()).toEqual({ args: [...baseArgs, ...overlay], mode: "work", defaults: "1", btw: "1" });
+	expect(launch()).toEqual({ args: [...baseArgs, ...overlay], mode: "work", defaults: "1", btw: "1", computer: "1" });
 	expect(work.allowsInteractiveHostTools).toBe(true);
 
 	coding.start();
-	expect(launch()).toEqual({ args: [...baseArgs, ...overlay], mode: "", defaults: "1", btw: "1" });
+	expect(launch()).toEqual({ args: [...baseArgs, ...overlay], mode: "", defaults: "1", btw: "1", computer: "1" });
 	expect(coding.allowsInteractiveHostTools).toBe(true);
 	fixture.prefs.set("launchProfiles", { [coding.cwd]: { tools: ["read"] }, [work.cwd]: { tools: ["bash", "write"] } });
 	coding.restart();
-	expect(launch().args).toEqual([...baseArgs, "--tools", "read", ...overlay]);
+	expect(launch()).toMatchObject({ args: [...baseArgs, "--tools", "read", ...overlay], computer: "0" });
 	expect(coding.allowsInteractiveHostTools).toBe(false);
 
 	fixture.prefs.delete("launchProfiles");
 	chat.start();
-	expect(launch()).toEqual({ args: [...baseArgs, "--chat", ...overlay], mode: "", defaults: "1", btw: "0" });
+	expect(launch()).toEqual({ args: [...baseArgs, "--chat", ...overlay], mode: "", defaults: "1", btw: "0", computer: "0" });
 	expect(chat.allowsInteractiveHostTools).toBe(false);
 
 	fixture.prefs.set("launchProfiles", { [work.cwd]: { tools: ["read"] } });
@@ -110,6 +116,7 @@ it("selects the Work host policy without changing Coding, Chat, or scheduled lau
 		mode: "",
 		defaults: "0",
 		btw: "1",
+		computer: "0",
 	});
 	expect(scheduled.allowsInteractiveHostTools).toBe(false);
 	hostOnly.start();
@@ -118,6 +125,7 @@ it("selects the Work host policy without changing Coding, Chat, or scheduled lau
 		mode: "host-tools-only",
 		defaults: "0",
 		btw: "0",
+		computer: "0",
 	});
 	expect(hostOnly.allowsInteractiveHostTools).toBe(false);
 });

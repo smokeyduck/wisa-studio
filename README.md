@@ -98,7 +98,7 @@ Vào Cài đặt → Nhà cung cấp → Dịch vụ, chọn **Giọng đọc ti
 
 Nhập yêu cầu trong tab Agent, ví dụ: “Dùng `browser_use` mở https://example.com và cho tôi biết tiêu đề trang.” Agent gọi công cụ `browser_use` của OMP; không còn nút quả địa cầu hay cửa sổ Trình duyệt WISA tích hợp.
 
-Studio đi kèm gói Python chính thức [Browser Use](https://github.com/browser-use/browser-use) (bản 1.0.8 ban đầu) và Chromium cục bộ. Mỗi phiên duyệt dùng một hồ sơ tạm riêng. Browser Use không yêu cầu đăng nhập, không dùng trình duyệt đám mây và không đọc hồ sơ Chrome cá nhân. Studio không nhập hay xóa lịch sử, cookie hoặc dữ liệu trang của Trình duyệt WISA cũ.
+Studio đi kèm gói Python chính thức [Browser Use](https://github.com/browser-use/browser-use) và Chromium cục bộ. Khi agent bắt đầu duyệt, Chromium mở một cửa sổ riêng; bạn có thể bấm, gõ và chuyển tab trực tiếp. Mỗi phiên duyệt dùng một hồ sơ tạm riêng, không dùng trình duyệt đám mây hay hồ sơ Chrome cá nhân. Studio không nhập hay xóa dữ liệu của Trình duyệt WISA cũ.
 
 Studio kiểm tra bản ổn định mới nhất trên GitHub khi mở app và mỗi ngày app còn chạy. Nếu cài đặt và kiểm thử Chromium thành công, phiên Agent mở sau đó dùng bản mới; phiên đang duyệt tiếp tục dùng bản cũ. Không cần cài Python hay tải Chromium ở lần chạy đầu. Nếu mất mạng hoặc bản mới lỗi, Studio giữ nguyên bản đang hoạt động.
 
