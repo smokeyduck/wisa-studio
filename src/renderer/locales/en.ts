@@ -476,7 +476,7 @@ export const en: Record<string, string> = {
 	"contextStrategy.strategyLabel": "Strategy",
 	"contextStrategy.window": "{size} window",
 	"contextStrategy.windowUnknown": "Window size unknown",
-	"contextStrategy.capability.vision": "Reads images",
+	"contextStrategy.capability.vision": "Image input declared",
 	"contextStrategy.capability.native": "Server compaction",
 	"contextStrategy.capability.noVision": "Text only",
 	"contextStrategy.capability.noNative": "No server compaction",

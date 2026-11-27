@@ -460,7 +460,7 @@ export const vi: Record<string, string> = {
 	"contextStrategy.strategyLabel": "Chiến lược",
 	"contextStrategy.window": "cửa sổ {size}",
 	"contextStrategy.windowUnknown": "Chưa rõ kích thước cửa sổ",
-	"contextStrategy.capability.vision": "Đọc được hình ảnh",
+	"contextStrategy.capability.vision": "Khai báo hỗ trợ ảnh",
 	"contextStrategy.capability.native": "Nén ngữ cảnh phía máy chủ",
 	"contextStrategy.capability.noVision": "Chỉ văn bản",
 	"contextStrategy.capability.noNative": "Không nén ngữ cảnh phía máy chủ",

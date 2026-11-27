@@ -674,6 +674,14 @@ if (process.argv.includes("stats")) {
 						title: `Allow tool: bash\n${"x".repeat(2200)}\ncritical final argument`,
 						options: ["Approve", "Deny"],
 					});
+				} else if (command.message === "fixture computer approval") {
+					write({
+						type: "extension_ui_request",
+						id: "computer-approval",
+						method: "select",
+						title: 'Allow tool: computer\nReason: Desktop input or mutation\nTarget: Code — Editor (42)\nAction: window("42").click(1, 2)',
+						options: ["Approve", "Deny"],
+					});
 				} else if (command.message === "fixture no reply") {
 					const answer: AgentMessage = {
 						role: "assistant",

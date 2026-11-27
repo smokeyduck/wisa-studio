@@ -461,7 +461,7 @@ export const zh: Record<string, string> = {
 	"contextStrategy.strategyLabel": "策略",
 	"contextStrategy.window": "{size} 窗口",
 	"contextStrategy.windowUnknown": "窗口大小未知",
-	"contextStrategy.capability.vision": "可读图片",
+	"contextStrategy.capability.vision": "声明支持图片输入",
 	"contextStrategy.capability.native": "服务端压缩",
 	"contextStrategy.capability.noVision": "仅文本",
 	"contextStrategy.capability.noNative": "无服务端压缩",

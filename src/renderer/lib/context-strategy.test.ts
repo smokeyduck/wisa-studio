@@ -30,6 +30,16 @@ describe("modelProfile", () => {
 		expect(modelProfile({ api: "openai-completions", contextWindow: 262_144, input: ["text"] })).toEqual(textOnly);
 	});
 
+	it("does not apply the Chat Completions image guard to pi-native forwarding", () => {
+		const profile = modelProfile({
+			api: "openai-completions",
+			transport: "pi-native",
+			input: ["text", "image"],
+			compat: { stripImageInput: true },
+		});
+		expect(expectedMethod(config(), profile)).toBe("snapcompact");
+	});
+
 	it("treats an Anthropic-lane model as native only when the catalog says its route supports it", () => {
 		expect(modelProfile({ api: "anthropic-messages", compat: { supportsServerCompaction: true } }).nativeRemote).toBe(
 			true,

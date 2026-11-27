@@ -108,6 +108,17 @@ describe("ContextStrategyBar", () => {
 		expect(row).toContain("at 222.8k");
 	});
 
+	it("shows a text handoff when a Chat Completions route strips declared images", async () => {
+		await mount({ ...kimi, compat: { stripImageInput: true } });
+		await openPopover();
+
+		const summary = document.querySelector("[role='dialog']")?.textContent ?? "";
+		expect(summary).toContain("Text only");
+		expect(summary).not.toContain("Image input declared");
+		expect(container.textContent).toContain("Handoff");
+		expect(container.textContent).not.toContain("Image archive");
+	});
+
 	it("names the method for a server-compacting model", async () => {
 		await mount(gpt);
 

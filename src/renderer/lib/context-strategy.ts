@@ -61,6 +61,7 @@ export interface ModelProfile {
 /** The slice of the wire model object the profile reads; every field is optional on the wire. */
 export interface ProfileSource {
 	api?: string;
+	transport?: string;
 	contextWindow?: number | null;
 	input?: readonly string[];
 	compat?: object | null;
@@ -79,9 +80,16 @@ function supportsServerCompaction(compat: object | null | undefined): boolean {
 
 export function modelProfile(model: ProfileSource | null | undefined): ModelProfile {
 	if (!model) return { windowTokens: null, vision: false, nativeRemote: false };
+	const stripsImages =
+		model.api === "openai-completions" &&
+		model.transport !== "pi-native" &&
+		model.compat !== undefined &&
+		model.compat !== null &&
+		"stripImageInput" in model.compat &&
+		model.compat.stripImageInput === true;
 	return {
 		windowTokens: model.contextWindow && model.contextWindow > 0 ? model.contextWindow : null,
-		vision: model.input?.includes("image") ?? false,
+		vision: !stripsImages && model.input?.includes("image") === true,
 		// Mirrors the agent's gate: the OpenAI Responses family, or a catalog rule
 		// (`compat.supportsServerCompaction`) for Anthropic-lane models.
 		nativeRemote:

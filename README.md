@@ -10,10 +10,10 @@ GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một
 
 | Nền tảng | Gói |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-1.0.1-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.0.1) |
-| macOS Intel | `wisa-studio-1.0.1-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.0.1) |
-| Windows x64 | [`wisa-studio-1.0.1-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.0.1/wisa-studio-1.0.1-setup.exe) |
-| Linux x64 | [`wisa-studio-1.0.1.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.0.1/wisa-studio-1.0.1.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.1.0-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.0) |
+| macOS Intel | `wisa-studio-1.1.0-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.0) |
+| Windows x64 | [`wisa-studio-1.1.0-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.0/wisa-studio-1.1.0-setup.exe) |
+| Linux x64 | [`wisa-studio-1.1.0.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.0/wisa-studio-1.1.0.AppImage) |
 
 [Tất cả bản phát hành](https://github.com/smokeyduck/wisa-studio/releases) · [Hướng dẫn cài đặt](docs/vi/cai-dat.md)
 
@@ -21,9 +21,9 @@ Bản macOS được ký ad-hoc (chưa notarize) và bản Windows chưa ký, n�
 
 **Yêu cầu Windows:** Windows 10 x64 phiên bản 1809 (build 17763) trở lên, bao gồm Windows 11, và CPU x86-64-v2 có SSE4.2. Mức tối thiểu này dựa trên yêu cầu của Electron, Bun và native addon; không có nghĩa bản phát hành đã được kiểm thử trên máy Windows 10 thực tế.
 
-### Có gì mới trong 1.0.1
+### Có gì mới trong 1.1.0
 
-Bản này dùng Core 19.2.1. Thứ tự Project ở thanh bên trái không đổi khi chuyển phiên; bạn vẫn có thể kéo thả để sắp xếp. Tin nhắn chờ vẫn hiện cho đến khi được ghi vào cuộc trò chuyện. Xem [changelog](CHANGELOG.md#101---2026-11-26).
+Browser Use thay trình duyệt nhúng: agent dùng Chromium riêng, không đụng đến hồ sơ Chrome cá nhân. Hộp thoại Computer hiển thị cửa sổ đích và thao tác; Core từ chối gửi input nếu đích đổi trong lúc chờ duyệt. Câu trả lời cuối vẫn hiển thị khi lượt chạy tiếp tục do checklist, không cần tải lại. Xem [changelog](CHANGELOG.md#110---2026-11-27).
 
 ## Lấy API key
 

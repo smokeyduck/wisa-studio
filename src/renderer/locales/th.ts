@@ -462,7 +462,7 @@ export const th: Record<string, string> = {
 	"contextStrategy.strategyLabel": "กลยุทธ์",
 	"contextStrategy.window": "หน้าต่าง {size}",
 	"contextStrategy.windowUnknown": "ไม่ทราบขนาดหน้าต่าง",
-	"contextStrategy.capability.vision": "อ่านรูปภาพได้",
+	"contextStrategy.capability.vision": "ระบุว่ารองรับรูปภาพ",
 	"contextStrategy.capability.native": "ย่อบริบทฝั่งเซิร์ฟเวอร์",
 	"contextStrategy.capability.noVision": "ข้อความเท่านั้น",
 	"contextStrategy.capability.noNative": "ไม่มีการย่อบริบทฝั่งเซิร์ฟเวอร์",

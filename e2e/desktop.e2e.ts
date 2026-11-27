@@ -191,6 +191,17 @@ test("long approval remains complete and Enter is neutral", async () => {
 	expect(errors).toEqual([]);
 });
 
+test("Computer approval names the target and action and offers only a one-time decision", async () => {
+	await command("fixture computer approval");
+	const modal = page.getByRole("dialog");
+	await expect(modal).toContainText("Target: Code — Editor (42)");
+	await expect(modal).toContainText('Action: window("42").click(1, 2)');
+	await expect(modal.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+	await expect(modal.getByRole("button", { name: "Approve for this session" })).toHaveCount(0);
+	await modal.getByRole("button", { name: "Deny", exact: true }).click();
+	await expect(modal).toHaveCount(0);
+});
+
 test("settings expose direct navigation, translated search and independent display preferences", async () => {
 	await page.getByRole("button", { name: "Settings", exact: true }).click();
 	const settings = page.getByRole("dialog");

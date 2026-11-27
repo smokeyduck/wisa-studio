@@ -462,7 +462,7 @@ export const ru: Record<string, string> = {
 	"contextStrategy.strategyLabel": "Стратегия",
 	"contextStrategy.window": "Окно размером {size}",
 	"contextStrategy.windowUnknown": "Размер окна неизвестен",
-	"contextStrategy.capability.vision": "Читает изображения",
+	"contextStrategy.capability.vision": "Заявлена поддержка изображений",
 	"contextStrategy.capability.native": "Сжатие на сервере",
 	"contextStrategy.capability.noVision": "Только текст",
 	"contextStrategy.capability.noNative": "Сжатие на сервере недоступно",

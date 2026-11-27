@@ -1618,11 +1618,13 @@ export interface ModelInfo {
 	cost?: ModelCost;
 	/** Wire API the model speaks (`openai-responses`, `anthropic-messages`, …); present on `get_state`. */
 	api?: string;
+	/** pi-native forwards declared modalities without applying the local Chat Completions guard. */
+	transport?: string;
 	/** Endpoint and model identity from the sidecar's full Model snapshot. */
 	baseUrl?: string;
 	identity?: { class?: string };
 	serviceTiers?: readonly string[];
-	/** Input modalities; `image` means snapcompact can archive history for this model. */
+	/** Declared input modalities; the route's compatibility rules may still disable image input. */
 	input?: string[];
 	/** Whether the model reasons at all. A non-reasoning model reports `false` and no ladder. */
 	reasoning?: boolean;
@@ -1636,7 +1638,7 @@ export interface ModelInfo {
 		effortRouting?: { off?: string };
 		unverified?: boolean;
 	} | null;
-	/** Catalog-resolved quirks (an opaque bag here); the context strategy reads only `supportsServerCompaction`. */
+	/** Catalog-resolved wire compatibility flags. */
 	compat?: object;
 }
 
