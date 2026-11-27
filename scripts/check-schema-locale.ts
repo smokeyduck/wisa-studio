@@ -2,12 +2,12 @@
  * Check the actual bundled Core schema against a locale's translation tables,
  * using an isolated agent profile.
  *
- * Usage: bun scripts/check-schema-locale.ts [--lang ru|vi]
+ * Usage: bun scripts/check-schema-locale.ts [--lang ru|vi] [--sidecar path]
  */
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { bundledOmpFilename, resolveOmpCandidate } from "../src/main/bundled-omp-path";
 import { RU_SCHEMA_OPTION_TEXT } from "../src/renderer/components/settings/schema-option-ru";
@@ -36,16 +36,19 @@ type LocaleId = keyof typeof LOCALES;
 const args = process.argv.slice(2);
 const langIndex = args.indexOf("--lang");
 const lang = (langIndex === -1 ? "ru" : args[langIndex + 1]) as LocaleId;
-if (!(lang in LOCALES)) throw new Error("Usage: bun scripts/check-schema-locale.ts [--lang ru|vi]");
+const sidecarIndex = args.indexOf("--sidecar");
+const sidecarArg = args[sidecarIndex + 1];
+if (!(lang in LOCALES) || (sidecarIndex !== -1 && (!sidecarArg || sidecarArg.startsWith("--")))) {
+	throw new Error("Usage: bun scripts/check-schema-locale.ts [--lang ru|vi] [--sidecar path]");
+}
 
 // Pinned sidecar only: the check runs the Core schema this checkout ships, never
 // an installed binary or a global CLI.
-const sidecar = resolveOmpCandidate(import.meta.dir, "..", "resources", bundledOmpFilename());
-if (!sidecar) {
-	throw new Error(
-		"No pinned sidecar at resources/omp. Build it with `bun run build:omp` (needs the omp monorepo next to this checkout), or copy a prebuilt sidecar there.",
-	);
-}
+const sidecarPath = sidecarIndex === -1
+	? join(import.meta.dir, "..", "resources", bundledOmpFilename())
+	: resolve(sidecarArg);
+const sidecar = resolveOmpCandidate(sidecarPath);
+if (!sidecar) throw new Error(`No pinned sidecar at ${sidecarPath}. Build the matching sidecar before checking locales.`);
 const locale = LOCALES[lang];
 
 const temporary = await mkdtemp(join(tmpdir(), `omp-${lang}-schema-`));

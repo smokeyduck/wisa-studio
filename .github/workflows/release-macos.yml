@@ -171,7 +171,12 @@ jobs:
 
       - name: Verify ru + vi cover every bundled setting
         working-directory: oh-my-pi/packages/gui
-        run: bun run check:locale
+        shell: bash
+        env:
+          SIDECAR: ${{ matrix.sidecar }}
+        run: |
+          bun scripts/check-schema-locale.ts --lang ru --sidecar "$SIDECAR"
+          bun scripts/check-schema-locale.ts --lang vi --sidecar "$SIDECAR"
 
       # The workflows check out the release tag, so a tag whose packaging config
       # is invalid ships nothing and reports the failure deep in the build log.
