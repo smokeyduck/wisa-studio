@@ -59,6 +59,7 @@ async function bounded(operation, milliseconds) {
 }
 
 let gui;
+let guiPage;
 let wrapper;
 let wrapperExit;
 let portableBrowser;
@@ -85,6 +86,21 @@ const watchdog = setTimeout(() => {
 	process.exit(1);
 }, portable ? 2 * (portableLaunchTimeout + portableShutdownTimeout) + 240_000 : 240_000);
 
+async function waitForMainPage(pages) {
+	const deadline = Date.now() + 60_000;
+	while (Date.now() < deadline) {
+		const page = pages().find(
+			page => !page.isClosed() && new URL(page.url()).pathname.endsWith("/renderer/index.html"),
+		);
+		if (page) {
+			await page.waitForLoadState("domcontentloaded", { timeout: 60_000 });
+			return page;
+		}
+		await delay(250);
+	}
+	throw new Error("main-window-timeout");
+}
+
 async function closeGui() {
 	if (wrapper) {
 		try {
@@ -105,6 +121,8 @@ async function closeGui() {
 		return;
 	}
 	const owned = gui;
+	const ownedPage = guiPage;
+	guiPage = undefined;
 	gui = undefined;
 	if (!owned) return;
 	try {
@@ -113,10 +131,9 @@ async function closeGui() {
 			Promise.all([
 				owned.waitForEvent("close", { timeout: 15_000 }),
 				// The context can disappear before evaluate resolves; actual process exit is still required.
-				owned
-					.windows()[0]
-					.evaluate(() => window.omp.app.quit())
-					.catch(() => {}),
+				ownedPage
+					? ownedPage.evaluate(() => window.omp.app.quit()).catch(() => {})
+					: owned.evaluate(({ app }) => app.quit()).catch(() => {}),
 			]),
 			15_000,
 		);
@@ -159,8 +176,7 @@ async function launchPortable(watchRenderer) {
 			const [context] = portableBrowser.contexts();
 			context.on("page", watchRenderer);
 			for (const page of context.pages()) watchRenderer(page);
-			portablePage = context.pages()[0] ?? (await context.waitForEvent("page", { timeout: 60_000 }));
-			await portablePage.waitForLoadState("domcontentloaded", { timeout: 60_000 });
+			portablePage = await waitForMainPage(() => context.pages());
 			return portablePage;
 		}
 		await delay(250);
@@ -185,7 +201,8 @@ async function launchGui() {
 			await gui.evaluate(({ app }, expected) => app.isPackaged && app.getPath("userData") === expected, userData),
 			true,
 		);
-		page = await gui.firstWindow({ timeout: 60_000 });
+		guiPage = await waitForMainPage(() => gui.windows());
+		page = guiPage;
 	}
 	stage = "own sidecar READY";
 	const readyDeadline = Date.now() + 90_000;
@@ -299,6 +316,7 @@ try {
 			"portable-early-exit",
 			"portable-exit-failed",
 			"portable-debug-port-timeout",
+			"main-window-timeout",
 			"settings-delivery-unknown",
 			"settings-not-connected",
 			"settings-response-failed",

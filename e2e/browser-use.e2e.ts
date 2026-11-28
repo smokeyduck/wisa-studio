@@ -27,6 +27,8 @@ test("the bundled Core opens Chromium for the user and delegates navigation to B
 	let calls = 0;
 	let pageVisits = 0;
 	let app: Awaited<ReturnType<typeof electron.launch>> | undefined;
+	const mainPage = () =>
+		app?.windows().find(page => !page.isClosed() && new URL(page.url()).pathname.endsWith("/renderer/index.html"));
 	let address: string;
 	let title: string;
 	const server = createServer(async (req, res) => {
@@ -59,13 +61,24 @@ test("the bundled Core opens Chromium for the user and delegates navigation to B
 				expect(toolOutput).toContain(title);
 				if (process.platform === "win32") {
 					// Headless Chromium returns AX and screenshots too, but has no native top-level window.
-					await expect.poll(async () => {
-						const { stdout } = await promisify(execFile)("powershell.exe", [
-							"-NoProfile", "-NonInteractive", "-Command",
-							"Get-Process -Name chrome -ErrorAction SilentlyContinue | Where-Object MainWindowHandle | ForEach-Object MainWindowTitle",
-						], { windowsHide: true, timeout: 5_000 });
-						return stdout;
-					}, { timeout: 8_000 }).toContain(title);
+					await expect
+						.poll(
+							async () => {
+								const { stdout } = await promisify(execFile)(
+									"powershell.exe",
+									[
+										"-NoProfile",
+										"-NonInteractive",
+										"-Command",
+										"Get-Process -Name chrome -ErrorAction SilentlyContinue | Where-Object MainWindowHandle | ForEach-Object MainWindowTitle",
+									],
+									{ windowsHide: true, timeout: 5_000 },
+								);
+								return stdout;
+							},
+							{ timeout: 8_000 },
+						)
+						.toContain(title);
 				}
 				const element = /\[(\d+)\] button/.exec(toolOutput)?.[1];
 				expect(toolOutput).toContain(button);
@@ -76,12 +89,14 @@ test("the bundled Core opens Chromium for the user and delegates navigation to B
 				expect(toolOutput).toContain(clicked);
 			}
 			const toolCalls = args
-				? [{
-					index: 0,
-					id: `call_browser_${turn}`,
-					type: "function",
-					function: { name: "browser_use", arguments: JSON.stringify(args) },
-				}]
+				? [
+						{
+							index: 0,
+							id: `call_browser_${turn}`,
+							type: "function",
+							function: { name: "browser_use", arguments: JSON.stringify(args) },
+						},
+					]
 				: undefined;
 			res.writeHead(200, { "Content-Type": "text/event-stream" });
 			for (const [delta, finish] of [
@@ -100,7 +115,9 @@ test("the bundled Core opens Chromium for the user and delegates navigation to B
 			res.end("data: [DONE]\n\n");
 		} catch (error) {
 			failures.push(String(error));
-			res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: String(error) } }));
+			res.writeHead(400, { "Content-Type": "application/json" }).end(
+				JSON.stringify({ error: { message: String(error) } }),
+			);
 		}
 	});
 	try {
@@ -113,14 +130,21 @@ test("the bundled Core opens Chromium for the user and delegates navigation to B
 		await Promise.all([mkdir(project), mkdir(agent, { recursive: true }), mkdir(userData, { recursive: true })]);
 		const canonicalProject = await realpath(project);
 		await Promise.all([
-			writeFile(join(userData, "prefs.json"), JSON.stringify({ language: "en", firstRunComplete: true, proxyDirect: true })),
+			writeFile(
+				join(userData, "prefs.json"),
+				JSON.stringify({ language: "en", firstRunComplete: true, proxyDirect: true }),
+			),
 			writeFile(join(agent, "config.yml"), "browser:\n  enabled: true\n"),
-			writeFile(join(agent, "models.yml"), `providers:\n  proof:\n    baseUrl: ${address}/v1\n    api: openai-completions\n    apiKey: proof-local-only\n    models:\n      - id: ${model}\n        contextWindow: 65536\n        maxTokens: 4096\n`),
+			writeFile(
+				join(agent, "models.yml"),
+				`providers:\n  proof:\n    baseUrl: ${address}/v1\n    api: openai-completions\n    apiKey: proof-local-only\n    models:\n      - id: ${model}\n        contextWindow: 65536\n        maxTokens: 4096\n`,
+			),
 		]);
 		// Exercise the package's bundled Browser Use, not a release fetched during the test.
 		const env = Object.fromEntries(
-			Object.entries(process.env).filter((entry): entry is [string, string] =>
-				entry[1] !== undefined && !/^(OMP_|PI_|WISA_|ELECTRON_RUN_AS_NODE$)/i.test(entry[0]),
+			Object.entries(process.env).filter(
+				(entry): entry is [string, string] =>
+					entry[1] !== undefined && !/^(OMP_|PI_|WISA_|ELECTRON_RUN_AS_NODE$)/i.test(entry[0]),
 			),
 		);
 		env.WISA_PROFILE_ROOT = profile;
@@ -133,20 +157,32 @@ test("the bundled Core opens Chromium for the user and delegates navigation to B
 		const output: string[] = [];
 		app.process().stdout?.on("data", chunk => output.push(String(chunk)));
 		app.process().stderr?.on("data", chunk => output.push(String(chunk)));
-		const page = await app.firstWindow({ timeout: 30_000 }).catch(error => {
-			throw new Error(`Wisa did not open a window:\n${output.join("")}`, { cause: error });
-		});
+		await expect
+			.poll(() => mainPage() !== undefined, { timeout: 30_000 })
+			.toBe(true)
+			.catch(error => {
+				throw new Error(`Wisa did not open its main window:\n${output.join("")}`, { cause: error });
+			});
+		const page = mainPage();
+		if (!page) throw new Error("Wisa main window closed before the Browser Use proof");
 		await page.waitForFunction(() => window.omp?.rpc != null);
-		await expect.poll(async () => {
-			const response = await page.evaluate(() => window.omp.rpc.getState());
-			const cwd = (response.data as RpcSessionState | undefined)?.cwd;
-			// Core can return the same directory through an alias, e.g. /var on macOS.
-			return response.success && cwd ? await realpath(cwd) : undefined;
-		}, { timeout: 60_000 }).toBe(canonicalProject);
-		await expect.poll(async () => {
-			const response = await page.evaluate(() => window.omp.rpc.getActiveTools());
-			return (response.data as RpcActiveToolsResult | undefined)?.tools.map(tool => tool.name);
-		}).toContain("browser_use");
+		await expect
+			.poll(
+				async () => {
+					const response = await page.evaluate(() => window.omp.rpc.getState());
+					const cwd = (response.data as RpcSessionState | undefined)?.cwd;
+					// Core can return the same directory through an alias, e.g. /var on macOS.
+					return response.success && cwd ? await realpath(cwd) : undefined;
+				},
+				{ timeout: 60_000 },
+			)
+			.toBe(canonicalProject);
+		await expect
+			.poll(async () => {
+				const response = await page.evaluate(() => window.omp.rpc.getActiveTools());
+				return (response.data as RpcActiveToolsResult | undefined)?.tools.map(tool => tool.name);
+			})
+			.toContain("browser_use");
 		const browserSetting = await page.evaluate(() => window.omp.rpc.getSettings(["browser.enabled"]));
 		expect(browserSetting.success).toBe(true);
 		expect(browserSetting.data).toMatchObject({ values: { "browser.enabled": false } });
@@ -156,10 +192,17 @@ test("the bundled Core opens Chromium for the user and delegates navigation to B
 		if (!named.success) throw new Error(named.error);
 		const selected = await page.evaluate(id => window.omp.rpc.setModel("proof", id), model);
 		if (!selected.success) throw new Error(selected.error);
-		const sent = await page.evaluate(url => window.omp.rpc.command({
-			type: "prompt",
-			message: `Open ${url}/page and click its button.`,
-		}, 60_000), address);
+		const sent = await page.evaluate(
+			url =>
+				window.omp.rpc.command(
+					{
+						type: "prompt",
+						message: `Open ${url}/page and click its button.`,
+					},
+					60_000,
+				),
+			address,
+		);
 		if (!sent.success) throw new Error(`${sent.error}; model requests: ${calls}; ${failures.join("; ")}`);
 		await expect.poll(() => failures.length > 0 || calls >= 3, { timeout: 60_000 }).toBe(true);
 		expect(failures).toEqual([]);
@@ -168,7 +211,7 @@ test("the bundled Core opens Chromium for the user and delegates navigation to B
 		expect(pageVisits).toBe(1);
 	} finally {
 		try {
-			const page = app?.windows().find(window => !window.isClosed());
+			const page = mainPage();
 			if (app && page) {
 				// Quit through Studio so its sidecar and Chromium shut down first.
 				await Promise.all([
