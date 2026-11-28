@@ -7,6 +7,10 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-11-29
+
+Core source: `smokeyduck/oh-my-pi@31e90ad2ae4f1c50d718755f37a102959c4bf43f` (Core 19.2.1 with WISA patches, synced with upstream stable `v19.2.1`).
+
 - Cache dependency/tool downloads and verified, host-specific offline Browser Use payloads across releases; reuse Cargo build intermediates only behind source-build verification. Verify each macOS package on its build host before staging it, avoiding an extra installer transfer and cross-architecture barrier. Use standard level-5 Windows 7z compression while retaining every installer, RPC, locale, architecture and Browser Use runtime gate.
 - Stop native Notch helpers automatically when their owning Wisa process exits, including crashes, force-quit and development smoke shutdowns that bypass Electron's quit events.
 - Add session-opt-in `/customize-notch` and the `notch_app` tool for free-form HTML/CSS/JavaScript mini-apps. Persist source revisions, preview/apply/restore them, and keep stop/version management outside the sandbox. Confirm activation and each privileged SDK invocation in trusted Wisa dialogs; revoke the tool on opt-out or session/sidecar changes without removing saved apps.

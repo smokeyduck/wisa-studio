@@ -1,4 +1,4 @@
-# WISA STUDIO
+# Wisa
 
 **Desktop application based on oh-my-pi (MIT), developed by WISA.**
 
@@ -10,10 +10,10 @@ Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding age
 
 | Platform | Package |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-1.1.5-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.5) |
-| macOS Intel | `wisa-studio-1.1.5-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.5) |
-| Windows x64 | [`wisa-studio-1.1.5-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.5/wisa-studio-1.1.5-setup.exe) |
-| Linux x64 | [`wisa-studio-1.1.5.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.5/wisa-studio-1.1.5.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.1.6-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.6) |
+| macOS Intel | `wisa-studio-1.1.6-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.6) |
+| Windows x64 | [`wisa-studio-1.1.6-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.6/wisa-studio-1.1.6-setup.exe) |
+| Linux x64 | [`wisa-studio-1.1.6.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.6/wisa-studio-1.1.6.AppImage) |
 
 [All releases](https://github.com/smokeyduck/wisa-studio/releases) · [Install guide (vi)](docs/vi/cai-dat.md)
 
@@ -21,9 +21,9 @@ macOS builds are ad-hoc signed (not notarized) and Windows builds are unsigned, 
 
 **Windows requirements:** Windows 10 x64 version 1809 (build 17763) or later, including Windows 11, and an x86-64-v2 CPU with SSE4.2. This minimum comes from the Electron, Bun and native-addon runtime requirements; it is not a claim that this release was tested on a Windows 10 machine.
 
-### What's new in 1.1.5
+### What's new in 1.1.6
 
-Browser Use opens a separate Chromium window you can see and interact with; background update checks stay headless. In interactive Studio sessions, Computer uses the normal tool approval policy instead of asking on every action, and Core can bring the target forward when needed. Explicit restrictions and Escape still apply. See the [changelog](CHANGELOG.md#115---2026-11-27).
+Create HTML/CSS/JavaScript Notch mini-apps after explicitly enabling `/customize-notch`; apps run in an isolated sandbox with trusted permission prompts and revision restore. Native Notch helpers exit with Wisa, including force-quit. This release also adds Claude/ChatGPT imports, full conversation history, wallpapers, a first-use tour and Liquid Glass controls. Actions reuse verified build inputs and avoid an extra installer transfer while retaining every runtime/updater gate. See the [changelog](CHANGELOG.md#116---2026-11-29).
 
 ## Get an API key
 
@@ -52,7 +52,7 @@ Optional: Anthropic, OpenAI, DeepSeek, OpenRouter, Gemini and anything else the 
 
 The oh-my-pi agent reads files, runs commands, edits code and calls tools, MCP and Skills. WISA STUDIO bundles the agent from the WISA fork commit pinned in [`sidecar-source.json`](sidecar-source.json); the fork includes changes for the app. The desktop app also adds:
 
-- **Name and identity:** WISA STUDIO in window titles, the tray, macOS permission prompts and installer artifact names.
+- **Name and identity:** Wisa in window titles, the tray and permission prompts; release artifact names remain `wisa-studio-*`.
 - **Vietnamese by default:** five interface languages (Tiếng Việt, English, 中文, Русский, ไทย); this build opens in Vietnamese.
 - **WISA gateway:** the `wisa` provider is pre-seeded and offered first in onboarding.
 - **Releases:** published from this repository.
@@ -62,6 +62,7 @@ WISA STUDIO keeps its own agent data under `~/.wisa-studio/agent` (not `~/.omp`)
 ## What the interface does
 
 - **Parallel sessions:** each tab is its own agent process; background work keeps running while you switch, and restored tabs start only when opened.
+- **Conversation history:** Core's full display transcript on the current branch, including messages before compaction/handoff. Model context maintenance does not truncate the visible session history.
 - **Split panes and multiple windows:** two sessions side by side or stacked, a draggable divider, layout restored across restarts.
 - **Workspace:** directory tree, file tabs, edit with `⌘S`, Markdown source/preview, diffs and logs.
 - **Scheduled tasks:** cron or interval, running in the background with run history, reports and a verification step.
@@ -73,29 +74,47 @@ WISA STUDIO keeps its own agent data under `~/.wisa-studio/agent` (not `~/.omp`)
 
 Known limits: separate tabs are not an OS security boundary; a split holds two panes, not an unlimited grid; approvals and security scans are not a sandbox. Model requests still go to the provider you configure.
 
-### Split Agent sessions (unreleased)
+### Wallpapers and the first-use tour
+
+Use **Wallpaper** at the lower-left of the composer to select a local image or muted looping video spanning the transcript and composer. Files are copied into the app profile, not uploaded to a provider. Pause or reset the background; hidden conversations pause playback and Reduced Motion disables autoplay by default.
+
+After a provider and model are verified, Wisa offers a 24-step tour of the real interface. The tour navigates without sending messages, changing models or enabling features, and restores the prior page when closed. Reopen it with `/tutorial` or the command palette. The display name is now **Wisa** (`Wisa.app` / `Wisa.exe`); app IDs, profile locations, deep links, sidecar names and release filenames are unchanged.
+
+### Notch and background lifecycle
+
+**Settings → Notch** controls appearance, behavior and session/clock/note/activity widgets, with explicit save/discard and versioned preset import/export. macOS uses the MIT-derived native [Notch Island](https://github.com/MANISH007700/notch-island) panel at commit `6217ed2360ad4c0887abc725f9cd9e6e2ea02427`; Windows/Linux use an isolated floating Electron panel. Presets do not carry secrets, installed hooks or permissions.
+
+Run **`/customize-notch`** in an Agent session to load `notch_app` and its SDK instructions. Create arbitrary HTML/CSS/JavaScript mini-apps, save revisions, preview and request activation. Wisa confirms the exact app/revision before applying it. `/customize-notch off`, a session switch or sidecar restart revokes the tool without deleting saved apps. **Settings → Notch → Mini-apps** manages preview, apply/restore and stopping the app; the applied revision returns on restart.
+
+Mini-apps have no direct Node/Electron, filesystem, network or system access. The SDK provides private state storage; privileged session, clipboard, notification, URL and system-program requests require confirmation for the exact action. Permissions never travel with saved HTML or revisions. Do not embed secrets in shared HTML.
+
+External agent connections are opt-in: Claude Code/Codex permission hooks support request-bound allow/deny; Cursor, Gemini CLI, Copilot and OpenCode send activity/notifications without taking over approval. Wisa backs up and merges configuration without granting trust. Failed, cancelled or timed-out requests fall back to the original agent prompt.
+
+Closing a window keeps tabs, drafts and sidecars in the background; restore via Dock/tray/shortcuts. Explicit Quit retains active-work and unsaved-file confirmation. Native helpers exit when their owning Wisa process ends, including force-quit. On macOS, building the universal helper requires Xcode Command Line Tools; sources and MIT notices are in `native/notch-island/`, never committed binaries.
+
+### Split Agent sessions
 
 Open two Agent tabs in the same workspace, right-click a tab, and choose **Split right** or **Split below**. In a narrow window the panes stack without changing the saved layout. Ask either agent to check its peer or leave a handoff with `workspace_peer`. A handoff stays in memory and is read only when the recipient calls `receive`; it does not start or interrupt a turn. Unlinking the pair, switching sessions, or closing a tab discards unread messages.
 
 The right sidebar overlays the selected pane. **Shift+Tab** changes Plan mode in the composer without opening the sidebar. **Terminal** in the sidebar launches the operating system terminal at the selected tab's workspace. Interactive commands run by the agent still use Studio's terminal panel.
 
-### Work and Coding tools (unreleased)
+### Work and Coding tools
 
 Coding uses the Core tool configuration and `edit.mode` / `edit.modelVariants`. Studio no longer reads the old GUI Tool Profiles preferences. Work uses a smaller tool set with `computer` on by default; `computer.enabled: false`, tool approvals and `--no-tools` still apply.
 
 `task.judgeRouting` is off by default. Turning it on allows the configured native Judge to see a bounded excerpt of each unpinned subagent assignment, not the parent transcript. It can only choose an already approved route. Explicit pins and the normal Core fallback still apply.
 
-### Project Knowledge in Obsidian (unreleased)
+### Project Knowledge in Obsidian
 
 In Memory → Project Knowledge, choose an existing Obsidian Vault after enabling `vault.enabled`. The selected project stores reviewed notes and lessons as Markdown in the vault, without writing a duplicate to local Memory. If the vault is disabled or unavailable, Studio reports it instead of silently changing sources. Automatic Memory remains separate; selecting a vault does not copy or delete past data.
 
-### Vietnamese dictation and read-aloud (unreleased)
+### Vietnamese dictation and read-aloud
 
 Studio defaults to local Whisper Small with Vietnamese for dictation unless you configure a model or language. Cloud dictation requires explicitly selecting a cloud model; a local error does not send the recording to a cloud service.
 
 In Settings → Providers → Services, choose the Vietnamese voice and use **Preview** to hear it. VAIS-1000 is a Northern Vietnamese voice that may need a one-time download; text is synthesized locally. The system option uses an installed Vietnamese voice or reports that one is missing. Read-aloud plays new messages in order, can be stopped for the current run, and does not replay loaded history.
 
-### Import Claude and ChatGPT data (unreleased)
+### Import Claude and ChatGPT data
 
 Open the import dialog, choose an official export, and select the downloaded ZIP or JSON. Preview conversations, filter, select individual chats or all chats, then import and continue them in WISA. Claude Code and Codex remain separate local-session sources, not history from the Claude or ChatGPT apps.
 
@@ -140,7 +159,7 @@ Earlier builds stored data in `…/omp` (userData) and `~/.omp` (agent). WISA ST
 Coexistence:
 
 - Against the upstream `omp` builds (`productName: omp`, `appId: sh.omp.gui`) the new build installs separately: different bundle or install folder, different identity.
-- Against earlier WISA STUDIO builds (`appId: sh.omp.gui`, `productName: WISA STUDIO`) the new build has the same product name, so it lands on the same `WISA STUDIO.app` path (macOS) or install folder (Windows) and replaces the old app file. The old data folders are left untouched; use a different path only if you need both running.
+- Against earlier WISA STUDIO builds (`appId: sh.omp.gui`), the display name is now Wisa (`Wisa.app` on macOS). The old app and data are not removed automatically; verify Wisa opens the expected profile before removing the older application file. Do not delete its data folders.
 - An earlier WISA STUDIO install reads the same release feed, so its auto-updater may install the new build in place. That update does not carry data over: the app then opens on the new data folder, and keys and macOS permissions tied to the old identity do not follow it.
 - Upstream `nornzach/oh-my-pi-gui` installs read their own feed and do not receive WISA releases.
 - WISA STUDIO is not a sandbox. It runs the agent with your login-shell environment, PATH, Git and SSH setup, and the workspace folders you open. These are shared with other programs on purpose.

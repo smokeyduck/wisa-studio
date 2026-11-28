@@ -10,10 +10,10 @@ GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một
 
 | Nền tảng | Gói |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-1.1.5-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.5) |
-| macOS Intel | `wisa-studio-1.1.5-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.5) |
-| Windows x64 | [`wisa-studio-1.1.5-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.5/wisa-studio-1.1.5-setup.exe) |
-| Linux x64 | [`wisa-studio-1.1.5.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.5/wisa-studio-1.1.5.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.1.6-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.6) |
+| macOS Intel | `wisa-studio-1.1.6-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.6) |
+| Windows x64 | [`wisa-studio-1.1.6-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.6/wisa-studio-1.1.6-setup.exe) |
+| Linux x64 | [`wisa-studio-1.1.6.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.6/wisa-studio-1.1.6.AppImage) |
 
 [Tất cả bản phát hành](https://github.com/smokeyduck/wisa-studio/releases) · [Hướng dẫn cài đặt](docs/vi/cai-dat.md)
 
@@ -21,9 +21,9 @@ Bản macOS được ký ad-hoc (chưa notarize) và bản Windows chưa ký, n�
 
 **Yêu cầu Windows:** Windows 10 x64 phiên bản 1809 (build 17763) trở lên, bao gồm Windows 11, và CPU x86-64-v2 có SSE4.2. Mức tối thiểu này dựa trên yêu cầu của Electron, Bun và native addon; không có nghĩa bản phát hành đã được kiểm thử trên máy Windows 10 thực tế.
 
-### Có gì mới trong 1.1.5
+### Có gì mới trong 1.1.6
 
-Browser Use mở cửa sổ Chromium riêng để bạn nhìn thấy và tương tác; kiểm tra cập nhật nền vẫn chạy headless. Trong phiên Studio tương tác, Computer dùng chính sách duyệt công cụ thông thường thay vì hỏi lại sau mỗi thao tác; Core có thể đưa cửa sổ đích lên trước khi cần. Hạn chế đặt riêng và phím Escape vẫn có hiệu lực. Xem [changelog](CHANGELOG.md#115---2026-11-27).
+Mini-app Tai thỏ tùy biến bằng HTML/CSS/JavaScript, chỉ nạp công cụ và hướng dẫn sau `/customize-notch`; chạy cách ly, có xác nhận quyền và khôi phục phiên bản. Helper Tai thỏ tự thoát theo Wisa, kể cả force-quit. Bản này còn có nhập dữ liệu Claude/ChatGPT, lịch sử hội thoại đầy đủ, hình nền, tour hướng dẫn và giao diện Liquid Glass. Actions tái sử dụng đầu vào build đã kiểm chứng và giảm bước chuyển installer; mọi gate runtime/updater vẫn giữ nguyên. Xem [changelog](CHANGELOG.md#116---2026-11-29).
 
 ## Lấy API key
 
@@ -62,7 +62,7 @@ Dữ liệu của WISA STUDIO nằm riêng ở `~/.wisa-studio/agent` (không ph
 ## Giao diện có gì
 
 - **Phiên song song:** mỗi tab là một tiến trình agent riêng, công việc nền chạy tiếp khi bạn chuyển tab; tab được khôi phục chỉ khởi động khi mở.
-- **Lịch sử hội thoại (chưa phát hành):** dùng bản ghi hiển thị đầy đủ của Core trên nhánh đang mở. Cuộn lên để đọc tin nhắn trước compact/handoff ngay trong hội thoại, không cần tải một bản xem trước riêng. Nén ngữ cảnh cho mô hình không cắt phần lịch sử hiển thị của phiên.
+- **Lịch sử hội thoại:** dùng bản ghi hiển thị đầy đủ của Core trên nhánh đang mở. Cuộn lên để đọc tin nhắn trước compact/handoff ngay trong hội thoại, không cần tải một bản xem trước riêng. Nén ngữ cảnh cho mô hình không cắt phần lịch sử hiển thị của phiên.
 - **Chia đôi và nhiều cửa sổ:** đặt hai phiên cạnh nhau hoặc trên/dưới, kéo vách ngăn, khôi phục bố cục sau khi khởi động lại.
 - **Không gian làm việc:** cây thư mục, tab file, sửa và lưu bằng `⌘S`, xem Markdown ở dạng nguồn hoặc đã render, xem diff và log.
 - **Tác vụ định kỳ:** cron hoặc interval, chạy nền, có lịch sử chạy, báo cáo và bước xác minh.
@@ -74,7 +74,7 @@ Dữ liệu của WISA STUDIO nằm riêng ở `~/.wisa-studio/agent` (không ph
 
 Giới hạn cần biết: các tab không phải ranh giới bảo mật của hệ điều hành; chia đôi là hai khung, không phải lưới vô hạn; phê duyệt và quét bảo mật không thay cho sandbox. Request mô hình vẫn đi tới nhà cung cấp bạn cấu hình.
 
-### Hình nền và hướng dẫn lần đầu (chưa phát hành)
+### Hình nền và hướng dẫn lần đầu
 
 Nút **Hình nền** ở góc trái dưới khung soạn hiện tên khi rê chuột hoặc dùng bàn phím. Chọn ảnh hoặc video cục bộ để phủ liền vùng hội thoại, hai bên và phía sau khung soạn. Video tự lặp, tắt tiếng; có nút tạm dừng và khôi phục nền mặc định. Tệp được sao chép vào hồ sơ ứng dụng, không tải lên nhà cung cấp; video tạm dừng khi vùng hội thoại không hiển thị và mặc định không tự phát nếu hệ thống bật Giảm chuyển động.
 
@@ -82,7 +82,7 @@ Sau khi kiểm tra kết nối có nhà cung cấp dùng được và ít nhất
 
 Tên hiển thị mới là **Wisa** (`Wisa.app` trên macOS, `Wisa.exe` trên Windows). `appId`, thư mục hồ sơ, deep link, tên sidecar và tên tệp phát hành `wisa-studio-*` không đổi. Khi nâng cấp từ WISA STUDIO trên macOS, xóa bản ứng dụng cũ sau khi xác nhận Wisa mở đúng dữ liệu để tránh hai biểu tượng cùng tồn tại; không xóa thư mục hồ sơ.
 
-### Tai thỏ và chạy nền (chưa phát hành)
+### Tai thỏ và chạy nền
 
 **Cài đặt → Tai thỏ** có trang riêng bằng cả năm ngôn ngữ. macOS dùng giao diện native tùy biến từ [Notch Island](https://github.com/MANISH007700/notch-island), mã nguồn MIT tại commit `6217ed2360ad4c0887abc725f9cd9e6e2ea02427`; Windows/Linux dùng thanh nổi Electron riêng. Không tải hoặc chạy bản cập nhật Notch độc lập.
 
@@ -102,23 +102,23 @@ Phản hồi thuộc đúng request/phiên; trả lời ở nơi khác hủy b�
 
 Trên macOS, `bun run dev` dựng helper nếu thiếu hoặc nguồn đã đổi; cần Xcode Command Line Tools. `bun run build:notch-island` dựng helper universal Apple Silicon/Intel. Mã nguồn và giấy phép ở `native/notch-island/`; binary ở `resources/notch-island/` không commit.
 
-### Chia khung cho hai phiên Agent (chưa phát hành)
+### Chia khung cho hai phiên Agent
 
 Mở hai tab Agent trong cùng workspace, bấm chuột phải lên một tab rồi chọn chia sang phải hoặc chia xuống dưới. Với cửa sổ hẹp, Studio xếp hai khung theo chiều dọc mà không đổi bố cục đã lưu. Bạn có thể yêu cầu một phiên xem trạng thái hoặc gửi lời nhắn bàn giao qua `workspace_peer`. Lời nhắn nằm trong bộ nhớ và chỉ được đọc khi phiên nhận gọi `receive`; nó không bắt đầu hay ngắt lượt đang chạy. Bỏ chia khung, chuyển phiên hoặc đóng tab sẽ xóa lời nhắn chưa đọc.
 
 Thanh bên phải phủ lên khung đang chọn. **Shift+Tab** đổi chế độ Kế hoạch tại ô soạn mà không mở thanh bên. Nút **Terminal** trên thanh bên mở terminal của hệ điều hành tại workspace của tab đang chọn. Lệnh tương tác do agent chạy vẫn dùng bảng terminal của Studio.
 
-### Công cụ trong Work và Coding (chưa phát hành)
+### Công cụ trong Work và Coding
 
 Coding dùng cấu hình công cụ và `edit.mode` / `edit.modelVariants` của Core. Studio không còn đọc tùy chọn Hồ sơ công cụ cũ của GUI. Work dùng bộ công cụ gọn hơn và bật `computer` mặc định; `computer.enabled: false`, yêu cầu phê duyệt và `--no-tools` vẫn có hiệu lực.
 
 `task.judgeRouting` tắt mặc định. Khi bật, Judge native đã cấu hình có thể nhận một đoạn trích giới hạn của từng nhiệm vụ subagent chưa ghim, không nhận bản ghi hội thoại cha. Judge chỉ được chọn tuyến đã cấp quyền. Lựa chọn ghim và cách phân giải mặc định của Core vẫn có hiệu lực.
 
-### Kiến thức dự án trong Obsidian (chưa phát hành)
+### Kiến thức dự án trong Obsidian
 
 Trong Memory → Kiến thức dự án, bật `vault.enabled` rồi chọn một Obsidian Vault có sẵn. Ghi chú và bài học đã duyệt của dự án được lưu thành Markdown trong vault, không ghi thêm một bản vào Memory cục bộ. Nếu vault bị tắt hoặc không truy cập được, Studio báo lỗi thay vì tự đổi nguồn. Memory tự động vẫn hoạt động riêng; chọn vault không sao chép hay xóa dữ liệu cũ.
 
-### Nhập chính tả và đọc to tiếng Việt (chưa phát hành)
+### Nhập chính tả và đọc to tiếng Việt
 
 Studio mặc định dùng Whisper Small cục bộ với tiếng Việt nếu bạn chưa chọn mô hình hoặc ngôn ngữ. Chỉ dùng dịch vụ nhập chính tả đám mây khi bạn chọn rõ mô hình đám mây; lỗi cục bộ không làm bản ghi bị gửi lên dịch vụ.
 
@@ -140,7 +140,7 @@ Tải gói ở trên, mở lên, dán API key (hoặc chọn provider khác) là
 
 Chi tiết theo từng nền tảng, cách đặt lại dữ liệu và xử lý lỗi khi mở app: [docs/vi/cai-dat.md](docs/vi/cai-dat.md).
 
-### Nhập dữ liệu Claude và ChatGPT (chưa phát hành)
+### Nhập dữ liệu Claude và ChatGPT
 
 Mở chức năng nhập dữ liệu, chọn bản xuất chính thức và mở tệp ZIP hoặc JSON đã tải về. Xem trước hội thoại, lọc, chọn từng cuộc hoặc toàn bộ rồi nhập; hội thoại đã nhập có thể tiếp tục trong WISA. Claude Code và Codex là các nguồn phiên cục bộ riêng, không phải lịch sử từ ứng dụng Claude hay ChatGPT.
 
