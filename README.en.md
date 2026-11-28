@@ -10,10 +10,10 @@ Vietnamese-first desktop GUI for oh-my-pi (omp) — an install-and-go coding age
 
 | Platform | Package |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-1.1.6-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.6) |
-| macOS Intel | `wisa-studio-1.1.6-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.6) |
-| Windows x64 | [`wisa-studio-1.1.6-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.6/wisa-studio-1.1.6-setup.exe) |
-| Linux x64 | [`wisa-studio-1.1.6.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.6/wisa-studio-1.1.6.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.1.7-arm64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.7) |
+| macOS Intel | `wisa-studio-1.1.7-x64.dmg` — [release page](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.7) |
+| Windows x64 | [`wisa-studio-1.1.7-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.7/wisa-studio-1.1.7-setup.exe) |
+| Linux x64 | [`wisa-studio-1.1.7.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.7/wisa-studio-1.1.7.AppImage) |
 
 [All releases](https://github.com/smokeyduck/wisa-studio/releases) · [Install guide (vi)](docs/vi/cai-dat.md)
 
@@ -21,9 +21,9 @@ macOS builds are ad-hoc signed (not notarized) and Windows builds are unsigned, 
 
 **Windows requirements:** Windows 10 x64 version 1809 (build 17763) or later, including Windows 11, and an x86-64-v2 CPU with SSE4.2. This minimum comes from the Electron, Bun and native-addon runtime requirements; it is not a claim that this release was tested on a Windows 10 machine.
 
-### What's new in 1.1.6
+### What's new in 1.1.7
 
-Create HTML/CSS/JavaScript Notch mini-apps after explicitly enabling `/customize-notch`; apps run in an isolated sandbox with trusted permission prompts and revision restore. Native Notch helpers exit with Wisa, including force-quit. This release also adds Claude/ChatGPT imports, full conversation history, wallpapers, a first-use tour and Liquid Glass controls. Actions reuse verified build inputs and avoid an extra installer transfer while retaining every runtime/updater gate. See the [changelog](CHANGELOG.md#116---2026-11-29).
+Create HTML/CSS/JavaScript Notch mini-apps after explicitly enabling `/customize-notch`; apps run in an isolated sandbox with trusted permission prompts and revision restore. Native Notch helpers exit with Wisa, including force-quit. This release also adds Claude/ChatGPT imports, full conversation history, wallpapers, a first-use tour and Liquid Glass controls. Actions reuse verified build inputs and avoid an extra installer transfer while retaining every runtime/updater gate. See the [changelog](CHANGELOG.md#117---2026-11-29).
 
 ## Get an API key
 

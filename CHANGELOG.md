@@ -7,9 +7,11 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
-## [1.1.6] - 2026-11-29
+## [1.1.7] - 2026-11-29
 
 Core source: `smokeyduck/oh-my-pi@31e90ad2ae4f1c50d718755f37a102959c4bf43f` (Core 19.2.1 with WISA patches, synced with upstream stable `v19.2.1`).
+
+- Align the release sidecar probe with Wisa's 20% compaction default; use distinct legacy and explicit-override thresholds so configuration isolation and precedence remain checked. The unpublished v1.1.6 candidate was stopped by this outdated assertion.
 
 - Cache dependency/tool downloads and verified, host-specific offline Browser Use payloads across releases; reuse Cargo build intermediates only behind source-build verification. Verify each macOS package on its build host before staging it, avoiding an extra installer transfer and cross-architecture barrier. Use standard level-5 Windows 7z compression while retaining every installer, RPC, locale, architecture and Browser Use runtime gate.
 - Stop native Notch helpers automatically when their owning Wisa process exits, including crashes, force-quit and development smoke shutdowns that bypass Electron's quit events.

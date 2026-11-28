@@ -10,10 +10,10 @@ GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một
 
 | Nền tảng | Gói |
 |---|---|
-| macOS Apple Silicon | `wisa-studio-1.1.6-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.6) |
-| macOS Intel | `wisa-studio-1.1.6-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.6) |
-| Windows x64 | [`wisa-studio-1.1.6-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.6/wisa-studio-1.1.6-setup.exe) |
-| Linux x64 | [`wisa-studio-1.1.6.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.6/wisa-studio-1.1.6.AppImage) |
+| macOS Apple Silicon | `wisa-studio-1.1.7-arm64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.7) |
+| macOS Intel | `wisa-studio-1.1.7-x64.dmg` — [trang phát hành](https://github.com/smokeyduck/wisa-studio/releases/tag/v1.1.7) |
+| Windows x64 | [`wisa-studio-1.1.7-setup.exe`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.7/wisa-studio-1.1.7-setup.exe) |
+| Linux x64 | [`wisa-studio-1.1.7.AppImage`](https://github.com/smokeyduck/wisa-studio/releases/download/v1.1.7/wisa-studio-1.1.7.AppImage) |
 
 [Tất cả bản phát hành](https://github.com/smokeyduck/wisa-studio/releases) · [Hướng dẫn cài đặt](docs/vi/cai-dat.md)
 
@@ -21,9 +21,9 @@ Bản macOS được ký ad-hoc (chưa notarize) và bản Windows chưa ký, n�
 
 **Yêu cầu Windows:** Windows 10 x64 phiên bản 1809 (build 17763) trở lên, bao gồm Windows 11, và CPU x86-64-v2 có SSE4.2. Mức tối thiểu này dựa trên yêu cầu của Electron, Bun và native addon; không có nghĩa bản phát hành đã được kiểm thử trên máy Windows 10 thực tế.
 
-### Có gì mới trong 1.1.6
+### Có gì mới trong 1.1.7
 
-Mini-app Tai thỏ tùy biến bằng HTML/CSS/JavaScript, chỉ nạp công cụ và hướng dẫn sau `/customize-notch`; chạy cách ly, có xác nhận quyền và khôi phục phiên bản. Helper Tai thỏ tự thoát theo Wisa, kể cả force-quit. Bản này còn có nhập dữ liệu Claude/ChatGPT, lịch sử hội thoại đầy đủ, hình nền, tour hướng dẫn và giao diện Liquid Glass. Actions tái sử dụng đầu vào build đã kiểm chứng và giảm bước chuyển installer; mọi gate runtime/updater vẫn giữ nguyên. Xem [changelog](CHANGELOG.md#116---2026-11-29).
+Mini-app Tai thỏ tùy biến bằng HTML/CSS/JavaScript, chỉ nạp công cụ và hướng dẫn sau `/customize-notch`; chạy cách ly, có xác nhận quyền và khôi phục phiên bản. Helper Tai thỏ tự thoát theo Wisa, kể cả force-quit. Bản này còn có nhập dữ liệu Claude/ChatGPT, lịch sử hội thoại đầy đủ, hình nền, tour hướng dẫn và giao diện Liquid Glass. Actions tái sử dụng đầu vào build đã kiểm chứng và giảm bước chuyển installer; mọi gate runtime/updater vẫn giữ nguyên. Xem [changelog](CHANGELOG.md#117---2026-11-29).
 
 ## Lấy API key
 

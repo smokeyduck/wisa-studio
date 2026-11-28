@@ -34,7 +34,7 @@ Object.assign(globalThis, {
 	Node,
 	IS_REACT_ACT_ENVIRONMENT: true,
 	requestAnimationFrame: (callback: () => void) => setTimeout(callback, 0),
-	cancelAnimationFrame: clearTimeout,
+	cancelAnimationFrame: (handle: ReturnType<typeof setTimeout>) => clearTimeout(handle),
 });
 Object.defineProperty(window, "getComputedStyle", { value: () => ({ overflow: "auto", overflowY: "auto" }) });
 let root: Root | undefined;
@@ -121,7 +121,8 @@ describe("empty conversation canvas", () => {
 
 describe("welcome scene lifecycle", () => {
 	function environment(reduced = false) {
-		vi.useFakeTimers();
+		// GSAP retains the timeout-backed RAF shim; keep cancellation on the same timer API.
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
 		const kills: Mock<() => void>[] = [];
 		vi.spyOn(motion, "tweenStyle").mockImplementation((style, pose, _seconds, onComplete) => {
 			Object.assign(style, pose);
