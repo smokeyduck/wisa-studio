@@ -1,0 +1,316 @@
+.notch-settings {
+	display: grid;
+	gap: 8px;
+	font-size: var(--text-omp-md);
+}
+
+.notch-settings-fields {
+	container-type: inline-size;
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.notch-options {
+	border-bottom: 1px solid var(--omp-border-muted);
+}
+
+.notch-options > summary {
+	padding: 8px 4px;
+	cursor: pointer;
+	color: var(--omp-text);
+	font-weight: 500;
+}
+
+.notch-options > summary:focus-visible {
+	outline: 2px solid var(--omp-accent);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+.notch-options[open] {
+	padding-bottom: 12px;
+}
+
+.notch-count {
+	margin-inline-start: 8px;
+	color: var(--omp-muted);
+	font-size: var(--text-omp-sm);
+	font-variant-numeric: tabular-nums;
+	font-weight: 400;
+}
+
+.notch-control-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px 24px;
+	padding: 4px;
+}
+
+.notch-settings .notch-toggle {
+	min-height: 36px;
+	align-items: center;
+	padding: 8px;
+	gap: 12px;
+}
+
+.notch-display-select {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 4px;
+}
+
+.notch-display-select select {
+	max-width: 60%;
+}
+
+.notch-colors {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	padding: 4px 4px 16px;
+}
+
+.notch-colors label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.notch-colors input {
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	cursor: pointer;
+}
+
+.notch-range,
+.notch-widget-input {
+	display: grid;
+	min-width: 0;
+	gap: 8px;
+}
+
+.notch-range > span {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.notch-range output {
+	color: var(--omp-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.notch-range input {
+	width: 100%;
+	accent-color: var(--omp-accent);
+}
+
+.notch-hint {
+	color: var(--omp-muted);
+	font-size: var(--text-omp-sm);
+	line-height: 1.5;
+}
+
+.notch-options > .notch-hint {
+	margin-bottom: 12px;
+}
+
+.notch-widget-list {
+	display: grid;
+	gap: 12px;
+	margin-top: 12px;
+}
+
+.notch-widget-list > li {
+	display: grid;
+	gap: 12px;
+	padding: 12px;
+	border: 1px solid var(--omp-border-muted);
+	border-radius: 8px;
+}
+
+.notch-widget-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.notch-widget-input {
+	color: var(--omp-muted);
+	font-size: var(--text-omp-sm);
+}
+
+.notch-agents {
+	padding-top: 12px;
+}
+
+.notch-agents > h3 {
+	font-weight: 500;
+}
+
+.notch-agents > .notch-hint {
+	margin: 4px 0 12px;
+}
+
+.notch-agent-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+	margin-bottom: 4px;
+}
+
+.notch-agent-card {
+	position: relative;
+	isolation: isolate;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	aspect-ratio: 1;
+	min-width: 0;
+	padding: 16px;
+	overflow: hidden;
+	border: 1px solid var(--omp-border-muted);
+	border-radius: 12px;
+	background: var(--omp-bg-secondary);
+}
+
+.notch-agent-card[data-selected="true"] {
+	border-color: color-mix(in srgb, var(--omp-accent) 45%, var(--omp-border-muted));
+}
+
+.notch-agent-art {
+	position: absolute;
+	z-index: -1;
+	inset: 20% -12% -8% 24%;
+	pointer-events: none;
+	color: var(--omp-text);
+	opacity: 0.12;
+	filter: blur(3px);
+	transform: rotate(-18deg);
+}
+
+.notch-agent-art > * {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.notch-agent-art > span {
+	background: currentColor;
+	mask-size: contain;
+	mask-position: center;
+	mask-repeat: no-repeat;
+}
+
+.notch-settings .notch-agent-toggle {
+	align-items: flex-start;
+	padding: 0;
+	gap: 8px;
+	border-radius: 4px;
+}
+
+.notch-settings .notch-agent-toggle:hover:not(:disabled) {
+	background: transparent;
+}
+
+.notch-agent-footer {
+	display: grid;
+	justify-items: start;
+	gap: 4px;
+}
+
+.notch-agent-footer > button {
+	padding-inline: 0;
+}
+
+.notch-connection-details {
+	display: grid;
+	gap: 16px;
+}
+
+.notch-connection-details h4 {
+	margin-bottom: 4px;
+	font-weight: 500;
+}
+
+.notch-connection-details code {
+	display: block;
+	overflow-wrap: anywhere;
+	color: var(--omp-muted);
+	font-size: var(--text-omp-sm);
+}
+
+.notch-actions,
+.notch-preset-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.notch-preset-actions {
+	margin-inline-start: auto;
+}
+
+@container (min-width: 640px) {
+	.notch-agent-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+}
+
+@container (max-width: 400px) {
+	.notch-control-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.notch-agent-card {
+		padding: 12px;
+	}
+}
+
+@media (forced-colors: active) {
+	.notch-agent-art {
+		display: none;
+	}
+
+	.notch-agent-card[data-selected="true"] {
+		border-color: Highlight;
+	}
+}
+
+.notch-miniapps {
+	display: grid;
+	gap: 8px;
+	padding-block: 12px;
+	border-bottom: 1px solid var(--omp-border-muted);
+}
+
+.notch-miniapps h3 {
+	font-weight: 500;
+}
+
+.notch-miniapp-row {
+	display: grid;
+	gap: 8px;
+	min-inline-size: 0;
+	padding: 12px;
+	border: 1px solid var(--omp-border-muted);
+	border-radius: 12px;
+}
+
+.notch-miniapp-version {
+	display: grid;
+	gap: 4px;
+	min-inline-size: 0;
+}
+
+.notch-miniapp-version select {
+	max-inline-size: 100%;
+}

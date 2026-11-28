@@ -44,6 +44,8 @@ export function isSettingVisible(entry: SettingEntry, values: Record<string, unk
 /** Terminal display settings and equivalents owned by GUI preferences. */
 const TERMINAL_DISPLAY_SETTINGS = new Set([
 	...GUI_DISPLAY_LEGACY_PATHS,
+	// The GUI reads Core's full display transcript; this fold is TUI-only.
+	"display.collapseCompacted",
 	"tui.resizeScrollback",
 	"statusLine.preset",
 	"display.showTurnTime",

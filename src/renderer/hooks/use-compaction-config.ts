@@ -1,10 +1,12 @@
 import {
 	CONTEXT_SETTING_PATH_LIST,
 	type CompactionConfig,
+	compactionThreshold,
+	modelProfile,
 	parseCompactionConfig,
-	windowCompactionThreshold,
 } from "../lib/context-strategy";
 import { useT } from "../lib/i18n";
+import { useModelStore } from "../stores/model";
 import { useSettingsStore } from "../stores/settings";
 import { useChatHistoryLimited } from "./use-chat-config";
 import { type LiveSettingsHandle, useLiveSettings } from "./use-live-settings";
@@ -23,7 +25,10 @@ export function useCompactionConfig(): CompactionConfigHandle {
  */
 export function useAutoCompactAt(contextWindow: number): number | null {
 	const autoCompaction = useSettingsStore(state => state.autoCompaction);
+	const model = useModelStore(state => state.model);
 	const { config } = useCompactionConfig();
 	const chatHistoryLimited = useChatHistoryLimited();
-	return autoCompaction && config && !chatHistoryLimited ? windowCompactionThreshold(config, contextWindow) : null;
+	return autoCompaction && config && !chatHistoryLimited
+		? compactionThreshold(config, { ...modelProfile(model), windowTokens: contextWindow })
+		: null;
 }

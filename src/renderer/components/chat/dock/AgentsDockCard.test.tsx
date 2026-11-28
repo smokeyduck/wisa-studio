@@ -113,7 +113,13 @@ afterEach(async () => {
 		});
 	}
 	container?.remove();
-	getSubagents.mockClear();
+	Object.defineProperty(document, "hidden", { configurable: true, value: false });
+	getSubagents.mockReset().mockResolvedValue({
+		type: "response",
+		command: "get_subagents",
+		success: true,
+		data: { subagents: [] },
+	});
 	useSubagentsStore.getState().reset();
 	useSettingsStore.getState().reset();
 	useSessionStore.setState({ isStreaming: false });
@@ -223,6 +229,12 @@ describe("subagent history card", () => {
 		// A frame-less park must still reach the sidebar and drawer with the block off.
 		useSettingsStore.setState({ pinnedAgents: "off" });
 		useSubagentsStore.getState().setSnapshots([snap({ id: "a1", status: "running" })]);
+		getSubagents.mockResolvedValue({
+			type: "response",
+			command: "get_subagents",
+			success: true,
+			data: { subagents: [snap({ id: "a1", status: "parked" })] },
+		});
 		activateTab();
 		useSessionStore.setState({ isStreaming: true });
 		container = document.createElement("div") as unknown as HTMLElement;
@@ -242,6 +254,22 @@ describe("subagent history card", () => {
 			await sleep(60);
 		});
 		expect(getSubagents.mock.calls.length).toBeGreaterThanOrEqual(1);
+
+		// Roster polling sleeps while hidden and refreshes immediately on return.
+		await act(async () => {
+			Object.defineProperty(document, "hidden", { configurable: true, value: true });
+			document.dispatchEvent(new Event("visibilitychange"));
+		});
+		const callsWhileHidden = getSubagents.mock.calls.length;
+		await act(async () => {
+			await sleep(60);
+		});
+		expect(getSubagents.mock.calls.length).toBe(callsWhileHidden);
+		await act(async () => {
+			Object.defineProperty(document, "hidden", { configurable: true, value: false });
+			document.dispatchEvent(new Event("visibilitychange"));
+		});
+		expect(getSubagents.mock.calls.length).toBe(callsWhileHidden + 1);
 
 		// Turn ends → interval cleared, no further polls.
 		await act(async () => {

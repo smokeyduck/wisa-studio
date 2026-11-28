@@ -1,10 +1,10 @@
-# WISA STUDIO
+# Wisa
 
 **Bản desktop dựa trên oh-my-pi (MIT), do WISA phát triển.**
 
 GUI desktop tiếng Việt cho oh-my-pi (omp) — trình coding agent cài một lần là chạy, nhiều phiên làm việc song song trong một cửa sổ, có sẵn cổng WISA để một API key dùng được mọi mô hình. Electron, cho macOS, Windows và Linux.
 
-<img src="docs/screenshots/vi/01-conversation.png" alt="WISA STUDIO với một phiên làm việc tiếng Việt và tab Tổng quan" width="100%">
+<img src="docs/screenshots/vi/01-conversation.png" alt="Wisa với một phiên làm việc tiếng Việt và tab Tổng quan" width="100%">
 
 ## Tải về
 
@@ -27,7 +27,7 @@ Browser Use mở cửa sổ Chromium riêng để bạn nhìn thấy và tương
 
 ## Lấy API key
 
-WISA STUDIO tạo sẵn nhà cung cấp `wisa` trỏ tới `https://api.askwisa.com/v1`. Một key dùng cho mọi mô hình mà cổng phục vụ, danh sách mô hình được lấy tự động sau khi lưu key.
+Wisa tạo sẵn nhà cung cấp `wisa` trỏ tới `https://api.askwisa.com/v1`. Một key dùng cho mọi mô hình mà cổng phục vụ, danh sách mô hình được lấy tự động sau khi lưu key.
 
 **[Lấy API key tại askwisa.com →](https://askwisa.com/?utm_source=github&utm_medium=readme)**
 
@@ -62,15 +62,45 @@ Dữ liệu của WISA STUDIO nằm riêng ở `~/.wisa-studio/agent` (không ph
 ## Giao diện có gì
 
 - **Phiên song song:** mỗi tab là một tiến trình agent riêng, công việc nền chạy tiếp khi bạn chuyển tab; tab được khôi phục chỉ khởi động khi mở.
+- **Lịch sử hội thoại (chưa phát hành):** dùng bản ghi hiển thị đầy đủ của Core trên nhánh đang mở. Cuộn lên để đọc tin nhắn trước compact/handoff ngay trong hội thoại, không cần tải một bản xem trước riêng. Nén ngữ cảnh cho mô hình không cắt phần lịch sử hiển thị của phiên.
 - **Chia đôi và nhiều cửa sổ:** đặt hai phiên cạnh nhau hoặc trên/dưới, kéo vách ngăn, khôi phục bố cục sau khi khởi động lại.
 - **Không gian làm việc:** cây thư mục, tab file, sửa và lưu bằng `⌘S`, xem Markdown ở dạng nguồn hoặc đã render, xem diff và log.
 - **Tác vụ định kỳ:** cron hoặc interval, chạy nền, có lịch sử chạy, báo cáo và bước xác minh.
 - **Tổng quan phiên:** ngữ cảnh theo nhóm, chi phí, cache, tốc độ, subagent và MCP server đang chạy.
 - **MCP, Skills, plugin, hook:** quản lý trong Cài đặt, không cần sửa JSON bằng tay.
+- **Jev / TypeSafe:** kết nối TypeSafe hoặc nhập API key ngay trong **Vai trò mô hình**, chọn Judge gốc từ danh mục rồi bấm **Bật định tuyến Jev**. Core định tuyến tác nhân con chưa ghim mô hình giữa các model chat đã được cho phép; không thay model chat/Default. Bật tùy chọn sẽ gửi một đoạn mô tả công việc đến TypeSafe, không gửi lịch sử hội thoại hay ngữ cảnh chung. Tắt định tuyến vẫn giữ key và vai trò Judge.
 - **SSH host, theme tuỳ chỉnh, command palette, chế độ giọng nói, cộng tác qua relay.**
 - **Chế độ Làm việc:** mặc định cho phép đọc, tìm kiếm, theo dõi tác vụ và điều khiển màn hình nền mà không bật shell hay trình chạy mã đa dụng. Cài đặt **Máy tính** dùng chung và yêu cầu phê duyệt thao tác vẫn áp dụng.
 
 Giới hạn cần biết: các tab không phải ranh giới bảo mật của hệ điều hành; chia đôi là hai khung, không phải lưới vô hạn; phê duyệt và quét bảo mật không thay cho sandbox. Request mô hình vẫn đi tới nhà cung cấp bạn cấu hình.
+
+### Hình nền và hướng dẫn lần đầu (chưa phát hành)
+
+Nút **Hình nền** ở góc trái dưới khung soạn hiện tên khi rê chuột hoặc dùng bàn phím. Chọn ảnh hoặc video cục bộ để phủ liền vùng hội thoại, hai bên và phía sau khung soạn. Video tự lặp, tắt tiếng; có nút tạm dừng và khôi phục nền mặc định. Tệp được sao chép vào hồ sơ ứng dụng, không tải lên nhà cung cấp; video tạm dừng khi vùng hội thoại không hiển thị và mặc định không tự phát nếu hệ thống bật Giảm chuyển động.
+
+Sau khi kiểm tra kết nối có nhà cung cấp dùng được và ít nhất một model, Wisa mở tour 24 bước trên giao diện thật: làm tối toàn cửa sổ, khoanh sáng từng tính năng và đặt lời giải thích cạnh nó. Mục lục chia nhóm workspace, hội thoại, kiến thức, tự động hóa và tùy chỉnh; có thể nhảy thẳng tới Skills, bộ nhớ, ngữ cảnh, Goal, Loop hoặc TypeSafe/Jev. Tour chỉ điều hướng giao diện, không gửi tin nhắn, đổi model hay bật tính năng; đóng sẽ khôi phục trang trước đó. Hoàn tất hoặc bỏ qua được ghi nhớ riêng với trạng thái kết nối; nhấn Escape chỉ đóng lần này. Mở lại bất kỳ lúc nào bằng `/tutorial` hoặc tìm hướng dẫn trong bảng lệnh `Cmd+K`.
+
+Tên hiển thị mới là **Wisa** (`Wisa.app` trên macOS, `Wisa.exe` trên Windows). `appId`, thư mục hồ sơ, deep link, tên sidecar và tên tệp phát hành `wisa-studio-*` không đổi. Khi nâng cấp từ WISA STUDIO trên macOS, xóa bản ứng dụng cũ sau khi xác nhận Wisa mở đúng dữ liệu để tránh hai biểu tượng cùng tồn tại; không xóa thư mục hồ sơ.
+
+### Tai thỏ và chạy nền (chưa phát hành)
+
+**Cài đặt → Tai thỏ** có trang riêng bằng cả năm ngôn ngữ. macOS dùng giao diện native tùy biến từ [Notch Island](https://github.com/MANISH007700/notch-island), mã nguồn MIT tại commit `6217ed2360ad4c0887abc725f9cd9e6e2ea02427`; Windows/Linux dùng thanh nổi Electron riêng. Không tải hoặc chạy bản cập nhật Notch độc lập.
+
+Trình thiết kế cho thêm/xóa/sắp xếp tiện ích **Phiên, Đồng hồ, Ghi chú, Hoạt động**, chỉnh tiêu đề/nội dung, màu nền/chữ/nhấn, chiều rộng, độ đục, bo góc, số thẻ hiển thị và hành vi rê chuột/phê duyệt/âm thanh/phím tắt. Chỉnh sửa là bản nháp cho tới khi bấm **Lưu cấu hình**; có thể bỏ thay đổi. Xem trước chỉ mô tả bố cục, không tạo dữ liệu phiên giả. Yêu cầu duyệt vẫn truy cập được khi bố cục không có tiện ích Phiên.
+
+**Xuất mẫu / Nhập mẫu** dùng JSON `wisa-notch` phiên bản 1, tối đa 64 KiB. Mẫu chỉ chứa giao diện/hành vi và lựa chọn agent hiển thị; không chứa token, đường dẫn bridge, hook đã cài hoặc quyền. Nhập cần xác nhận thay cấu hình và không tự kết nối agent.
+
+Gõ **`/customize-notch`** trong phiên Agent để bật công cụ `notch_app` cùng hướng dẫn SDK cho riêng phiên đó. Sau đó yêu cầu một mini-app HTML/CSS/JavaScript bất kỳ: trò chơi, đồng hồ, bảng phiên hoặc giao diện riêng, không giới hạn vào các tiện ích có sẵn. Agent lưu mã nguồn thành phiên bản, mở xem trước rồi đề nghị áp dụng; hộp thoại Wisa xác nhận đúng app/phiên bản trước khi thay Tai thỏ. `/customize-notch off`, đổi phiên hoặc khởi động lại sidecar thu hồi công cụ, không xóa app đã lưu. **Cài đặt → Tai thỏ → Mini-app** quản lý phiên bản, xem trước, áp dụng/khôi phục và dừng để trở về Tai thỏ mặc định. App được áp dụng tự khôi phục khi mở Wisa.
+
+Mini-app chạy trong sandbox riêng, không có Node/Electron, tệp, mạng hay quyền hệ thống mặc định. SDK cung cấp kho trạng thái riêng và các yêu cầu qua cầu nối Wisa; đọc phiên, clipboard, thông báo, mở URL hoặc chạy chương trình hệ thống phải xác nhận từng thao tác cụ thể. Quyền không đi theo mã HTML hoặc phiên bản đã lưu. Dùng `notch_app` với `read` để lấy toàn bộ mã nguồn/SDK và `save` để nhập lại thành phiên bản mới; không đưa khóa hoặc dữ liệu bí mật vào HTML chia sẻ.
+
+Wisa có sẵn cầu nối phiên và yêu cầu tương tác. Claude Code/Codex có hook phê duyệt `allow/deny`; Cursor, Gemini CLI, Copilot và OpenCode chỉ gửi hoạt động/thông báo, quyền vẫn ở agent gốc. Bấm **Kết nối** và xác nhận đúng agent/đường dẫn để cài hook hoặc plugin; **Ngắt kết nối** chỉ gỡ phần Wisa, giữ cấu hình khác và sao lưu trước khi sửa. Không tự bật trust hoặc policy hooks. Hook dùng thư mục mặc định trong home; hồ sơ agent có đường dẫn tùy chỉnh cần adapter riêng. Với **Tác nhân tùy chỉnh**, kết nối tạo metadata giao thức tại đường dẫn hiển thị; adapter dùng lệnh được cung cấp hoặc HTTP loopback xác thực. Không chia sẻ `bridge.json` hay token. Timeout, mất kết nối hoặc phản hồi không hợp lệ không cấp quyền: agent phải dùng prompt gốc. Không thực thi lệnh terminal hoặc tự cấp quyền từ nội dung hook.
+
+Phản hồi thuộc đúng request/phiên; trả lời ở nơi khác hủy bản sao còn lại. Đăng nhập, trình sửa và biểu mẫu không hỗ trợ vẫn ở Wisa. Nút mở phiên ngoài chỉ đưa Wisa ra trước, không chạy lệnh hoặc tự nhảy vào terminal bên ngoài. Tai thỏ không có nút dừng/gửi prompt mới cho mọi agent. Phím tắt duyệt native: `⌘Y`/`⌘N`; thanh nổi: `Ctrl+Alt+Y`/`Ctrl+Alt+N` (chỉ khi bật và có yêu cầu hợp lệ).
+
+Đóng cửa sổ giữ tab, draft và sidecar chạy nền. Mở lại bằng Dock, tray/menu bar hoặc phím tắt hiện/ẩn. **Thoát Wisa** mới kết thúc ứng dụng và vẫn xác nhận nếu có công việc hoặc file chưa lưu. Nếu không có tray/Dock để mở lại, ứng dụng giữ cửa sổ thay vì làm nó biến mất. Không tự thêm vào khởi động cùng hệ điều hành.
+
+Trên macOS, `bun run dev` dựng helper nếu thiếu hoặc nguồn đã đổi; cần Xcode Command Line Tools. `bun run build:notch-island` dựng helper universal Apple Silicon/Intel. Mã nguồn và giấy phép ở `native/notch-island/`; binary ở `resources/notch-island/` không commit.
 
 ### Chia khung cho hai phiên Agent (chưa phát hành)
 
@@ -110,6 +140,15 @@ Tải gói ở trên, mở lên, dán API key (hoặc chọn provider khác) là
 
 Chi tiết theo từng nền tảng, cách đặt lại dữ liệu và xử lý lỗi khi mở app: [docs/vi/cai-dat.md](docs/vi/cai-dat.md).
 
+### Nhập dữ liệu Claude và ChatGPT (chưa phát hành)
+
+Mở chức năng nhập dữ liệu, chọn bản xuất chính thức và mở tệp ZIP hoặc JSON đã tải về. Xem trước hội thoại, lọc, chọn từng cuộc hoặc toàn bộ rồi nhập; hội thoại đã nhập có thể tiếp tục trong WISA. Claude Code và Codex là các nguồn phiên cục bộ riêng, không phải lịch sử từ ứng dụng Claude hay ChatGPT.
+
+- Claude: vào **Settings → Privacy → Export data**; xem [hướng dẫn chính thức](https://support.claude.com/en/articles/9450526-export-your-claude-data).
+- ChatGPT: vào **Settings → Data controls → Export data**; xem [hướng dẫn chính thức](https://help.openai.com/en/articles/7260999-exporting-your-chatgpt-history-and-data).
+- Nhập chạy cục bộ, không cần cookie hay đăng nhập tài khoản nguồn. WISA giữ nguyên tệp nguồn, lưu bản sao riêng trong profile agent và cung cấp thư mục tham chiếu cho project, tài liệu, tệp cùng metadata có trong gói. Cấu hình, bộ nhớ và hướng dẫn từ nguồn không tự trở thành cấu hình hay quyền của WISA.
+- Đây không phải chuyển nguyên tài khoản: Anthropic không đưa tệp gốc đã tải lên vào bản xuất Claude. JSON riêng lẻ cũng không chứa các tệp nằm bên cạnh nó. Dữ liệu không chuyển thành chat được giữ để tham chiếu và báo rõ; WISA không khôi phục tệp vắng mặt. Khi tiếp tục hội thoại, nội dung gửi mô hình vẫn đi tới nhà cung cấp bạn đã cấu hình.
+
 ## Vị trí dữ liệu và cùng tồn tại
 
 WISA STUDIO giữ dữ liệu riêng và không đọc hay ghi `~/.omp`. Không có di chuyển dữ liệu tự động từ bản cũ.
@@ -130,7 +169,7 @@ Các bản cũ lưu dữ liệu ở `…/omp` (userData) và `~/.omp` (agent). W
 Cùng tồn tại:
 
 - Với bản upstream `omp` (`productName: omp`, `appId: sh.omp.gui`) bản mới cài riêng: khác thư mục cài và định danh.
-- Với bản WISA STUDIO cũ (`appId: sh.omp.gui`, `productName: WISA STUDIO`), bản mới trùng tên sản phẩm nên cùng đường dẫn `WISA STUDIO.app` (macOS) hoặc thư mục cài (Windows) và thay thế tệp ứng dụng cũ. Thư mục dữ liệu cũ không bị đụng tới; chỉ cài đường dẫn khác nếu cần chạy cả hai.
+- Bản WISA STUDIO cũ (`appId: sh.omp.gui`) dùng `WISA STUDIO.app`; bản mới dùng tên hiển thị Wisa và `Wisa.app`. Thư mục dữ liệu cũ không bị đụng tới; hai tệp ứng dụng có thể cùng tồn tại nhưng không dùng chung định danh hoặc hồ sơ.
 - Bản WISA cũ đọc cùng feed phát hành, nên trình tự cập nhật có thể cài bản mới tại chỗ. Cập nhật đó không mang theo dữ liệu: ứng dụng mở trên thư mục dữ liệu mới, còn key và quyền macOS gắn với định danh cũ không đi theo.
 - Bản upstream `nornzach/oh-my-pi-gui` đọc feed riêng, không nhận bản WISA.
 - WISA STUDIO không phải sandbox. Agent chạy với môi trường shell đăng nhập, PATH, cấu hình Git và SSH, và các thư mục làm việc bạn mở. Những thứ này được dùng chung có chủ ý.
@@ -161,7 +200,11 @@ bun run build
 
 `bun run dev` chạy tách biệt với bản đã cài: userData `wisa-studio-dev`, profile agent `~/.wisa-studio-dev/agent`, không đăng ký URL scheme với hệ điều hành, không chiếm phím tắt toàn cục.
 
+Main và preload cũng được theo dõi thay đổi; khi chúng được dựng lại, Electron khởi động lại hoặc tải lại cửa sổ để giữ IPC đồng bộ với renderer. Nếu một phiên dev cũ báo cần khởi động lại, thoát và chạy lại `bun run dev` một lần; chỉ tải lại cửa sổ không cập nhật main process.
+
 `bun run dev --stop` chỉ dừng tiến trình do `bun run dev` của checkout và profile hiện tại khởi động, không tắt bản đã cài. Nếu lúc khởi động có đặt `WISA_PROFILE_ROOT`, dùng cùng giá trị khi dừng. Lệnh này ngắt cả tác vụ dev đang chạy.
+
+Giao diện dùng vật liệu Liquid Glass từ [OpenGlass UI](https://github.com/moekoelueker/open-glass-ui) (MIT, ghim phiên bản trong `package.json`). `src/renderer/lib/liquid-glass.ts` tạo token một lần lúc khởi động; `src/renderer/styles/liquid-glass.css` ánh xạ chúng vào design system chung. Thêm màn hình bằng các primitive/class hiện có, không thêm blur theo từng hàng. Màu theo theme hiện tại; chế độ giảm độ trong suốt và tương phản cao dùng vật liệu đặc, không blur.
 
 Ghi đè chỉ dành cho phát triển, chỉ với bản chưa đóng gói: `OMP_BUNDLED_OMP=<path>` chạy binary đó thay cho `resources/omp`, và `OMP_SIDECAR=source` chạy mã nguồn coding-agent của monorepo qua bun. Bản đóng gói bỏ qua cả hai. App không kiểm tra rằng bản ghi đè hiểu `PI_CONFIG_SOURCES` / `PI_PROJECT_CONFIG_DIR` hay profile cách ly; dùng chúng là trách nhiệm của bạn.
 
@@ -177,6 +220,8 @@ bun run package:linux     -- --publish never   # AppImage + deb
 ```
 
 Quy trình phát hành đầy đủ, gồm thứ tự build sidecar và kiểm tra gói, nằm trong [AGENTS.md](AGENTS.md) — đọc trước khi cắt bản. Định danh đóng gói và các bước cutover nằm trong [docs/vi/appid-va-cap-nhat.md](docs/vi/appid-va-cap-nhat.md).
+
+Actions tái sử dụng cache tải dependency và gói Browser Use đúng hệ điều hành/kiến trúc, khóa theo recipe và kiểm chứng lại trước khi đóng gói. Native addon vẫn bị khóa theo Core commit; khi cần build lại, Cargo kiểm tra các intermediate đã cache. macOS kiểm chứng DMG/ZIP ngay trên host build trước khi chuyển artifact; Windows dùng mức nén 7z 5 để giảm CPU. Tất cả kiểm tra runtime và updater vẫn bắt buộc, không dùng lại installer từ cache.
 
 ## Giấy phép và ghi công
 

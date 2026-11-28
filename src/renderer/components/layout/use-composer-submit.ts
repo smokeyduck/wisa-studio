@@ -18,6 +18,7 @@ import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { parseComposerMode } from "../../lib/input-modes";
 import { clearSessionContext } from "../../lib/messages";
+import { minifyInput } from "../../lib/minify-input";
 import { dropReferencedPastes, expandPasteMarkers } from "../../lib/paste-blobs";
 import { parseQueueShorthand, splitQueuedMessages } from "../../lib/queue-input";
 import { useTabRpc } from "../../lib/tab-rpc";
@@ -42,7 +43,6 @@ function withFileMentions(message: string, files: ComposerFile[], cwd: string): 
 
 export function useComposerSubmit({
 	text,
-	images,
 	sending,
 	status,
 	isStreaming,
@@ -56,7 +56,6 @@ export function useComposerSubmit({
 	setSending,
 }: {
 	text: string;
-	images: ComposerImage[];
 	sending: boolean;
 	status: string;
 	isStreaming: boolean;
@@ -91,8 +90,16 @@ export function useComposerSubmit({
 			const originTabId = runtimeTabId;
 			const originSession = sessionRuntimeStore<SessionStore>(originTabId, "session");
 			const originComposer = sessionRuntimeStore<ComposerStore>(originTabId, "composer") ?? useComposerStore;
-			const { files, sending: inFlight, submissionUncertain } = originComposer.getState();
-			if (inFlight || submissionUncertain || (!message && images.length === 0 && files.length === 0)) return;
+			const { files, images, pendingImageReads, sending: inFlight, submissionUncertain } = originComposer.getState();
+			// Read from the owning draft, not the last render: FileReader can finish
+			// just before React commits the image strip, or still be in flight.
+			if (
+				inFlight ||
+				submissionUncertain ||
+				pendingImageReads > 0 ||
+				(!message && images.length === 0 && files.length === 0)
+			)
+				return;
 			if (status !== "ready") {
 				connectingToast.current = toast({ variant: "warning", message: t("input.agentConnecting") });
 				return;
@@ -278,7 +285,7 @@ export function useComposerSubmit({
 					try {
 						for (let index = 0; index < dispatchItems.length; index++) {
 							if (!originStillActive()) throw new Error("Tab changed during queue dispatch");
-							const draftItem = dispatchItems[index] ?? "";
+							const draftItem = minifyInput(dispatchItems[index] ?? "");
 							// File references used to be at the end of the shorthand draft.
 							const item =
 								index === dispatchItems.length - 1 ? withFileMentions(draftItem, files, originCwd) : draftItem;
@@ -342,7 +349,7 @@ export function useComposerSubmit({
 			// while streaming), session-replacing commands are blocked while
 			// busy, and local-only resolutions rehydrate the transcript.
 			const payload = images.map(image => image.content);
-			const wireMessage = withFileMentions(expandedMessage, files, originCwd);
+			const wireMessage = withFileMentions(minifyInput(expandedMessage), files, originCwd);
 			const submit = planComposerSubmit({
 				message: expandedMessage,
 				wireMessage,
@@ -501,7 +508,6 @@ export function useComposerSubmit({
 		},
 		[
 			text,
-			images,
 			sending,
 			status,
 			isStreaming,

@@ -179,7 +179,7 @@ function notifyOnAgentEnd(tabId: string, event: Extract<AgentSessionEvent, { typ
 				: translate("events.notificationError");
 	void maybeNotify(
 		outcome.tone === "failed" ? "error" : "completion",
-		title || "WISA STUDIO",
+		title || "Wisa",
 		body,
 		runtime.command,
 	);
@@ -1005,6 +1005,10 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 					: "Waiting for input";
 			void maybeNotify("ask", sessionName, body, sessionRuntime(tabId)?.command ?? activeTabCommand);
 		});
+		const unsubFocusTab = window.omp.events.onFocusTab?.(tabId => {
+			const tabs = useTabsStore.getState();
+			if (tabs.tabs.some(tab => tab.id === tabId)) void tabs.switchTab(tabId);
+		});
 
 		const unsubBtw =
 			typeof window.omp.events.onTabBtwFrame === "function"
@@ -1029,6 +1033,7 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 			unsubSessionInfo();
 			unsubExtensionError();
 			unsubBtw();
+			unsubFocusTab?.();
 		};
 	}, [heartbeatMs]);
 }

@@ -1,17 +1,14 @@
 import { createSessionRpcClient, fetchTranscript } from "../../shared/rpc-client";
 import type {
 	AgentMessage,
-	MessagesPage,
 	ModelInfo,
 	RpcAdvisorStatus,
-	RpcCommand,
 	RpcGoalState,
 	RpcLoopModeState,
 	RpcResponse,
 	RpcSessionState,
 	RpcVibeModeState,
 } from "../../shared/rpc-types";
-import { readDisplayPreference } from "../lib/display-preferences";
 import { type MessagesStore, mergeFetchedTranscript, useMessagesStore } from "../stores/messages";
 import { useModelStore } from "../stores/model";
 import { type QueueStore, useQueueStore } from "../stores/queue";
@@ -263,7 +260,7 @@ export async function syncVibeMode(tabId: string, command: TabCommand, isCurrent
 const hydrationVersions = new WeakMap<SessionRuntime, number>();
 const pendingHydrations = new WeakMap<
 	SessionRuntime,
-	{ generation: number | undefined; eventVersion: number | undefined; folded: boolean; promise: Promise<void> }
+	{ generation: number | undefined; eventVersion: number | undefined; promise: Promise<void> }
 >();
 const hydratedSessions = new WeakMap<SessionRuntime, { generation: number | undefined; sessionId: string }>();
 
@@ -300,10 +297,9 @@ export async function hydrateLegacySession(fallbackName?: string, initialState?:
 	const beforeMessages = useMessagesStore.getState().messages;
 	const beforeLiveMessages = useMessagesStore.getState().liveMessages;
 	const beforeEventVersion = useSessionStore.getState().eventVersion;
-	const folded = readDisplayPreference("collapseCompacted");
 	const core = Promise.allSettled([
 		initialState ? Promise.resolve(initialState) : activeTabCommand({ type: "get_state" }),
-		fetchTranscript(createSessionRpcClient(activeTabCommand).command, folded),
+		fetchTranscript(createSessionRpcClient(activeTabCommand).command),
 	]);
 	const subagents = useSubagentsStore.getState().refresh({ expect: isCurrent });
 	const secondary = Promise.allSettled([
@@ -349,7 +345,6 @@ export async function hydrateLegacySession(fallbackName?: string, initialState?:
 		const fetched = (messagesResult.value.data as { messages?: AgentMessage[] } | undefined)?.messages ?? [];
 		const current = useMessagesStore.getState().messages;
 		useMessagesStore.getState().reconcileFetched(mergeFetchedTranscript(fetched, beforeMessages, current));
-		useSessionStore.setState({ transcriptFolded: folded });
 		if (eventsUnchanged && stateIsIdle && useMessagesStore.getState().liveMessages === beforeLiveMessages) {
 			useMessagesStore.getState().clearDeliveredLiveMessages();
 		}
@@ -401,19 +396,12 @@ export function hydrateTabSession(tabId: string, fallbackName?: string, initialS
 	const runtime = ensureTabRuntime(tabId);
 	const generation = runtime.sessionGeneration;
 	const eventVersion = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState().eventVersion;
-	const folded = withSessionRuntime(tabId, () => readDisplayPreference("collapseCompacted"));
 	const pending = pendingHydrations.get(runtime);
-	if (
-		pending &&
-		pending.generation === generation &&
-		pending.eventVersion === eventVersion &&
-		pending.folded === folded
-	)
-		return pending.promise;
-	const promise = performTabHydration(tabId, runtime, generation, folded, fallbackName, initialState).finally(() => {
+	if (pending && pending.generation === generation && pending.eventVersion === eventVersion) return pending.promise;
+	const promise = performTabHydration(tabId, runtime, generation, fallbackName, initialState).finally(() => {
 		if (pendingHydrations.get(runtime)?.promise === promise) pendingHydrations.delete(runtime);
 	});
-	pendingHydrations.set(runtime, { generation, eventVersion, folded, promise });
+	pendingHydrations.set(runtime, { generation, eventVersion, promise });
 	return promise;
 }
 
@@ -421,7 +409,6 @@ async function performTabHydration(
 	tabId: string,
 	runtime: SessionRuntime,
 	generation: number | undefined,
-	folded: boolean,
 	fallbackName?: string,
 	initialState?: RpcResponse,
 ): Promise<void> {
@@ -444,9 +431,7 @@ async function performTabHydration(
 	const pendingSessionPath = useTabsStore.getState().tabs.find(tab => tab.id === tabId)?.pendingSessionPath;
 
 	const stateResultPromise = initialState ?? runtime.command({ type: "get_state" });
-	const messagesResultPromise = Promise.allSettled([
-		fetchTranscript(createSessionRpcClient(runtime.command).command, folded),
-	]);
+	const messagesResultPromise = Promise.allSettled([fetchTranscript(createSessionRpcClient(runtime.command).command)]);
 	const subagentsResult = sessionRuntimeStore<SubagentsStore>(tabId, "subagents")
 		?.getState()
 		.refresh({ expect: isCurrent });
@@ -541,7 +526,6 @@ async function performTabHydration(
 		const tools = sessionRuntimeStore<ToolsStore>(tabId, "tools");
 		const current = messages?.getState().messages ?? [];
 		messages?.getState().reconcileFetched(mergeFetchedTranscript(fetched, beforeMessages, current));
-		sessionRuntimeStore<SessionStore>(tabId, "session")?.setState({ transcriptFolded: folded });
 		if (eventsUnchanged && stateIsIdle && messages?.getState().liveMessages === beforeLiveMessages) {
 			messages.getState().clearDeliveredLiveMessages();
 		}
@@ -563,47 +547,4 @@ async function performTabHydration(
 	// requests still begin in parallel, but the core session can paint first.
 	await subagentsResult;
 	await secondaryResult;
-}
-
-type ArchiveQuery = NonNullable<Extract<RpcCommand, { type: "get_transcript_page" }>["archive"]>;
-
-/** Historical rows are local to the reader, never reconciled into the active messages or tool stores. */
-export async function readOlderTranscript(
-	tabId: string,
-	archive: ArchiveQuery,
-): Promise<(MessagesPage & { hasOlder: boolean }) | undefined> {
-	const runtime = sessionRuntime(tabId);
-	if (!runtime) return undefined;
-	const generation = runtime.sessionGeneration;
-	const current = () => {
-		const session = sessionRuntimeStore<SessionStore>(tabId, "session")?.getState();
-		return (
-			sessionRuntime(tabId) === runtime &&
-			runtime.sessionGeneration === generation &&
-			session?.sessionId === archive.sessionId &&
-			session.status === "ready" &&
-			!session.switchPending
-		);
-	};
-	if (!current()) return undefined;
-	let response: RpcResponse;
-	try {
-		response = await createSessionRpcClient(runtime.command).command({ type: "get_transcript_page", archive });
-	} catch (error) {
-		if (!current()) return undefined;
-		throw error;
-	}
-	if (!current()) return undefined;
-	if (!response.success) throw new Error(response.error);
-	const data = response.data as Partial<MessagesPage & { hasOlder: boolean }> | undefined;
-	if (
-		!Array.isArray(data?.messages) ||
-		typeof data.hasOlder !== "boolean" ||
-		typeof data.totalMessages !== "number" ||
-		!Number.isSafeInteger(data.totalMessages) ||
-		data.totalMessages < data.messages.length
-	) {
-		throw new Error("Invalid transcript archive response");
-	}
-	return { messages: data.messages, totalMessages: data.totalMessages, hasOlder: data.hasOlder };
 }

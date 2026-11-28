@@ -4,7 +4,7 @@
  * ⌘Q SIGTERMs every in-flight agent run with no word to the user.
  */
 import { app, BrowserWindow, dialog, type MessageBoxOptions, type MessageBoxSyncOptions } from "electron";
-import { DEV_RESTART_ENV, DEV_RESTART_EXIT_CODE } from "../shared/dev-restart";
+import { DEV_REBUILD_MESSAGE, DEV_RESTART_ENV, DEV_RESTART_EXIT_CODE } from "../shared/dev-restart";
 import { hasUnsavedFileDrafts } from "./file-draft-guard";
 import { getMainLanguage, mainT } from "./i18n";
 import { assessQuitRisk, type QuitRisk, quitNeedsConfirmation, type WindowTabFact } from "./quit-guard";
@@ -73,6 +73,12 @@ export function installQuitGuard(
 ): void {
 	inventory = tabInventory;
 	runningTasks = scheduledRuns;
+	if (!app.isPackaged && process.env[DEV_RESTART_ENV] === "1") {
+		// Main rebuilds use the same teardown and dirty-file gate as normal quit.
+		process.on("message", message => {
+			if (message === DEV_REBUILD_MESSAGE) requestQuit();
+		});
+	}
 	app.on("before-quit", event => {
 		if (approved) {
 			if (cleanedUp) return;

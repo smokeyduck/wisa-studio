@@ -40,10 +40,12 @@ globals.HTMLElement = HTMLElement;
 globals.Node = Node;
 globals.IS_REACT_ACT_ENVIRONMENT = true;
 globals.requestAnimationFrame = (callback: () => void) => setTimeout(callback, 0);
+globals.cancelAnimationFrame = (frame: number) => clearTimeout(frame);
 
 const elementPrototype = HTMLElement.prototype as unknown as Record<string, unknown>;
 if (typeof elementPrototype.focus !== "function") elementPrototype.focus = () => {};
 if (typeof elementPrototype.scrollIntoView !== "function") elementPrototype.scrollIntoView = () => {};
+if (typeof elementPrototype.setPointerCapture !== "function") elementPrototype.setPointerCapture = () => {};
 elementPrototype.getBoundingClientRect = () => ({
 	bottom: 0,
 	height: 0,
@@ -562,6 +564,51 @@ describe("InputArea queue shorthand submit", () => {
 		expect(followUp).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		{ streaming: false, modifier: {}, lane: "prompt" },
+		{ streaming: false, modifier: { ctrlKey: true }, lane: "prompt" },
+		{ streaming: true, modifier: {}, lane: "steer" },
+		{ streaming: true, modifier: { ctrlKey: true }, lane: "followUp" },
+		{ streaming: true, modifier: followUpModifier, lane: "followUp" },
+	])(
+		"minifies expanded pastes for $lane with streaming=$streaming and $modifier",
+		async ({ streaming, modifier, lane }) => {
+			await mount();
+			await act(async () => useSessionStore.setState({ isStreaming: streaming }));
+			const raw = '{\n  "log": "keep  spaces",\n  "id": 9007199254740993\n}';
+			const blob = storePaste(raw);
+			await typeInto(findTextarea(), pasteMarkerText(blob.id, blob.content));
+			await pressEnter(findTextarea(), modifier);
+			await flush();
+			await flush();
+			const target = lane === "prompt" ? prompt : lane === "steer" ? steer : followUp;
+			expect(target).toHaveBeenCalledWith('{"log":"keep  spaces","id":9007199254740993}', []);
+		},
+	);
+
+	it("minifies each shorthand queue item after splitting without modifying literal commands", async () => {
+		await mount();
+		await typeInto(findTextarea(), '->\n1. { "ok": true }\n2. /custom keep   spaces');
+		await pressEnter(findTextarea());
+		await flush();
+		await flush();
+		expect(followUp).toHaveBeenNthCalledWith(1, '{"ok":true}', []);
+		expect(followUp).toHaveBeenNthCalledWith(2, "/custom keep   spaces", undefined);
+	});
+
+	it("restores the original unminified draft on a rejected send", async () => {
+		await mount();
+		await act(async () => useSessionStore.setState({ isStreaming: false }));
+		prompt.mockResolvedValueOnce({ type: "response", command: "prompt", success: false, error: "Rejected" });
+		const raw = '{\n  "keep": true\n}';
+		await typeInto(findTextarea(), raw);
+		await pressEnter(findTextarea());
+		await flush();
+		await flush();
+		expect(prompt).toHaveBeenCalledWith('{"keep":true}', []);
+		expect(useComposerStore.getState().draft).toBe(raw);
+	});
+
 	it("renders an idle prompt before its RPC settles and replaces the local echo on delivery", async () => {
 		await mount();
 		await act(async () => useSessionStore.setState({ isStreaming: false }));
@@ -915,17 +962,19 @@ describe("InputArea run settings", () => {
 		expect(buttonWithText(translate("input.thinking.name.high"))).toBeDefined();
 		expect(buttonWithText("Fast")).toBeDefined();
 		expect(buttonWithText("Full access")).toBeDefined();
-		expect(buttonWithText("Modes")).toBeDefined();
+		expect(buttonWithText(translate("input.modes.label"))).toBeDefined();
 	});
 
-	it("keeps a long model name whole in its accessible name and tooltip", async () => {
+	it("keeps the model name accessible and shows its maker rather than the gateway", async () => {
 		const name = "A particularly long model display name from a custom provider, with qualifiers and dates";
-		useModelStore.setState({ model: { ...FAST_MODE_MODEL, name } });
+		const model = { ...FAST_MODE_MODEL, id: "claude-sonnet-5-5", provider: "wisa", name };
+		useModelStore.setState({ model });
 		await mountCompact();
 		const trigger = document.querySelector("[data-model-picker-trigger]");
 		expect(trigger?.querySelector(".truncate")?.textContent).toBe(name);
 		expect(trigger?.getAttribute("aria-label")).toBe(`${translate("input.model")}: ${name}`);
-		expect(trigger?.getAttribute("title")).toContain(`${name} (${FAST_MODE_MODEL.id})`);
+		expect(trigger?.getAttribute("title")).toContain(`${name} (${model.id})`);
+		expect(trigger?.querySelector("svg")?.getAttribute("data-brand")).toBe("anthropic");
 	});
 
 	it("marks fast mode selected when the active model supports it", async () => {
@@ -960,13 +1009,15 @@ describe("InputArea run settings", () => {
 		if (!thinking) throw new Error("thinking trigger missing");
 		await click(thinking);
 
-		const max = buttonWithText(translate("input.thinking.name.max"));
-		if (!max) throw new Error("max option missing");
-		// Browser ordering is pointerdown → pointerup → click. The regression
-		// closed the parent on the first event and unmounted this handler before
-		// the final click.
-		await pointerDown(max);
-		await click(max);
+		const range = document.querySelector('input[type="range"]') as unknown as TestElement | null;
+		if (!range) throw new Error("reasoning slider missing");
+		// Pointerdown inside the nested portal must not dismiss its parent.
+		await pointerDown(range);
+		await act(async () => {
+			range.value = "5";
+			range.dispatchEvent(new Event("input", { bubbles: true }));
+			range.dispatchEvent(new Event("pointerup", { bubbles: true }));
+		});
 		await flush();
 
 		expect(setThinkingLevel).toHaveBeenCalledWith("max");
@@ -989,42 +1040,30 @@ describe("InputArea run settings", () => {
 		expect(useSettingsStore.getState().approvalMode).toBe("always-ask");
 	});
 
-	it("lets the nested modes portal dispatch its selected action", async () => {
+	it("only shows the compact plan toggle while active and lets it turn planning off", async () => {
 		await mountCompact();
-		await openRunSettings();
-		const modes = buttonWithText("Modes");
-		if (!modes) throw new Error("modes trigger missing");
-		await click(modes);
-
+		expect(buttonWithText("Plan")).toBeUndefined();
+		await pressTab(findTextarea(), true);
+		await flush();
 		const plan = buttonWithText("Plan");
-		if (!plan) throw new Error("plan option missing");
+		if (!plan) throw new Error("active plan toggle missing");
 		await pointerDown(plan);
 		await click(plan);
 		await flush();
 
-		expect(setPlanMode).toHaveBeenCalledWith(true);
-		expect(useSessionStore.getState().planModeEnabled).toBe(true);
-		expect(document.querySelector("[data-run-settings-menu]")?.getAttribute("aria-hidden")).toBeNull();
+		expect(setPlanMode).toHaveBeenLastCalledWith(false);
+		expect(useSessionStore.getState().planModeEnabled).toBe(false);
+		expect(buttonWithText("Plan")).toBeUndefined();
 	});
 
-	it("clamps the nested Modes portal to the viewport and scrolls when there is not enough height", async () => {
+	it("opens session controls from compact run settings without creating a nested modes menu", async () => {
 		await mountCompact();
 		await openRunSettings();
-		const modes = buttonWithText("Modes");
-		if (!modes) throw new Error("modes trigger missing");
-		Object.defineProperty(modes, "getBoundingClientRect", {
-			value: () => ({ left: 440, right: 484, top: 30, bottom: 62 }),
-		});
+		const modes = buttonWithText(translate("input.modes.label"));
+		if (!modes) throw new Error("session controls trigger missing");
 		await click(modes);
-		const menu = document.querySelector("[data-composer-modes-menu]") as unknown as HTMLElement | null;
-		if (!menu) throw new Error("modes menu missing");
-		Object.defineProperty(menu, "scrollHeight", { value: 900 });
-		await act(async () => window.dispatchEvent(new Event("resize")));
-
-		expect(menu.style.left).toBe("196px");
-		expect(menu.style.width).toBe("288px");
-		expect(menu.style.top).toBe("68px");
-		expect(menu.style.maxHeight).toBe("724px");
+		expect(useUiStore.getState().modesOpen).toBe(true);
+		expect(document.querySelector("[data-composer-modes-menu]")).toBeNull();
 	});
 });
 
@@ -1078,6 +1117,73 @@ describe("InputArea file attachments", () => {
 });
 
 describe("InputArea pasted images", () => {
+	it.each(["paste", "file picker"])("waits for overlapping %s images before queuing", async source => {
+		const readers: DeferredFileReader[] = [];
+		class DeferredFileReader {
+			result = "";
+			onload: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			readAsDataURL() {
+				readers.push(this);
+			}
+		}
+		vi.stubGlobal("FileReader", DeferredFileReader);
+		try {
+			await mount();
+			await typeInto(findTextarea(), "inspect both screenshots");
+			for (let index = 0; index < 2; index++) {
+				const target =
+					source === "paste"
+						? findTextarea()
+						: (document.querySelector('input[type="file"]') as unknown as TestElement);
+				const file = { name: `screenshot-${index}.png`, type: "image/png" } as File;
+				const event = {
+					clipboardData: { files: [file] },
+					target: { files: [file], value: "selected" },
+					preventDefault: () => {},
+				};
+				const key = Object.getOwnPropertyNames(target).find(name => name.startsWith("__reactProps$"));
+				if (!key) throw new Error("attachment input props missing");
+				const props = (target as unknown as Record<string, unknown>)[key] as Record<
+					string,
+					(attachmentEvent: typeof event) => void
+				>;
+				await act(async () => props[source === "paste" ? "onPaste" : "onChange"](event));
+			}
+			const sendButton = document.querySelector("button.omp-send-button") as unknown as TestElement;
+			expect(sendButton.getAttribute("disabled")).not.toBeNull();
+			await pressEnter(findTextarea(), followUpModifier);
+			await flush();
+			expect(followUp).not.toHaveBeenCalled();
+			expect(useComposerStore.getState().draft).toBe("inspect both screenshots");
+
+			await act(async () => {
+				readers[0].result = "data:image/png;base64,AQID";
+				readers[0].onload?.();
+			});
+			await pressEnter(findTextarea(), followUpModifier);
+			await flush();
+			expect(followUp).not.toHaveBeenCalled();
+
+			await act(async () => {
+				readers[1].result = "data:image/png;base64,AQIE";
+				readers[1].onload?.();
+			});
+			expect(sendButton.getAttribute("disabled")).toBeNull();
+			await pressEnter(findTextarea(), followUpModifier);
+			await flush();
+			await flush();
+			expect(followUp).toHaveBeenCalledExactlyOnceWith("inspect both screenshots", [
+				{ type: "image", data: "AQID", mimeType: "image/png" },
+				{ type: "image", data: "AQIE", mimeType: "image/png" },
+			]);
+			expect(steer).not.toHaveBeenCalled();
+			expect(useComposerStore.getState().images).toEqual([]);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("opens a pasted image in the right preview without removing it", async () => {
 		useComposerStore.getState().setImages([
 			{

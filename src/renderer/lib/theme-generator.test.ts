@@ -51,10 +51,12 @@ describe("generateTheme", () => {
 		).toBeLessThan(10);
 		// accent-bright stays the lighter one.
 		expect(toOklab(color(tokens, "--omp-accent-bright")).l).toBeGreaterThan(toOklab(color(tokens, "--omp-accent")).l);
-		// Syntax keywords and the info color are blue in Graphite too, but not part of the accent.
+		// Syntax and info colors carry meaning independently of the brand accent.
 		expect(tokens["--omp-syntax-keyword"]).toBe(THEMES.dark.tokens["--omp-syntax-keyword"]);
 		expect(tokens["--omp-info"]).toBe(THEMES.dark.tokens["--omp-info"]);
-		expect(tokens["--omp-input-focus-border"]).toBe(THEMES.dark.tokens["--omp-input-focus-border"]);
+		expect(
+			Math.abs(hueDegrees(color(tokens, "--omp-input-focus-border")) - hueDegrees(color(tokens, "--omp-accent"))),
+		).toBeLessThan(10);
 	});
 
 	it("turns the overlays tinted with the accent, not the plain white ones", () => {

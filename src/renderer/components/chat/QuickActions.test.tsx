@@ -1,23 +1,19 @@
 import { parseHTML } from "linkedom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentMessage, RpcCommand, RpcResponse } from "../../../shared/rpc-types";
+import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import { I18nProvider, translate } from "../../lib/i18n";
-import { type MessagesStore, useMessagesStore } from "../../stores/messages";
+import * as motion from "../../lib/motion";
+import { useMessagesStore } from "../../stores/messages";
 import { type SessionStore, useSessionStore } from "../../stores/session";
-import {
-	SessionRuntimeProvider,
-	sessionRuntimeStore,
-	setFocusedSessionRuntime,
-} from "../../stores/session-runtime-context";
+import { SessionRuntimeProvider, sessionRuntimeStore } from "../../stores/session-runtime-context";
 import { createTabRuntime } from "../../stores/tab-runtime";
 import { useTabsStore } from "../../stores/tabs";
 import { activeWorkspacePage, useUiStore } from "../../stores/ui";
 import { useWorkspaceMode } from "../../stores/workspace-mode";
 import { ModesPanel } from "../panels/ModesPanel";
 import { ChatStream } from "./ChatStream";
-import { ReadOnlyTranscriptContext } from "./transcript-mode";
+import { WelcomeScenes } from "./WelcomeScenes";
 
 const {
 	document,
@@ -53,7 +49,18 @@ afterEach(async () => {
 	useMessagesStore.getState().reset();
 	useSessionStore.getState().reset();
 	useTabsStore.getState().reset();
-	useUiStore.setState({ modesOpen: false, workspacePage: null });
+	useUiStore.setState({
+		modesOpen: false,
+		modesTab: "goal",
+		workspacePage: null,
+		panelVisible: false,
+		panelTab: "overview",
+	});
+	useWorkspaceMode.setState({ defaultWorkspace: null });
+	vi.restoreAllMocks();
+	vi.useRealTimers();
+	Reflect.deleteProperty(window, "matchMedia");
+	Reflect.deleteProperty(document, "hidden");
 });
 async function mount(element: React.ReactNode) {
 	container = document.createElement("div");
@@ -64,274 +71,194 @@ async function mount(element: React.ReactNode) {
 	});
 }
 
-/** Each starter card in the three empty-state lanes, with its localized title and prompt keys. */
 const LANES = [
+	{ lane: "code", cwd: "/project", kind: "agent", titleKey: "chat.empty.title", subtitleKey: "chat.empty.subtitle" },
 	{
-		kind: "agent",
+		lane: "chat",
 		cwd: "/project",
-		cards: [
-			["chat.starter.understand.title", "chat.starter.understand.prompt"],
-			["chat.starter.fix.title", "chat.starter.fix.prompt"],
-			["chat.starter.build.title", "chat.starter.build.prompt"],
-			["chat.starter.review.title", "chat.starter.review.prompt"],
-		],
-	},
-	{
 		kind: "chat",
-		cwd: "/project",
-		cards: [
-			["chat.starter.explain.title", "chat.starter.explain.prompt"],
-			["chat.starter.draft.title", "chat.starter.draft.prompt"],
-			["chat.starter.brainstorm.title", "chat.starter.brainstorm.prompt"],
-			["chat.starter.translate.title", "chat.starter.translate.prompt"],
-		],
+		titleKey: "chat.empty.title.chat",
+		subtitleKey: "chat.empty.subtitle.chat",
 	},
 	{
-		kind: "work",
+		lane: "work",
 		cwd: "/work",
-		cards: [
-			["chat.starter.write.title", "chat.starter.write.prompt"],
-			["chat.starter.plan.title", "chat.starter.plan.prompt"],
-			["chat.starter.research.title", "chat.starter.research.prompt"],
-			["chat.starter.analyze.title", "chat.starter.analyze.prompt"],
-		],
+		kind: "agent",
+		titleKey: "chat.empty.title.work",
+		subtitleKey: "chat.empty.subtitle.work",
 	},
 ] as const;
 
-describe("compact quick setup surfaces", () => {
-	it.each(
-		LANES.flatMap(lane =>
-			lane.cards.map(([titleKey, promptKey], index) => ({
-				lane: lane.kind,
-				cwd: lane.cwd,
-				index,
-				titleKey,
-				promptKey,
-			})),
-		),
-	)(
-		"$lane starter $index opens its modal with its own prompt, stages it for its tab, and closes",
-		async ({ lane, cwd, index, promptKey }) => {
-			useWorkspaceMode.setState({ defaultWorkspace: "/work" });
-			setFocusedSessionRuntime("quick");
-			useTabsStore.setState({
-				tabs: [{ id: "quick", cwd, status: "ready", kind: lane === "chat" ? "chat" : "agent", unreadDone: false }],
-				activeTabId: "quick",
-			});
-			useSessionStore.setState({ status: "ready", cwd, sessionId: "quick-session" });
-			await mount(<ChatStream />);
-			const card = document.querySelectorAll<HTMLButtonElement>(".omp-starter-card")[index];
-			expect(card).toBeDefined();
-			const staged: { text: string; tabId?: string }[] = [];
-			const capture = (event: Event) => {
-				staged.push((event as CustomEvent<{ text: string; tabId?: string }>).detail);
-			};
-			window.addEventListener("omp:fill-composer", capture);
-			try {
-				await act(async () => {
-					card?.dispatchEvent(new Event("click", { bubbles: true }));
-				});
-				const dialogs = document.querySelectorAll('[role="dialog"]');
-				expect(dialogs).toHaveLength(1);
-				expect(document.querySelector("[data-workspace-page]")).toBeNull();
-				const textarea = dialogs[0]?.querySelector("textarea") as unknown as { value: string } | null;
-				expect(textarea?.value).toBe(translate(promptKey));
-				const form = dialogs[0]?.querySelector("form");
-				await act(async () => {
-					form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-				});
-				expect(staged).toEqual([{ text: translate(promptKey), tabId: "quick" }]);
-				expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0);
-			} finally {
-				window.removeEventListener("omp:fill-composer", capture);
-			}
-		},
-	);
-
-	it("Cancel closes the starter modal and stages nothing into the composer", async () => {
+describe("empty conversation canvas", () => {
+	it.each(LANES)("shows only the welcome content in $lane", async ({ lane, cwd, kind, titleKey, subtitleKey }) => {
+		useWorkspaceMode.setState({ defaultWorkspace: "/work" });
+		const runtime = createTabRuntime(`empty-${lane}`);
 		useTabsStore.setState({
-			tabs: [{ id: "quick", cwd: "/project", status: "ready", kind: "agent", unreadDone: false }],
-			activeTabId: "quick",
-		});
-		useSessionStore.setState({ status: "ready", cwd: "/project", sessionId: "quick-session" });
-		await mount(<ChatStream />);
-		const staged: unknown[] = [];
-		const capture = (event: Event) => {
-			staged.push((event as CustomEvent).detail);
-		};
-		window.addEventListener("omp:fill-composer", capture);
-		try {
-			await act(async () => {
-				document
-					.querySelector<HTMLButtonElement>(".omp-starter-card")
-					?.dispatchEvent(new Event("click", { bubbles: true }));
-			});
-			const cancel = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
-				button => button.textContent?.trim() === translate("common.cancel"),
-			);
-			await act(async () => {
-				cancel?.dispatchEvent(new Event("click", { bubbles: true }));
-			});
-			expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0);
-			expect(staged).toEqual([]);
-		} finally {
-			window.removeEventListener("omp:fill-composer", capture);
-		}
-	});
-
-	it.each(["vibe", "goal", "loop"] as const)("keeps %s quick setup centered, not a workspace page", async tab => {
-		useUiStore.getState().openModes(tab);
-		expect(activeWorkspacePage(useUiStore.getState())).toBeNull();
-		await mount(<ModesPanel open onClose={() => {}} initialTab={tab} />);
-		expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-		expect(document.querySelector(".omp-dialog-size-md")).not.toBeNull();
-	});
-});
-
-describe("older transcript history", () => {
-	it("requests one boundary per click at most three times, without replacing the live transcript", async () => {
-		const runtime = createTabRuntime("older-history");
-		const session = sessionRuntimeStore<SessionStore>(runtime.tabId, "session")!;
-		const messages = sessionRuntimeStore<MessagesStore>(runtime.tabId, "messages")!;
-		const late = Promise.withResolvers<RpcResponse>();
-		const commandForTab = vi.fn(async (_tabId: string, command: RpcCommand): Promise<RpcResponse> => {
-			if (command.type !== "get_transcript_page" || !command.archive) throw new Error("Unexpected archive command");
-			if (command.archive.boundaryId === "second-boundary") return late.promise;
-			const depth = command.archive.depth;
-			return {
-				type: "response",
-				command: command.type,
-				success: true,
-				data: {
-					messages: [{ role: "user", entryId: `older-${depth}`, content: `Old ${depth}`, timestamp: depth }],
-					totalMessages: 1,
-					hasOlder: true,
-				},
-			};
-		});
-		const savedBridge = bridge.omp;
-		bridge.omp = {
-			...(savedBridge as object),
-			rpc: {
-				commandForTab: (tabId: string, command: RpcCommand) =>
-					command.type === "get_queue"
-						? Promise.resolve({
-								type: "response",
-								command: command.type,
-								success: true,
-								data: { steering: [], followUp: [] },
-							})
-						: commandForTab(tabId, command),
-			},
-		};
-		useTabsStore.setState({
-			tabs: [{ id: runtime.tabId, cwd: "/project", status: "ready", kind: "agent", unreadDone: false }],
-			activeTabId: runtime.tabId,
-		});
-		session.setState({ status: "ready", sessionId: "session-with-archive" });
-		const live: AgentMessage[] = [
-			{
-				role: "compactionSummary",
-				entryId: "handoff-boundary",
-				summary: "Handoff",
-				method: "handoff",
-				tokensBefore: 10,
-				timestamp: 5,
-			},
-			{ role: "user", entryId: "live-user", content: "Latest", timestamp: 6 },
-		];
-		messages.setState({ messages: live });
-		const action = (key: string) =>
-			[...document.querySelectorAll<HTMLButtonElement>("button")].find(
-				button => button.textContent?.trim() === translate(key),
-			);
-		const click = async (key: string) => {
-			const button = action(key);
-			expect(button).toBeDefined();
-			await act(async () => {
-				button?.dispatchEvent(new Event("click", { bubbles: true }));
-			});
-		};
-		try {
-			await mount(
-				<SessionRuntimeProvider runtime={runtime}>
-					<ChatStream />
-				</SessionRuntimeProvider>,
-			);
-			expect(commandForTab).not.toHaveBeenCalled();
-			await click("chat.olderHistory.open");
-			expect(action("chat.olderHistory.close")?.getAttribute("aria-expanded")).toBe("true");
-			await click("chat.olderHistory.more");
-			await click("chat.olderHistory.more");
-			expect(action("chat.olderHistory.more")?.getAttribute("aria-disabled")).toBe("true");
-			await click("chat.olderHistory.more");
-			expect(
-				commandForTab.mock.calls.map(
-					([, command]) => command.type === "get_transcript_page" && command.archive?.depth,
-				),
-			).toEqual([0, 1, 2]);
-			expect(messages.getState().messages).toBe(live);
-			await click("chat.olderHistory.close");
-			expect(action("chat.olderHistory.open")?.getAttribute("aria-expanded")).toBe("false");
-			expect(action("chat.olderHistory.more")).toBeUndefined();
-			expect(document.body.textContent).not.toContain(translate("chat.olderHistory.loaded", { count: 3 }));
-			await click("chat.olderHistory.open");
-			expect(commandForTab.mock.lastCall?.[1]).toMatchObject({ archive: { depth: 0 } });
-			expect(document.body.textContent).toContain(translate("chat.olderHistory.loaded", { count: 1 }));
-
-			await act(async () => {
-				messages.setState({ messages: [{ ...live[0], entryId: "second-boundary", method: "soft" }, live[1]] });
-			});
-			await click("chat.olderHistory.open");
-			expect(commandForTab).toHaveBeenCalledTimes(5);
-			await act(async () => {
-				session.setState({ switchPending: { fromId: "session-with-archive", toId: "different" } });
-				late.resolve({
-					type: "response",
-					command: "get_transcript_page",
-					success: true,
-					data: {
-						messages: [{ role: "user", content: "Stale archive", timestamp: 1 }],
-						totalMessages: 1,
-						hasOlder: false,
-					},
-				});
-			});
-			expect(action("chat.olderHistory.open")).toBeUndefined();
-			expect(document.body.textContent).not.toContain("Stale archive");
-		} finally {
-			bridge.omp = savedBridge;
-		}
-	});
-
-	it("has no archive control in a read-only subagent transcript", async () => {
-		const runtime = createTabRuntime("readonly-history");
-		useTabsStore.setState({
-			tabs: [{ id: runtime.tabId, cwd: "/project", status: "ready", kind: "agent", unreadDone: false }],
+			tabs: [{ id: runtime.tabId, cwd, status: "ready", kind, unreadDone: false }],
 			activeTabId: runtime.tabId,
 		});
 		sessionRuntimeStore<SessionStore>(runtime.tabId, "session")?.setState({
 			status: "ready",
-			sessionId: "agent-archive",
-		});
-		sessionRuntimeStore<MessagesStore>(runtime.tabId, "messages")?.setState({
-			messages: [
-				{
-					role: "compactionSummary",
-					entryId: "readonly-boundary",
-					summary: "Subagent compaction",
-					tokensBefore: 10,
-					timestamp: 5,
-				},
-			],
+			cwd,
+			sessionId: `empty-${lane}`,
 		});
 		await mount(
 			<SessionRuntimeProvider runtime={runtime}>
-				<ReadOnlyTranscriptContext.Provider value={{ authorLabel: "Parent" }}>
-					<ChatStream />
-				</ReadOnlyTranscriptContext.Provider>
+				<ChatStream />
 			</SessionRuntimeProvider>,
 		);
-		expect(document.body.textContent).not.toContain(translate("chat.olderHistory.open"));
+		const canvas = container?.querySelector(".omp-transcript-scroll .omp-empty-canvas");
+		expect(canvas).not.toBeNull();
+		expect(canvas?.querySelector("img")?.getAttribute("src")).toBeTruthy();
+		expect(canvas?.querySelector("h1")?.textContent).toBe(translate(titleKey));
+		expect(canvas?.querySelector("p")?.textContent).toBe(translate(subtitleKey));
+		expect(
+			canvas?.querySelectorAll("button, textarea, .omp-card, .omp-starter-card, .omp-starter-grid"),
+		).toHaveLength(0);
+		expect(container?.querySelectorAll('[role="dialog"]')).toHaveLength(0);
 	});
+});
+
+describe("welcome scene lifecycle", () => {
+	function environment(reduced = false) {
+		vi.useFakeTimers();
+		const kills: Mock<() => void>[] = [];
+		vi.spyOn(motion, "tweenStyle").mockImplementation((style, pose, _seconds, onComplete) => {
+			Object.assign(style, pose);
+			onComplete?.();
+			const kill = vi.fn();
+			kills.push(kill);
+			return kill;
+		});
+		const listeners = new Set<() => void>();
+		const media = {
+			matches: reduced,
+			addEventListener: (_event: string, listener: () => void) => listeners.add(listener),
+			removeEventListener: (_event: string, listener: () => void) => listeners.delete(listener),
+		};
+		Object.defineProperty(window, "matchMedia", { configurable: true, value: () => media });
+		Object.defineProperty(document, "hidden", { configurable: true, value: false });
+		return {
+			kills,
+			listeners,
+			reduce(value: boolean) {
+				media.matches = value;
+				for (const listener of listeners) listener();
+			},
+			hide(value: boolean) {
+				Object.defineProperty(document, "hidden", { configurable: true, value });
+				document.dispatchEvent(new Event("visibilitychange"));
+			},
+		};
+	}
+
+	async function advance(ms: number) {
+		await act(async () => {
+			vi.advanceTimersByTime(ms);
+		});
+	}
+
+	it.each(["code", "work"] as const)(
+		"cycles welcome text and artwork every ten seconds in %s without moving the logo",
+		async mode => {
+			environment();
+			await mount(<WelcomeScenes mode={mode} />);
+			const stage = container?.querySelector(".omp-welcome-stage");
+			const logo = container?.querySelector("img");
+			expect(stage?.getAttribute("data-scene")).toBe("constellation");
+			const visibleCopy = () => container?.querySelector('[data-welcome-copy][aria-hidden="false"]');
+			const initialTitle = translate(mode === "work" ? "chat.empty.title.work" : "chat.empty.title");
+			expect(visibleCopy()?.querySelector("h1")?.textContent).toBe(initialTitle);
+			await advance(9999);
+			expect(stage?.getAttribute("data-scene")).toBe("constellation");
+			await advance(1);
+			expect(stage?.getAttribute("data-scene")).toBe("blueprint");
+			expect(visibleCopy()?.querySelector("h1")?.textContent).toBe(translate(`chat.empty.title.${mode}.blueprint`));
+			expect(visibleCopy()?.querySelector("p")?.textContent).toBe(
+				translate(`chat.empty.subtitle.${mode}.blueprint`),
+			);
+			await advance(10_000);
+			expect(stage?.getAttribute("data-scene")).toBe("folio");
+			expect(visibleCopy()?.querySelector("h1")?.textContent).toBe(translate(`chat.empty.title.${mode}.folio`));
+			expect(visibleCopy()?.querySelector("p")?.textContent).toBe(translate(`chat.empty.subtitle.${mode}.folio`));
+			await advance(10_000);
+			expect(stage?.getAttribute("data-scene")).toBe("constellation");
+			expect(container?.querySelector("img")).toBe(logo);
+			expect(visibleCopy()?.querySelector("h1")?.textContent).toBe(initialTitle);
+			expect(stage?.getAttribute("aria-hidden")).toBe("true");
+			expect(container?.querySelector("[aria-live]")).toBeNull();
+		},
+	);
+
+	it("keeps the Chat greeting static", async () => {
+		environment();
+		await mount(<WelcomeScenes mode="chat" />);
+		await advance(30_000);
+		expect(container?.querySelector("h1")?.textContent).toBe(translate("chat.empty.title.chat"));
+		expect(container?.querySelectorAll("[data-welcome-copy]")).toHaveLength(1);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("stays static without timers under reduced motion, including live preference changes", async () => {
+		const env = environment(true);
+		await mount(<WelcomeScenes mode="work" />);
+		expect(vi.getTimerCount()).toBe(0);
+		expect(motion.tweenStyle).not.toHaveBeenCalled();
+		await act(async () => env.reduce(false));
+		expect(vi.getTimerCount()).toBe(1);
+		await advance(10_000);
+		await act(async () => env.reduce(true));
+		expect(vi.getTimerCount()).toBe(0);
+		expect(container?.querySelector(".omp-welcome-stage")?.getAttribute("data-scene")).toBe("constellation");
+		expect(container?.querySelector('[data-welcome-copy][aria-hidden="false"] h1')?.textContent).toBe(
+			translate("chat.empty.title.work"),
+		);
+		expect(env.kills.every(kill => kill.mock.calls.length === 1)).toBe(true);
+	});
+
+	it("pauses hidden tabs and resets the loop on mode change, cleaning up on unmount", async () => {
+		const env = environment();
+		await mount(<WelcomeScenes mode="code" />);
+		await advance(10_000);
+		env.hide(true);
+		expect(vi.getTimerCount()).toBe(0);
+		await advance(30_000);
+		expect(container?.querySelector(".omp-welcome-stage")?.getAttribute("data-scene")).toBe("blueprint");
+		env.hide(false);
+		await advance(5000);
+		await act(async () =>
+			root?.render(
+				<I18nProvider>
+					<WelcomeScenes mode="work" />
+				</I18nProvider>,
+			),
+		);
+		expect(container?.querySelector("h1")?.textContent).toBe(translate("chat.empty.title.work"));
+		expect(container?.querySelector(".omp-welcome-stage")?.getAttribute("data-scene")).toBe("constellation");
+		await advance(5000);
+		expect(container?.querySelector(".omp-welcome-stage")?.getAttribute("data-scene")).toBe("constellation");
+		await act(async () => root?.unmount());
+		root = undefined;
+		expect(vi.getTimerCount()).toBe(0);
+		expect(env.listeners.size).toBe(0);
+		expect(env.kills.every(kill => kill.mock.calls.length === 1)).toBe(true);
+	});
+});
+
+describe("compact quick setup surfaces", () => {
+	it.each(["vibe", "goal", "loop"] as const)(
+		"opens %s in a non-modal session sidebar without replacing the inspector",
+		async tab => {
+			useUiStore.setState({ panelVisible: true, panelTab: "terminal" });
+			useUiStore.getState().openModes(tab);
+			expect(activeWorkspacePage(useUiStore.getState())).toBeNull();
+			await mount(<ModesPanel open onClose={() => {}} initialTab={tab} />);
+			expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0);
+			expect(document.querySelector("aside")?.getAttribute("aria-label")).toBe(translate("modesPanel.title"));
+			expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+				translate(`modesPanel.tabs.${tab}`),
+			);
+			expect(useUiStore.getState()).toMatchObject({ panelVisible: true, panelTab: "terminal" });
+		},
+	);
 });

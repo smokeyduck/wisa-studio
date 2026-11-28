@@ -18,7 +18,7 @@ import {
 } from "electron";
 import Store from "electron-store";
 import { type CaptionColors, IPC_EVENTS, type RunProgressState, type SessionKind } from "../shared/ipc-types";
-import { confirmDiscardFileDrafts, isQuitting, quitRisk, requestQuit } from "./app-quit";
+import { isQuitting, quitRisk, requestQuit } from "./app-quit";
 import { editableContextMenuTemplate } from "./editable-context-menu";
 import { setWindowFileDrafts } from "./file-draft-guard";
 import { getMainLanguage, mainT } from "./i18n";
@@ -94,6 +94,8 @@ export class WindowManager {
 	#launchResourceIdentity = this.#readResourceIdentity();
 	#resourceRestartScheduled = false;
 	#windowClosedListeners = new Set<(record: WindowRecord) => void>();
+	#lastFocusedWindowId: number | null = null;
+	#backgroundRestoreAvailable: () => boolean = () => false;
 	/**
 	 * Subscribe to window teardown (tray aggregates, tab-layout persistence).
 	 * A listener set rather than one slot because more than one consumer needs
@@ -142,7 +144,7 @@ export class WindowManager {
 			minWidth: MIN_WIDTH,
 			minHeight: MIN_HEIGHT,
 			show: showOnCreate,
-			backgroundColor: nativeTheme.shouldUseDarkColors ? "#1f1f1f" : "#ffffff",
+			backgroundColor: nativeTheme.shouldUseDarkColors ? "#171716" : "#f5f4f1",
 			...this.#captionOptions(),
 			webPreferences: {
 				contextIsolation: true,
@@ -187,13 +189,17 @@ export class WindowManager {
 		// and dropped documents must not replace it with arbitrary page content.
 		win.webContents.on("will-navigate", event => event.preventDefault());
 
-		// Persist state on close
+		// Closing the shell leaves drafts, tabs and their sidecars alive. Only
+		// an approved app quit destroys windows (the global guard owns prompts).
 		win.on("close", event => {
-			if (!isQuitting() && !confirmDiscardFileDrafts(win)) {
-				event.preventDefault();
-				return;
-			}
 			this.#persistState(win);
+			if (isQuitting()) return;
+			event.preventDefault();
+			this.hideWindow(win);
+		});
+		win.on("hide", () => this.#persistState(win));
+		win.on("focus", () => {
+			this.#lastFocusedWindowId = record.id;
 		});
 
 		win.on("closed", () => {
@@ -218,8 +224,8 @@ export class WindowManager {
 			return { titleBarStyle: "hidden", trafficLightPosition: { x: 16, y: 17 } };
 		}
 		const fallback = nativeTheme.shouldUseDarkColors
-			? { color: "#1f1f1f", symbolColor: "#ececec" }
-			: { color: "#ffffff", symbolColor: "#0d0d0d" };
+			? { color: "#1c1c1b", symbolColor: "#f2f1ee" }
+			: { color: "#faf9f7", symbolColor: "#222220" };
 		const colors = this.#store.get("captionColors") ?? fallback;
 		return { titleBarStyle: "hidden", titleBarOverlay: { ...colors, height: CAPTION_HEIGHT } };
 	}
@@ -444,6 +450,28 @@ export class WindowManager {
 		return true;
 	}
 
+	/** Tray availability is live: a failed/destroyed tray must not strand windows. */
+	setBackgroundRestoreAvailable(available: () => boolean): void {
+		this.#backgroundRestoreAvailable = available;
+	}
+
+	hideWindow(win: BrowserWindow): boolean {
+		if (win.isDestroyed()) return false;
+		const dockAvailable = process.platform === "darwin" && app.dock?.isVisible();
+		if (!dockAvailable && !this.#backgroundRestoreAvailable()) {
+			writeRuntimeLog({
+				source: "window-lifecycle",
+				message:
+					"Window kept open: no system tray or visible Dock can restore it. Enable the system tray, or use Quit to exit WISA.",
+			});
+			this.focusWindowById(win.webContents.id);
+			return false;
+		}
+		this.#persistState(win);
+		win.hide();
+		return true;
+	}
+
 	/** Update a window's project dir (called when its sidecar switches project). */
 	setRecordCwd(win: BrowserWindow, cwd: string): void {
 		const record = this.#records.get(win.webContents.id);
@@ -467,12 +495,13 @@ export class WindowManager {
 
 	/**
 	 * Window that should receive user-initiated actions (menu/tray): the
-	 * focused window when it's one of ours, else the first live window.
+	 * focused window when it's one of ours, else the most recently focused one.
 	 */
 	getTargetWindow(): BrowserWindow | null {
 		const focused = BrowserWindow.getFocusedWindow();
 		if (focused && !focused.isDestroyed() && this.#records.has(focused.webContents.id)) return focused;
-		return this.getMainWindow();
+		const recent = this.#lastFocusedWindowId === null ? undefined : this.#records.get(this.#lastFocusedWindowId);
+		return recent && !recent.win.isDestroyed() ? recent.win : this.getMainWindow();
 	}
 
 	getAllWindows(): BrowserWindow[] {

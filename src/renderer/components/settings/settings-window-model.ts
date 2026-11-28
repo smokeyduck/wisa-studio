@@ -32,6 +32,7 @@ export const HOOKS_TAB_ID = "hooks";
 export const COMMANDS_TAB_ID = "commands";
 export const SSH_TAB_ID = "ssh";
 export const UPDATES_TAB_ID = "updates";
+export const NOTCH_TAB_ID = "notch";
 /** Settings without UI metadata (advanced): searchable flat list. */
 export const ADVANCED_TAB_ID = "advanced";
 export const SHORTCUTS_TAB_ID = "shortcuts";
@@ -56,6 +57,7 @@ export function isAgentSchemaTab(tab: string, schema: { tabs: { id: string }[] }
 		!MANAGEMENT_TAB_IDS.has(tab) &&
 		tab !== GUI_TAB_ID &&
 		tab !== SHORTCUTS_TAB_ID &&
+		tab !== NOTCH_TAB_ID &&
 		tab !== APP_HELP_TAB_ID &&
 		tab !== ADVANCED_TAB_ID
 	);
@@ -86,6 +88,7 @@ export function buildSettingsNavGroups(
 			id: "experience",
 			items: [
 				{ id: GUI_TAB_ID, label: "General" },
+				{ id: NOTCH_TAB_ID, label: "Notch" },
 				{ id: SHORTCUTS_TAB_ID, label: "Keyboard shortcuts" },
 				{ id: APP_HELP_TAB_ID, label: "App & help" },
 			],
@@ -205,6 +208,13 @@ export const GUI_SETTING_SEARCH_ITEMS = [
 		id: "notifications",
 		labelKey: "settings.gui.notifications",
 		aliases: "notifications notify focused focus 通知 聚焦 前台 уведомления фокус",
+	},
+	{
+		id: "agentNotch",
+		tabId: NOTCH_TAB_ID,
+		labelKey: "notch.title",
+		aliases:
+			"agentNotch notch island tai thỏ computer màn hình approval display widgets builder sessions clock note activity agents claude codex cursor gemini copilot opencode custom connect import export width opacity background foreground accent phê duyệt tiện ích bố cục kết nối nhập xuất 刘海 组件 时钟 便笺 连接 导入 导出 вырез виджеты подключение импорт экспорт รอยบาก วิดเจ็ต เชื่อมต่อ นำเข้า ส่งออก",
 	},
 	{
 		id: "thinkingExpanded",

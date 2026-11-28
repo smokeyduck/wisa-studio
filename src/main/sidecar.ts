@@ -118,6 +118,7 @@ const AGENT_EVENT_TYPES: Record<string, true> = {
 	retry_fallback_applied: true,
 	retry_fallback_succeeded: true,
 	model_changed: true,
+	config_warnings_changed: true,
 	ttsr_triggered: true,
 	todo_reminder: true,
 	todo_auto_clear: true,
@@ -232,7 +233,7 @@ export function missingSidecarMessage(packaged: boolean, resourcesPath?: string)
 		return "Built-in omp not found. Build it with `bun --cwd=packages/gui run build:omp`, then relaunch.";
 	}
 	const target = resourcesPath ? join(resourcesPath, "omp") : "the bundled omp binary";
-	return `WISA STUDIO is missing from this installation (${target}). Reinstall WISA STUDIO, then relaunch.`;
+	return `Wisa is missing from this installation (${target}). Reinstall Wisa, then relaunch.`;
 }
 
 export interface SidecarEvents {

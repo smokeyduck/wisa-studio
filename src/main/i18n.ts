@@ -9,10 +9,17 @@ import { VI_MAIN_TEXT } from "./native-vi";
 export type MainLanguage = Language;
 
 export type MainTextKey =
+	| `notch.${"title" | "open" | "allow" | "always" | "deny" | "empty" | "working" | "done" | "waiting" | "failed" | "activity" | "close" | "export" | "import" | "setup" | "idle" | "hideSession" | "mute" | "unmute" | "send"}`
+	| `notchApp.${"confirmTitle" | "apply" | "allow" | "cancel" | "applyMessage" | "applyDetail" | "capabilityMessage" | "capabilityDetail" | "stop" | "revert" | "preview" | "restoreError" | "loadError"}`
+	| "notchApp.storeError"
 	| "crash.body"
 	| "crash.close"
 	| "crash.title"
 	| "dialog.openProject"
+	| "wallpaper.pick"
+	| "wallpaper.media"
+	| "wallpaper.importFailed"
+	| "wallpaper.clearFailed"
 	| "menu.about"
 	| "menu.addToDictionary"
 	| "menu.agentHub"
@@ -100,8 +107,58 @@ export type MainTextKey =
 	| "updates.unsupportedArchitecture";
 
 const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "th" | "vi">, string>> = {
+	"notchApp.storeError": {
+		en: "Mini-app storage is unavailable. The original file was preserved. {detail}",
+		zh: "迷你应用存储不可用。原文件已保留。{detail}",
+	},
+	"notchApp.confirmTitle": { en: "WISA STUDIO — Mini-app permission", zh: "WISA STUDIO — 迷你应用权限" },
+	"notchApp.apply": { en: "Activate mini-app", zh: "启用迷你应用" },
+	"notchApp.allow": { en: "Allow once", zh: "仅允许一次" },
+	"notchApp.cancel": { en: "Cancel", zh: "取消" },
+	"notchApp.applyMessage": { en: "Activate {name}?", zh: "启用 {name}？" },
+	"notchApp.applyDetail": {
+		en: "App: {id}\nRevision: {revision}\nThis replaces the current notch mini-app. HTML cannot authorize this change.",
+		zh: "应用：{id}\n版本：{revision}\n将替换当前刘海迷你应用。HTML 不能授权此更改。",
+	},
+	"notchApp.capabilityMessage": { en: "{name} requests {capability}", zh: "{name} 请求 {capability}" },
+	"notchApp.capabilityDetail": {
+		en: "App: {id}\nRevision: {revision}\nRequest: {request}\nAllow this exact invocation only?",
+		zh: "应用：{id}\n版本：{revision}\n请求：{request}\n是否仅允许本次具体操作？",
+	},
+	"notchApp.stop": { en: "Stop", zh: "停止" },
+	"notchApp.revert": { en: "Close preview / revert", zh: "关闭预览／还原" },
+	"notchApp.preview": { en: "Preview", zh: "预览" },
+	"notchApp.restoreError": { en: "The mini-app could not be restored.", zh: "无法恢复迷你应用。" },
+	"notchApp.loadError": { en: "The mini-app could not be loaded.", zh: "无法加载迷你应用。" },
+	"notch.title": { en: "Notch", zh: "刘海" },
+	"notch.open": { en: "Open session", zh: "打开会话" },
+	"notch.allow": { en: "Allow", zh: "允许" },
+	"notch.always": { en: "Always allow", zh: "始终允许" },
+	"notch.deny": { en: "Deny", zh: "拒绝" },
+	"notch.empty": { en: "No active sessions", zh: "没有活动会话" },
+	"notch.working": { en: "Working", zh: "运行中" },
+	"notch.done": { en: "Done", zh: "已完成" },
+	"notch.waiting": { en: "Needs you", zh: "需要回应" },
+	"notch.failed": { en: "Failed", zh: "失败" },
+	"notch.activity": { en: "Activity", zh: "活动" },
+	"notch.close": { en: "Hide Notch", zh: "隐藏刘海" },
+	"notch.export": { en: "Export Notch setup", zh: "导出刘海配置" },
+	"notch.import": { en: "Import Notch setup", zh: "导入刘海配置" },
+	"notch.setup": { en: "Notch setup", zh: "刘海配置" },
+	"notch.idle": { en: "Idle", zh: "空闲" },
+	"notch.hideSession": { en: "Hide session", zh: "隐藏会话" },
+	"notch.mute": { en: "Mute sounds", zh: "关闭声音" },
+	"notch.unmute": { en: "Unmute sounds", zh: "开启声音" },
+	"notch.send": { en: "Send", zh: "发送" },
 	"dialog.openProject": { en: "Open project", zh: "打开项目" },
-	"menu.about": { en: "About WISA STUDIO", zh: "关于 WISA STUDIO" },
+	"wallpaper.pick": { en: "Choose wallpaper", zh: "选择背景" },
+	"wallpaper.media": { en: "Images and videos", zh: "图片和视频" },
+	"wallpaper.importFailed": {
+		en: "Could not import wallpaper. Choose a supported image up to 50 MiB or video up to 1 GiB.",
+		zh: "无法导入背景。请选择支持的图片（不超过 50 MiB）或视频（不超过 1 GiB）。",
+	},
+	"wallpaper.clearFailed": { en: "Could not reset the wallpaper.", zh: "无法重置背景。" },
+	"menu.about": { en: "About Wisa", zh: "关于 Wisa" },
 	"menu.addToDictionary": { en: "Add to dictionary", zh: "添加到词典" },
 	"menu.closeTab": { en: "Close Tab", zh: "关闭标签页" },
 	"menu.closeWindow": { en: "Close Window", zh: "关闭窗口" },
@@ -138,7 +195,7 @@ const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "th" | "vi">
 		zh: "窗口渲染进程反复崩溃且无法自行恢复。故障已写入运行日志({logPath})- 重启可能有用,也可以通过「帮助 → 反馈问题」把日志提交给我们。",
 	},
 	"crash.close": { en: "Close", zh: "关闭" },
-	"crash.title": { en: "WISA STUDIO window crashed", zh: "WISA STUDIO 窗口崩溃" },
+	"crash.title": { en: "Wisa window crashed", zh: "Wisa 窗口崩溃" },
 	"menu.newChatTab": { en: "New Chat Tab", zh: "新建聊天标签页" },
 	"menu.newSession": { en: "New Session", zh: "新建会话" },
 	"menu.newTab": { en: "New Tab", zh: "新建标签页" },
@@ -175,8 +232,8 @@ const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "th" | "vi">
 		zh: "打开任务查看出错原因。",
 	},
 	"tasks.notify.missedBody": {
-		en: "WISA STUDIO was closed or the computer was asleep when it was due.",
-		zh: "到点时 WISA STUDIO 未运行或电脑处于睡眠状态。",
+		en: "Wisa was closed or the computer was asleep when it was due.",
+		zh: "到点时 Wisa 未运行或电脑处于睡眠状态。",
 	},
 	"tasks.notify.disabled": { en: "{title} was switched off", zh: "{title} 已停用" },
 	"tasks.notify.disabledFailures": {
@@ -207,8 +264,8 @@ const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "th" | "vi">
 	},
 	"quit.workingTitle": { en: "Sessions are still running", zh: "仍有会话在运行" },
 	"restart.body": {
-		en: "WISA STUDIO's installed files were replaced while it was running, so this window can no longer load them reliably. {working} of {total} sessions are still working.",
-		zh: "WISA STUDIO 运行期间安装文件已被替换，窗口无法可靠地加载它们。仍有 {working}/{total} 个会话正在工作。",
+		en: "Wisa's installed files were replaced while it was running, so this window can no longer load them reliably. {working} of {total} sessions are still working.",
+		zh: "Wisa 运行期间安装文件已被替换，窗口无法可靠地加载它们。仍有 {working}/{total} 个会话正在工作。",
 	},
 	"restart.later": { en: "Later", zh: "稍后再说" },
 	"restart.now": { en: "Restart now", zh: "立即重启" },

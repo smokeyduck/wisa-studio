@@ -161,6 +161,7 @@ describe("GUI settings visibility", () => {
 			"tui.spinnerInterval",
 			"colorBlindMode",
 			"display.showTokenUsage",
+			"display.collapseCompacted",
 			"terminal.showProgress",
 			"spelling.typoDetection",
 			"spelling.autocomplete",
@@ -197,12 +198,14 @@ describe("GUI settings visibility", () => {
 		expect(isAgentSchemaTab("gui", null)).toBe(false);
 		expect(isAgentSchemaTab("skills", null)).toBe(false);
 		expect(isAgentSchemaTab("app-help", null)).toBe(false);
+		expect(isAgentSchemaTab("notch", null)).toBe(false);
 	});
 
 	it("registers App & help and one shortcut editor without turning capabilities into a Settings page", () => {
 		const pages = buildSettingsNavGroups(null).flatMap(group => group.items.map(item => item.id));
 		expect(pages).toContain("app-help");
 		expect(pages.filter(id => id === "shortcuts")).toHaveLength(1);
+		expect(pages.filter(id => id === "notch")).toHaveLength(1);
 		expect(pages).not.toContain("capabilities");
 	});
 

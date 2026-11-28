@@ -1,4 +1,6 @@
 [
+  "modelRoles.jev.title",
+  "onboarding.wisa.title",
   "input.commandGroup.skill",
   "titlebar.agentHub",
   "prCenter.titlePlaceholder",
@@ -16,7 +18,6 @@
   "invPanel.tabs.plugins",
   "extPanel.tabs.hooks",
   "extPanel.tabs.mcp",
-  "modesPanel.tabs.vibe",
   "projectAudit.shortTitle",
   "benchmark.col.ttft",
   "providerCfg.form.baseUrlPlaceholder",

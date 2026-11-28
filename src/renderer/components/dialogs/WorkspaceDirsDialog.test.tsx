@@ -10,19 +10,11 @@ import { parseHTML } from "linkedom";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
-import type { RpcCommand, RpcResponse } from "../../../shared/rpc-types";
+import type { RpcResponse } from "../../../shared/rpc-types";
 import { I18nProvider } from "../../lib/i18n";
-import { type SessionStore, useSessionStore } from "../../stores/session";
-import {
-	deleteSessionRuntime,
-	SessionRuntimeProvider,
-	sessionRuntimeStore,
-	setFocusedSessionRuntime,
-} from "../../stores/session-runtime-context";
-import { createTabRuntime } from "../../stores/tab-runtime";
+import { useSessionStore } from "../../stores/session";
 import { useToastStore } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
-import { CurrentWorkspaceControl } from "../layout/CurrentWorkspaceControl";
 import { WorkspaceDirsDialog } from "./WorkspaceDirsDialog";
 
 const { document, window, Event, CustomEvent, HTMLElement, Element, Node } = parseHTML("<html><body></body></html>");
@@ -169,9 +161,6 @@ afterEach(async () => {
 		});
 	}
 	container?.remove();
-	setFocusedSessionRuntime(null);
-	deleteSessionRuntime("a");
-	deleteSessionRuntime("b");
 	useUiStore.getState().closeWorkspaceDirs();
 	useSessionStore.getState().reset();
 	useToastStore.setState({ toasts: [] });
@@ -306,62 +295,5 @@ describe("WorkspaceDirsDialog", () => {
 		const toasts = useToastStore.getState().toasts;
 		expect(toasts.some(toast => toast.variant === "error" && (toast.message ?? "").includes("/move"))).toBe(true);
 		expect(document.body.textContent ?? "").toContain(EXTRA);
-	});
-});
-
-describe("CurrentWorkspaceControl", () => {
-	for (const closeOrigin of [false, true]) {
-		it(
-			closeOrigin
-				? "discards a folder picked for a closed session"
-				: "moves the original session when focus changes inside the folder picker",
-			async () => {
-				const omp = installMockOmp();
-				const picked = Promise.withResolvers<string[] | null>();
-				omp.system.showOpenDialog.mockReturnValueOnce(picked.promise);
-				const commands = vi.fn(async (tab: string, command: RpcCommand) => {
-					if (command.type === "get_state") return success({ sessionId: tab, cwd: EXTRA, todoPhases: [] });
-					if (command.type === "get_transcript") return success({ messages: [] });
-					if (command.type === "move_session") return success({ cwd: EXTRA });
-					return failure("not available");
-				});
-				Object.assign(omp.rpc, { commandForTab: commands });
-				const a = createTabRuntime("a");
-				createTabRuntime("b");
-				setFocusedSessionRuntime("a");
-				sessionRuntimeStore<SessionStore>("a", "session")!.setState({ sessionId: "a", cwd: CWD, status: "ready" });
-				await mount(
-					<SessionRuntimeProvider runtime={a}>
-						<CurrentWorkspaceControl disabled={false} tabId="a" />
-					</SessionRuntimeProvider>,
-				);
-				const button = findButton("project");
-				expect(button.title).toContain(CWD);
-				await click(button);
-				expect(omp.system.showOpenDialog).toHaveBeenCalledOnce();
-				setFocusedSessionRuntime("b");
-				if (closeOrigin) deleteSessionRuntime("a");
-				await act(async () => {
-					picked.resolve([EXTRA]);
-				});
-				await flush();
-				const moves = commands.mock.calls.filter(([, cmd]) => cmd.type === "move_session");
-				expect(moves.map(([id, cmd]) => [id, cmd])).toEqual(
-					closeOrigin ? [] : [["a", { type: "move_session", path: EXTRA }]],
-				);
-				if (!closeOrigin) expect(buttons()[0]?.textContent).toContain("extra");
-				expect(omp.rpc.moveSession).not.toHaveBeenCalled();
-			},
-		);
-	}
-
-	it("does not open the picker when workspace moves are disabled", async () => {
-		const omp = installMockOmp();
-		useSessionStore.setState({ cwd: CWD, status: "ready" });
-		await mount(<CurrentWorkspaceControl disabled tabId={null} />);
-		await click(buttons()[0]!);
-
-		expect(omp.system.showOpenDialog).not.toHaveBeenCalled();
-		expect(omp.rpc.moveSession).not.toHaveBeenCalled();
 	});
 });

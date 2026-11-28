@@ -1,32 +1,14 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-	ArrowDown,
-	BookOpen,
-	Bug,
-	ChevronRight,
-	Code2,
-	FileDiff,
-	Handshake,
-	Languages,
-	Layers,
-	Lightbulb,
-	ListTodo,
-	PenLine,
-	RotateCw,
-	SearchCode,
-	Sparkles,
-	X,
-} from "lucide-react";
+import { ArrowDown, ChevronRight, FileDiff, Handshake, Layers, RotateCw, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { AgentMessage, RpcQueuedMessage } from "../../../shared/rpc-types";
-import { hydrateTabSession, readOlderTranscript } from "../../hooks/session-hydration";
-import { useDisplayPreference } from "../../lib/display-preferences";
 import { describeError, describeProviderError } from "../../lib/errors";
 import { cx, formatClock } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { messageTimestampMs } from "../../lib/message-identity";
 import { abortActiveTurn, isRenderableMessageText, messageText } from "../../lib/messages";
+import { PREVIEW_SCROLL_SM } from "../../lib/preview";
 import { collapsibleReadTarget, groupReadRows, type ReadGroupEntry } from "../../lib/read-group";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { useExtensionUiStore } from "../../stores/extension-ui";
@@ -43,7 +25,7 @@ import { cachedTranscript } from "../../stores/transcript-cache";
 import { TRANSCRIPT_FOCUS_TTL_MS, useTranscriptFocusStore } from "../../stores/transcript-focus";
 import { useUiStore } from "../../stores/ui";
 import { useTabIsWork } from "../../stores/workspace-mode";
-import { Button, LongTaskStatus, Modal, TextArea, WisaLogo } from "../common";
+import { LongTaskStatus } from "../common";
 import { buildEditCandidates } from "../panels/DiffPanel";
 import { DiffStat } from "../panels/workspace-ui";
 import { ReadGroupCard } from "../tools/ReadGroupCard";
@@ -81,7 +63,8 @@ import { TranscriptFindBar } from "./TranscriptFindBar";
 import { TranscriptLoading } from "./TranscriptLoading";
 import { TranscriptQuoteAction } from "./TranscriptQuoteAction";
 import { findRangesInRow, findTranscriptMatches, paintFindHighlights } from "./transcript-find";
-import { ReadOnlyTranscriptContext, useReadOnlyTranscript } from "./transcript-mode";
+import { useReadOnlyTranscript } from "./transcript-mode";
+import { WelcomeScenes } from "./WelcomeScenes";
 
 // TanStack's end check needs one CSS pixel for fractional scrollTop rounding.
 // User intent is enforced separately by switching away from end anchoring.
@@ -94,16 +77,6 @@ const REVEAL_TOP_INSET_PX = 96;
 const REVEAL_MAX_FRAMES = 90;
 /** Consecutive frames without movement that count as settled. */
 const REVEAL_STILL_FRAMES = 3;
-
-const MAX_OLDER_BOUNDARIES = 3;
-const EMPTY_OLDER_HISTORY = {
-	boundaryId: undefined as string | undefined,
-	depth: 0,
-	messages: [] as AgentMessage[],
-	searchMessages: [] as AgentMessage[],
-	hasOlder: true,
-	omitted: 0,
-};
 
 function estimateRowSize(row: Row | undefined): number {
 	const kind = row?.kind;
@@ -195,14 +168,12 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	const manualMaintenance = useSessionStore(s => s.manualMaintenance);
 	const warmingCache = useSessionStore(s => s.cacheWarming !== null && s.cacheWarming.outcome === undefined);
 	const sessionId = useSessionStore(s => s.sessionId);
-	// Shared agent compaction preference and GUI-local transcript detail.
-	const collapseCompacted = useDisplayPreference("collapseCompacted");
+	// GUI-local transcript detail; native history stays complete across compactions.
 	const transcriptDetail = useUiStore(s => s.transcriptDetail);
 	const switchPending = useSessionStore(s => s.switchPending);
 	const savedView = useSessionStore(s => s.transcriptView);
 	const saveView = useSessionStore(s => s.saveTranscriptView);
 	const [restoreView] = useState(() => (savedView?.sessionId === sessionId ? savedView : null));
-	const [preCompactionOpen, setPreCompactionOpen] = useState(restoreView?.preCompactionOpen ?? false);
 	const [processExpansion, setProcessExpansion] = useState<ReadonlyMap<string, boolean>>(
 		() => restoreView?.processExpansion ?? new Map(),
 	);
@@ -223,148 +194,42 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	// Stops an in-flight reveal (search hit, find match); any reader gesture calls it.
 	const revealCancelRef = useRef<(() => void) | null>(null);
 
-	const lastCompactionIndex = displayMessages.findLastIndex(message => message.role === "compactionSummary");
-	const hiddenCount = collapseCompacted && !preCompactionOpen && lastCompactionIndex > 0 ? lastCompactionIndex : 0;
-	const lastBoundary =
-		lastCompactionIndex >= 0
-			? displayMessages[lastCompactionIndex]
-			: displayMessages.find(message => message.role === "custom" && message.customType === "handoff");
-	const archiveBoundaryId =
-		readOnly === null && collapseCompacted && status === "ready" && !switchPending && tabId && sessionId
-			? lastBoundary?.entryId
-			: undefined;
-	const [archiveState, setArchiveState] = useState(EMPTY_OLDER_HISTORY);
-	const archive = archiveState.boundaryId === archiveBoundaryId ? archiveState : EMPTY_OLDER_HISTORY;
-	const archiveTicket = useRef<object | null>(null);
-	const [archiveLoading, setArchiveLoading] = useState(false);
-	const [archiveFailed, setArchiveFailed] = useState(false);
-	const archiveBusy = isStreaming || isCompacting || compactionInfo !== null || manualMaintenance !== null;
-	const canvasId = useId();
-	const archiveAuthorLabel = t("live.you");
-	const archivedReadOnly = useMemo(() => ({ authorLabel: archiveAuthorLabel }), [archiveAuthorLabel]);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a new compaction divider invalidates the previous page and request
-	useLayoutEffect(() => {
-		setArchiveState(EMPTY_OLDER_HISTORY);
-		setArchiveLoading(false);
-		setArchiveFailed(false);
-		return () => {
-			archiveTicket.current = null;
-		};
-	}, [archiveBoundaryId]);
-	const transcriptFolded = useSessionStore(s => s.transcriptFolded);
-	useEffect(() => {
-		if (
-			transcriptFolded === null ||
-			transcriptFolded === collapseCompacted ||
-			status !== "ready" ||
-			readOnly !== null ||
-			!tabId ||
-			switchPending
-		)
-			return;
-		void hydrateTabSession(tabId);
-	}, [collapseCompacted, readOnly, status, switchPending, tabId, transcriptFolded]);
-	const visibleMessages = useMemo(
-		() => (hiddenCount > 0 ? displayMessages.slice(hiddenCount) : displayMessages),
-		[displayMessages, hiddenCount],
-	);
-	const historicalMessages = useMemo(() => {
-		if (!archive.messages.length && !archive.searchMessages.length) return [];
-		const ids = new Set(archive.messages.map(message => message.entryId));
-		const liveIds = new Set(visibleMessages.map(message => message.entryId));
-		return [...archive.searchMessages.filter(message => !ids.has(message.entryId)), ...archive.messages].filter(
-			message => !liveIds.has(message.entryId),
-		);
-	}, [archive.messages, archive.searchMessages, visibleMessages]);
-	const firstVisibleMessage = visibleMessages[0];
-	const foldTime =
-		firstVisibleMessage && (hiddenCount > 0 || (transcriptFolded && lastCompactionIndex === 0))
-			? messageTimestampMs(firstVisibleMessage)
-			: 0;
-	const { currentAgents, olderAgents, currentMessages, olderMessages, completions, replies } = useMemo(() => {
-		const currentAgents = new Map<string, number>();
-		const olderAgents = new Map<string, number>();
-		const olderStart = historicalMessages[0] ? messageTimestampMs(historicalMessages[0]) : undefined;
-		for (const [id, timestamp] of subagentAnchors) {
-			if (timestamp >= foldTime) currentAgents.set(id, timestamp);
-			else if (olderStart !== undefined && timestamp >= olderStart) olderAgents.set(id, timestamp);
-		}
+	const { historyMessages, completions, replies } = useMemo(() => {
 		const completions = new Map<string, AgentMessage[]>();
 		const replies = new Map<string, number[]>();
-		if (subagentAnchors.size === 0) {
-			return {
-				currentAgents,
-				olderAgents,
-				currentMessages: visibleMessages,
-				olderMessages: historicalMessages,
-				completions,
-				replies,
-			};
-		}
-		const hasCard = (id: string) => currentAgents.has(id) || olderAgents.has(id);
-		const claimCurrent = (id: string, timestamp: number) => {
-			if (hasCard(id)) return true;
-			if (!subagentAnchors.has(id) || timestamp < foldTime) return false;
-			// Its spawn is folded away. Place one card at the first visible update.
-			currentAgents.set(id, timestamp);
-			return true;
-		};
-		const olderMessages = foldSubagentNotices(historicalMessages, hasCard, completions, replies);
-		const currentMessages = foldSubagentNotices(
-			visibleMessages,
-			(id, message) => claimCurrent(id, messageTimestampMs(message)),
-			completions,
-			replies,
-		);
+		if (subagentAnchors.size === 0) return { historyMessages: displayMessages, completions, replies };
+		const historyMessages = foldSubagentNotices(displayMessages, id => subagentAnchors.has(id), completions, replies);
 		for (const [id, timestamp] of replyTimes) {
-			if (!claimCurrent(id, timestamp)) continue;
+			if (!subagentAnchors.has(id)) continue;
 			const times = replies.get(id);
 			if (times) times.push(timestamp);
 			else replies.set(id, [timestamp]);
 		}
-		return { currentAgents, olderAgents, currentMessages, olderMessages, completions, replies };
-	}, [foldTime, historicalMessages, replyTimes, subagentAnchors, visibleMessages]);
-	const olderRows = useMemo(() => {
-		const built = buildHistoryRows(olderMessages, transcriptDetail, processExpansion, subagentAnchors);
-		const grouped = transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
-		return mergeSubagentRows(grouped, olderAgents);
-	}, [olderMessages, olderAgents, transcriptDetail, processExpansion, subagentAnchors]);
+		return { historyMessages, completions, replies };
+	}, [displayMessages, replyTimes, subagentAnchors]);
 	const historyRows = useMemo<HistoryRow[]>(() => {
-		const built = buildHistoryRows(currentMessages, transcriptDetail, processExpansion, subagentAnchors);
-		let anchors = currentAgents;
-		for (const row of built) {
-			if (row.kind !== "subagent" || !row.reuse) continue;
-			const anchor = anchors.get(row.id);
-			// A visible reuse already owns notices that arrived after it. Keep the
-			// real spawn and any earlier fallback for a folded-away spawn.
-			if (anchor !== undefined && anchor !== subagentAnchors.get(row.id) && anchor >= row.timestamp) {
-				if (anchors === currentAgents) anchors = new Map(currentAgents);
-				anchors.delete(row.id);
-			}
-		}
+		const built = buildHistoryRows(historyMessages, transcriptDetail, processExpansion, subagentAnchors);
 		// Read-tool grouping (TUI parity) folds consecutive collapsible reads into
 		// one card — only in full mode; compact mode's ProcessGroup already folds
 		// ALL consecutive tool work, so a second fold would nest redundantly.
 		const grouped = transcriptDetail === "compact" ? built : (groupReadRows(built) as HistoryRow[]);
-		return mergeSubagentRows(grouped, anchors);
-	}, [currentMessages, currentAgents, transcriptDetail, processExpansion, subagentAnchors]);
+		return mergeSubagentRows(grouped, subagentAnchors);
+	}, [historyMessages, transcriptDetail, processExpansion, subagentAnchors]);
 	const repliedRows = useMemo(() => {
 		const result = new Set<HistoryRow>();
 		const nextActivity = new Map<string, number>();
-		for (const section of [historyRows, olderRows]) {
-			for (let index = section.length - 1; index >= 0; index--) {
-				const row = section[index];
-				if (row?.kind !== "subagent") continue;
-				const until = nextActivity.get(row.id) ?? Infinity;
-				const times = replies.get(row.id);
-				// Live spawn frames are stamped on receipt; a reply can carry a wire
-				// timestamp earlier than that local stamp, but belongs to this agent.
-				if (times?.some(time => time < until && (!row.reuse || time >= row.timestamp))) result.add(row);
-				nextActivity.set(row.id, row.timestamp);
-			}
+		for (let index = historyRows.length - 1; index >= 0; index--) {
+			const row = historyRows[index];
+			if (row?.kind !== "subagent") continue;
+			const until = nextActivity.get(row.id) ?? Infinity;
+			const times = replies.get(row.id);
+			// Live spawn frames are stamped on receipt; a reply can carry a wire
+			// timestamp earlier than that local stamp, but belongs to this agent.
+			if (times?.some(time => time < until && (!row.reuse || time >= row.timestamp))) result.add(row);
+			nextActivity.set(row.id, row.timestamp);
 		}
 		return result;
-	}, [historyRows, olderRows, replies]);
+	}, [historyRows, replies]);
 
 	// What the latest run changed on disk, once it has settled: closes the turn
 	// with one line leading to the review drawer. Tool events stream in at a high
@@ -440,7 +305,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	// change finalized history. Keep the O(history) row/key projection stable so
 	// a long transcript does not get rebuilt for every token.
 	const { rows, rowKeys } = useMemo(() => {
-		const nextRows: Row[] = [...olderRows, ...historyRows];
+		const nextRows: Row[] = [...historyRows];
 		if (turnChanges && lastPromptAt !== null && !isStreaming && !showStatusRow) {
 			nextRows.push({ kind: "turnChanges", since: lastPromptAt, summary: turnChanges });
 		}
@@ -473,7 +338,6 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 			rowKeys: buildTranscriptRowKeys(nextRows),
 		};
 	}, [
-		olderRows,
 		historyRows,
 		turnChanges,
 		lastPromptAt,
@@ -501,34 +365,10 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		setVisibleRowIndex(current => (current === next ? current : next));
 	}, []);
 
-	const STARTERS = [
-		{ icon: Code2, title: t("chat.starter.understand.title"), prompt: t("chat.starter.understand.prompt") },
-		{ icon: Bug, title: t("chat.starter.fix.title"), prompt: t("chat.starter.fix.prompt") },
-		{ icon: Sparkles, title: t("chat.starter.build.title"), prompt: t("chat.starter.build.prompt") },
-		{ icon: SearchCode, title: t("chat.starter.review.title"), prompt: t("chat.starter.review.prompt") },
-	] as const;
-	const CHAT_STARTERS = [
-		{ icon: BookOpen, title: t("chat.starter.explain.title"), prompt: t("chat.starter.explain.prompt") },
-		{ icon: PenLine, title: t("chat.starter.draft.title"), prompt: t("chat.starter.draft.prompt") },
-		{ icon: Lightbulb, title: t("chat.starter.brainstorm.title"), prompt: t("chat.starter.brainstorm.prompt") },
-		{ icon: Languages, title: t("chat.starter.translate.title"), prompt: t("chat.starter.translate.prompt") },
-	] as const;
-	// Work sessions have no project to read, run or review, so the project
-	// starters ("Understand the project", "Review changes") would point at
-	// something that is not there. These ask for the work the workspace is for.
-	const WORK_STARTERS = [
-		{ icon: PenLine, title: t("chat.starter.write.title"), prompt: t("chat.starter.write.prompt") },
-		{ icon: ListTodo, title: t("chat.starter.plan.title"), prompt: t("chat.starter.plan.prompt") },
-		{ icon: SearchCode, title: t("chat.starter.research.title"), prompt: t("chat.starter.research.prompt") },
-		{ icon: FileDiff, title: t("chat.starter.analyze.title"), prompt: t("chat.starter.analyze.prompt") },
-	] as const;
-	/** Chat tabs get a conversation-oriented empty state (agent starters imply tools). */
+	/** Chat tabs keep conversation-oriented copy without implying tool access. */
 	const isChat = useActiveTabKind() === "chat";
-	// The Work lane runs the full agent in the GUI's own folder: no repo, no
-	// build. Its empty state says so and offers the work that folder is for, so
-	// the two lanes are told apart by what they show, not only by a filter.
+	// Work runs the agent in the GUI's own folder rather than a project.
 	const isWork = useTabIsWork(tabId);
-	const starters = isChat ? CHAT_STARTERS : isWork ? WORK_STARTERS : STARTERS;
 	// A fresh tab has no transcript to wait for: its start screen can show while
 	// the sidecar boots instead of a spinner on a blank page. A tab resuming a
 	// session keeps the spinner, so the start screen never flashes before history.
@@ -536,17 +376,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		tabAwaitsTranscript(state.tabs.find(candidate => candidate.id === tabId)),
 	);
 	const awaitingTranscript = status === "starting" && (tabHasHistory || readOnly !== null);
-	const [quickAction, setQuickAction] = useState<{ title: string; prompt: string } | null>(null);
-	const [quickDraft, setQuickDraft] = useState("");
 	const activeTabId = useTabsStore(state => state.activeTabId);
-	const quickActionTab = useRef(activeTabId);
-	const quickActionSession = useRef(sessionId);
-	useEffect(() => {
-		if (quickActionTab.current === activeTabId && quickActionSession.current === sessionId) return;
-		quickActionTab.current = activeTabId;
-		quickActionSession.current = sessionId;
-		setQuickAction(null);
-	}, [activeTabId, sessionId]);
 
 	const virtualizer = useVirtualizer({
 		count: rows.length,
@@ -584,8 +414,8 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		el.scrollTop = el.scrollHeight;
 		setAtLiveEdge(isTranscriptAtLiveEdge(el));
 	}, []);
-	const viewRef = useRef({ pinned, preCompactionOpen, processExpansion });
-	viewRef.current = { pinned, preCompactionOpen, processExpansion };
+	const viewRef = useRef({ pinned, processExpansion });
+	viewRef.current = { pinned, processExpansion };
 	useLayoutEffect(
 		() => () => {
 			const scrollOffset = virtualizer.scrollOffset ?? 0;
@@ -877,61 +707,6 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	const updateProcessExpanded = useCallback((key: string, expanded: boolean) => {
 		setProcessExpansion(current => (current.get(key) === expanded ? current : new Map(current).set(key, expanded)));
 	}, []);
-	const requestOlder = useCallback(
-		async (targetEntryId?: string) => {
-			if (!tabId || !archiveBoundaryId || archiveBusy || archiveTicket.current) return;
-			if (!targetEntryId && (!archive.hasOlder || archive.depth >= MAX_OLDER_BOUNDARIES)) return;
-			const ticket = {};
-			archiveTicket.current = ticket;
-			setArchiveLoading(true);
-			setArchiveFailed(false);
-			try {
-				const page = await readOlderTranscript(tabId, {
-					sessionId,
-					boundaryId: archiveBoundaryId,
-					depth: targetEntryId ? 0 : archive.depth,
-					targetEntryId,
-				});
-				if (!page || archiveTicket.current !== ticket) return;
-				setArchiveState(
-					targetEntryId
-						? { ...archive, boundaryId: archiveBoundaryId, searchMessages: page.messages }
-						: {
-								...archive,
-								boundaryId: archiveBoundaryId,
-								depth: archive.depth + 1,
-								messages: [...page.messages, ...archive.messages],
-								hasOlder: page.hasOlder,
-								omitted: archive.omitted + page.totalMessages - page.messages.length,
-							},
-				);
-			} catch {
-				if (archiveTicket.current === ticket) setArchiveFailed(true);
-			} finally {
-				if (archiveTicket.current === ticket) {
-					archiveTicket.current = null;
-					setArchiveLoading(false);
-				}
-			}
-		},
-		[archive, archiveBoundaryId, archiveBusy, sessionId, tabId],
-	);
-	const archiveOpen = archive.depth > 0 || archive.searchMessages.length > 0 || preCompactionOpen;
-	const cannotLoadOlder = archiveBusy || archiveLoading || !archive.hasOlder || archive.depth >= MAX_OLDER_BOUNDARIES;
-	const closeOlder = () => {
-		archiveTicket.current = null;
-		revealCancelRef.current?.();
-		setArchiveState(EMPTY_OLDER_HISTORY);
-		setArchiveLoading(false);
-		setArchiveFailed(false);
-		setPreCompactionOpen(false);
-		jumpToLatest();
-	};
-	const revealedDepth = useRef(0);
-	useLayoutEffect(() => {
-		if (archive.depth > revealedDepth.current && olderRows.length) revealRow(0);
-		revealedDepth.current = archive.depth;
-	}, [archive.depth, olderRows.length, revealRow]);
 	const updateUserTextExpanded = useCallback((key: string, expanded: boolean) => {
 		setExpandedUserKeys(current => {
 			if (current.has(key) === expanded) return current;
@@ -944,13 +719,12 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 
 	// Open at a message (conversation search): once this tab shows the requested
 	// session file with its history loaded, bring the message near the top of the
-	// view and mark it. Earlier-than-compaction history opens first; a folded
-	// process group opens to show it. A message on another branch says so.
+	// view and mark it. A folded process group opens to show it. A message on
+	// another branch says so.
 	const sessionFile = useSessionStore(s => s.sessionFile);
 	const focusTarget = useTranscriptFocusStore(s => s.target);
 	const settleFocus = useTranscriptFocusStore(s => s.settle);
 	const [foundKey, setFoundKey] = useState<string | null>(null);
-	const requestedFocus = useRef<typeof focusTarget>(null);
 	useEffect(() => {
 		const target = focusTarget;
 		if (!target || target.sessionPath !== sessionFile) return;
@@ -959,19 +733,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 			return;
 		}
 		if (status !== "ready" || switchPending || messages.length === 0) return;
-		if (hiddenCount > 0 && displayMessages.slice(0, hiddenCount).some(m => m.entryId === target.entryId)) {
-			setPreCompactionOpen(true);
-			return;
-		}
 		const found = locateEntryRow(rows, target.entryId);
-		if (!found && archiveBoundaryId) {
-			if (archiveBusy || archiveLoading) return;
-			if (requestedFocus.current !== target) {
-				requestedFocus.current = target;
-				void requestOlder(target.entryId);
-				return;
-			}
-		}
 		settleFocus(target.nonce);
 		if (!found) {
 			toast({ variant: "info", message: t("search.notOnBranch") });
@@ -990,12 +752,6 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 		status,
 		switchPending,
 		messages.length,
-		hiddenCount,
-		archiveBoundaryId,
-		archiveBusy,
-		archiveLoading,
-		requestOlder,
-		displayMessages,
 		rows,
 		rowKeys,
 		settleFocus,
@@ -1106,6 +862,8 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 	// Messages hydrate via hydrateSession (use-rpc-events) on sidecar ready -
 	// no separate fetch here (that would double-download the transcript).
 
+	const showWelcome = !awaitingTranscript && rows.length === 0 && !isStreaming && !switchPending && readOnly === null;
+
 	return (
 		<>
 			<div className="omp-transcript-editorial relative flex min-h-0 flex-1 flex-col bg-transparent [container-type:size]">
@@ -1119,42 +877,6 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 						query={findQuery}
 						total={findMatches.length}
 					/>
-				)}
-				{archiveBoundaryId && (
-					<div className="omp-transcript-row flex flex-wrap items-center gap-2 py-1">
-						<button
-							type="button"
-							aria-controls={canvasId}
-							aria-expanded={archiveOpen}
-							aria-disabled={!archiveOpen && cannotLoadOlder}
-							onClick={archiveOpen ? closeOlder : () => void requestOlder()}
-							className="rounded-md px-2 py-1 text-omp-md font-medium text-[var(--omp-accent)] hover:bg-[var(--omp-selected-bg)] aria-disabled:opacity-50"
-						>
-							{t(archiveOpen ? "chat.olderHistory.close" : "chat.olderHistory.open")}
-						</button>
-						{archiveOpen && (
-							<button
-								type="button"
-								aria-controls={canvasId}
-								aria-disabled={cannotLoadOlder}
-								onClick={() => void requestOlder()}
-								className="rounded-md px-2 py-1 text-omp-md font-medium text-[var(--omp-accent)] hover:bg-[var(--omp-selected-bg)] aria-disabled:opacity-50"
-							>
-								{t("chat.olderHistory.more")}
-							</button>
-						)}
-						<span role="status" className="text-omp-sm text-[var(--omp-muted)]">
-							{archiveLoading
-								? t("chat.olderHistory.loading")
-								: archiveFailed
-									? t("chat.olderHistory.failed")
-									: archive.omitted > 0
-										? t("chat.olderHistory.omitted", { count: archive.omitted })
-										: archive.depth > 0
-											? t("chat.olderHistory.loaded", { count: archive.messages.length })
-											: null}
-						</span>
-					</div>
 				)}
 				<div
 					ref={parentRef}
@@ -1170,7 +892,7 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 					tabIndex={0}
 					className={cx(
 						"omp-transcript-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain",
-						(rows.length > 0 || Boolean(footer)) && "pb-4",
+						!showWelcome && (rows.length > 0 || Boolean(footer)) && "pb-4",
 					)}
 				>
 					{readOnly === null && <TranscriptQuoteAction tabId={tabId} transcriptRef={parentRef} />}
@@ -1180,52 +902,8 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 						</div>
 					)}
 					{awaitingTranscript && rows.length === 0 && !switchPending && <TranscriptLoading />}
-					{!awaitingTranscript && rows.length === 0 && !isStreaming && !switchPending && readOnly === null && (
-						<div className="omp-empty-canvas flex min-h-full flex-col justify-center pb-20">
-							<div className="omp-empty-logo mb-6 flex items-center justify-center">
-								<WisaLogo size={56} />
-							</div>
-							<h1 className="text-center font-display text-omp-display font-semibold leading-tight tracking-[-0.025em] text-[var(--omp-text)]">
-								{isChat
-									? t("chat.empty.title.chat")
-									: isWork
-										? t("chat.empty.title.work")
-										: t("chat.empty.title")}
-							</h1>
-							<p className="mx-auto mt-2 max-w-2xl text-center text-omp-xl leading-relaxed text-[var(--omp-muted)]">
-								{isChat
-									? t("chat.empty.subtitle.chat")
-									: isWork
-										? t("chat.empty.subtitle.work")
-										: t("chat.empty.subtitle")}
-							</p>
-							<div className="omp-starter-grid mt-8 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-								{starters.map(({ icon: Icon, title, prompt }) => (
-									<button
-										key={title}
-										type="button"
-										onClick={() => {
-											setQuickAction({ title, prompt });
-											setQuickDraft(prompt);
-										}}
-										className="omp-starter-card omp-lift group flex min-h-20 items-start gap-3 rounded-2xl border border-[var(--omp-border)] p-4 text-left shadow-[var(--omp-shadow-sm)] hover:border-[var(--omp-border-accent)] hover:bg-[var(--omp-bg-secondary)]"
-									>
-										<span className="omp-starter-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--omp-selected-bg)] text-[var(--omp-accent)]">
-											<Icon size={17} />
-										</span>
-										<span>
-											<span className="block text-omp-lg font-semibold text-[var(--omp-text)]">{title}</span>
-											<span className="mt-1 block text-omp-lg leading-snug text-[var(--omp-muted)]">
-												{prompt}
-											</span>
-										</span>
-									</button>
-								))}
-							</div>
-						</div>
-					)}
+					{showWelcome && <WelcomeScenes mode={isChat ? "chat" : isWork ? "work" : "code"} />}
 					<div
-						id={canvasId}
 						ref={canvasRef}
 						className="omp-transcript-canvas"
 						style={{ height: totalSize, position: "relative", width: "100%" }}
@@ -1264,61 +942,57 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 									}}
 								>
 									<div className="omp-transcript-row w-full">
-										<ReadOnlyTranscriptContext.Provider
-											value={item.index < olderRows.length ? archivedReadOnly : readOnly}
-										>
-											{row.kind === "message" ? (
-												<MessageBubble
-													message={row.message}
-													onUserTextExpandedChange={
-														row.message.role === "user" ? updateUserTextExpanded : undefined
-													}
-													reaction={row.reaction}
-													repeats={row.repeats}
-													rowKey={row.message.role === "user" ? rowKey : undefined}
-													runningIndicator="dot"
-													todoReminders={row.todoReminders}
-													userTextExpanded={
-														row.message.role === "user" ? expandedUserKeys.has(rowKey) : undefined
-													}
-												/>
-											) : row.kind === "readGroup" ? (
-												<ReadGroupCard entries={row.entries} runningIndicator="dot" usage={row.usage} />
-											) : row.kind === "process" ? (
-												<ProcessGroup
-													expanded={processExpansion.get(processKey) === true}
-													onExpandedChange={expanded => updateProcessExpanded(processKey, expanded)}
-													row={row}
-												/>
-											) : row.kind === "subagent" ? (
-												<SubagentHistoryCard
-													agentId={row.id}
-													full={subagentMode === "full"}
-													onOpen={setSelectedSubagent}
-													replied={repliedRows.has(row)}
-													reused={row.reuse !== undefined}
-												/>
-											) : row.kind === "streaming" ? (
-												<StreamingRows
-													expanded={processExpansion.get(processKey) === true}
-													onExpandedChange={expanded => updateProcessExpanded(processKey, expanded)}
-													process={row.process}
-												/>
-											) : row.kind === "queued" ? (
-												<QueuedMessageBubble item={row.item} lane={row.lane} />
-											) : row.kind === "turnChanges" ? (
-												<TurnChangesRow summary={row.summary} />
-											) : row.kind === "noReply" ? (
-												<div
-													role="status"
-													className="ps-(--omp-editorial-inset) pe-(--omp-editorial-edge) py-2 text-omp-sm text-[var(--omp-muted)]"
-												>
-													{t("chat.turn.noReply")}
-												</div>
-											) : (
-												<TurnStatusRow />
-											)}
-										</ReadOnlyTranscriptContext.Provider>
+										{row.kind === "message" ? (
+											<MessageBubble
+												message={row.message}
+												onUserTextExpandedChange={
+													row.message.role === "user" ? updateUserTextExpanded : undefined
+												}
+												reaction={row.reaction}
+												repeats={row.repeats}
+												rowKey={row.message.role === "user" ? rowKey : undefined}
+												runningIndicator="dot"
+												todoReminders={row.todoReminders}
+												userTextExpanded={
+													row.message.role === "user" ? expandedUserKeys.has(rowKey) : undefined
+												}
+											/>
+										) : row.kind === "readGroup" ? (
+											<ReadGroupCard entries={row.entries} runningIndicator="dot" usage={row.usage} />
+										) : row.kind === "process" ? (
+											<ProcessGroup
+												expanded={processExpansion.get(processKey) === true}
+												onExpandedChange={expanded => updateProcessExpanded(processKey, expanded)}
+												row={row}
+											/>
+										) : row.kind === "subagent" ? (
+											<SubagentHistoryCard
+												agentId={row.id}
+												full={subagentMode === "full"}
+												onOpen={setSelectedSubagent}
+												replied={repliedRows.has(row)}
+												reused={row.reuse !== undefined}
+											/>
+										) : row.kind === "streaming" ? (
+											<StreamingRows
+												expanded={processExpansion.get(processKey) === true}
+												onExpandedChange={expanded => updateProcessExpanded(processKey, expanded)}
+												process={row.process}
+											/>
+										) : row.kind === "queued" ? (
+											<QueuedMessageBubble item={row.item} lane={row.lane} />
+										) : row.kind === "turnChanges" ? (
+											<TurnChangesRow summary={row.summary} />
+										) : row.kind === "noReply" ? (
+											<div
+												role="status"
+												className="ps-(--omp-editorial-inset) pe-(--omp-editorial-edge) py-2 text-omp-sm text-[var(--omp-muted)]"
+											>
+												{t("chat.turn.noReply")}
+											</div>
+										) : (
+											<TurnStatusRow />
+										)}
 									</div>
 								</div>
 							);
@@ -1354,33 +1028,6 @@ function SessionTranscript({ footer, subagentDialogHost }: ChatStreamProps) {
 				anchors={conversationAnchors}
 				onNavigate={jumpToConversation}
 			/>
-			<Modal open={quickAction !== null} onClose={() => setQuickAction(null)} size="md" title={quickAction?.title}>
-				<form
-					className="space-y-3"
-					onSubmit={event => {
-						event.preventDefault();
-						if (!quickDraft.trim()) return;
-						window.dispatchEvent(new CustomEvent("omp:fill-composer", { detail: { text: quickDraft, tabId } }));
-						setQuickAction(null);
-					}}
-				>
-					<TextArea
-						autoFocus
-						aria-label={quickAction?.title}
-						rows={4}
-						value={quickDraft}
-						onChange={event => setQuickDraft(event.target.value)}
-					/>
-					<div className="flex justify-end gap-2">
-						<Button type="button" variant="ghost" onClick={() => setQuickAction(null)}>
-							{t("common.cancel")}
-						</Button>
-						<Button type="submit" variant="primary" disabled={!quickDraft.trim()}>
-							{t("chat.starter.continue")}
-						</Button>
-					</div>
-				</form>
-			</Modal>
 		</>
 	);
 }
@@ -1802,6 +1449,8 @@ function QueuedMessageBubble({ item, lane }: { item: RpcQueuedMessage; lane: Que
 	const rpc = useTabRpc();
 	const refreshQueue = useQueueStore(state => state.refresh);
 	const [removing, setRemoving] = useState(false);
+	const [expanded, setExpanded] = useState(false);
+	const previewId = useId();
 
 	const remove = async () => {
 		setRemoving(true);
@@ -1822,11 +1471,28 @@ function QueuedMessageBubble({ item, lane }: { item: RpcQueuedMessage; lane: Que
 		<div className="omp-queued-turn group flex justify-end ps-(--omp-editorial-inset) pe-(--omp-editorial-edge) py-1.5">
 			<div className="omp-transcript-content omp-queued-bubble flex items-start gap-2 rounded-xl border border-dashed border-[var(--omp-border)] px-3.5 py-2.5">
 				<div className="min-w-0 flex-1">
-					<div className="mb-0.5 text-omp-xs font-semibold text-[var(--omp-dim)]">
-						{t(lane === "steering" ? "pendingBubble.steering" : "pendingBubble.followUp")}
+					<div className="mb-1 flex items-center justify-between gap-3 text-omp-xs text-[var(--omp-dim)]">
+						<span className="font-semibold">
+							{t(lane === "steering" ? "pendingBubble.steering" : "pendingBubble.followUp")}
+						</span>
+						<button
+							type="button"
+							aria-expanded={expanded}
+							aria-controls={previewId}
+							className="omp-pressable shrink-0 rounded px-1 text-[var(--omp-muted)] hover:text-[var(--omp-text)]"
+							onClick={() => setExpanded(value => !value)}
+						>
+							{t(expanded ? "chat.userMessage.collapse" : "chat.userMessage.expand")}
+						</button>
 					</div>
-					<div className="whitespace-pre-wrap break-words text-omp-lg leading-snug text-[var(--omp-muted)]">
-						{item.text || "…"}
+					<div
+						id={previewId}
+						className={cx(
+							"whitespace-pre-wrap break-words text-omp-sm leading-snug text-[var(--omp-muted)]",
+							expanded ? PREVIEW_SCROLL_SM : "line-clamp-2",
+						)}
+					>
+						{expanded ? item.text || "…" : item.text.slice(0, 240) + (item.text.length > 240 ? "…" : "") || "…"}
 					</div>
 				</div>
 				<button

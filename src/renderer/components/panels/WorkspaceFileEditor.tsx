@@ -3,52 +3,12 @@ import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { drawSelection, EditorView, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { useEffect, useRef } from "react";
-import { create } from "zustand";
-import type { FileEditFailure } from "../../../shared/ipc-types";
 import { useInvalidateWorkspace } from "../../hooks/use-workspace-revision";
 import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
+import { setFileDraft, useFileDrafts } from "../../stores/file-drafts";
 import { Button } from "../common";
-
-type EditFailure = { reason: FileEditFailure; detail?: string };
-interface FileDraft {
-	initial: string;
-	revision: string;
-	content: string;
-	saving?: boolean;
-	failure?: EditFailure;
-	cursor?: { anchor: number; head: number };
-	scroll?: { top: number; left: number };
-	lastLineRequest?: number;
-}
-
-// Window-local drafts survive a file switch, closing the drawer, or opening another panel.
-export const useFileDrafts = create<{ drafts: ReadonlyMap<string, FileDraft> }>()(() => ({ drafts: new Map() }));
-
-/** Keep the close guard alive while drawers and editor tabs are hidden. */
-export function connectFileDraftGuard(): () => void {
-	let previous: boolean | undefined;
-	const report = () => {
-		const dirty = [...useFileDrafts.getState().drafts.values()].some(
-			draft => draft.saving || draft.content !== draft.initial,
-		);
-		if (dirty === previous) return;
-		window.omp.app.setUnsavedFiles(dirty);
-		previous = dirty;
-	};
-	report();
-	return useFileDrafts.subscribe(report);
-}
-
-export function setFileDraft(id: string, draft: FileDraft | null): void {
-	useFileDrafts.setState(state => {
-		const drafts = new Map(state.drafts);
-		if (draft) drafts.set(id, draft);
-		else drafts.delete(id);
-		return { drafts };
-	});
-}
 
 const editorTheme = EditorView.theme({
 	"&": { height: "100%", color: "var(--omp-text)", backgroundColor: "var(--omp-code-bg)" },

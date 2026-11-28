@@ -3,6 +3,7 @@ import type { RpcCommand, RpcResponse, RpcResponseError } from "../../shared/rpc
 import { createBtwStore } from "./btw";
 import { type ComposerStore, createComposerStore } from "./composer";
 import { createExtensionUiStore } from "./extension-ui";
+import { createMcpStore } from "./mcp";
 import { createMessagesStore } from "./messages";
 import { createModelStore } from "./model";
 import { createPlanApprovalStore } from "./plan-approval";
@@ -108,6 +109,7 @@ export function createTabRuntime(tabId: string): SessionRuntime {
 	addRuntimeStore(runtime, "composer", createComposerStore());
 	addRuntimeStore(runtime, "extensionUi", createExtensionUiStore());
 	addRuntimeStore(runtime, "messages", createMessagesStore());
+	addRuntimeStore(runtime, "mcp", createMcpStore(command));
 	addRuntimeStore(runtime, "model", createModelStore(command));
 	addRuntimeStore(runtime, "planApproval", createPlanApprovalStore());
 	addRuntimeStore(runtime, "queue", createQueueStore(command));

@@ -128,7 +128,7 @@ describe("mac bundle configs", () => {
 		const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "omp-bundle-policy-"));
 		// Named after productName, not a literal: the hook resolves the single
 		// `.app` in appOutDir, and this fixture proves it finds that name.
-		const plistPath = path.join(directory, "WISA STUDIO.app", "Contents", "Info.plist");
+		const plistPath = path.join(directory, "Wisa.app", "Contents", "Info.plist");
 		const loopback = { NSExceptionAllowsInsecureHTTPLoads: true };
 		const original: PlistObject = {
 			CFBundleIdentifier: "org.wisa.studio",
@@ -164,10 +164,8 @@ describe("mac bundle configs", () => {
 });
 
 /**
- * `productName` is "WISA STUDIO" — a space in an artifact name becomes a space
- * in the release URL and in the asset name the updater looks for. Every target
- * therefore pins an explicit, space-free name instead of letting electron-builder
- * derive one from productName.
+ * Keep release asset URLs independent of the display name. Every target pins
+ * an explicit, space-free name instead of deriving one from productName.
  */
 describe("release artifact names", () => {
 	/**
@@ -199,7 +197,7 @@ describe("release artifact names", () => {
 	it("pins a space-free artifact name for every target it builds", () => {
 		for (const [file, targets] of Object.entries(EXPECTED)) {
 			const config = parse(fs.readFileSync(path.join(PACKAGE_ROOT, file), "utf8")) as BuilderConfig;
-			expect(config.productName, `${file} names no productName`).toBe("WISA STUDIO");
+			expect(config.productName, `${file} names no productName`).toBe("Wisa");
 			for (const [target, read] of targets) {
 				const name = read(config);
 				expect(name, `${file} pins no artifact name for ${target}`).toBeTypeOf("string");
@@ -227,7 +225,7 @@ describe("release artifact names", () => {
 		const config = parse(
 			fs.readFileSync(path.join(PACKAGE_ROOT, "electron-builder.win.yml"), "utf8"),
 		) as BuilderConfig;
-		expect(config.nsis?.shortcutName).toBe("WISA STUDIO");
+		expect(config.nsis?.shortcutName).toBe("Wisa");
 	});
 });
 
@@ -267,7 +265,7 @@ describe("renderer content security policy", () => {
 	it("cannot fetch a remote image for markdown a model wrote", () => {
 		// Explicit, not inherited: without img-src the policy falls back to
 		// default-src, and a later relaxation there would silently re-open this.
-		expect(sources("img-src")).toEqual(["'self'", "data:", "blob:"]);
+		expect(sources("img-src")).toEqual(["'self'", "data:", "blob:", "wisa-wallpaper:"]);
 	});
 
 	it("keeps script execution and network calls inside the app", () => {

@@ -26,9 +26,9 @@ export function ApprovalControl() {
 	const setApprovalMode = useSettingsStore(s => s.setApprovalMode);
 	const [open, setOpen] = useState(false);
 	const [pendingYolo, setPendingYolo] = useState(false);
-	const { mounted, closing } = useOverlayPresence(open);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
+	const { mounted, closing } = useOverlayPresence(open, menuRef, "popover");
 	const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
 
 	// Position the portal menu above the trigger whenever it opens.
@@ -89,6 +89,7 @@ export function ApprovalControl() {
 	return (
 		<>
 			<button
+				data-tour="approvals"
 				ref={triggerRef}
 				type="button"
 				aria-expanded={open}
@@ -129,7 +130,7 @@ export function ApprovalControl() {
 							inert={closing}
 							className={cx(
 								"fixed z-[100] w-56 overflow-hidden rounded-xl border border-[var(--omp-border)] bg-[var(--omp-panel-bg)] p-1 shadow-[var(--omp-shadow-md)]",
-								closing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
+								closing && "pointer-events-none",
 							)}
 						>
 							{MODES.map(option => {

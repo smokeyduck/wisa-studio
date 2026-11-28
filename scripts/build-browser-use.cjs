@@ -191,6 +191,7 @@ async function beforePack(context) {
 	const { Arch } = require("builder-util");
 	const arch = Arch[context.arch];
 	const platform = context.electronPlatformName;
+	if (platform === "darwin") await require("./build-notch-island.cjs").build();
 	if (platform !== process.platform || arch !== process.arch) {
 		throw new Error(`Build Browser Use on a native ${platform}-${arch} runner; current host is ${process.platform}-${process.arch}`);
 	}

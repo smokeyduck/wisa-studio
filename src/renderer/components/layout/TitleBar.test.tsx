@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../lib/i18n";
+import { en } from "../../locales/en";
 import { useMessagesStore } from "../../stores/messages";
 import { useSchedulerStore } from "../../stores/scheduler";
 import { useSessionStore } from "../../stores/session";
@@ -207,7 +208,7 @@ describe("TitleBar", () => {
 		expect(actions).toBeDefined();
 		await act(async () => actions?.click());
 		const importItem = Array.from(document.querySelectorAll("[data-menu-item]")).find(item =>
-			item.textContent?.includes("Import External Session"),
+			item.textContent?.includes(en["cmd.import"]),
 		) as unknown as TestButton | undefined;
 		expect(importItem).toBeDefined();
 		await act(async () => importItem?.click());

@@ -460,6 +460,97 @@
 	max-width: calc(var(--omp-column-workspace) + 2 * var(--omp-column-pad));
 }
 
+/* One media canvas spans the transcript, gutters and composer; no per-row blur. */
+.omp-wallpaper-layer {
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.omp-wallpaper-media {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.omp-wallpaper-layer::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: color-mix(in srgb, var(--omp-bg-primary) 68%, transparent);
+}
+
+.omp-wallpaper-control,
+.omp-wallpaper-actions {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.omp-wallpaper-choose,
+.omp-wallpaper-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 24px;
+	height: 24px;
+	padding: 4px;
+	border-radius: 6px;
+	color: var(--omp-dim);
+	transition: color var(--omp-motion-fast) var(--omp-ease), background-color var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-wallpaper-choose:hover,
+.omp-wallpaper-action:hover,
+.omp-wallpaper-control:focus-within .omp-wallpaper-choose {
+	background: var(--omp-selected-bg);
+	color: var(--omp-text);
+}
+
+.omp-wallpaper-choose:focus-visible,
+.omp-wallpaper-action:focus-visible {
+	outline: 2px solid var(--omp-accent);
+	outline-offset: 1px;
+}
+
+.omp-wallpaper-choose:disabled,
+.omp-wallpaper-action:disabled {
+	opacity: 0.5;
+	cursor: wait;
+}
+
+.omp-wallpaper-label {
+	display: none;
+	margin-inline-start: 6px;
+	font-size: var(--text-omp-xs);
+	white-space: nowrap;
+}
+
+.omp-wallpaper-actions {
+	width: 0;
+	overflow: hidden;
+}
+
+.omp-wallpaper-control:hover .omp-wallpaper-label,
+.omp-wallpaper-control:focus-within .omp-wallpaper-label {
+	display: inline;
+}
+
+.omp-wallpaper-control:hover .omp-wallpaper-actions,
+.omp-wallpaper-control:focus-within .omp-wallpaper-actions {
+	width: auto;
+	overflow: visible;
+}
+
+@media (forced-colors: active) {
+	.omp-wallpaper-layer {
+		display: none;
+	}
+}
+
 /* Surface policy card: the single content-card recipe (hairline, no fill). */
 .omp-card {
 	border: 1px solid var(--omp-border-muted);
@@ -1497,12 +1588,20 @@
 	padding-inline: var(--omp-column-pad);
 }
 
-.omp-starter-grid {
-	width: 100%;
-	min-width: 0;
+.omp-empty-canvas {
+	display: flex;
+	min-height: 100%;
+	align-items: center;
+	justify-content: center;
+	padding-block: 1rem;
 }
 
-.omp-starter-grid > *,
+.omp-empty-content {
+	width: 100%;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
 .omp-composer-shell > * {
 	min-width: 0;
 	max-width: 100%;
@@ -1725,6 +1824,11 @@
 	opacity: 0.88;
 }
 
+.omp-send-button:hover:not(:disabled):not(.omp-send-button--secondary):not(.omp-send-button--follow-up) {
+	background: var(--omp-accent-bright);
+	opacity: 1;
+}
+
 .omp-send-button:active:not(:disabled) {
 	transform: scale(0.94);
 }
@@ -1790,12 +1894,6 @@
 	}
 }
 
-@container omp-workspace (min-width: 1900px) {
-	.omp-starter-grid {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-	}
-}
-
 /* A narrow conversation keeps every column for reading. */
 @container omp-workspace (max-width: 900px) {
 	.omp-conversation-nav {
@@ -1807,8 +1905,105 @@
 	}
 }
 
-/* Give model text leftover space without resizing its type. Actions remain in
-   the flow, so a queue preview can never cover a nearby control. */
+/* Fit the inspector itself, not the window: split panes can have different sizes. */
+.omp-overview-panel {
+	container: overview / size;
+	block-size: 100%;
+	min-block-size: 0;
+	min-inline-size: 0;
+}
+
+.omp-overview-scroll {
+	--overview-gap: 12px;
+	--overview-padding: 12px;
+	--overview-card-padding: 12px;
+	--overview-body-gap: 6px;
+	--overview-row-gap: 6px;
+	--overview-legend-gap: 6px;
+	block-size: 100%;
+	min-block-size: 0;
+	overflow-y: auto;
+	padding: var(--overview-padding);
+}
+
+.omp-overview-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-items: start;
+	gap: var(--overview-gap);
+}
+
+.omp-overview-card {
+	min-inline-size: 0;
+	padding: 8px var(--overview-card-padding) var(--overview-card-padding);
+}
+
+.omp-overview-card-header {
+	min-block-size: 28px;
+}
+
+.omp-overview-card-body {
+	margin-block-start: var(--overview-body-gap);
+}
+
+.omp-overview-row-label {
+	inline-size: 4rem;
+}
+
+.omp-overview-context-reading {
+	margin-block-end: var(--overview-body-gap);
+}
+
+.omp-overview-list {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--overview-row-gap);
+}
+
+.omp-overview-context-breakdown > ul {
+	display: grid;
+	gap: var(--overview-legend-gap) 16px;
+	margin-block-start: 8px;
+}
+
+.omp-overview-context-breakdown > ul > li {
+	min-inline-size: 0;
+	margin-block: 0;
+}
+
+@container overview (height <= 760px) {
+	.omp-overview-scroll {
+		--overview-gap: 8px;
+		--overview-padding: 8px;
+		--overview-card-padding: 8px;
+		--overview-body-gap: 4px;
+		--overview-row-gap: 2px;
+		--overview-legend-gap: 2px;
+	}
+}
+
+@container overview (width >= 580px) {
+	.omp-overview-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.omp-overview-grid > .omp-overview-card:first-child {
+		grid-column: 1 / -1;
+	}
+
+	.omp-overview-context-breakdown > ul {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+.omp-composer-input,
+.omp-composer-input::placeholder {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* Keep short model names content-sized and let long names shrink. Actions stay
+   in the flow, so a queue preview can never cover a nearby control. */
 .omp-composer-toolbar {
 	container: omp-composer-toolbar / inline-size;
 	white-space: nowrap;
@@ -1830,6 +2025,12 @@
 	max-width: 14rem;
 }
 
+/* Isolate the human name's reading order; overflow drops the prefix, not the model/version. */
+.omp-composer-model-label {
+	direction: rtl;
+	text-align: left;
+}
+
 .omp-composer-menu {
 	max-width: calc(100vw - 16px);
 	overscroll-behavior: contain;
@@ -1841,6 +2042,15 @@
 
 .omp-composer-queue-label {
 	display: none;
+}
+
+/* Preserve compact-pane hit targets; spend extra space on rhythm only when
+   inline settings fit beside the model and send actions. */
+@container omp-composer-toolbar (max-width: 35rem) {
+	.omp-composer-controls,
+	.omp-composer-attachments {
+		gap: 0.25rem;
+	}
 }
 
 @container omp-composer-toolbar (min-width: 40rem) {
@@ -1894,10 +2104,6 @@
 @container omp-workspace (max-width: 680px) {
 	.omp-session-pane-cwd {
 		display: none;
-	}
-
-	.omp-starter-grid {
-		grid-template-columns: minmax(0, 1fr);
 	}
 }
 
@@ -2000,14 +2206,7 @@
 	position: absolute;
 	top: 0;
 	left: 0;
-	width: var(--glide-w);
-	height: var(--glide-h);
 	pointer-events: none;
-	transform: translate(var(--glide-x), var(--glide-y));
-	transition:
-		transform var(--omp-motion-med) var(--omp-ease-enter),
-		width var(--omp-motion-med) var(--omp-ease-enter),
-		height var(--omp-motion-med) var(--omp-ease-enter);
 }
 
 .omp-glide--pill {
@@ -2025,13 +2224,6 @@
 	height: 2px;
 	border-radius: 1px;
 	background: var(--omp-accent);
-	transform: translate(var(--glide-x), calc(var(--glide-y) + var(--glide-h) - 2px));
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.omp-glide {
-		transition: none;
-	}
 }
 
 .omp-segmented {
@@ -2369,23 +2561,6 @@
 	animation: omp-fade-in var(--omp-motion-fast) var(--omp-ease) both;
 }
 
-/* Starter cards fan in on the empty canvas instead of landing as one block. */
-.omp-starter-grid > * {
-	animation: omp-fade-up var(--omp-motion-spring) var(--omp-ease-spring) both;
-}
-
-.omp-starter-grid > :nth-child(2) {
-	animation-delay: var(--omp-stagger);
-}
-
-.omp-starter-grid > :nth-child(3) {
-	animation-delay: calc(var(--omp-stagger) * 2);
-}
-
-.omp-starter-grid > :nth-child(n + 4) {
-	animation-delay: calc(var(--omp-stagger) * 3);
-}
-
 /* ============================================================================
    Settings & dialogs hierarchy
    ============================================================================ */
@@ -2554,4 +2729,319 @@
 	border-radius: 5px;
 	padding: 0.08em 0.34em;
 	color: var(--omp-md-code);
+}
+
+/* First-run connection choices. Artwork is decorative; the whole card is a button. */
+.omp-onboarding {
+	display: flex;
+	flex-direction: column;
+	gap: 28px;
+	padding: 32px;
+}
+
+.omp-onboarding-choices {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 16px;
+}
+
+.omp-onboarding-choice {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid var(--omp-border);
+	border-radius: 20px;
+	background: var(--omp-bg-secondary);
+	color: var(--omp-text);
+	text-align: left;
+	cursor: pointer;
+	transition: border-color 160ms, background-color 160ms;
+}
+
+.omp-onboarding-choice:hover {
+	border-color: var(--omp-accent);
+	background: var(--omp-bg-tertiary);
+}
+
+.omp-onboarding-choice:focus-visible {
+	outline: 2px solid var(--omp-accent);
+	outline-offset: 4px;
+}
+
+.omp-onboarding-wisa {
+	border-color: var(--omp-border-accent);
+}
+
+.omp-onboarding-art {
+	position: relative;
+	display: block;
+	height: 180px;
+	flex-shrink: 0;
+	overflow: hidden;
+	pointer-events: none;
+	user-select: none;
+}
+
+.omp-onboarding-tile {
+	position: absolute;
+	top: 34px;
+	left: calc(50% - 54px);
+	display: grid;
+	width: 108px;
+	height: 108px;
+	place-items: center;
+	border: 1px solid rgb(255 255 255 / 12%);
+	border-radius: 24px;
+	box-shadow: 0 12px 28px rgb(0 0 0 / 14%);
+}
+
+.omp-onboarding-wisa-back {
+	background: var(--omp-accent);
+	opacity: 0.12;
+	filter: blur(3px);
+	transform: translate(38px, 0) rotate(18deg);
+}
+
+.omp-onboarding-wisa-mid {
+	background: var(--omp-accent);
+	opacity: 0.25;
+	filter: blur(1px);
+	transform: translate(18px, 5px) rotate(5deg);
+}
+
+.omp-onboarding-wisa-mark {
+	background: #20242c;
+	transform: translate(-10px, 5px) rotate(-10deg);
+}
+
+.omp-onboarding-gemini {
+	background: #e4edff;
+	filter: blur(1px);
+	transform: translate(57px, -8px) rotate(19deg);
+}
+
+.omp-onboarding-anthropic {
+	background: #e4c7b4;
+	filter: blur(0.4px);
+	transform: translate(4px, 5px) rotate(3deg);
+}
+
+.omp-onboarding-openai {
+	background: #204d43;
+	transform: translate(-55px, 18px) rotate(-13deg);
+}
+
+.omp-onboarding-copy {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 8px;
+	padding: 4px 24px 24px;
+}
+
+.omp-onboarding-action {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: auto;
+	padding-top: 20px;
+	font-size: var(--text-omp-md);
+	font-weight: 500;
+}
+
+.omp-onboarding-wisa .omp-onboarding-action {
+	color: var(--omp-accent);
+}
+
+@media (max-width: 560px) {
+	.omp-onboarding {
+		gap: 20px;
+		padding: 24px;
+	}
+
+	.omp-onboarding-choices {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.omp-onboarding-art {
+		height: 148px;
+	}
+
+	.omp-onboarding-tile {
+		top: 18px;
+	}
+}
+
+/* Read-only first-use tour. The cutout reveals the real surface, never a screenshot. */
+.omp-first-use-tour {
+	position: fixed;
+	inset: 0;
+	z-index: 140;
+	isolation: isolate;
+	color: var(--omp-text);
+	-webkit-app-region: no-drag;
+}
+
+.omp-tour-shade {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+.omp-tour-header {
+	position: absolute;
+	top: 20px;
+	right: 24px;
+	left: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	color: white;
+}
+
+.omp-tour-header > :first-child {
+	padding: 8px 12px;
+	border-radius: 12px;
+	background: rgb(20 20 20 / 95%);
+}
+
+.omp-tour-header-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 36px;
+	padding: 8px 12px;
+	border: 1px solid rgb(255 255 255 / 20%);
+	border-radius: 10px;
+	background: rgb(20 20 20 / 90%);
+	color: white;
+	font-size: var(--text-omp-sm);
+	cursor: pointer;
+}
+
+.omp-tour-header-button:hover {
+	background: rgb(50 50 50 / 95%);
+}
+
+.omp-tour-header-button:focus-visible,
+.omp-tour-contents button:focus-visible {
+	outline: 2px solid var(--omp-accent);
+	outline-offset: 3px;
+}
+
+.omp-tour-header-button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.omp-tour-card,
+.omp-tour-contents {
+	position: absolute;
+	border: 1px solid var(--omp-border-strong);
+	border-radius: 14px;
+	background: var(--omp-bg-elevated);
+	box-shadow: 0 12px 48px rgb(0 0 0 / 35%);
+}
+
+.omp-tour-card {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.omp-tour-progress {
+	height: 3px;
+	flex-shrink: 0;
+	background: var(--omp-border);
+}
+
+.omp-tour-progress > span {
+	display: block;
+	height: 100%;
+	background: var(--omp-accent);
+}
+
+.omp-tour-card-scroll {
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 20px 20px 16px;
+}
+
+.omp-tour-tip {
+	margin-top: 16px;
+	padding-left: 12px;
+	border-left: 2px solid var(--omp-accent);
+	color: var(--omp-muted);
+	font-size: var(--text-omp-sm);
+	line-height: 1.6;
+}
+
+.omp-tour-footer {
+	display: flex;
+	flex-shrink: 0;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 12px;
+	border-top: 1px solid var(--omp-border);
+}
+
+.omp-tour-footer .omp-button {
+	font-size: var(--text-omp-sm);
+}
+
+.omp-tour-contents {
+	top: 80px;
+	right: 24px;
+	z-index: 1;
+	width: min(320px, calc(100vw - 32px));
+	max-height: calc(100dvh - 100px);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 4px 8px 12px;
+}
+
+.omp-tour-contents[hidden] {
+	display: none;
+}
+
+.omp-tour-contents button {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 10px;
+	border-radius: 8px;
+	color: var(--omp-text-secondary);
+	font-size: var(--text-omp-sm);
+	text-align: left;
+	cursor: pointer;
+}
+
+.omp-tour-contents button:hover,
+.omp-tour-contents button[aria-current="step"] {
+	background: var(--omp-selected-bg);
+	color: var(--omp-text);
+}
+
+@media (max-width: 640px) {
+	.omp-tour-header {
+		right: 16px;
+		left: 16px;
+	}
+
+	.omp-tour-header p + p {
+		display: none;
+	}
+
+	.omp-tour-header-button > span {
+		display: none;
+	}
 }

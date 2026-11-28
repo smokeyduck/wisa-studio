@@ -1,17 +1,8 @@
-import { useEffect, useState } from "react";
+import { type RefObject, useLayoutEffect, useRef, useState } from "react";
+import { animateSurface, type MotionKind, prefersReducedMotion } from "../lib/motion";
 
-/**
- * Duration of every overlay exit animation. The closing classes animate at
- * `--omp-motion-fast` (140ms); unmount waits one frame past that so the last
- * painted frame of the exit is the frame the element disappears on.
- */
+/** Exit duration plus one frame; consumers that wait for dismissal use this bound. */
 export const OVERLAY_EXIT_MS = 160;
-
-/** True when the OS asks for reduced motion; exit phases are skipped then. */
-export function prefersReducedMotion(): boolean {
-	if (typeof window.matchMedia !== "function") return false;
-	return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
 
 export interface OverlayPresence {
 	/** Render gate: true while the overlay is open or still playing its exit animation. */
@@ -22,33 +13,78 @@ export interface OverlayPresence {
 
 type Phase = "closed" | "open" | "closing";
 
-/**
- * Keep a conditionally rendered overlay mounted for its exit animation.
- *
- * Every dismissal route flips `open` in the same commit that used to remove the
- * element, so the closing keyframe never painted and the surface vanished
- * instantly. Deriving the exit from `open` — rather than from one close callsite —
- * means hover-out, Escape, outside press and selection all animate the same way.
- *
- * Both transitions happen during render, never in an effect: a dialog that only
- * appears in the commit *after* `open` flips misses its own post-commit work —
- * its panel is still null when the Escape listener and focus trap are installed,
- * so the overlay opens and then refuses to close.
- *
- * `closing` NEVER gates interactivity: the overlay is logically closed the moment
- * `open` flips, so callers keep their `open` checks for handlers and ARIA state and
- * hide the exiting element from assistive tech instead of leaving it actionable.
- */
-export function useOverlayPresence(open: boolean): OverlayPresence {
+/** Keep exits mounted; release focus and interactivity as soon as `open` changes. */
+export function useOverlayPresence(
+	open: boolean,
+	ref: RefObject<HTMLElement | null>,
+	kind: MotionKind,
+): OverlayPresence {
 	const [phase, setPhase] = useState<Phase>(open ? "open" : "closed");
+	const previousNode = useRef<HTMLElement | null>(null);
+	const initiallyOpen = useRef(open);
+	const stop = useRef<(() => void) | null>(null);
+	const last = useRef<{ node: HTMLElement | null; phase: Phase; kind: MotionKind } | null>(null);
 	if (open && phase !== "open") setPhase("open");
 	else if (!open && phase === "open") setPhase(prefersReducedMotion() ? "closed" : "closing");
 
-	useEffect(() => {
-		if (phase !== "closing") return;
-		const timer = setTimeout(() => setPhase("closed"), OVERLAY_EXIT_MS);
-		return () => clearTimeout(timer);
-	}, [phase]);
+	useLayoutEffect(() => {
+		const node = ref.current;
+		if (last.current?.node === node && last.current.phase === phase && last.current.kind === kind) return;
+		stop.current?.();
+		stop.current = null;
+		last.current = { node, phase, kind };
+		if (!node || phase === "closed") {
+			previousNode.current = null;
+			return;
+		}
+		const fresh = previousNode.current !== node;
+		previousNode.current = node;
+		const immediate = kind === "collapse" && fresh && initiallyOpen.current;
+		initiallyOpen.current = false;
+		stop.current =
+			animateSurface(
+				node,
+				kind,
+				open,
+				fresh,
+				() => {
+					if (!open) setPhase("closed");
+				},
+				immediate,
+			) ?? null;
+	});
+	useLayoutEffect(
+		() => () => {
+			stop.current?.();
+			last.current = null;
+		},
+		[],
+	);
 
 	return { closing: phase === "closing", mounted: phase !== "closed" };
+}
+
+/** Entrance for a mounted surface or a deliberate page change, never each render. */
+export function useSurfaceMotion(
+	ref: RefObject<HTMLElement | null>,
+	kind: "page" | "drawer" | "popover",
+	key?: unknown,
+): void {
+	const last = useRef<{ node: HTMLElement | null; key: unknown; kind: string } | null>(null);
+	const stop = useRef<(() => void) | null>(null);
+	useLayoutEffect(() => {
+		const node = ref.current;
+		if (last.current?.node === node && Object.is(last.current.key, key) && last.current.kind === kind) return;
+		stop.current?.();
+		stop.current = null;
+		last.current = { node, key, kind };
+		if (node) stop.current = animateSurface(node, kind, true, true) ?? null;
+	});
+	useLayoutEffect(
+		() => () => {
+			stop.current?.();
+			last.current = null;
+		},
+		[],
+	);
 }

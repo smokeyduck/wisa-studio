@@ -85,7 +85,6 @@ export interface GuiDisplayPreferences {
 	hideThinkingBlock?: boolean | null;
 	proseOnlyThinking?: boolean | null;
 	showTokenUsage?: boolean | null;
-	collapseCompacted?: boolean | null;
 	titleState?: boolean | null;
 	goalStatusInFooter?: boolean | null;
 	showProgress?: boolean | null;
@@ -93,7 +92,7 @@ export interface GuiDisplayPreferences {
 	pasteMenuThreshold?: number | null;
 }
 
-interface UiStore {
+export interface UiStore {
 	displayPreferences: GuiDisplayPreferences;
 	sidebarVisible: boolean;
 	panelVisible: boolean;
@@ -117,6 +116,9 @@ interface UiStore {
 	/** 1-based line the preview scrolls to and marks, when a link named one. */
 	filePreviewLine: number | null;
 	commandPaletteOpen: boolean;
+	tutorialOpen: boolean;
+	openTutorial: () => void;
+	closeTutorial: () => void;
 	modelPickerOpen: boolean;
 	settingsOpen: boolean;
 	settingsTab: string;
@@ -419,7 +421,7 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 		if (get().workspacePage === "tasks") set({ workspacePage: null });
 	},
 	returnToConversation: () => set(workspacePagePatch(null)),
-	diffScope: "repository",
+	diffScope: "current",
 	logsOpen: false,
 	filePreviewPath: null,
 	filePreviewRequestId: 0,
@@ -427,6 +429,9 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	filePreviewImage: null,
 	filePreviewLine: null,
 	commandPaletteOpen: false,
+	tutorialOpen: false,
+	openTutorial: () => set({ tutorialOpen: true, commandPaletteOpen: false }),
+	closeTutorial: () => set({ tutorialOpen: false }),
 	modelPickerOpen: false,
 	settingsOpen: false,
 	settingsTab: "gui",
@@ -566,8 +571,8 @@ export const useUiStore = create<UiStore>()((set, get) => ({
 	openThemeEditor: selection => set({ themePickerOpen: false, themeEditor: { selection: selection ?? null } }),
 	closeThemeEditor: backToPicker => set({ themeEditor: null, themePickerOpen: backToPicker === true }),
 	modesOpen: false,
-	modesTab: "vibe" as const,
-	openModes: tab => set({ ...workspacePagePatch(null), modesOpen: true, modesTab: tab ?? "vibe" }),
+	modesTab: "goal" as const,
+	openModes: tab => set(state => ({ ...workspacePagePatch(null), modesOpen: true, modesTab: tab ?? state.modesTab })),
 	closeModes: () => set({ modesOpen: false }),
 	agentHubOpen: false,
 	agentHubTab: "definitions" as const,

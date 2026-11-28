@@ -116,7 +116,8 @@ function CapabilityCard({
 }) {
 	return (
 		<section
-			className={`rounded-xl border bg-transparent p-4 ${featured || wide ? "settings-capability-featured" : ""} ${
+			data-featured={featured || undefined}
+			className={`omp-card rounded-xl border bg-transparent p-4 ${featured || wide ? "settings-capability-featured" : ""} ${
 				featured
 					? "border-[color-mix(in_srgb,var(--omp-accent)_45%,var(--omp-border-muted))]"
 					: "border-(--omp-border-muted)"

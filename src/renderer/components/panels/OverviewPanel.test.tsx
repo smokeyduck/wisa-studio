@@ -1,8 +1,7 @@
 /**
- * Overview drawer tab against the wire: changed files read as their porcelain
- * code, MCP servers as their connection state, live work as counts with the
- * overflow folded away, and a tool-free chat tab neither shows nor reads the
- * git and MCP cards. Same linkedom harness as the other panels.
+ * Overview drawer against the live MCP snapshot: connection state and available
+ * tools stay current, live work folds overflow away, and a tool-free chat tab
+ * does not request Git or MCP state.
  */
 
 import { parseHTML } from "linkedom";
@@ -12,11 +11,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BtwHistoryRecord, RpcResponse, SubagentSnapshot } from "../../../shared/rpc-types";
 import { I18nProvider } from "../../lib/i18n";
 import { useBtwStore } from "../../stores/btw";
+import { useMcpStore } from "../../stores/mcp";
 import { useSessionStore } from "../../stores/session";
 import { useSubagentsStore } from "../../stores/subagents";
 import { useTabsStore } from "../../stores/tabs";
 import { useTodoStore } from "../../stores/todo";
 import { useUiStore } from "../../stores/ui";
+import { ExtensionSettingsPage } from "./ExtensionsPanel";
 import { OverviewPanel } from "./OverviewPanel";
 
 const { document, window, Event, HTMLElement, Element, Node } = parseHTML("<html><body></body></html>");
@@ -38,28 +39,20 @@ const rpc = {
 	getGitStatus: vi.fn(async () =>
 		ok("get_git_status", { isRepo: true, branch: "main", staged: 0, unstaged: 0, untracked: 0 }),
 	),
-	getGitChanges: vi.fn(async () =>
-		ok("get_git_changes", {
-			isRepo: true,
-			root: "/work",
-			base: null,
-			truncated: false,
-			files: [
-				{ path: "src/new.ts", status: "??" },
-				{ path: "src/app.ts", status: " M" },
-				{ path: "old.md", status: "D " },
-				{ path: "src/b.ts", status: "M " },
-				{ path: "src/c.ts", status: "M " },
-				{ path: "src/d.ts", status: "M " },
-				{ path: "src/e.ts", status: "M " },
-				{ path: "src/f.ts", status: "M " },
-			],
-		}),
-	),
+	getGitChanges: vi.fn(async () => ok("get_git_changes", { isRepo: true, files: [] })),
 	getMcpServers: vi.fn(async () =>
 		ok("get_mcp_servers", {
 			servers: [
-				{ name: "github", transport: "http", status: "connected", toolCount: 12, enabled: true, authed: true },
+				{
+					name: "github",
+					transport: "http",
+					status: "connected",
+					toolCount: 12,
+					enabled: true,
+					authed: true,
+					lastError: "Old failure",
+					authState: "required",
+				},
 				{
 					name: "slack",
 					transport: "http",
@@ -74,12 +67,21 @@ const rpc = {
 		}),
 	),
 };
-(window as unknown as Record<string, unknown>).omp = { rpc, events: { onConfigUpdate: () => () => {} } };
+const configListeners = new Set<() => void>();
+(window as unknown as Record<string, unknown>).omp = {
+	rpc,
+	events: {
+		onConfigUpdate: (callback: () => void) => {
+			configListeners.add(callback);
+			return () => configListeners.delete(callback);
+		},
+	},
+};
 
 let container: InstanceType<typeof HTMLElement>;
 let root: Root;
 
-async function mount(kind: "agent" | "chat"): Promise<void> {
+async function mount(kind: "agent" | "chat", settings = false): Promise<void> {
 	useTabsStore.setState({
 		tabs: [{ id: "t0", cwd: "/work", status: "ready", kind, unreadDone: false }],
 		activeTabId: "t0",
@@ -93,6 +95,7 @@ async function mount(kind: "agent" | "chat"): Promise<void> {
 		root.render(
 			<I18nProvider>
 				<OverviewPanel />
+				{settings && <ExtensionSettingsPage tabId="mcp" query="" />}
 			</I18nProvider>,
 		);
 	});
@@ -113,31 +116,82 @@ afterEach(async () => {
 	await act(async () => root?.unmount());
 	container?.remove();
 	vi.clearAllMocks();
+	rpc.getMcpServers.mockReset();
 	useTabsStore.getState().reset();
 	useSessionStore.getState().reset();
+	useMcpStore.getState().reset();
 	useSubagentsStore.getState().reset();
 	useTodoStore.getState().reset();
 	useBtwStore.getState().reset();
 	useUiStore.setState({ panelTab: "overview", panelVisible: false, settingsOpen: false, settingsTab: "gui" });
+	vi.useRealTimers();
 });
 
 describe("OverviewPanel", () => {
-	it("lists changed files by porcelain code and MCP servers by connection state", async () => {
+	it("shows live connections instead of stale errors and omits the removed Changes card", async () => {
 		await mount("agent");
-
-		expect(card("Changes")?.textContent).toContain("8 uncommitted files");
-		// Untracked "??" reads as U; the first non-blank side of XY is the code.
-		// Each row is name then folder; a root file has no folder, so its name is not repeated.
-		expect(rows("Changes")).toEqual(["Unew.tssrc", "Mapp.tssrc", "Dold.md", "Mb.tssrc", "Mc.tssrc", "Md.tssrc"]);
-		expect(card("Changes")?.textContent).toContain("+2 more");
-
-		// A server with a last error is an error even while it reports "disconnected";
-		// a disabled one is off, not merely disconnected.
+		expect(card("Changes")).toBeNull();
+		expect(rpc.getGitChanges).not.toHaveBeenCalled();
 		expect(rows("MCP servers")).toEqual(["github12 toolsConnected", "slackError", "localOff"]);
+	});
 
-		const review = [...(card("Changes")?.querySelectorAll("button") ?? [])].find(b => b.textContent === "Review");
-		await act(async () => review?.click());
-		expect(useUiStore.getState()).toMatchObject({ panelTab: "diff", panelVisible: true });
+	it("keeps all MCP rows and error details available when the list overflows", async () => {
+		const servers = Array.from({ length: 24 }, (_, index) => ({
+			name: `server-${index}`,
+			transport: "http",
+			status: index === 23 ? "disconnected" : "connected",
+			toolCount: index + 1,
+			enabled: true,
+			authed: true,
+			...(index === 23 ? { lastError: "Please enable workspace research for server-23" } : {}),
+		}));
+		rpc.getMcpServers.mockResolvedValueOnce(ok("get_mcp_servers", { servers }));
+		await mount("agent");
+		expect(rows("MCP servers")).toHaveLength(24);
+		expect(rows("MCP servers")[23]).toBe("server-23Error");
+		expect(card("MCP servers")?.querySelectorAll("li")[23]?.getAttribute("title")).toBe(
+			"Please enable workspace research for server-23",
+		);
+	});
+
+	it("keeps Overview and Settings synchronized through disconnects, read failures, and recovery", async () => {
+		vi.useFakeTimers();
+		await mount("agent", true);
+		expect(rpc.getMcpServers).toHaveBeenCalledTimes(1);
+		const configured = card("Configured servers");
+		expect(configured?.textContent).toContain("12 tools");
+		rpc.getMcpServers.mockResolvedValue(
+			ok("get_mcp_servers", {
+				servers: [
+					{
+						name: "github",
+						transport: "http",
+						status: "disconnected",
+						toolCount: 283,
+						enabled: true,
+						authed: true,
+					},
+				],
+			}),
+		);
+		await act(async () => {
+			for (const listener of configListeners) listener();
+		});
+		expect(rows("MCP servers")).toEqual(["githubDisconnected"]);
+		expect(configured?.textContent).toContain("0 tools");
+		expect(configured?.textContent).not.toContain("283 tools");
+		rpc.getMcpServers.mockRejectedValue(new Error("Read failed"));
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1000);
+		});
+		expect(card("MCP servers")?.textContent).toContain("Could not load MCP servers");
+		expect(configured?.textContent).not.toContain("Connected");
+		rpc.getMcpServers.mockReset();
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1000);
+		});
+		expect(rows("MCP servers")[0]).toBe("github12 toolsConnected");
+		expect(configured?.textContent).toContain("12 tools");
 	});
 
 	it("opens separate Settings targets for Plugins and MCP", async () => {

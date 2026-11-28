@@ -386,7 +386,7 @@ export function MemoryWindow() {
 				</span>
 			}
 		>
-			<div className="omp-docked-fill flex h-[min(78dvh,52rem)] min-h-0 flex-col">
+			<div className="omp-docked-fill flex h-[min(78dvh,52rem)] min-h-0 flex-col" data-tour="memory">
 				<div className="flex shrink-0 items-center gap-3 border-b border-(--omp-border-muted) pr-3 pl-4">
 					<Tabs
 						activeId={tab}

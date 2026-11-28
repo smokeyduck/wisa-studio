@@ -1,17 +1,13 @@
-/**
- * Side-questions drawer against the wire protocol: `get_btw_history` fills the
- * topic list, selecting a topic shows its whole thread, the composer sends a
- * follow-up with the selected record id (or a new topic without one), and a
- * running answer offers Stop. Same linkedom harness as the other panels.
- */
+/** Side questions use the real store/wire contract, with local clipboard staging. */
 
 import { parseHTML } from "linkedom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { BtwHistoryRecord, RpcCommand, RpcResponse } from "../../../shared/rpc-types";
+import type { BtwHistoryRecord, ModelInfo, RpcCommand, RpcResponse } from "../../../shared/rpc-types";
 import { I18nProvider, translate } from "../../lib/i18n";
 import { useBtwStore } from "../../stores/btw";
+import { useModelStore } from "../../stores/model";
 import { BtwPanel } from "./BtwPanel";
 
 const { document, window, Event, HTMLElement, Node } = parseHTML("<html><body></body></html>");
@@ -24,6 +20,8 @@ globals.HTMLElement = HTMLElement;
 globals.Node = Node;
 globals.IS_REACT_ACT_ENVIRONMENT = true;
 globals.requestAnimationFrame = (callback: () => void) => setTimeout(callback, 0);
+globals.cancelAnimationFrame = clearTimeout;
+Object.assign(window, { matchMedia: () => ({ matches: true }) });
 
 const elementPrototype = HTMLElement.prototype as unknown as Record<string, unknown>;
 if (typeof elementPrototype.scrollIntoView !== "function") elementPrototype.scrollIntoView = () => {};
@@ -155,6 +153,33 @@ function topicRows(): TestElement[] {
 	return Array.from(document.querySelectorAll("button[aria-pressed]")) as unknown as TestElement[];
 }
 
+async function pasteImages(files: File[] = [{ type: "image/png" } as File]): Promise<void> {
+	const element = textarea();
+	const props = Object.getOwnPropertyNames(element).find(key => key.startsWith("__reactProps$"));
+	const handler = props
+		? (element as unknown as Record<string, { onPaste?: (event: object) => void }>)[props]?.onPaste
+		: undefined;
+	if (!handler) throw new Error("pasteImages: no onPaste handler");
+	await act(async () => handler({ clipboardData: { files }, preventDefault: vi.fn() }));
+	await flush();
+}
+
+function enableImages(): void {
+	useModelStore.setState({
+		model: { id: "vision", provider: "test", api: "openai-completions", input: ["text", "image"] } as ModelInfo,
+	});
+	vi.stubGlobal(
+		"FileReader",
+		class {
+			result = "data:image/png;base64,cGljdHVyZQ==";
+			onload: (() => void) | null = null;
+			readAsDataURL() {
+				queueMicrotask(() => this.onload?.());
+			}
+		},
+	);
+}
+
 function textarea(): TestElement {
 	const element = document.querySelector("textarea") as unknown as TestElement | null;
 	if (!element) throw new Error("textarea not found");
@@ -187,10 +212,12 @@ afterEach(async () => {
 	container = null;
 	root = null;
 	useBtwStore.getState().reset();
+	useModelStore.getState().reset();
+	vi.unstubAllGlobals();
 });
 
 describe("BtwPanel", () => {
-	it("lists topics newest first and shows the selected thread", async () => {
+	it("keeps all topics in the centered history picker, then closes it on selection", async () => {
 		const newer = record({
 			id: "newer",
 			question: "newer question",
@@ -206,21 +233,29 @@ describe("BtwPanel", () => {
 			createdAt: 1,
 			followUps: [{ question: "older follow-up", answer: "more", status: "complete", createdAt: 3, updatedAt: 3 }],
 		});
-		command.mockImplementationOnce(async () => ok("get_btw_history", { records: [newer, older] }));
+		const extra = Array.from({ length: 4 }, (_, index) =>
+			record({ id: `extra-${index}`, question: `extra question ${index}`, status: "complete" }),
+		);
+		command.mockImplementationOnce(async () => ok("get_btw_history", { records: [newer, older, ...extra] }));
 
 		await mount();
 
 		expect(document.body.textContent).toContain("newer question");
+		expect(document.body.textContent).not.toContain("older question");
+		expect(topicRows()).toHaveLength(0);
+		await click(buttonWithText(translate("btw.history")));
+		expect(document.querySelector('[role="dialog"]')).not.toBeNull();
 		expect(document.body.textContent).toContain("older question");
 		expect(document.body.textContent).toContain("newer answer");
 
 		const rows = topicRows();
-		expect(rows).toHaveLength(2);
+		expect(rows).toHaveLength(6);
 		expect(rows[0]?.getAttribute("aria-pressed")).toBe("true");
 
-		await click(rows[1]);
+		await click(buttonWithText("older question"));
 		expect(document.body.textContent).toContain("older answer");
 		expect(document.body.textContent).toContain("older follow-up");
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
 	});
 
 	it("sends a follow-up with the selected record id and a new question without one", async () => {
@@ -312,6 +347,112 @@ describe("BtwPanel", () => {
 		await mount();
 		expect(document.querySelector("[data-btw-inject]")).toBeNull();
 		expect(buttonWithText(translate("btw.injectSend"))).toBeUndefined();
+	});
+
+	it("stages clipboard images locally, removes individual previews, then sends text and remaining images", async () => {
+		enableImages();
+		await mount();
+		await pasteImages([{ type: "image/png" } as File, { type: "image/png" } as File]);
+		expect(document.querySelectorAll("[data-btw-attachments] img")).toHaveLength(2);
+		expect(command.mock.calls.map(([cmd]) => cmd.type)).not.toContain("btw");
+		const remove = document.querySelector("[data-btw-attachments] button") as unknown as TestElement;
+		await click(remove);
+		expect(document.querySelectorAll("[data-btw-attachments] img")).toHaveLength(1);
+		await typeInto(textarea(), "What is shown?");
+		await pressEnter(textarea());
+		expect(command).toHaveBeenCalledWith(
+			{
+				type: "btw",
+				question: "What is shown?",
+				images: [{ type: "image", mimeType: "image/png", data: "cGljdHVyZQ==" }],
+			},
+			120_000,
+		);
+		expect(document.querySelector("[data-btw-attachments]")).toBeNull();
+	});
+
+	it("sends an image-only question with the translated short prompt", async () => {
+		enableImages();
+		await mount();
+		await pasteImages();
+		await pressEnter(textarea());
+		expect(command).toHaveBeenCalledWith(
+			{
+				type: "btw",
+				question: translate("btw.imageQuestion"),
+				images: [{ type: "image", mimeType: "image/png", data: "cGljdHVyZQ==" }],
+			},
+			120_000,
+		);
+	});
+
+	it("reports unsupported vision instead of silently discarding or sending an image", async () => {
+		useModelStore.setState({
+			model: { id: "text", provider: "test", api: "openai-completions", input: ["text"] } as ModelInfo,
+		});
+		await mount();
+		await pasteImages();
+		expect(document.querySelector('[role="alert"]')?.textContent).toContain(translate("btw.imagesUnsupported"));
+		expect(document.querySelector("[data-btw-attachments]")).toBeNull();
+		expect(command.mock.calls.map(([cmd]) => cmd.type)).not.toContain("btw");
+	});
+
+	it("retains the image draft when sending fails", async () => {
+		enableImages();
+		await mount();
+		await pasteImages();
+		command.mockImplementationOnce(async () => ({
+			type: "response",
+			command: "btw",
+			success: false,
+			error: "offline",
+		}));
+		await pressEnter(textarea());
+		expect(document.querySelector('[role="alert"]')?.textContent).toContain("offline");
+		expect(document.querySelectorAll("[data-btw-attachments] img")).toHaveLength(1);
+	});
+
+	it("allows undeclared model capabilities to reach Core rather than rejecting custom models", async () => {
+		enableImages();
+		useModelStore.setState({ model: null });
+		await mount();
+		await pasteImages();
+		await pressEnter(textarea());
+		expect(command.mock.calls.map(([cmd]) => cmd.type)).toContain("btw");
+	});
+
+	it("shows persisted images from the selected history turn", async () => {
+		command.mockImplementationOnce(async () =>
+			ok("get_btw_history", {
+				records: [
+					record({ status: "complete", images: [{ type: "image", mimeType: "image/png", data: "cGljdHVyZQ==" }] }),
+				],
+			}),
+		);
+		await mount();
+		expect(document.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,cGljdHVyZQ==");
+	});
+
+	it("does not restore images from a pending read after starting a new question", async () => {
+		enableImages();
+		let finish: (() => void) | undefined;
+		vi.stubGlobal(
+			"FileReader",
+			class {
+				result = "data:image/png;base64,cGljdHVyZQ==";
+				onload: (() => void) | null = null;
+				readAsDataURL() {
+					finish = () => this.onload?.();
+				}
+			},
+		);
+		await mount();
+		await pasteImages();
+		await pressEnter(textarea());
+		expect(command.mock.calls.map(([cmd]) => cmd.type)).not.toContain("btw");
+		await click(buttonWithText(translate("btw.newQuestion")));
+		await act(async () => finish?.());
+		expect(document.querySelector("[data-btw-attachments]")).toBeNull();
 	});
 
 	it("shows the empty state when the session has no topics", async () => {

@@ -27,5 +27,5 @@
 import { Agentation } from "agentation";
 
 export function DevAgentation() {
-	return <Agentation appName="WISA STUDIO" />;
+	return <Agentation appName="Wisa" />;
 }

@@ -42,13 +42,9 @@ describe("Thai locale completeness", () => {
 		expect(th["tabs.kindMismatch"]).toContain("Agent");
 		expect(th["tabs.kindMismatch"]).toContain("Chat");
 	});
-	it("localizes visible starter templates while preserving their parameters", () => {
+	it("localizes plan approval prompts while preserving their parameters", () => {
 		for (const key of Object.keys(en)) {
-			if (
-				(key.startsWith("chat.starter.") && key.endsWith(".prompt")) ||
-				key === "planPanel.approveMessage" ||
-				key === "planPanel.reviseMessage"
-			) {
+			if (key === "planPanel.approveMessage" || key === "planPanel.reviseMessage") {
 				expect(th[key], key).toMatch(/[\u0E00-\u0E7F]/);
 				expect(placeholders(th[key]), key).toEqual(placeholders(en[key]));
 			}

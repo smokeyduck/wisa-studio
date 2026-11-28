@@ -45,9 +45,7 @@ export function startupFolder(): string | undefined {
 /**
  * The `.desktop` id electron-builder installs for Linux (`linux.executableName`
  * in electron-builder.yml). It is deliberately not derived from `app.getName()`:
- * that returns the productName, "WISA STUDIO", whose space makes `xdg-settings`
- * die in awk (`cannot open …/WISA`) and leaves the scheme with whatever app
- * owned it before — the old omp, in the field.
+ * that returns the display name rather than the stable installed desktop id.
  */
 export const LINUX_DESKTOP_FILE = "wisa-studio.desktop";
 
@@ -62,7 +60,7 @@ export const LINUX_DEV_DESKTOP_FILE = "wisa-studio-dev.desktop";
  * must point at the AppImage file itself (`APPIMAGE`), never at `execPath`.
  *
  * `name`/`icon` exist for the dev entry: a dev run and the installed app are both
- * "WISA STUDIO", so an "Open With" list shows the same label twice with no way to
+ * "Wisa", so an "Open With" list shows the same label twice with no way to
  * tell which is which.
  */
 export function linuxDesktopEntry(
@@ -73,7 +71,7 @@ export function linuxDesktopEntry(
 	return [
 		"[Desktop Entry]",
 		"Type=Application",
-		`Name=${options.name ?? "WISA STUDIO"}`,
+		`Name=${options.name ?? "Wisa"}`,
 		"Comment=Desktop GUI for the omp coding agent",
 		`Exec=${quoted}${options.execArgs ? ` ${options.execArgs}` : ""} %U`,
 		...(options.icon ? [`Icon=${options.icon}`] : []),
@@ -117,7 +115,7 @@ function ensureLinuxDesktopEntry(): void {
 
 /**
  * Register a `.desktop` entry for a dev run, so "Open With" lists it separately
- * from the installed app instead of showing "WISA STUDIO" twice.
+ * from the installed app instead of showing "Wisa" twice.
  *
  * Deliberately not made the scheme default: a checkout must not hijack the
  * installed WISA application's browser hand-off.
@@ -134,7 +132,7 @@ function ensureLinuxDevDesktopEntry(): void {
 		writeFileSync(
 			join(dir, LINUX_DEV_DESKTOP_FILE),
 			linuxDesktopEntry(process.execPath, {
-				name: "WISA STUDIO (Dev)",
+				name: "Wisa (Dev)",
 				icon: existsSync(icon) ? icon : undefined,
 				execArgs: quoteDesktopArg(app.getAppPath()),
 			}),
@@ -191,7 +189,11 @@ export function setupDeepLinks(windowManager: WindowManager, spawnWindow: SpawnW
 		const request = parseLaunchArgv(launchArguments(argv, process.defaultApp), PROTOCOL);
 		if (request.kind === "url") handleDeepLink(request.url, windowManager, spawnWindow);
 		else if (request.kind === "path") handleOpenPath(request.path, windowManager, spawnWindow);
-		else windowManager.getTargetWindow()?.focus();
+		else {
+			const win = windowManager.getTargetWindow();
+			if (win) windowManager.focusWindowById(win.webContents.id);
+			else spawnWindow();
+		}
 	});
 
 	// Windows/Linux cold start: the URL that launched the app arrives in its own

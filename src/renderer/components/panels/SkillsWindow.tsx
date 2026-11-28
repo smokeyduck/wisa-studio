@@ -33,7 +33,7 @@ export function SkillsWindow() {
 			}
 		>
 			{/* The page scrolls its own panes, so this only pads the frame. */}
-			<div className="flex h-full min-h-0 flex-col px-5 py-4">
+			<div className="flex h-full min-h-0 flex-col px-5 py-4" data-tour="skills">
 				<SkillsSettingsPage query="" />
 			</div>
 		</Modal>

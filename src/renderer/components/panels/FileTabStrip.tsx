@@ -3,8 +3,8 @@ import { useRef } from "react";
 import { basename, cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { scrollStripOnWheel, useActiveChipInView } from "../../lib/strip-scroll";
+import { useFileDrafts } from "../../stores/file-drafts";
 import type { WorkspaceFileTab } from "./file-tabs";
-import { useFileDrafts } from "./WorkspaceFileEditor";
 
 function FileTab({
 	tab,

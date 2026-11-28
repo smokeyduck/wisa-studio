@@ -1,302 +1,408 @@
-import { useTabRpc } from "../../lib/tab-rpc";
-/**
- * Foreign-session import wizard (Claude/Codex → OMP copy): list sessions from
- * a source, multi-select, import each as a fresh OMP session (the source data
- * is never modified). A single import opens the new session via the normal
- * switch flow; multiple imports land in the sidebar list with a count toast.
- * Backs the `list_foreign_sessions` / `import_foreign_session` RPCs.
- */
-
-import { Download, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RpcForeignSessionInfo, RpcResponse } from "../../../shared/rpc-types";
+import { Download } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type {
+	RpcForeignSessionInfo,
+	RpcOfficialArchiveImportResult,
+	RpcOfficialArchivePreview,
+} from "../../../shared/rpc-types";
 import { describeError } from "../../lib/errors";
 import { cx, formatTimeAgo } from "../../lib/format";
 import { useT } from "../../lib/i18n";
+import { useTabRpc } from "../../lib/tab-rpc";
 import { useSessionStore } from "../../stores/session";
 import { useTabsStore } from "../../stores/tabs";
-import { toast } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
 import { Button, Input, Modal, Spinner } from "../common";
 
-type Source = "claude" | "codex";
+type Source = "official" | "claude" | "codex";
+const SOURCES: Source[] = ["official", "claude", "codex"];
+type Imported = RpcOfficialArchiveImportResult["imported"][number];
 
-const SOURCES: Source[] = ["claude", "codex"];
-
-interface SourceState {
-	loading: boolean;
-	error: string | null;
-	sessions: RpcForeignSessionInfo[];
-}
-
+/** The renderer receives metadata only; archive bytes remain in the native/Core boundary. */
 export function ImportForeignDialog() {
-	const tabRpc = useTabRpc();
 	const t = useT();
-	const sidecarReady = useSessionStore(state => state.status) === "ready";
-	const close = useUiStore(s => s.closeImportDialog);
-	const [source, setSource] = useState<Source>("claude");
-	const [states, setStates] = useState<Partial<Record<Source, SourceState>>>({});
+	const tabRpc = useTabRpc();
+	const activeTabId = useTabsStore(state => state.activeTabId);
+	const ready = useSessionStore(state => state.status) === "ready";
+	const close = useUiStore(state => state.closeImportDialog);
+	const [source, setSource] = useState<Source>("official");
+	const [sessions, setSessions] = useState<RpcForeignSessionInfo[]>([]);
+	const [preview, setPreview] = useState<RpcOfficialArchivePreview | null>(null);
+	const [filePath, setFilePath] = useState("");
 	const [query, setQuery] = useState("");
 	const [selected, setSelected] = useState<Set<string>>(new Set());
-	const [importing, setImporting] = useState(false);
-	const [importError, setImportError] = useState<string | null>(null);
-	const [completed, setCompleted] = useState<Set<string>>(new Set());
+	const [imported, setImported] = useState<Imported[]>([]);
+	const [result, setResult] = useState<RpcOfficialArchiveImportResult | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+	const pending = useRef<symbol | null>(null);
 	const generation = useRef(0);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a different session client invalidates pending imports.
-	useEffect(() => {
+	const mounted = useRef(true);
+	const context = useRef({ tabRpc, activeTabId, ready });
+	// Invalidate during render as well as cleanup: an old promise can settle before effects run.
+	if (
+		context.current.tabRpc !== tabRpc ||
+		context.current.activeTabId !== activeTabId ||
+		context.current.ready !== ready
+	) {
 		generation.current++;
+		context.current = { tabRpc, activeTabId, ready };
+	}
+	useEffect(() => {
+		mounted.current = true;
 		return () => {
+			mounted.current = false;
 			generation.current++;
 		};
-	}, [tabRpc]);
+	}, []);
 
-	const load = useCallback(
-		async (target: Source, force = false) => {
-			if (!sidecarReady) return;
-			const existing = states[target];
-			if (!force && existing && (existing.sessions.length > 0 || existing.error !== null || existing.loading)) {
-				return;
-			}
-			setStates(current => ({ ...current, [target]: { loading: true, error: null, sessions: [] } }));
-			const version = generation.current;
-			try {
-				const response = await tabRpc.listForeignSessions(target);
-				if (version !== generation.current) return;
-				if (!response.success) {
-					setStates(current => ({
-						...current,
-						[target]: { loading: false, error: describeError(response.error), sessions: [] },
-					}));
-					return;
-				}
-				const data = response.data as { sessions?: RpcForeignSessionInfo[] } | undefined;
-				setStates(current => ({
-					...current,
-					[target]: { loading: false, error: null, sessions: data?.sessions ?? [] },
-				}));
-			} catch (cause) {
-				if (generation.current === version)
-					setStates(current => ({
-						...current,
-						[target]: { loading: false, error: describeError(cause), sessions: [] },
-					}));
-			}
-		},
-		[sidecarReady, states, tabRpc.listForeignSessions],
-	);
+	const reset = () => {
+		setSessions([]);
+		setPreview(null);
+		setFilePath("");
+		setSelected(new Set());
+		setImported([]);
+		setResult(null);
+		setError(null);
+		setQuery("");
+	};
 
-	// Reload only when the source tab changes (load() closes over cached states).
-	// biome-ignore lint/correctness/useExhaustiveDependencies: keyed reload by design
-	useEffect(() => {
-		if (!sidecarReady) {
-			setStates(current => ({
-				...current,
-				[source]: { loading: false, error: t("import.notConnected"), sessions: [] },
-			}));
-			return;
+	// A synchronous token guards picker/list/import/open actions, including same-tick double clicks.
+	const run = async (action: (valid: () => boolean) => Promise<void>) => {
+		if (pending.current || !ready) return;
+		const token = Symbol();
+		pending.current = token;
+		const version = generation.current;
+		const valid = () =>
+			mounted.current &&
+			generation.current === version &&
+			pending.current === token &&
+			useTabsStore.getState().activeTabId === activeTabId;
+		setBusy(true);
+		setError(null);
+		try {
+			await action(valid);
+		} catch (cause) {
+			if (valid()) setError(describeError(cause));
+		} finally {
+			if (pending.current === token) {
+				pending.current = null;
+				if (generation.current === version) setBusy(false);
+			}
 		}
-		void load(source, true);
-	}, [source, sidecarReady, tabRpc]);
+	};
 
-	const state = states[source];
+	const loadLocal = (target: "claude" | "codex") =>
+		run(async valid => {
+			const response = await tabRpc.listForeignSessions(target);
+			if (!valid()) return;
+			if (!response.success) throw new Error(describeError(response.error));
+			setSessions((response.data as { sessions?: RpcForeignSessionInfo[] } | undefined)?.sessions ?? []);
+		});
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset on actual routing/client changes only.
+	useEffect(() => {
+		pending.current = null;
+		setBusy(false);
+		reset();
+		if (source !== "official" && ready) void loadLocal(source);
+	}, [source, tabRpc, activeTabId, ready]);
+
+	const pickArchive = () =>
+		run(async valid => {
+			const paths = await window.omp.system.showOpenDialog([
+				{ name: t("import.archiveFilter"), extensions: ["zip", "json"] },
+			]);
+			if (!valid() || !paths?.[0]) return;
+			reset();
+			const response = await tabRpc.previewOfficialArchive(paths[0]);
+			if (!valid()) return;
+			if (!response.success) throw new Error(describeError(response.error));
+			const data = response.data as RpcOfficialArchivePreview;
+			setFilePath(paths[0]);
+			setPreview(data);
+			setSessions(data.sessions);
+		});
+
+	const completed = useMemo(() => new Set(imported.map(item => item.sourceId)), [imported]);
 	const filtered = useMemo(() => {
-		const sessions = state?.sessions ?? [];
 		const q = query.trim().toLowerCase();
-		if (!q) return sessions;
 		return sessions.filter(
 			session =>
-				(session.title ?? "").toLowerCase().includes(q) ||
-				(session.firstMessage ?? "").toLowerCase().includes(q) ||
-				session.cwd.toLowerCase().includes(q),
+				!q || [session.title, session.firstMessage, session.cwd].some(value => value?.toLowerCase().includes(q)),
 		);
-	}, [state, query]);
-
-	const toggle = (id: string) => {
-		id = `${source}:${id}`;
+	}, [sessions, query]);
+	const toggle = (id: string) =>
 		setSelected(current => {
 			const next = new Set(current);
 			if (next.has(id)) next.delete(id);
 			else next.add(id);
 			return next;
 		});
-	};
-
-	const doImport = async () => {
-		if (!sidecarReady) return;
-		const sessions = (state?.sessions ?? []).filter(session => selected.has(`${source}:${session.id}`));
-		if (sessions.length === 0 || importing) return;
-		setImporting(true);
-		setImportError(null);
-		const failed = new Set<string>();
-		const version = generation.current;
-		try {
-			let firstImported: { sessionPath: string; sessionId: string; cwd: string } | null = null;
-			let importedCount = 0;
-			for (const session of sessions) {
-				let response: RpcResponse;
-				try {
-					response = await tabRpc.importForeignSession(source, session.id);
-				} catch (cause) {
-					failed.add(`${source}:${session.id}`);
-					setImportError(describeError(cause));
-					continue;
-				}
-				if (generation.current !== version) return;
-				if (!response.success) {
-					failed.add(`${source}:${session.id}`);
-					setImportError(describeError(response.error));
-					continue;
-				}
-				const data = response.data as { sessionPath?: string; sessionId?: string; cwd?: string } | undefined;
-				if (data?.sessionPath && data.sessionId) {
-					importedCount += 1;
-					setCompleted(current => new Set([...current, `${source}:${session.id}`]));
-					firstImported ??= {
-						sessionPath: data.sessionPath,
-						sessionId: data.sessionId,
-						cwd: data.cwd ?? session.cwd,
-					};
+	const openSession = (item: Imported) =>
+		run(async valid => {
+			const tabId = await useTabsStore.getState().openTab({ sessionPath: item.sessionPath });
+			// openTab itself changes the route; accept that exact returned tab, not an unrelated switch.
+			if (!mounted.current || (!valid() && (!tabId || useTabsStore.getState().activeTabId !== tabId))) return;
+			if (tabId) close();
+			else setError(t("import.openFailed", { path: item.sessionPath }));
+		});
+	const doImport = () =>
+		run(async valid => {
+			const ids = sessions
+				.filter(session => selected.has(session.id) && !completed.has(session.id))
+				.map(session => session.id);
+			if (!ids.length) return;
+			const successes: Imported[] = [];
+			const failures: Array<{ sourceId: string; error: string }> = [];
+			if (source === "official") {
+				if (!preview) return;
+				const response = await tabRpc.importOfficialArchive(filePath, preview.archiveId, ids);
+				if (!valid()) return;
+				if (!response.success) throw new Error(describeError(response.error));
+				const data = response.data as RpcOfficialArchiveImportResult;
+				setResult(data);
+				successes.push(...data.imported);
+				failures.push(...data.failed);
+			} else {
+				for (const id of ids) {
+					try {
+						const response = await tabRpc.importForeignSession(source, id);
+						if (!valid()) return;
+						if (!response.success) throw new Error(describeError(response.error));
+						const data = response.data as { sessionPath: string; sessionId: string; cwd: string };
+						successes.push({ sourceId: id, ...data });
+					} catch (cause) {
+						if (!valid()) return;
+						failures.push({ sourceId: id, error: describeError(cause) });
+					}
 				}
 			}
-			if (importedCount === 0) return;
-			if (sessions.length === 1 && firstImported) {
-				const tabId = await useTabsStore.getState().openTab({ sessionPath: firstImported.sessionPath });
+			if (!valid()) return;
+			setImported(current => [
+				...current,
+				...successes.filter(item => !current.some(existing => existing.sourceId === item.sourceId)),
+			]);
+			setSelected(new Set(failures.map(item => item.sourceId)));
+			setError(
+				failures.length
+					? failures
+							.map(
+								item =>
+									`${sessions.find(session => session.id === item.sourceId)?.title ?? item.sourceId}: ${item.error}`,
+							)
+							.join("\n")
+					: null,
+			);
+			// Keep official results visible so preserved data and batch sessions remain reachable.
+			if (source !== "official" && ids.length === 1 && successes[0]) {
+				const tabId = await useTabsStore.getState().openTab({ sessionPath: successes[0].sessionPath });
+				if (!mounted.current || (!valid() && (!tabId || useTabsStore.getState().activeTabId !== tabId))) return;
 				if (tabId) close();
-				else setImportError(t("import.openFailed", { path: firstImported.sessionPath }));
-				return;
+				else setError(t("import.openFailed", { path: successes[0].sessionPath }));
 			}
-			toast({ variant: "success", message: t("import.imported", { count: importedCount }) });
-			setSelected(failed);
-			// Refresh the list after a batch so newly available source sessions and
-			// completion markers are reconciled instead of leaving a stale snapshot.
-			await load(source, true);
-		} catch (cause) {
-			setImportError(describeError(cause));
-		} finally {
-			if (generation.current === version) setImporting(false);
-		}
-	};
+		});
+	const preservedAction = (path: string, reveal: boolean) =>
+		run(async valid => {
+			const response = await (reveal ? window.omp.system.revealPath(path) : window.omp.system.openPath(path));
+			if (valid() && !response.ok) setError(describeError(response.error));
+		});
 
 	return (
 		<Modal
 			open
 			onClose={() => {
-				if (!importing) close();
+				if (!pending.current) close();
 			}}
 			title={t("import.title")}
 			size="lg"
 		>
-			<div className="mb-3 flex items-center gap-2">
+			<div className="mb-3 flex flex-wrap items-center gap-2">
 				{SOURCES.map(candidate => (
 					<button
 						key={candidate}
 						type="button"
-						disabled={importing}
+						disabled={busy}
 						aria-pressed={source === candidate}
 						onClick={() => {
-							setSource(candidate);
-							setSelected(new Set());
+							if (!pending.current && source !== candidate) {
+								generation.current++;
+								setSource(candidate);
+							}
 						}}
 						className={cx(
-							"rounded-lg px-3 py-1.5 text-omp-md font-medium capitalize",
+							"rounded-lg border px-3 py-1.5 text-omp-md font-medium",
 							source === candidate
 								? "bg-(--omp-btn-primary-bg) text-(--omp-btn-primary-text)"
-								: "border border-(--omp-border) text-(--omp-muted) hover:bg-(--omp-selected-bg)",
+								: "border-(--omp-border) text-(--omp-muted)",
 						)}
 					>
-						{candidate === "claude" ? "Claude" : "Codex"}
+						{t(
+							candidate === "official"
+								? "import.official"
+								: candidate === "claude"
+									? "import.claudeCode"
+									: "import.codexLocal",
+						)}
 					</button>
 				))}
-				<span className="ml-auto">
-					<Input
-						aria-label={t("import.search")}
-						value={query}
-						onChange={event => setQuery(event.target.value)}
-						placeholder={t("import.search")}
-					/>
-				</span>
 			</div>
-
-			{importError && (
-				<p role="alert" className="mb-2 text-omp-sm text-(--omp-error)">
-					{importError}
+			{source === "official" ? (
+				<div className="mb-3 space-y-2 text-omp-sm text-(--omp-muted)">
+					<p>{t("import.privacy")}</p>
+					<p>{t("import.exportGuide")}</p>
+					<p>{t("import.limitations")}</p>
+					<Button size="sm" disabled={!ready || busy} onClick={() => void pickArchive()}>
+						{t("import.pickArchive")}
+					</Button>
+					{preview && (
+						<p>
+							{t("import.archiveSummary", {
+								source: t(preview.source === "claude" ? "import.claudeOfficial" : "import.chatgptOfficial"),
+								name: preview.fileName,
+								chats: sessions.length,
+								projects: preview.projectCount,
+								files: preview.fileCount,
+							})}
+						</p>
+					)}
+					{[...new Set([...(preview?.warnings ?? []), ...(result?.warnings ?? [])])].map(warning => (
+						<p key={warning}>{warning}</p>
+					))}
+				</div>
+			) : (
+				<Button size="sm" disabled={!ready || busy} onClick={() => void loadLocal(source)}>
+					{t("common.refresh")}
+				</Button>
+			)}
+			{!ready && <p role="alert">{t("import.notConnected")}</p>}
+			{error && (
+				<p role="alert" className="mb-2 whitespace-pre-wrap text-omp-sm text-(--omp-error)">
+					{error}
 				</p>
 			)}
-			<Button
-				disabled={!sidecarReady || importing || state?.loading}
-				onClick={() => void load(source, true)}
-				size="sm"
-				title={!sidecarReady ? t("import.notConnected") : undefined}
-			>
-				{t("common.refresh")}
-			</Button>
-			<div className="max-h-[46vh] min-h-[200px] overflow-y-auto rounded-lg border border-(--omp-border-muted)">
-				{state?.loading && (
-					<div className="flex h-32 items-center justify-center text-(--omp-dim)">
-						<Loader2 size={16} className="animate-spin" />
-					</div>
-				)}
-				{state?.error && (
-					<div className="px-4 py-6 text-center text-omp-md text-(--omp-muted)">
-						{t("import.sourceUnavailable", { source })}
-						<div className="mt-1 text-omp-sm text-(--omp-dim)">{state.error}</div>
-					</div>
-				)}
-				{!state?.loading && !state?.error && filtered.length === 0 && (
-					<div className="px-4 py-6 text-center text-omp-md text-(--omp-dim)">{t("import.empty")}</div>
-				)}
-				{!state?.loading &&
-					!state?.error &&
-					filtered.map(session => (
-						<label
-							key={session.id}
-							className="flex cursor-pointer items-start gap-3 border-b border-(--omp-border-muted) px-3 py-2.5 last:border-0 hover:bg-(--omp-selected-bg)"
+			{error && source === "official" && (
+				<p className="mb-2 text-omp-sm text-(--omp-muted)">{t("import.updateRequired")}</p>
+			)}
+			{imported.length > 0 && (
+				<div role="status" className="mb-2 text-omp-sm">
+					<p>{t("import.batchStatus", { count: imported.length })}</p>
+					{imported.map(item => (
+						<Button
+							key={item.sourceId}
+							size="sm"
+							disabled={busy || !ready}
+							onClick={() => void openSession(item)}
 						>
-							<input
-								type="checkbox"
-								disabled={!sidecarReady || importing || completed.has(`${source}:${session.id}`)}
-								title={!sidecarReady ? t("import.notConnected") : undefined}
-								checked={selected.has(`${source}:${session.id}`)}
-								onChange={() => toggle(session.id)}
-								className="mt-1"
-							/>
-							<span className="min-w-0 flex-1">
-								<span className="block truncate text-omp-md font-medium text-(--omp-text)">
-									{session.title ?? session.firstMessage ?? t("import.untitled")}
-									{completed.has(`${source}:${session.id}`) && (
-										<span className="ml-2 text-(--omp-success)">{t("import.done")}</span>
-									)}
-								</span>
-								<span className="mt-0.5 block whitespace-pre-wrap text-omp-sm text-(--omp-muted)">
-									{session.firstMessage}
-								</span>
-								<span className="mt-0.5 block truncate font-mono text-omp-xs text-(--omp-dim)">
-									{session.cwd}
-								</span>
-							</span>
-							<span className="shrink-0 text-right text-omp-xs text-(--omp-dim)">
-								{formatTimeAgo(session.modified)}
-								{session.messageCount !== undefined && (
-									<span className="block">{t("import.messages", { count: session.messageCount })}</span>
+							{t("import.openChat", {
+								title: sessions.find(session => session.id === item.sourceId)?.title ?? t("import.untitled"),
+							})}
+						</Button>
+					))}
+				</div>
+			)}
+			{result && (
+				<div className="mb-3 flex flex-wrap gap-2">
+					<Button
+						size="sm"
+						disabled={busy || !ready}
+						onClick={() => void preservedAction(result.workspacePath, false)}
+					>
+						{t("import.openWorkspace")}
+					</Button>
+					<Button
+						size="sm"
+						disabled={busy || !ready}
+						onClick={() => void preservedAction(result.workspacePath, true)}
+					>
+						{t("import.revealWorkspace")}
+					</Button>
+					<Button
+						size="sm"
+						disabled={busy || !ready}
+						onClick={() => void preservedAction(result.archivePath, true)}
+					>
+						{t("import.revealArchive")}
+					</Button>
+				</div>
+			)}
+			<div className="my-2 flex flex-wrap items-center gap-2">
+				<Input
+					aria-label={t("import.search")}
+					placeholder={t("import.search")}
+					value={query}
+					onChange={event => setQuery(event.target.value)}
+				/>
+				<Button
+					size="sm"
+					disabled={busy || !ready || !sessions.length}
+					onClick={() =>
+						setSelected(
+							new Set(sessions.filter(session => !completed.has(session.id)).map(session => session.id)),
+						)
+					}
+				>
+					{t("import.selectAll")}
+				</Button>
+				<Button size="sm" disabled={busy || !selected.size} onClick={() => setSelected(new Set())}>
+					{t("import.clearAll")}
+				</Button>
+				<span className="text-omp-xs text-(--omp-dim)">
+					{t("import.selection", { selected: selected.size, total: sessions.length, visible: filtered.length })}
+				</span>
+			</div>
+			<div className="max-h-[46vh] min-h-[200px] overflow-y-auto rounded-lg border border-(--omp-border-muted)">
+				{busy && (
+					<div role="status" className="flex justify-center p-3">
+						<Spinner size="sm" />
+					</div>
+				)}
+				{!busy && !filtered.length && <p className="p-4 text-omp-sm text-(--omp-dim)">{t("import.empty")}</p>}
+				{filtered.map(session => (
+					<label
+						key={session.id}
+						className="flex cursor-pointer items-start gap-3 border-b border-(--omp-border-muted) px-3 py-2.5 last:border-0 hover:bg-(--omp-selected-bg)"
+					>
+						<input
+							type="checkbox"
+							disabled={!ready || busy || completed.has(session.id)}
+							checked={selected.has(session.id)}
+							onChange={() => toggle(session.id)}
+							className="mt-1"
+						/>
+						<span className="min-w-0 flex-1">
+							<span className="block truncate text-omp-md font-medium">
+								{session.title ?? session.firstMessage ?? t("import.untitled")}
+								{completed.has(session.id) && (
+									<span className="ml-2 text-(--omp-success)">{t("import.done")}</span>
 								)}
 							</span>
-						</label>
-					))}
+							<span className="block whitespace-pre-wrap text-omp-sm text-(--omp-muted)">
+								{session.firstMessage}
+							</span>
+							{source !== "official" && (
+								<span className="block truncate font-mono text-omp-xs text-(--omp-dim)">{session.cwd}</span>
+							)}
+						</span>
+						<span className="shrink-0 text-right text-omp-xs text-(--omp-dim)">
+							{formatTimeAgo(session.modified)}
+							{session.messageCount !== undefined && (
+								<span className="block">{t("import.messages", { count: session.messageCount })}</span>
+							)}
+						</span>
+					</label>
+				))}
 			</div>
-
 			<div className="mt-3 flex items-center gap-3">
 				<span className="text-omp-sm text-(--omp-dim)">{t("import.copyNote")}</span>
-				<span className="ml-auto">
-					<Button
-						disabled={!sidecarReady || selected.size === 0 || importing}
-						icon={importing ? <Spinner size="sm" /> : <Download size={13} />}
-						onClick={() => void doImport()}
-						size="sm"
-						title={!sidecarReady ? t("import.notConnected") : undefined}
-					>
-						{selected.size > 0 ? t("import.importN", { count: selected.size }) : t("import.import")}
-					</Button>
-				</span>
+				<Button
+					size="sm"
+					disabled={!ready || busy || !selected.size}
+					icon={busy ? <Spinner size="sm" /> : <Download size={13} />}
+					onClick={() => void doImport()}
+				>
+					{selected.size ? t("import.importN", { count: selected.size }) : t("import.import")}
+				</Button>
 			</div>
 		</Modal>
 	);

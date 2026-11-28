@@ -15,7 +15,6 @@ import { createScopedStoreApi, useScopedStore } from "./session-runtime-context"
 export interface TranscriptView {
 	sessionId: string;
 	pinned: boolean;
-	preCompactionOpen: boolean;
 	processExpansion: ReadonlyMap<string, boolean>;
 	scrollOffset: number;
 	anchorKey?: string;
@@ -37,8 +36,6 @@ export interface SessionStore {
 	/** Live event revision; a delayed snapshot cannot overwrite a newer lifecycle transition. */
 	eventVersion: number;
 	transcriptView: TranscriptView | null;
-	/** Projection of the last successfully hydrated display transcript; null before its first read. */
-	transcriptFolded: boolean | null;
 	saveTranscriptView: (view: TranscriptView) => void;
 	/** Bumped when the transcript must snap back to the live edge (the user just
 	 * sent a message). Per-tab stores, so a tab switch can't strand another pane. */
@@ -105,7 +102,6 @@ const initialState = {
 	switchPending: null as { fromId: string; toId: string } | null,
 	eventVersion: 0,
 	transcriptView: null as TranscriptView | null,
-	transcriptFolded: null as boolean | null,
 	transcriptPinNonce: 0,
 	sessionId: "",
 	sessionName: null,

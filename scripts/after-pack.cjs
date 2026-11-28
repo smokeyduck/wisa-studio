@@ -3,7 +3,7 @@ const path = require("node:path");
 const plist = require("plist");
 
 /**
- * The bundle directory is named after `productName` ("WISA STUDIO.app"), so it
+ * The bundle directory is named after `productName` ("Wisa.app"), so it
  * cannot be hardcoded. electron-builder writes exactly one `.app` per pack into
  * `appOutDir`; finding it there also keeps this hook correct if the product name
  * changes again.

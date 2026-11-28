@@ -19,7 +19,7 @@
 			document.documentElement.dataset.theme = scheme;
 			var background = localStorage.getItem("omp.themeBackground");
 			var plain = background && window.CSS && CSS.supports("color", background) && !/var\(/.test(background);
-			document.documentElement.style.backgroundColor = plain ? background : scheme === "dark" ? "#1f1f1f" : "#ffffff";
+			document.documentElement.style.backgroundColor = plain ? background : scheme === "dark" ? "#171716" : "#f5f4f1";
 			document.documentElement.style.colorScheme = scheme;
 		}
 	} catch (e) {

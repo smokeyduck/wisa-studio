@@ -102,14 +102,14 @@ describe("linuxDesktopEntry", () => {
 	});
 
 	it("labels a dev entry apart from the installed app", () => {
-		// Both builds are productName "WISA STUDIO", so an "Open With" list shows
+		// Both builds use the same productName, so an "Open With" list shows
 		// the same label twice; the dev entry must say which one it is.
 		const entry = linuxDesktopEntry("/repo/node_modules/electron/dist/electron", {
-			name: "WISA STUDIO (Dev)",
+			name: "Wisa (Dev)",
 			icon: "/repo/resources/icon.png",
 			execArgs: "/repo",
 		});
-		expect(entry).toContain("Name=WISA STUDIO (Dev)");
+		expect(entry).toContain("Name=Wisa (Dev)");
 		expect(entry).toContain("Icon=/repo/resources/icon.png");
 		expect(entry).toContain("Exec=/repo/node_modules/electron/dist/electron /repo %U");
 	});

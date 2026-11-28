@@ -129,9 +129,47 @@ jobs:
         with:
           bun-version-file: oh-my-pi/package.json
 
+
+      - name: Cache Core dependency downloads
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/bun-install-cache
+          key: wisa-bun-downloads-v1-${{ runner.os }}-${{ runner.arch }}-core-${{ hashFiles('oh-my-pi/bun.lock', 'oh-my-pi/bun.lockb', 'oh-my-pi/**/package.json', 'oh-my-pi/bunfig.toml') }}
+          restore-keys: |
+            wisa-bun-downloads-v1-${{ runner.os }}-${{ runner.arch }}-core-
+
+      - name: Identify the native build environment
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        id: native-environment
+        shell: pwsh
+        run: |
+          if (-not $env:ImageVersion) { throw 'Runner image version is unavailable' }
+          "image=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+
+      # build-bindings.ts runs Cargo at the workspace root with profile ci;
+      # its dependency artifacts live in target/ci, not packages/natives/target.
+      # This is only an accelerator: a miss in the exact addon cache ALWAYS
+      # invokes the source build and its load/version proof before packaging.
+      - name: Cache Cargo downloads and ci dependency artifacts
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            ~/.cargo/git/checkouts
+            oh-my-pi/target/ci
+          key: wisa-cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-environment.outputs.image }}-baseline-ci-${{ hashFiles('oh-my-pi/rust-toolchain.toml', 'oh-my-pi/.cargo/config.toml', 'oh-my-pi/**/Cargo.toml', 'oh-my-pi/Cargo.lock', 'oh-my-pi/**/build.rs', 'oh-my-pi/packages/natives/scripts/*.ts', 'oh-my-pi/scripts/bazel-natives.ts', 'oh-my-pi/scripts/stamp-native-version.ts') }}-${{ needs.source.outputs.core_sha }}
+          restore-keys: |
+            wisa-cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-environment.outputs.image }}-baseline-ci-${{ hashFiles('oh-my-pi/rust-toolchain.toml', 'oh-my-pi/.cargo/config.toml', 'oh-my-pi/**/Cargo.toml', 'oh-my-pi/Cargo.lock', 'oh-my-pi/**/build.rs', 'oh-my-pi/packages/natives/scripts/*.ts', 'oh-my-pi/scripts/bazel-natives.ts', 'oh-my-pi/scripts/stamp-native-version.ts') }}-
       - name: Install Core dependencies
         if: steps.native-cache.outputs.cache-hit != 'true'
         working-directory: oh-my-pi
+        env:
+          BUN_INSTALL_CACHE_DIR: ${{ runner.temp }}/bun-install-cache
         run: bun install
 
       - name: Build natives from the pinned Core source
@@ -197,12 +235,40 @@ jobs:
           path: oh-my-pi/packages/gui
           persist-credentials: false
 
+      - name: Set download cache paths
+        shell: bash
+        run: |
+          printf '%s\n' \
+            "BUN_INSTALL_CACHE_DIR=$RUNNER_TEMP/bun-install-cache" \
+            "ELECTRON_CACHE=$RUNNER_TEMP/electron-cache" \
+            "ELECTRON_BUILDER_CACHE=$RUNNER_TEMP/electron-builder-cache" >> "$GITHUB_ENV"
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           # The sidecar build requires the monorepo's exact Bun (packageManager),
           # so follow the pinned checkout instead of a hard-coded version.
           bun-version-file: oh-my-pi/package.json
+
+      # Cache downloads only; bun install still resolves/checks the selected
+      # workspace and runs its required install scripts on every release.
+      - name: Cache workspace dependency downloads
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.BUN_INSTALL_CACHE_DIR }}
+          key: wisa-bun-downloads-v1-${{ runner.os }}-${{ runner.arch }}-gui-${{ hashFiles('oh-my-pi/bun.lock', 'oh-my-pi/bun.lockb', 'oh-my-pi/**/package.json', 'oh-my-pi/bunfig.toml') }}
+          restore-keys: |
+            wisa-bun-downloads-v1-${{ runner.os }}-${{ runner.arch }}-gui-
+
+      - name: Cache Electron and builder tool downloads
+        uses: actions/cache@v5
+        with:
+          path: |
+            ${{ env.ELECTRON_CACHE }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: wisa-electron-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('oh-my-pi/bun.lock', 'oh-my-pi/bun.lockb', 'oh-my-pi/packages/gui/package.json', 'oh-my-pi/packages/gui/electron-builder*.yml') }}
+          restore-keys: |
+            wisa-electron-downloads-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install dependencies
         working-directory: oh-my-pi
@@ -268,15 +334,37 @@ jobs:
             }
           '
 
+      # No prefix restore: the offline payload is reusable only on this host
+      # with the exact recipe (uv/Python/browser-use/Chromium pins + hashes)
+      # and Chromium license input. Never cache sidecars or installers here.
+      - name: Cache the offline Browser Use payload
+        id: browser-use-cache
+        uses: actions/cache@v5
+        with:
+          path: oh-my-pi/packages/gui/resources/browser-use
+          key: wisa-browser-use-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('oh-my-pi/packages/gui/scripts/build-browser-use.cjs', 'oh-my-pi/packages/gui/resources/LICENSE-CHROMIUM') }}
+
+      - name: Build the offline Browser Use payload on cache miss
+        if: steps.browser-use-cache.outputs.cache-hit != 'true'
+        working-directory: oh-my-pi/packages/gui
+        run: bun run build:browser-use
+
+      - name: Verify the offline Browser Use payload on every release
+        working-directory: oh-my-pi/packages/gui
+        run: node scripts/build-browser-use.cjs --verify resources/browser-use
+
       - name: Build GUI + Windows packages
         working-directory: oh-my-pi/packages/gui
         shell: bash
+        env:
+          # electron-builder maps both normal and maximum 7z to level 9.
+          # Use standard LZMA compression without changing installer/runtime gates.
+          ELECTRON_BUILDER_COMPRESSION_LEVEL: "5"
         # NOTE: invoke electron-builder through bun — the bunx shim falls back
         # to Node, which crashes on ESM deps under Node < 22 (see issue #10).
         # The monorepo's bun install hoists deps to the workspace root, so the
         # cli.js lives two levels up, not in packages/gui/node_modules.
         run: |
-          bun run build:browser-use
           bun run build
           bun ../../node_modules/electron-builder/cli.js \
             --config electron-builder.win.yml --win --x64 --publish never
@@ -344,9 +432,9 @@ jobs:
           $shell = New-Object -ComObject Shell.Application
           foreach ($folder in @('Desktop', 'Programs')) {
             $directory = [Environment]::GetFolderPath($folder)
-            $shortcut = Join-Path $directory 'WISA STUDIO.lnk'
+            $shortcut = Join-Path $directory 'Wisa.lnk'
             if (-not (Test-Path $shortcut -PathType Leaf)) { throw 'NSIS shortcut is missing' }
-            $target = $shell.NameSpace($directory).ParseName('WISA STUDIO.lnk').GetLink.Path
+            $target = $shell.NameSpace($directory).ParseName('Wisa.lnk').GetLink.Path
             if ($target -ne $installedExe) { throw "NSIS shortcut targets the wrong executable: shortcut=[$target] expected=[$installedExe]" }
           }
           node scripts/smoke-packaged-gui.mjs $installedExe

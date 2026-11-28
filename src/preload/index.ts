@@ -5,6 +5,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { AGENT_NOTCH_CHANNELS, type AgentNotchState } from "../shared/agent-notch";
 import type { DocumentPreviewResult } from "../shared/document-preview";
 import type {
 	ConversationSearchResponse,
@@ -71,7 +72,8 @@ import type {
 } from "../shared/ipc-types";
 import { type CaptionColors, IPC_COMMANDS, IPC_EVENTS } from "../shared/ipc-types";
 import { isLanguage, type Language } from "../shared/languages";
-import type { McpCatalogPage, McpCatalogRequest } from "../shared/mcp-catalog";
+import { NOTCH_APPS_CHANNELS, type NotchAppsSnapshot } from "../shared/notch-apps";
+import type { NotchIntegrationInfo } from "../shared/notch-integrations";
 import { createSessionRpcClient, timeoutForCommand } from "../shared/rpc-client";
 import type {
 	AgentSessionEvent,
@@ -110,6 +112,7 @@ import type {
 	TaskRun,
 	TaskSaveResult,
 } from "../shared/scheduler-types";
+import type { ConversationWallpaper } from "../shared/wallpaper";
 
 function rpcCommand(cmd: RpcCommand, timeoutMs?: number): Promise<RpcResponse> {
 	return ipcRenderer.invoke(IPC_COMMANDS.RPC_COMMAND, {
@@ -158,6 +161,28 @@ const initialLanguage = process.argv.find(arg => arg.startsWith(languageArgument
 
 const api: OmpApi = {
 	initialLanguage: isLanguage(initialLanguage) ? initialLanguage : undefined,
+	notch: {
+		getState: () => ipcRenderer.invoke(AGENT_NOTCH_CHANNELS.get) as Promise<AgentNotchState>,
+		configure: settings => ipcRenderer.invoke(AGENT_NOTCH_CHANNELS.configure, settings) as Promise<AgentNotchState>,
+		exportSetup: () => ipcRenderer.invoke(AGENT_NOTCH_CHANNELS.exportSetup) as Promise<boolean>,
+		importSetup: () => ipcRenderer.invoke(AGENT_NOTCH_CHANNELS.importSetup) as Promise<AgentNotchState | null>,
+		integrations: () => ipcRenderer.invoke(AGENT_NOTCH_CHANNELS.integrations) as Promise<NotchIntegrationInfo[]>,
+		connectAgent: (agent, connected) =>
+			ipcRenderer.invoke(AGENT_NOTCH_CHANNELS.connectAgent, agent, connected) as Promise<NotchIntegrationInfo[]>,
+		onChanged: callback => subscribe<AgentNotchState>(AGENT_NOTCH_CHANNELS.changed, callback),
+	},
+	notchApps: {
+		command: args => ipcRenderer.invoke(NOTCH_APPS_CHANNELS.command, args) as Promise<NotchAppsSnapshot>,
+		customize: (tabId, enabled) =>
+			ipcRenderer.invoke(NOTCH_APPS_CHANNELS.customize, tabId, enabled) as Promise<{ enabled: boolean }>,
+		onChanged: callback => subscribe<NotchAppsSnapshot>(NOTCH_APPS_CHANNELS.changed, callback),
+	},
+	wallpaper: {
+		get: () => ipcRenderer.invoke(IPC_COMMANDS.WALLPAPER_GET) as Promise<ConversationWallpaper | null>,
+		choose: () => ipcRenderer.invoke(IPC_COMMANDS.WALLPAPER_CHOOSE) as Promise<ConversationWallpaper | null>,
+		clear: () => ipcRenderer.invoke(IPC_COMMANDS.WALLPAPER_CLEAR) as Promise<void>,
+		onChanged: callback => subscribe<ConversationWallpaper | null>(IPC_EVENTS.WALLPAPER_CHANGED, callback),
+	},
 	runtime: {
 		report: (error: RuntimeErrorReport) => ipcRenderer.send(IPC_COMMANDS.RUNTIME_ERROR_REPORT, error),
 		logPath: () => ipcRenderer.invoke(IPC_COMMANDS.RUNTIME_LOG_PATH) as Promise<string>,
@@ -191,6 +216,8 @@ const api: OmpApi = {
 			subscribeActiveTab<IpcSidecarStatusPayload>(IPC_EVENTS.SIDECAR_STATUS, callback),
 		onTabStatus: (callback: (payload: IpcTabStatusPayload) => void) =>
 			subscribe<IpcTabStatusPayload>(IPC_EVENTS.TAB_STATUS, callback),
+		onFocusTab: callback =>
+			subscribe<{ tabId: string }>(IPC_EVENTS.WINDOW_FOCUS_TAB, payload => callback(payload.tabId)),
 		onExtensionUi: (callback: (request: ExtensionUIRequest, tabId: string) => void) =>
 			subscribe<{ request: ExtensionUIRequest; tabId: string }>(IPC_EVENTS.EXTENSION_UI, data =>
 				callback(data.request, data.tabId),
@@ -517,11 +544,6 @@ const api: OmpApi = {
 		logo: (owner: string) => ipcRenderer.invoke(IPC_COMMANDS.PLUGIN_LOGO, owner) as Promise<string | null>,
 		inspect: (payload: IpcPluginInspectPayload) =>
 			ipcRenderer.invoke(IPC_COMMANDS.PLUGIN_INSPECT, payload) as Promise<IpcPluginInspection>,
-	},
-
-	mcpCatalog: {
-		list: (payload: McpCatalogRequest) =>
-			ipcRenderer.invoke(IPC_COMMANDS.MCP_CATALOG_LIST, payload) as Promise<McpCatalogPage>,
 	},
 
 	projectAudit: {

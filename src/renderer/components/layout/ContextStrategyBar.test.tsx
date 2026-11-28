@@ -103,9 +103,13 @@ describe("ContextStrategyBar", () => {
 
 		const row = container.textContent ?? "";
 		expect(row).toContain("Balanced");
-		// No server compaction, reads images: the default order lands on the image archive.
+		// Core's default order chooses Snapcompact on a vision route without server compaction.
 		expect(row).toContain("Image archive");
-		expect(row).toContain("at 222.8k");
+		expect(row).toContain("at 52.4k");
+		expect(command).not.toHaveBeenCalled();
+		await openPopover();
+		expect(radio("20%")?.getAttribute("aria-checked")).toBe("true");
+		expect(radio("10%")).toBeUndefined();
 	});
 
 	it("shows a text handoff when a Chat Completions route strips declared images", async () => {
@@ -156,7 +160,7 @@ describe("ContextStrategyBar", () => {
 					type: "set_session_compaction",
 					sessionId: "s1",
 					values: {
-						"compaction.methodOrder": ["shake", "handoff", "soft"],
+						"compaction.methodOrder": ["snapcompact", "shake", "handoff", "soft"],
 						"compaction.keepRecentTokens": 40_000,
 						"compaction.experimentalContextManagement": false,
 					},
@@ -164,7 +168,50 @@ describe("ContextStrategyBar", () => {
 			],
 		]);
 		expect(container.textContent).toContain("Preserve detail");
-		expect(container.textContent).toContain("Shake");
+		expect(container.textContent).toContain("Image archive");
+	});
+
+	it("restores Core's Balanced order without rewriting an explicit threshold", async () => {
+		values = {
+			"compaction.methodOrder": ["remote", "handoff", "shake", "soft"],
+			"compaction.thresholdPercent": 20,
+		};
+		await mount(kimi);
+		await openPopover();
+		expect(command).not.toHaveBeenCalled();
+		expect(radio("Balanced")?.textContent).toContain("Default");
+		await act(async () => radio("Balanced")?.click());
+		expect(command.mock.calls).toEqual([
+			[
+				{
+					type: "set_session_compaction",
+					sessionId: "s1",
+					values: {
+						"compaction.methodOrder": ["remote", "snapcompact", "handoff", "shake", "soft"],
+						"compaction.keepRecentTokens": 20_000,
+						"compaction.experimentalContextManagement": false,
+					},
+				},
+			],
+		]);
+		expect(container.textContent).toContain("Balanced");
+		expect(container.textContent).toContain("Image archive");
+		expect(container.textContent).toContain("at 52.4k");
+	});
+
+	it("disables image-preserving mode when the route cannot send images", async () => {
+		await mount({ ...kimi, compat: { stripImageInput: true } });
+		await openPopover();
+		expect(radio("Preserve detail")?.hasAttribute("disabled")).toBe(true);
+		expect(radio("Balanced")?.hasAttribute("disabled")).toBe(false);
+		expect(command).not.toHaveBeenCalled();
+	});
+
+	it("does not claim server compaction on an unconfigured compatible gateway", async () => {
+		values = { "compaction.methodOrder": ["remote", "handoff", "shake", "soft"] };
+		await mount({ ...gpt, provider: "gateway" });
+		expect(container.textContent).toContain("Handoff");
+		expect(container.textContent).not.toContain("Server compaction");
 	});
 
 	it("labels a setup that matches no strategy as custom instead of picking one", async () => {
@@ -197,7 +244,7 @@ describe("ContextStrategyBar", () => {
 		await openPopover();
 
 		expect(container.textContent).toContain("No runnable method");
-		expect(document.body.textContent).toContain("nothing will compact automatically");
+		expect(command).not.toHaveBeenCalled();
 	});
 
 	it("honors an explicitly selected Auto threshold without writing a default", async () => {
@@ -206,6 +253,42 @@ describe("ContextStrategyBar", () => {
 		await openPopover();
 		expect(radio("Auto")?.getAttribute("aria-checked")).toBe("true");
 		expect(container.textContent).toContain("at 222.8k");
+		expect(command).not.toHaveBeenCalled();
+	});
+
+	it("returns an explicit threshold to Core Auto without changing retention or method order", async () => {
+		values = { "compaction.thresholdPercent": 10, "compaction.keepRecentTokens": 40_000 };
+		await mount({ ...gpt, contextWindow: 1_000_000 });
+		await openPopover();
+		expect(container.textContent).toContain("at 100.0k");
+		expect(radio("10%")).toBeUndefined();
+		expect(command).not.toHaveBeenCalled();
+		await act(async () => radio("Auto")?.click());
+		expect(command.mock.calls).toEqual([
+			[{ type: "set_session_compaction", sessionId: "s1", values: { "compaction.thresholdPercent": -1 } }],
+		]);
+		expect(container.textContent).toContain("at 850.0k");
+		expect(values["compaction.keepRecentTokens"]).toBe(40_000);
+		expect(values["compaction.methodOrder"]).toBeUndefined();
+	});
+
+	it.each([{ "compaction.thresholdTokens": 90_000 }, { "compaction.modelThresholds": { "openai/*": "f90000" } }])(
+		"shows the actual fixed/model limit and does not offer an ineffective percentage preset",
+		async settings => {
+			values = settings;
+			await mount(gpt);
+			await openPopover();
+			expect(container.textContent).toContain("at 90.0k");
+			expect(radio("80%")?.hasAttribute("disabled")).toBe(true);
+			expect(document.body.textContent).toContain("fixed token limit or per-model rule");
+			expect(command).not.toHaveBeenCalled();
+		},
+	);
+
+	it("does not invent a budget for an unknown window", async () => {
+		await mount({ ...gpt, contextWindow: undefined });
+		await openPopover();
+		expect(document.body.textContent).toContain("Window size unknown");
 		expect(command).not.toHaveBeenCalled();
 	});
 

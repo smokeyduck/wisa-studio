@@ -304,7 +304,16 @@ function readableOn(lab: Oklab, alpha: number, surfaces: readonly ContrastTarget
 	const fg = fromOklab(lab, alpha);
 	const at = (end: number, t: number) => fromOklab({ ...lab, l: lab.l + (end - lab.l) * t }, alpha);
 	const reach = (targets: readonly ContrastTarget[]): Rgba | null | undefined => {
-		const meets = (color: Rgba) => targets.every(s => contrastRatio(color, s.color) >= s.target - 1e-3);
+		const meets = (color: Rgba) => {
+			// Test the 8-bit color that formatCssColor writes, not its unrounded precursor.
+			const displayed = {
+				r: Math.round(color.r * 255) / 255,
+				g: Math.round(color.g * 255) / 255,
+				b: Math.round(color.b * 255) / 255,
+				alpha: color.alpha,
+			};
+			return targets.every(s => contrastRatio(displayed, s.color) >= s.target);
+		};
 		if (meets(fg)) return null;
 		const lighter = !isLightColor(targets[0]!.color);
 		for (const end of lighter ? [1, 0] : [0, 1]) {

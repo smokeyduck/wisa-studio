@@ -73,13 +73,9 @@ describe("Vietnamese locale completeness", () => {
 		expect(offenders).toEqual([]);
 	});
 
-	it("localizes visible starter templates with Vietnamese diacritics", () => {
+	it("localizes plan approval prompts with Vietnamese diacritics", () => {
 		for (const key of Object.keys(en)) {
-			if (
-				(key.startsWith("chat.starter.") && key.endsWith(".prompt")) ||
-				key === "planPanel.approveMessage" ||
-				key === "planPanel.reviseMessage"
-			) {
+			if (key === "planPanel.approveMessage" || key === "planPanel.reviseMessage") {
 				expect(vi[key], key).toMatch(VIETNAMESE_DIACRITIC);
 				expect(placeholders(vi[key]), key).toEqual(placeholders(en[key]));
 			}

@@ -146,7 +146,7 @@ afterEach(async () => {
 	await act(async () => root?.unmount());
 	container?.remove();
 	document.body.innerHTML = "";
-	useUiStore.setState({ commandPaletteOpen: false });
+	useUiStore.setState({ commandPaletteOpen: false, tutorialOpen: false });
 	useSessionStore.getState().reset();
 	useTabsStore.setState({ tabs: [], activeTabId: null });
 });
@@ -192,6 +192,15 @@ describe("panel keyboard handling", () => {
 });
 
 describe("row execution", () => {
+	it("reopens the tutorial without sending a prompt or replacing the draft", async () => {
+		seedTab("agent");
+		await mount();
+		await click(rowByLabel(translate("tutorial.title")));
+		expect(useUiStore.getState().tutorialOpen).toBe(true);
+		expect(useUiStore.getState().commandPaletteOpen).toBe(false);
+		expect(prefills).toEqual([]);
+		expect(rpc.prompt).not.toHaveBeenCalled();
+	});
 	it("fills the composer for a command that needs an argument", async () => {
 		sidecarCommands = [DEPLOY];
 		seedTab("agent");

@@ -13,6 +13,7 @@ import { act, type ReactElement } from "react";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../lib/i18n";
+import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
 import { useToastStore } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
@@ -25,10 +26,6 @@ Object.assign(globalThis as Record<string, unknown>, {
 	HTMLElement,
 	Element,
 	Node,
-	requestAnimationFrame: (callback: () => void) => {
-		callback();
-		return 0;
-	},
 	IS_REACT_ACT_ENVIRONMENT: true,
 });
 
@@ -73,12 +70,17 @@ async function mount(element: ReactElement): Promise<void> {
 	await act(async () => {});
 }
 
-function installRpc(getModelRoles?: (...args: unknown[]) => Promise<unknown>) {
+function installRpc(getModelRoles?: (...args: unknown[]) => Promise<unknown>, initialLanguage: "en" | "vi" = "en") {
 	const rpc = {
 		getModelRoles: vi.fn(getModelRoles ?? (async () => ({ success: true, data: { roles: ROLES } }))),
 		setModelRole: vi.fn(async () => ({ success: true })),
+		getProviders: vi.fn(async () => ({
+			success: true,
+			data: { providers: [], models: [], generation: 0, refreshPending: false, discoveryStates: [] },
+		})),
+		getSettings: vi.fn(async () => ({ success: true, data: { values: { "task.judgeRouting": false } } })),
 	};
-	(window as unknown as { omp?: unknown }).omp = { rpc };
+	(window as unknown as { omp?: unknown }).omp = { rpc, initialLanguage };
 	return rpc;
 }
 
@@ -97,6 +99,8 @@ afterEach(async () => {
 	delete (window as unknown as { omp?: unknown }).omp;
 	useUiStore.getState().closeModelRoles();
 	useSessionStore.getState().reset();
+	useModelStore.getState().reset();
+	useToastStore.setState({ toasts: [] });
 	vi.restoreAllMocks();
 });
 
@@ -121,8 +125,8 @@ describe("ModelRolesWindow", () => {
 
 		await mount(<ModelRolesWindow />);
 
-		expect(document.body.textContent).toContain("Chat roles");
-		expect(document.body.textContent).toContain("Specialized roles");
+		expect(document.body.textContent).toContain("General tasks");
+		expect(document.body.textContent).toContain("Specialized tasks");
 	});
 
 	it("groups each role's candidates by provider, keeping same-id models separate", async () => {
@@ -135,7 +139,7 @@ describe("ModelRolesWindow", () => {
 		const trigger = [...document.body.querySelectorAll("button")].find(
 			button => button.getAttribute("aria-label") === "Model for Default",
 		);
-		expect(trigger?.textContent).toContain("Claude - anthropic/claude");
+		expect(trigger?.textContent).toContain("Claude");
 		await act(async () => trigger?.click());
 
 		const listbox = document.body.querySelector('[role="listbox"]');
@@ -244,6 +248,78 @@ describe("ModelRolesWindow", () => {
 		// The saved selector carries no level, so none is sent.
 		expect(setModelRole).toHaveBeenCalledWith("default", "openai/gpt", undefined);
 	});
+
+	it("localizes built-in names, controls and save notices while preserving backend role ids and custom names", async () => {
+		const roles = [
+			...LEVEL_ROLES,
+			{ ...LEVEL_ROLES[0], id: "slow", name: "Backend deep role" },
+			{ ...ROLES[1], id: "custom-role", name: "My custom role" },
+		];
+		const { setModelRole } = installRpc(async () => ({ success: true, data: { roles } }), "vi");
+		useSessionStore.getState().setStatus("ready", "/repo");
+		useUiStore.getState().openModelRoles();
+		await mount(<ModelRolesWindow />);
+
+		expect(byLabel("Mô hình cho Nhanh")).toBeDefined();
+		expect(byLabel("Mức suy luận cho Nhanh")).toBeDefined();
+		expect(byLabel("Mô hình cho Suy luận")).toBeDefined();
+		expect(byLabel("Mô hình cho My custom role")).toBeDefined();
+		expect(bodyText()).not.toContain("Backend deep role");
+
+		await act(async () => byLabel("Mô hình cho Nhanh")?.click());
+		const option = [...document.body.querySelectorAll('[role="option"]')].find(button =>
+			(button.textContent ?? "").includes("acme/deep"),
+		);
+		expect(option).toBeDefined();
+		await act(async () => option?.dispatchEvent(new Event("click", { bubbles: true })));
+		expect(setModelRole).toHaveBeenCalledWith("smol", "acme/deep", "high");
+		expect(useToastStore.getState().toasts.at(-1)?.message).toBe('Đã đặt vai trò "Nhanh" thành acme/deep');
+
+		await act(async () => byLabel("Mô hình cho My custom role")?.click());
+		const customOption = [...document.body.querySelectorAll('[role="option"]')].find(button =>
+			(button.textContent ?? "").includes("openai/dalle"),
+		);
+		expect(customOption).toBeDefined();
+		await act(async () => customOption?.dispatchEvent(new Event("click", { bubbles: true })));
+		expect(setModelRole).toHaveBeenLastCalledWith("custom-role", "openai/dalle", undefined);
+		expect(useToastStore.getState().toasts.at(-1)?.message).toBe(
+			'Đã đặt vai trò "My custom role" thành openai/dalle',
+		);
+	});
+
+	it("keeps the role guide collapsed and excludes hidden roles", async () => {
+		installRpc();
+		useSessionStore.getState().setStatus("ready", "/repo");
+		useUiStore.getState().openModelRoles();
+		await mount(<ModelRolesWindow />);
+
+		const guide = [...document.body.querySelectorAll("details")].find(
+			details => details.querySelector("summary")?.textContent === "Role guide",
+		);
+		expect(guide).toBeDefined();
+		expect(guide?.hasAttribute("open")).toBe(false);
+		expect(guide?.textContent).toContain("Default");
+		expect(guide?.textContent).toContain("Image generation");
+		expect(guide?.textContent).not.toContain("Hidden role");
+	});
+
+	it("keeps a saved selector available when it is absent from eligible candidates", async () => {
+		const selector = "retired/a-very-long-saved-model-id:high";
+		const { setModelRole } = installRpc(async () => ({
+			success: true,
+			data: { roles: [{ ...ROLES[0], model: selector }] },
+		}));
+		useSessionStore.getState().setStatus("ready", "/repo");
+		useUiStore.getState().openModelRoles();
+		await mount(<ModelRolesWindow />);
+
+		expect(byLabel("Model for Default")?.getAttribute("title")).toBe(selector);
+		await act(async () => byLabel("Model for Default")?.click());
+		const saved = document.body.querySelector('[role="option"][aria-selected="true"]');
+		expect(saved?.textContent).toContain(selector);
+		await act(async () => saved?.dispatchEvent(new Event("click", { bubbles: true })));
+		expect(setModelRole).toHaveBeenCalledWith("default", selector, undefined);
+	});
 });
 
 // Issue #34: saved selectors carry a `:level` suffix. The backend parses it into
@@ -304,7 +380,7 @@ describe("ModelRolesWindow thinking levels", () => {
 	it("shows a saved model as selected when its selector carries a level", async () => {
 		await mountLevelRoles();
 
-		expect(byLabel("Model for Fast")?.textContent).toContain("Thinker - acme/thinker");
+		expect(byLabel("Model for Fast")?.textContent).toContain("Thinker");
 		expect((byLabel("Thinking level for Fast") as HTMLSelectElement | undefined)?.value).toBe("high");
 		await act(async () => byLabel("Model for Fast")?.click());
 		const selected = document.body.querySelector('[role="option"][aria-selected="true"]');

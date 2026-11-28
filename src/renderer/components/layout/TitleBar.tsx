@@ -12,10 +12,11 @@ import {
 	Share2,
 	Wrench,
 } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { SessionStats } from "../../../shared/rpc-types";
 import { cx, formatCost, formatDuration, formatPercent, formatTokens } from "../../lib/format";
 import { useT } from "../../lib/i18n";
+import { useNowTick } from "../../lib/now-tick";
 import { isRecording, subscribeRecording, toggleRecording } from "../../lib/recording";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { headerHasAppMenu } from "../../lib/window-chrome";
@@ -28,7 +29,7 @@ import { useUiStore } from "../../stores/ui";
 import { ContextMenu, type ContextMenuAnchor, type ContextMenuItem } from "../common/ContextMenu";
 import { WorkspaceDialog } from "../dialogs/WorkspaceDialog";
 import { NotificationBell } from "./NotificationBell";
-import { sessionCacheHitPercent, sessionExecutionDurationMs } from "./session-metrics";
+import { prepareSessionExecutionDuration, sessionCacheHitPercent } from "./session-metrics";
 
 /**
  * Native desktop toolbar. Session controls stay here; model and execution
@@ -69,7 +70,6 @@ export function TitleBar() {
 	const [workspaceOpen, setWorkspaceOpen] = useState(false);
 	const [actionsMenu, setActionsMenu] = useState<ContextMenuAnchor | null>(null);
 	const [stats, setStats] = useState<SessionStats | null>(null);
-	const [now, setNow] = useState(() => Date.now());
 	const statsMessageCount = messages.length;
 	// A settled transcript append and a fresh sidecar snapshot are the two things
 	// that can move these figures. Mid-run appends come several times a turn, so
@@ -110,25 +110,16 @@ export function TitleBar() {
 		};
 	}, [sessionId, statsTrigger, status, tabRpc.getSessionStats, tabId, isCompacting]);
 
-	const hasRunningTool = [...tools.values()].some(tool => tool.endTime === null);
-	useEffect(() => {
-		setNow(Date.now());
-		if (!isStreaming && !hasRunningTool) return;
-		const timer = window.setInterval(() => setNow(Date.now()), 1000);
-		return () => window.clearInterval(timer);
-	}, [hasRunningTool, isStreaming]);
+	const now = useNowTick(isStreaming);
+	const executionDurationAt = useMemo(
+		() => prepareSessionExecutionDuration({ messages, streamingMessage, tools, awaitingModelSince, isStreaming }),
+		[messages, streamingMessage, tools, awaitingModelSince, isStreaming],
+	);
 
 	const visibleStats = stats?.sessionId === sessionId ? stats : null;
 	const cacheHit = sessionCacheHitPercent(visibleStats);
 	const usedTokens = visibleStats ? (visibleStats.history?.totalTokens ?? visibleStats.tokens.total) : 0;
-	const executionDuration = sessionExecutionDurationMs({
-		messages,
-		streamingMessage,
-		tools,
-		awaitingModelSince,
-		isStreaming,
-		now,
-	});
+	const executionDuration = executionDurationAt(now);
 
 	const usedCost = visibleStats ? (visibleStats.history?.cost ?? visibleStats.cost) : 0;
 	const advisorCost = advisorStatus?.cost ?? 0;
@@ -290,6 +281,7 @@ export function TitleBar() {
 			)}
 			<button
 				type="button"
+				data-tour="navigation-toggle"
 				aria-label={t("titlebar.toggleSidebar")}
 				onClick={toggleSidebar}
 				title={t("titlebar.toggleSidebar")}

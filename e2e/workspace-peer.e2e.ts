@@ -130,7 +130,7 @@ test("split layout stays usable and agents exchange a handoff through Core", asy
 		await expect(reviewerPane.locator(".omp-inspector")).toHaveCount(0);
 		expect(await conversation.evaluate(node => node.getBoundingClientRect().width)).toBe(width);
 		await page.screenshot({ path: testInfo.outputPath("split-review.png"), animations: "disabled" });
-		await inspector.getByRole("button", { name: "Close", exact: true }).click();
+		await review.click();
 		const composer = writerPane.locator("textarea").first();
 		await composer.press("Shift+Tab");
 		await expect.poll(async () => {

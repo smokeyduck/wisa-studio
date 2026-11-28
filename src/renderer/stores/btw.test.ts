@@ -59,6 +59,28 @@ describe("createBtwStore", () => {
 		expect(command).toHaveBeenCalledWith({ type: "btw", question: "more", recordId: "topic-1" }, 120_000);
 	});
 
+	it("sends image attachments with a follow-up and keeps them in history", async () => {
+		const images = [{ type: "image" as const, mimeType: "image/png", data: "iVBORw0KGgo=" }];
+		const followUp = {
+			question: "this image?",
+			images,
+			answer: "",
+			status: "running" as const,
+			createdAt: 2,
+			updatedAt: 2,
+		};
+		const command = transport(cmd => ok(cmd.type, { record: record({ followUps: [followUp] }) }));
+		const store = createBtwStore(command);
+
+		await store.getState().ask("this image?", "topic-1", images);
+
+		expect(command).toHaveBeenCalledWith(
+			{ type: "btw", question: "this image?", recordId: "topic-1", images },
+			120_000,
+		);
+		expect(getBtwLatestTurn(store.getState().records[0]!).images).toEqual(images);
+	});
+
 	it("appends streamed deltas to the running answer", async () => {
 		const command = transport(cmd => (cmd.type === "btw" ? ok("btw", { record: record() }) : ok(cmd.type)));
 		const store = createBtwStore(command);

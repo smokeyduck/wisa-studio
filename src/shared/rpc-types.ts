@@ -183,7 +183,7 @@ export type RpcCommand =
 	| { id?: string; type: "get_goal" }
 	| { id?: string; type: "guided_goal"; initial?: string }
 	| { id?: string; type: "set_agents_paused"; enabled: boolean }
-	| { id?: string; type: "btw"; question: string; recordId?: string }
+	| { id?: string; type: "btw"; question: string; recordId?: string; images?: ImageContent[] }
 	| { id?: string; type: "btw_branch" }
 	| { id?: string; type: "btw_cancel"; recordId: string }
 	| { id?: string; type: "btw_inject"; recordId: string }
@@ -257,6 +257,14 @@ export type RpcCommand =
 	| { id?: string; type: "write_local_paste"; content: string }
 	| { id?: string; type: "list_foreign_sessions"; source: "claude" | "codex" }
 	| { id?: string; type: "import_foreign_session"; source: "claude" | "codex"; foreignId: string }
+	| { id?: string; type: "preview_official_archive"; filePath: string }
+	| {
+			id?: string;
+			type: "import_official_archive";
+			filePath: string;
+			archiveId: string;
+			conversationIds: string[];
+	  }
 	| { id?: string; type: "fork_from"; entryId: string }
 	| { id?: string; type: "switch_leaf"; entryId: string; summarize?: boolean; customInstructions?: string }
 	| { id?: string; type: "resume_after_ask_reanswer" }
@@ -833,6 +841,7 @@ export interface RpcTerminalSnapshot {
 /** One /btw turn (upstream wire shape: `session/btw-history`). */
 export interface BtwHistoryTurn {
 	question: string;
+	images?: ImageContent[];
 	answer: string;
 	status: "running" | "complete" | "cancelled" | "error" | "interrupted";
 	createdAt: number;
@@ -1624,6 +1633,8 @@ export interface ModelInfo {
 	baseUrl?: string;
 	identity?: { class?: string };
 	serviceTiers?: readonly string[];
+	/** Explicit server-compaction route controls from the full Core Model snapshot. */
+	remoteCompaction?: { api?: string; enabled?: boolean; endpoint?: string; v2StreamingEnabled?: boolean };
 	/** Declared input modalities; the route's compatibility rules may still disable image input. */
 	input?: string[];
 	/** Whether the model reasons at all. A non-reasoning model reports `false` and no ladder. */
@@ -2675,6 +2686,36 @@ export interface RpcForeignSessionInfo {
 	modified: string;
 	messageCount?: number;
 	firstMessage?: string;
+}
+
+/** Local preview of a user-selected official Claude/ChatGPT data export. */
+export interface RpcOfficialArchivePreview {
+	/** Digest of the exact source bytes, rechecked before importing. */
+	archiveId: string;
+	source: "claude" | "chatgpt";
+	fileName: string;
+	sessions: RpcForeignSessionInfo[];
+	projectCount: number;
+	fileCount: number;
+	warnings: string[];
+}
+
+/** Imported chats plus the durable, private copy of everything in the source export. */
+export interface RpcOfficialArchiveImportResult {
+	source: "claude" | "chatgpt";
+	imported: Array<{
+		sourceId: string;
+		sessionPath: string;
+		sessionId: string;
+		cwd: string;
+		reused?: boolean;
+	}>;
+	failed: Array<{ sourceId: string; error: string }>;
+	archivePath: string;
+	workspacePath: string;
+	projectCount: number;
+	fileCount: number;
+	warnings: string[];
 }
 /** Prompt terminal status introduced by the upstream RPC lifecycle contract. */
 export type RpcPromptStatus = "completed" | "aborted" | "error";

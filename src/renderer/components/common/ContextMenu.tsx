@@ -8,6 +8,7 @@
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSurfaceMotion } from "../../hooks/use-overlay-presence";
 import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { isImeKeyEvent } from "../../lib/ime";
@@ -53,15 +54,13 @@ interface ContextMenuProps {
 
 export function ContextMenu({ items, x, y, placement = "below", onClose }: ContextMenuProps) {
 	const menuRef = useRef<HTMLDivElement>(null);
+	useSurfaceMotion(menuRef, "popover");
 	const [activeIndex, setActiveIndex] = useState(() => items.findIndex(item => !item.disabled));
 	const [pos, setPos] = useState({ left: x, top: y });
 
 	// Clamp inside the viewport once mounted (menu height is content-driven).
 	//
-	// Measured with `offsetWidth`/`offsetHeight`, not `getBoundingClientRect()`:
-	// the pop-in animation starts at `scale(0.92)`, and a rect taken then is
-	// ~8% short, which under-corrects and lets the real menu hang off-screen.
-	// Layout metrics ignore transforms, so they describe the settled box.
+	// Layout metrics ignore the entrance transform and describe the settled box.
 	useLayoutEffect(() => {
 		const el = menuRef.current;
 		if (!el) return;
@@ -165,7 +164,7 @@ export function ContextMenu({ items, x, y, placement = "below", onClose }: Conte
 					if (item && !item.disabled) item.onSelect();
 				}
 			}}
-			className="omp-pop-in fixed z-50 min-w-44 overflow-hidden rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] py-1 shadow-xl"
+			className="fixed z-50 min-w-44 overflow-hidden rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] py-1 shadow-xl"
 		>
 			{items.map((item, index) => (
 				<div

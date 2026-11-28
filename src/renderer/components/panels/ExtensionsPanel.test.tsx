@@ -20,7 +20,6 @@ import {
 	hookTool,
 	isCustomCommand,
 } from "./ExtensionsPanel";
-import { MCP_STATUS_VARIANT } from "./mcp/McpServerCard";
 
 function skill(partial: Partial<RpcSkillInfo> & { name: string }): RpcSkillInfo {
 	return {
@@ -131,14 +130,6 @@ describe("groupHooksByTool", () => {
 	it("falls back to the * bucket for events with no tool part", () => {
 		const groups = groupHooksByTool([hook({ id: "h1", event: "sessionStart" })]);
 		expect(groups.map(([tool]) => tool)).toEqual(["*"]);
-	});
-});
-
-describe("MCP_STATUS_VARIANT", () => {
-	it("maps every connection status to the spec'd badge color", () => {
-		expect(MCP_STATUS_VARIANT.connected).toBe("success");
-		expect(MCP_STATUS_VARIANT.connecting).toBe("info");
-		expect(MCP_STATUS_VARIANT.disconnected).toBe("muted");
 	});
 });
 

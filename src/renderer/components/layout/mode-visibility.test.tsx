@@ -1,8 +1,4 @@
-/**
- * Contract tests for mode-state visibility: the compact composer Modes entry
- * surfaces the active-mode count and keeps each control reachable in its menu.
- * State comes from the session store (including loop/vibe hydration and loop updates).
- */
+/** Session controls toggle independently of plan mode and the existing inspector. */
 
 import { parseHTML } from "linkedom";
 import { act, type ReactElement } from "react";
@@ -43,7 +39,7 @@ function success(data: unknown): RpcResponse {
 
 interface MockOmp {
 	rpc: {
-		getSettings: Mock<(keys: string[]) => Promise<RpcResponse>>;
+		setPlanMode: Mock<(enabled: boolean) => Promise<RpcResponse>>;
 	};
 	events: {
 		onConfigUpdate: Mock<() => () => void>;
@@ -51,10 +47,10 @@ interface MockOmp {
 }
 
 /** ComposerModes needs no RPC on render; the mock preserves the window bridge contract. */
-function installMockOmp(preset?: string): MockOmp {
+function installMockOmp(): MockOmp {
 	const omp: MockOmp = {
 		rpc: {
-			getSettings: vi.fn(async () => success({ values: preset ? { "statusLine.preset": preset } : {} })),
+			setPlanMode: vi.fn(async enabled => success({ enabled })),
 		},
 		events: {
 			onConfigUpdate: vi.fn(() => () => {}),
@@ -94,6 +90,7 @@ afterEach(async () => {
 	container?.remove();
 	useSessionStore.getState().reset();
 	useUiStore.setState({ modesOpen: false, modesTab: "vibe" });
+	useUiStore.setState({ panelVisible: false, panelTab: "overview" });
 });
 
 function buttonByTitle(title: string): TestElement | null {
@@ -102,78 +99,40 @@ function buttonByTitle(title: string): TestElement | null {
 	return (match ?? null) as unknown as TestElement | null;
 }
 
-describe("ComposerModes menu", () => {
-	it("collapses active modes into one highlighted trigger and preserves their detail in the menu", async () => {
+describe("ComposerModes controls", () => {
+	it("surfaces active modes and toggles the sidebar without changing their state", async () => {
 		installMockOmp();
 		useSessionStore.setState({
 			planModeEnabled: true,
 			goal: { objective: "Ship the activity dock" },
 			goalState: { status: "active" },
-			loopMode: {
-				enabled: true,
-				state: "running",
-				prompt: "keep going",
-				limit: { kind: "iterations", initial: 10, remaining: 7 },
-			},
+			loopMode: { enabled: true, state: "running", prompt: "keep going" },
 			vibeModeEnabled: true,
 		});
+		useUiStore.setState({ panelVisible: true, panelTab: "files" });
 		await mount(<ComposerModes />);
-
-		const trigger = buttonByTitle("Active modes: Plan - Goal - Loop - Vibe");
-		expect(trigger).not.toBeNull();
-		expect(trigger?.className).toContain("bg-[var(--omp-accent-dim)]");
-		expect(trigger?.textContent).toContain("4");
-
-		await act(async () => {
-			trigger?.click();
+		const trigger = container.querySelector("[data-session-controls-trigger]");
+		expect(trigger?.textContent).toContain("3");
+		expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+		await act(async () => trigger?.click());
+		expect(useUiStore.getState()).toMatchObject({ modesOpen: true, panelVisible: true, panelTab: "files" });
+		await act(async () => trigger?.click());
+		expect(useUiStore.getState()).toMatchObject({ modesOpen: false, panelVisible: true, panelTab: "files" });
+		expect(useSessionStore.getState()).toMatchObject({
+			planModeEnabled: true,
+			vibeModeEnabled: true,
+			loopMode: { enabled: true },
 		});
-		await flush();
-
-		for (const title of [
-			"Plan mode: agent drafts a plan before acting",
-			"Goal mode - Ship the activity dock",
-			"Loop mode - 7 of 10 iterations left",
-			"Route this session through persistent fast workers.",
-		]) {
-			const row = buttonByTitle(title);
-			expect(row).not.toBeNull();
-			expect(row?.getAttribute("aria-pressed")).toBe("true");
-		}
 	});
 
-	it("keeps inactive controls inside the menu instead of occupying the primary toolbar", async () => {
-		installMockOmp();
+	it("turns active planning off directly without opening a menu or the sidebar", async () => {
+		const omp = installMockOmp();
+		useSessionStore.setState({ planModeEnabled: true });
 		await mount(<ComposerModes />);
-
-		const trigger = buttonByTitle("Session modes and coding toggles");
-		expect(trigger).not.toBeNull();
-		expect(trigger?.className).not.toContain("bg-[var(--omp-accent-dim)]");
-		expect(container.textContent).toBe("Modes");
-
-		await act(async () => {
-			trigger?.click();
-		});
-		await flush();
-
-		for (const title of ["Plan mode: agent drafts a plan before acting", "Loop mode: open the loop panel"]) {
-			const row = buttonByTitle(title);
-			expect(row).not.toBeNull();
-			expect(row?.getAttribute("aria-pressed")).toBe("false");
-		}
-	});
-
-	it("opens the Modes window on the selected menu tab", async () => {
-		installMockOmp();
-		await mount(<ComposerModes />);
-
-		await act(async () => {
-			buttonByTitle("Session modes and coding toggles")?.click();
-		});
-		await flush();
-		await act(async () => {
-			buttonByTitle("Loop mode: open the loop panel")?.click();
-		});
-		expect(useUiStore.getState().modesOpen).toBe(true);
-		expect(useUiStore.getState().modesTab).toBe("loop");
+		await act(async () => buttonByTitle("Plan mode: agent drafts a plan before acting")?.click());
+		expect(omp.rpc.setPlanMode).toHaveBeenCalledWith(false);
+		expect(useSessionStore.getState().planModeEnabled).toBe(false);
+		expect(useUiStore.getState().modesOpen).toBe(false);
+		expect(document.querySelector('[role="menu"]')).toBeNull();
 	});
 });

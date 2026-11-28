@@ -1,4 +1,6 @@
 [
+	"modelRoles.jev.title",
+	"onboarding.wisa.title",
 	"activeTools.source.mcp",
 	"activeTools.source.plugin",
 	"agentHub.defs.detail.prewalk",
@@ -50,7 +52,6 @@
 	"modelPicker.intelligence",
 	"modelPicker.speed",
 	"modelRoles.kind.chat",
-	"modesPanel.tabs.vibe",
 	"panel.tabs.terminal",
 	"plugins.category.ai-ml",
 	"plugins.category.api",

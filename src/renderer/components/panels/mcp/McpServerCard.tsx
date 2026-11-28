@@ -18,6 +18,7 @@ import type { RpcMcpServerInfo } from "../../../../shared/rpc-types";
 import { isDevOverlayEvent } from "../../../lib/dev-overlay";
 import { cx } from "../../../lib/format";
 import { useT } from "../../../lib/i18n";
+import { mcpServerState } from "../../../stores/mcp";
 import { Badge, type BadgeVariant, Button, Spinner } from "../../common";
 import { McpTestResultView, type McpTestView } from "./McpFeedback";
 
@@ -25,13 +26,6 @@ export type McpCardAction = "enable" | "disable" | "reconnect" | "remove" | "tes
 
 /** Reauth in-flight phases; "cancelling" disables the cancel button. */
 export type McpReauthPhase = "running" | "cancelling";
-
-/** MCP connection status → badge color (connected / connecting pulse / dim). */
-export const MCP_STATUS_VARIANT: Record<RpcMcpServerInfo["status"], BadgeVariant> = {
-	connected: "success",
-	connecting: "info",
-	disconnected: "muted",
-};
 
 /** MCP auth state → badge color (none renders no badge at all). */
 export const MCP_AUTH_BADGE_VARIANT: Record<NonNullable<RpcMcpServerInfo["authState"]>, BadgeVariant> = {
@@ -61,7 +55,11 @@ function EnabledBadge({ enabled }: { enabled: boolean }) {
 /** authState badge for the C1 wire field; falls back to the legacy authed lock. */
 function AuthBadge({ server }: { server: RpcMcpServerInfo }) {
 	const t = useT();
-	if (server.authState && server.authState !== "none") {
+	if (
+		server.authState &&
+		server.authState !== "none" &&
+		(server.status !== "connected" || server.authState === "authorized")
+	) {
 		return (
 			<Badge dot variant={MCP_AUTH_BADGE_VARIANT[server.authState]}>
 				{t(`mcp.card.auth.${server.authState}`)}
@@ -148,6 +146,7 @@ export function McpServerCard({
 
 	// stdio shows the command; http/sse the URL; fall back to whichever exists.
 	const target = (server.transport === "stdio" ? server.command : server.url) ?? server.command ?? server.url;
+	const state = mcpServerState(server);
 
 	return (
 		<div className="flex flex-col rounded-lg border border-(--omp-border-muted) bg-transparent px-3 py-2.5">
@@ -160,14 +159,14 @@ export function McpServerCard({
 					<AuthBadge server={server} />
 				</div>
 				<span className="shrink-0 text-omp-sm tabular-nums text-(--omp-dim)">
-					{t("extPanel.tools", { count: server.toolCount })}
+					{t("extPanel.tools", { count: state.key === "connected" ? server.toolCount : 0 })}
 				</span>
-				<Badge dot pulse={server.status === "connecting"} variant={MCP_STATUS_VARIANT[server.status]}>
-					{t(`extPanel.status.${server.status}`)}
+				<Badge dot pulse={state.pulse} variant={state.variant}>
+					{t(`overview.servers.status.${state.key}`)}
 				</Badge>
 				{server.scope && !confirmingRemove && (
 					<Button
-						aria-label={t("mcp.registry.removeConfigured", { name: server.name })}
+						aria-label={t("mcp.removeConfigured", { name: server.name })}
 						disabled={disabled}
 						icon={<Trash2 size={13} />}
 						onClick={() => onMenuAction("remove")}
@@ -253,19 +252,25 @@ export function McpServerCard({
 					{target}
 				</span>
 			)}
-			{enabled && reauth === null && (server.authState === "required" || server.authState === "expired") && (
-				<div className="mt-1.5">
-					<Button
-						disabled={disabled || busy}
-						icon={<KeyRound size={12} />}
-						onClick={() => onMenuAction("reauth")}
-						size="sm"
-						variant="secondary"
-					>
-						{t("mcp.action.reauth")}
-					</Button>
-				</div>
+			{state.key === "error" && server.lastError && (
+				<p className="mt-1.5 whitespace-pre-wrap break-words text-omp-sm text-(--omp-error)">{server.lastError}</p>
 			)}
+			{state.key === "error" &&
+				enabled &&
+				reauth === null &&
+				(server.authState === "required" || server.authState === "expired") && (
+					<div className="mt-1.5">
+						<Button
+							disabled={disabled || busy}
+							icon={<KeyRound size={12} />}
+							onClick={() => onMenuAction("reauth")}
+							size="sm"
+							variant="secondary"
+						>
+							{t("mcp.action.reauth")}
+						</Button>
+					</div>
+				)}
 			{(testing || testView) && (
 				<McpTestResultView className="mt-1.5" onDismiss={onDismissTest} testing={testing} view={testView} />
 			)}

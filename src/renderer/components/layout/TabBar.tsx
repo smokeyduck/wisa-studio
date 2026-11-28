@@ -72,6 +72,7 @@ import {
 	visibleTabIds,
 } from "../../stores/tabs";
 import { type TabWidth, useEffectiveKeymapOverrides, useUiStore } from "../../stores/ui";
+import { isWorkCwd, useDefaultWorkspace } from "../../stores/workspace-mode";
 import { anchorFromEvent, ContextMenu, type ContextMenuAnchor, type ContextMenuItem } from "../common/ContextMenu";
 import { type TabSearchEntry, TabSearchMenu } from "./TabSearchMenu";
 
@@ -318,6 +319,7 @@ function PairChip({
 export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?: number }) {
 	const t = useT();
 	const { sessions } = useSessionList("global");
+	const defaultWorkspace = useDefaultWorkspace();
 	const tabs = useTabsStore(s => s.tabs);
 	const activeTabId = useTabsStore(s => s.activeTabId);
 	const panelVisible = useUiStore(s => s.panelVisible && s.panelOwnerTabId === activeTabId);
@@ -382,7 +384,11 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 	const labelOf = (tab: SessionTab) =>
 		tabDisplayTitle(tab, stripTabs, indexedSessions.get(tab.id), t("sidebar.untitled"));
 	const workspaceOf = (tab: SessionTab) =>
-		tab.kind === "chat" ? t("sidebar.chats") : (groupAliases[tab.cwd] ?? basename(tab.cwd) ?? tab.cwd);
+		tab.kind === "chat"
+			? t("sidebar.chats")
+			: isWorkCwd(tab.cwd, defaultWorkspace)
+				? t("sidebar.mode.work")
+				: (groupAliases[tab.cwd] ?? basename(tab.cwd) ?? tab.cwd);
 
 	// The strip tracks a drag that started on one of its chips (the split
 	// workspace listens to the same signal for its pane drop zones).
@@ -673,6 +679,7 @@ export function TabBar({ confirmCloseMs = CONFIRM_CLOSE_MS }: { confirmCloseMs?:
 	return (
 		<>
 			<div
+				data-tour="tabs"
 				className={cx(
 					"drag-region flex shrink-0 gap-1 border-b border-[var(--omp-border-muted)] bg-[var(--omp-titlebar-bg)] px-2.5",
 					multiRow ? "min-h-11 items-start py-1.5" : "h-11 items-center",

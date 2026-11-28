@@ -11,6 +11,11 @@
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { AvailableCommand, RpcResponse } from "../../shared/rpc-types";
 import { useSessionStore } from "../stores/session";
+import {
+	deleteSessionRuntime,
+	registerSessionRuntime,
+	setFocusedSessionRuntime,
+} from "../stores/session-runtime-context";
 import { useToastStore } from "../stores/toast";
 import { useUiStore } from "../stores/ui";
 import { planComposerSubmit, settleComposerResponse } from "./composer-submit";
@@ -85,6 +90,7 @@ afterEach(() => {
 	useToastStore.setState({ toasts: [] });
 	useUiStore.setState({
 		settingsOpen: false,
+		tutorialOpen: false,
 		copySelectorOpen: false,
 		btwRequest: null,
 		collabOpen: false,
@@ -101,6 +107,42 @@ const guiOnly = (name: string): AvailableCommand => ({
 	textModeExecutable: false,
 });
 describe("planComposerSubmit", () => {
+	it("handles customize-notch on/off locally before discovery, even while streaming", async () => {
+		const omp = installMockOmp();
+		const customize = vi.fn(async (_tabId: string, enabled: boolean) => ({ enabled }));
+		Object.assign(omp, { notchApps: { customize } });
+		registerSessionRuntime({ tabId: "notch-submit", command: vi.fn(async () => success({})), stores: new Map() });
+		setFocusedSessionRuntime("notch-submit");
+		try {
+			for (const message of ["/customize-notch", "/customize-notch off"]) {
+				expect(
+					planComposerSubmit({ message, images: [], isStreaming: true, mode: "prompt", commands: [] }),
+				).toEqual({ kind: "handled" });
+			}
+			await Promise.resolve();
+			expect(customize.mock.calls).toEqual([
+				["notch-submit", true],
+				["notch-submit", false],
+			]);
+			expect(omp.rpc.prompt).not.toHaveBeenCalled();
+			expect(omp.rpc.steer).not.toHaveBeenCalled();
+		} finally {
+			deleteSessionRuntime("notch-submit");
+		}
+	});
+	it("opens /tutorial locally before command discovery, without sending it to the model", () => {
+		const omp = installMockOmp();
+		const submit = planComposerSubmit({
+			message: "/tutorial",
+			images: [],
+			isStreaming: false,
+			mode: "prompt",
+			commands: [],
+		});
+		expect(submit.kind).toBe("handled");
+		expect(useUiStore.getState().tutorialOpen).toBe(true);
+		expect(omp.rpc.prompt).not.toHaveBeenCalled();
+	});
 	it.each([false, true])("routes a ? shortcut to BTW while streaming=%s", isStreaming => {
 		const omp = installMockOmp();
 		const result = planComposerSubmit({
@@ -351,6 +393,128 @@ describe("planComposerSubmit GUI-only routing", () => {
 		expect(submit.kind).toBe("handled");
 		expect(omp.app.quit).toHaveBeenCalledTimes(1);
 		expect(close).not.toHaveBeenCalled();
+		expect(omp.rpc.prompt).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		[false, "/goal ship reliable sync"],
+		[true, "/goal ship reliable sync"],
+		[undefined, "/goal ship reliable sync"],
+		[false, "/goal set ship reliable sync"],
+		[true, "/goal set ship reliable sync"],
+		[undefined, "/goal set ship reliable sync"],
+	] as const)("forwards /goal objectives natively with discovery executable=%s: %s", (executable, message) => {
+		const omp = installMockOmp();
+		const openModes = vi.spyOn(useUiStore.getState(), "openModes");
+		const submit = planComposerSubmit({
+			message,
+			images: [],
+			isStreaming: false,
+			mode: "prompt",
+			commands: executable === undefined ? [] : [{ ...guiOnly("goal"), textModeExecutable: executable }],
+		});
+		expect(submit.kind).toBe("handled");
+		expect(omp.rpc.guidedGoal).toHaveBeenCalledWith("ship reliable sync");
+		expect(openModes).not.toHaveBeenCalled();
+		expect(omp.rpc.prompt).not.toHaveBeenCalled();
+	});
+
+	it.each([false, true, undefined])("opens the goal sidebar without an objective, executable=%s", executable => {
+		const omp = installMockOmp();
+		const openModes = vi.spyOn(useUiStore.getState(), "openModes").mockImplementation(() => {});
+		const submit = planComposerSubmit({
+			message: "/goal   ",
+			images: [],
+			isStreaming: false,
+			mode: "prompt",
+			commands: executable === undefined ? [] : [{ ...guiOnly("goal"), textModeExecutable: executable }],
+		});
+		expect(submit.kind).toBe("handled");
+		expect(openModes).toHaveBeenCalledWith("goal");
+		expect(omp.rpc.guidedGoal).not.toHaveBeenCalled();
+		expect(omp.rpc.prompt).not.toHaveBeenCalled();
+	});
+
+	it.each(["/goal", "/goal ship reliable sync"])("preserves extension ownership for %s", async message => {
+		const omp = installMockOmp();
+		const submit = planComposerSubmit({
+			message,
+			images: [],
+			isStreaming: false,
+			mode: "prompt",
+			commands: [
+				{ ...guiOnly("goal"), textModeExecutable: true },
+				{ name: "goal", source: "extension", description: "Extension goal", textModeExecutable: true },
+			],
+		});
+		expect(submit.kind).toBe("send");
+		if (submit.kind !== "send") throw new Error("extension command was intercepted");
+		await submit.request();
+		expect(omp.rpc.prompt).toHaveBeenCalledWith(message, []);
+		expect(omp.rpc.guidedGoal).not.toHaveBeenCalled();
+	});
+
+	it("preserves extension aliases named goal", async () => {
+		const omp = installMockOmp();
+		const submit = planComposerSubmit({
+			message: "/goal custom objective",
+			images: [],
+			isStreaming: false,
+			mode: "prompt",
+			commands: [{ name: "custom-goal", aliases: ["goal"], source: "extension", description: "Custom goal" }],
+		});
+		if (submit.kind !== "send") throw new Error("extension alias was intercepted");
+		await submit.request();
+		expect(omp.rpc.prompt).toHaveBeenCalledWith("/goal custom objective", []);
+		expect(omp.rpc.guidedGoal).not.toHaveBeenCalled();
+	});
+
+	it.each(["show", "pause", "resume", "drop", "budget 50000"])(
+		"preserves executable Core goal management: %s",
+		async args => {
+			const omp = installMockOmp();
+			const message = `/goal ${args}`;
+			const submit = planComposerSubmit({
+				message,
+				images: [],
+				isStreaming: false,
+				mode: "prompt",
+				commands: [{ ...guiOnly("goal"), textModeExecutable: true }],
+			});
+			if (submit.kind !== "send") throw new Error("Core management command was intercepted");
+			await submit.request();
+			expect(omp.rpc.prompt).toHaveBeenCalledWith(message, []);
+			expect(omp.rpc.guidedGoal).not.toHaveBeenCalled();
+		},
+	);
+
+	it("preserves management subcommands advertised by Core", async () => {
+		const omp = installMockOmp();
+		const submit = planComposerSubmit({
+			message: "/goal status",
+			images: [],
+			isStreaming: false,
+			mode: "prompt",
+			commands: [{ ...guiOnly("goal"), textModeExecutable: true, subcommands: [{ name: "status" }] }],
+		});
+		if (submit.kind !== "send") throw new Error("advertised management command was intercepted");
+		await submit.request();
+		expect(omp.rpc.prompt).toHaveBeenCalledWith("/goal status", []);
+		expect(omp.rpc.guidedGoal).not.toHaveBeenCalled();
+	});
+
+	it("surfaces guided goal RPC refusals instead of sending raw goal text", async () => {
+		const omp = installMockOmp();
+		omp.rpc.guidedGoal.mockResolvedValueOnce({
+			type: "response",
+			command: "guided_goal",
+			success: false,
+			error: "Goal is paused",
+		});
+		planComposerSubmit({ message: "/goal ship sync", images: [], isStreaming: false, mode: "prompt", commands: [] });
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ variant: "error", message: "Goal is paused" });
 		expect(omp.rpc.prompt).not.toHaveBeenCalled();
 	});
 

@@ -8,12 +8,13 @@ import { I18nProvider } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
 import { useSessionStore } from "../../stores/session";
 import { useTabsStore } from "../../stores/tabs";
+import { useTerminalsStore } from "../../stores/terminals";
 import { useToastStore } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
 import { useFileTabs } from "../panels/file-tabs";
 import { PanelContainer } from "./PanelContainer";
 
-// Tool-driven terminal output still loads xterm; the launcher button does not use it.
+// Loading the embedded terminal imports xterm even before a terminal is opened.
 vi.hoisted(() => {
 	(globalThis as Record<string, unknown>).self = globalThis;
 });
@@ -67,6 +68,7 @@ afterEach(async () => {
 	container?.remove();
 	useSessionStore.getState().reset();
 	useTabsStore.getState().reset();
+	useTerminalsStore.setState({ byTab: {}, reveal: null });
 	useFileTabs.setState({ workspaces: new Map() });
 	useUiStore.setState({ panelTab: "files", panelVisible: true, filePreviewPath: null, filePreviewLine: null });
 	useToastStore.setState({ toasts: [] });
@@ -94,7 +96,7 @@ function FileLinkHarness({ content = "[report](docs/report.md)" }: { content?: s
 	return (
 		<>
 			<MarkdownRenderer content={content} />
-			{panelVisible && <PanelContainer />}
+			<PanelContainer open={panelVisible} />
 		</>
 	);
 }
@@ -103,7 +105,7 @@ describe("PanelContainer chat tab filter", () => {
 	it("renders the side questions and files tabs in a chat tab", async () => {
 		seedActiveTab("chat");
 		useUiStore.setState({ panelTab: "files", panelVisible: true });
-		await mount(<PanelContainer />);
+		await mount(<PanelContainer open />);
 
 		const labels = drawerTabLabels();
 		expect(labels).toContain("Files");
@@ -117,7 +119,7 @@ describe("PanelContainer chat tab filter", () => {
 	it("falls back to the files surface when the agent-only diff tab was selected before entering chat", async () => {
 		seedActiveTab("chat");
 		useUiStore.setState({ panelTab: "diff", panelVisible: true });
-		await mount(<PanelContainer />);
+		await mount(<PanelContainer open />);
 
 		expect(document.querySelector('button[aria-label="Refresh file tree"]')).not.toBeNull();
 	});
@@ -125,39 +127,78 @@ describe("PanelContainer chat tab filter", () => {
 	it("renders all drawer tabs in an agent tab", async () => {
 		seedActiveTab("agent");
 		useUiStore.setState({ panelTab: "files", panelVisible: true });
-		await mount(<PanelContainer />);
+		await mount(<PanelContainer open />);
 
 		const labels = drawerTabLabels();
-		for (const visible of ["Plan", "Side questions", "Changes", "Files"]) {
+		for (const visible of ["Plan", "Side questions", "Changes", "Files", "Terminal"]) {
 			expect(labels).toContain(visible);
 		}
-		for (const absent of ["Agents", "Browser", "Todo", "Queue", "Logs", "Terminal"]) {
+		for (const absent of ["Agents", "Browser", "Todo", "Queue", "Logs"]) {
 			expect(labels).not.toContain(absent);
 		}
 		expect(document.querySelector('aside > header button[aria-label="Agents"]')).toBeNull();
 	});
 
-	it("launches the OS terminal for the active tab without selecting a view or closing the drawer", async () => {
+	it("selects the embedded terminal and opens a workspace shell through Core, reporting failures in place", async () => {
 		seedActiveTab("agent");
-		const openTerminal = vi.fn(async () => ({ ok: false, error: "Launcher failed" }));
-		ompWindow.omp = { system: { openTerminal } };
+		const openTerminal = vi.fn();
+		const commandForTab = vi.fn(async (_tabId: string, command: { type: string }) =>
+			command.type === "terminal_open"
+				? { success: false, error: "Shell failed" }
+				: { success: true, data: { terminals: [] } },
+		);
+		ompWindow.omp = { rpc: { commandForTab }, system: { openTerminal } };
 		useUiStore.getState().setPanelTab("files");
-		await mount(<PanelContainer />);
+		await mount(<PanelContainer open />);
 
 		const terminal = document.querySelector('aside > header button[aria-label="Terminal"]');
-		expect(terminal?.hasAttribute("aria-pressed")).toBe(false);
 		await act(async () => terminal?.dispatchEvent(new Event("click", { bubbles: true, cancelable: true })));
-		expect(openTerminal).toHaveBeenCalledExactlyOnceWith("t0");
-		expect(useUiStore.getState()).toMatchObject({ panelTab: "files", panelVisible: true, panelOwnerTabId: "t0" });
+		expect(terminal?.getAttribute("aria-pressed")).toBe("true");
+		expect(useUiStore.getState()).toMatchObject({ panelTab: "terminal", panelVisible: true, panelOwnerTabId: "t0" });
+		expect(container.textContent).toContain("No terminal open");
+		const newShell = document.querySelector('aside button[aria-label="New shell"]');
+		expect(newShell).not.toBeNull();
+		await act(async () => newShell?.dispatchEvent(new Event("click", { bubbles: true, cancelable: true })));
+		expect(commandForTab).toHaveBeenCalledWith("t0", { type: "terminal_open" });
+		expect(openTerminal).not.toHaveBeenCalled();
 		expect(useToastStore.getState().toasts).toEqual([
-			expect.objectContaining({ variant: "error", message: "Couldn't start a terminal: Launcher failed" }),
+			expect.objectContaining({ variant: "error", message: "Couldn't start a terminal: Shell failed" }),
 		]);
+	});
+
+	it("renders an existing shell inside the inspector when Terminal is selected", async () => {
+		seedActiveTab("agent");
+		ompWindow.omp = { rpc: { commandForTab: vi.fn(async () => ({ success: false, error: "Offline" })) } };
+		useTerminalsStore.setState({
+			byTab: {
+				t0: {
+					activeId: "shell-1",
+					terminals: [
+						{
+							terminalId: "shell-1",
+							kind: "shell",
+							title: "Workspace shell",
+							cwd: "/work",
+							cols: 80,
+							rows: 24,
+							running: true,
+						},
+					],
+				},
+			},
+		});
+		useUiStore.getState().setPanelTab("terminal");
+		await mount(<PanelContainer open />);
+		expect(document.querySelector("aside .omp-terminal-viewport")).not.toBeNull();
+		expect(
+			document.querySelector('aside button[aria-pressed="true"][title="Workspace shell - /work"]')?.textContent,
+		).toContain("Workspace shell");
 	});
 
 	it("consumes Escape inside the inspector and clears its owner", async () => {
 		seedActiveTab("agent");
 		useUiStore.getState().setPanelTab("files");
-		await mount(<PanelContainer />);
+		await mount(<PanelContainer open />);
 		const event = new Event("keydown", { bubbles: true, cancelable: true });
 		Object.defineProperties(event, {
 			key: { value: "Escape" },
@@ -171,24 +212,66 @@ describe("PanelContainer chat tab filter", () => {
 	it("sizes an overlay against its pane body rather than the window", async () => {
 		seedActiveTab("agent");
 		useUiStore.getState().setPanelTab("files");
-		await mount(<PanelContainer />, 320);
+		await mount(<PanelContainer open />, 320);
 		const overlay = document.querySelector("aside.omp-inspector");
 		expect(overlay?.classList.contains("absolute")).toBe(true);
 		expect(overlay?.getAttribute("style")).toContain("width:320px");
 		expect(overlay?.querySelector('[role="separator"]')?.getAttribute("aria-valuemax")).toBe("320");
 	});
 
-	it("keeps the chosen view selected and lets the user close it from the same control", async () => {
+	it("bounds a docked inspector to leave room for chat, with explicit full-width and restore controls", async () => {
+		seedActiveTab("chat");
+		ompWindow.omp = { prefs: { get: async () => 800 } };
+		useUiStore.getState().setPanelTab("files");
+		await mount(<PanelContainer open />, 1040);
+		const panel = document.querySelector("aside.omp-inspector");
+		const separator = panel?.querySelector('[role="separator"]');
+		expect(panel?.getAttribute("style")).toContain("width:480px");
+		expect(separator?.getAttribute("aria-valuemax")).toBe("480");
+		const resize = async (key: string) => {
+			const event = new Event("keydown", { bubbles: true, cancelable: true });
+			Object.defineProperty(event, "key", { value: key });
+			await act(async () => separator?.dispatchEvent(event));
+		};
+		await resize("ArrowLeft");
+		expect(separator?.getAttribute("aria-valuenow")).toBe("480");
+		await resize("End");
+		expect(separator?.getAttribute("aria-valuenow")).toBe("1040");
+		await resize("Home");
+		expect(separator?.getAttribute("aria-valuenow")).toBe("360");
+		expect(separator?.getAttribute("aria-valuemax")).toBe("480");
+	});
+
+	it("keeps the full pane resize range in a wide split pane", async () => {
+		seedActiveTab("agent");
+		ompWindow.omp = { prefs: { get: async () => 800 } };
+		useUiStore.getState().setPanelTab("files");
+		await mount(<PanelContainer open split />, 1040);
+		const panel = document.querySelector("aside.omp-inspector");
+		expect(panel?.getAttribute("style")).toContain("width:800px");
+		expect(panel?.querySelector('[role="separator"]')?.getAttribute("aria-valuemax")).toBe("1040");
+	});
+
+	it("shows only the active tab name alongside its icon, without a close button", async () => {
 		seedActiveTab("agent");
 		await act(async () => useUiStore.getState().setPanelTab("files"));
-		await mount(<PanelContainer />);
+		await mount(<PanelContainer open />, 360);
 
-		const files = document.querySelector('aside > header button[aria-label="Files"]');
-		const close = document.querySelector('aside > header button[aria-label="Close"]');
-		expect(files?.getAttribute("aria-pressed")).toBe("true");
-		expect(close?.parentElement).toBe(files?.parentElement);
-		await act(async () => close?.dispatchEvent(new Event("click", { bubbles: true })));
-		expect(useUiStore.getState().panelVisible).toBe(false);
+		const buttons = [...document.querySelectorAll("aside > header button")];
+		for (const button of buttons) {
+			expect(button.querySelector("svg")).not.toBeNull();
+			expect(button.textContent).toBe(button.getAttribute("aria-pressed") === "true" ? "Files" : "");
+		}
+		expect(document.querySelector('aside > header button[aria-label="Close"]')).toBeNull();
+		await act(async () =>
+			document
+				.querySelector('aside > header button[aria-label="Side questions"]')
+				?.dispatchEvent(new Event("click", { bubbles: true })),
+		);
+		expect(document.querySelector('aside > header button[aria-label="Files"]')?.textContent).toBe("");
+		expect(document.querySelector('aside > header button[aria-label="Side questions"]')?.textContent).toBe(
+			"Side questions",
+		);
 	});
 
 	it("opens a local markdown link inside the Files drawer", async () => {

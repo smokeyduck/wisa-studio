@@ -1500,7 +1500,7 @@ export function Sidebar() {
 		.map(id => indexedNavigation.get(id))
 		.filter((item): item is NavigationItem => item !== undefined && !item.fixedPin);
 	const navigationRow =
-		"omp-pressable group/nav flex h-8 w-full min-w-0 items-center gap-2.5 rounded-lg px-2 text-left text-omp-md text-[var(--omp-text-secondary)] hover:bg-[var(--omp-sidebar-item-hover)] hover:text-[var(--omp-text)]";
+		"omp-pressable group/nav flex h-9 w-full min-w-0 items-center gap-2.5 rounded-lg px-2 text-left text-omp-md text-[var(--omp-text-secondary)] hover:bg-[var(--omp-sidebar-item-hover)] hover:text-[var(--omp-text)]";
 	const renderNavigationItem = (item: NavigationItem) => {
 		const Icon = item.icon;
 		const selected = item.page !== undefined && item.page === workspacePage;
@@ -1549,7 +1549,7 @@ export function Sidebar() {
 			<div
 				key={item.id}
 				data-sidebar-index-item={location === "index" ? item.id : undefined}
-				className="flex min-w-0 items-center"
+				className="flex min-w-0 items-center gap-1"
 			>
 				{renderNavigationItem(item)}
 				{!item.fixedPin && (
@@ -1573,16 +1573,17 @@ export function Sidebar() {
 	return (
 		<>
 			<aside
+				data-tour="sidebar"
 				className="omp-session-sidebar relative flex h-full shrink-0 flex-col border-r border-[var(--omp-border-muted)] bg-[var(--omp-sidebar-bg)]"
 				style={{ width: visibleSidebarWidth }}
 			>
 				<div aria-hidden className="omp-window-caption drag-region" />
 				{/* Primary action + navigation. */}
-				<div className="shrink-0 px-2 pt-1 pb-3" data-sidebar-navigation>
+				<div className="shrink-0 px-3 pt-2 pb-4" data-sidebar-navigation>
 					{/* The lane switch stays visible above the list: it decides which
 					    sessions the list below holds, so it reads as a heading, not a
 					    setting buried in a menu. */}
-					<div className="mb-1.5 flex items-center gap-1.5">
+					<div className="mb-3 flex items-center gap-1.5">
 						<div className="omp-segmented flex-1" role="group" aria-label={t("sidebar.mode.aria")}>
 							<Glide activeKey={lane} selector='[aria-pressed="true"]' variant="thumb" />
 							{(["code", "work"] as const).map(value => (
@@ -1599,12 +1600,12 @@ export function Sidebar() {
 							))}
 						</div>
 					</div>
-					<div className="mb-1 flex items-center gap-1">
+					<div className="mb-2 flex items-center gap-1">
 						<button
 							type="button"
 							data-sidebar-new-agent
 							onClick={startNew}
-							className="omp-pressable group/nav flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left text-omp-md font-medium text-[var(--omp-text)] hover:bg-[var(--omp-sidebar-item-hover)]"
+							className="omp-pressable group/nav flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left text-omp-md font-medium text-[var(--omp-text)] hover:bg-[var(--omp-sidebar-item-hover)]"
 						>
 							<SquarePen aria-hidden="true" size={16} strokeWidth={1.75} className="shrink-0" />
 							<span className="min-w-0 flex-1 truncate">
@@ -1612,7 +1613,7 @@ export function Sidebar() {
 							</span>
 						</button>
 					</div>
-					<div className="space-y-px">
+					<div className="space-y-1">
 						{primaryNavigation.map(renderNavigationItem)}
 						{renderNavigationItem(securityNavigation)}
 						{pinnedNavigation.map(item => renderToolWithPin(item, "pinned"))}
@@ -1623,7 +1624,7 @@ export function Sidebar() {
 							aria-expanded={toolIndexOpen}
 							aria-controls="sidebar-tool-index"
 							onClick={() => void toggleListExpanded("__tools__")}
-							className={cx(navigationRow, "mt-px", toolIndexOpen && "bg-(--omp-sidebar-item-hover)")}
+							className={cx(navigationRow, "mt-1", toolIndexOpen && "bg-(--omp-sidebar-item-hover)")}
 						>
 							<List aria-hidden="true" className="shrink-0 text-(--omp-muted)" size={16} strokeWidth={1.75} />
 							<span className="min-w-0 flex-1 truncate">{t("sidebar.navigation.index")}</span>
@@ -1938,7 +1939,7 @@ export function Sidebar() {
 
 				{/* Footer: app-level controls that are not tied to a session. */}
 				{/* A container so a narrow sidebar folds Settings to its icon instead of cutting the word. */}
-				<div className="@container flex h-11 shrink-0 items-center gap-0.5 border-t border-[var(--omp-border-muted)] px-2 text-omp-md">
+				<div className="@container flex h-12 shrink-0 items-center gap-1.5 border-t border-[var(--omp-border-muted)] px-3 text-omp-md">
 					<button
 						type="button"
 						data-sidebar-settings

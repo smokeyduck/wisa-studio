@@ -66,6 +66,27 @@ test.afterAll(async () => {
 	if (profile) await fs.rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
+test("missing-model setup opens the picker and stale startup warnings stay hidden after selection and reload", async () => {
+	try {
+		await page.evaluate(() => window.omp.rpc.setSetting("fixture.missingModel", true));
+		await expect(page.getByText("Choose a model to get started", { exact: true })).toBeVisible();
+		await expect(page.getByText("Configuration warning", { exact: true })).toHaveCount(0);
+		await expect(page.getByText(/No default model selected/)).toHaveCount(0);
+		await page.screenshot({ path: "test-results/model-setup.png", scale: "css", animations: "disabled" });
+		await page.getByRole("button", { name: "Choose model", exact: true }).click();
+		await page.getByRole("option").filter({ hasText: "Local fixture" }).click();
+		await expect(page.getByText("Choose a model to get started", { exact: true })).toHaveCount(0);
+		await expect(page.getByText("Configuration warning", { exact: true })).toHaveCount(0);
+		await page.reload();
+		await expect(page.locator("[data-model-picker-trigger]").filter({ hasText: "Local fixture" })).toBeVisible();
+		await expect(page.getByText("Choose a model to get started", { exact: true })).toHaveCount(0);
+		await expect(page.getByText(/No default model selected/)).toHaveCount(0);
+		await page.screenshot({ path: "test-results/model-selected.png", scale: "css", animations: "disabled" });
+	} finally {
+		await page.evaluate(() => window.omp.rpc.setSetting("fixture.missingModel", false));
+	}
+});
+
 test("the desktop does not start or expose an embedded agent browser", async () => {
 	await expect(page.getByRole("button", { name: "Open WISA Browser", exact: true })).toHaveCount(0);
 	expect(await page.evaluate(() => "browser" in window.omp)).toBe(false);
@@ -262,7 +283,7 @@ test("math survives history reload and scrolls inside its column in both themes"
 	await expect(markdown.locator(".katex-html").filter({ hasText: "显存有效带宽" })).toHaveCount(1);
 	await expect(markdown.locator("h1, h2, .katex-error")).toHaveCount(0);
 	const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-	for (const theme of ["Graphite", "Porcelain"]) {
+	for (const theme of ["WISA Dark", "WISA Light"]) {
 		await command("/theme");
 		const picker = page.getByRole("dialog");
 		await picker.getByPlaceholder("Search themes…").fill(theme);
@@ -398,12 +419,12 @@ test("adjacent background updates and reasoning share one activity summary with 
 test("all named themes apply with readable primary text and no stale scheme tokens", async () => {
 	test.setTimeout(90_000);
 	const labels = [
-		"Graphite",
+		"WISA Dark",
 		"Slate",
 		"Deep Sea",
 		"Espresso",
 		"Ember",
-		"Porcelain",
+		"WISA Light",
 		"Ivory",
 		"Sand",
 		"Rose Quartz",
@@ -416,7 +437,7 @@ test("all named themes apply with readable primary text and no stale scheme toke
 		await command("/theme");
 		const picker = page.getByRole("dialog");
 		await picker.getByPlaceholder("Search themes…").fill(label);
-		const option = picker.locator("button[aria-pressed]").filter({ hasText: label });
+		const option = picker.locator("button[aria-pressed]").filter({ has: page.getByText(label, { exact: true }) });
 		await option.click();
 		await expect(picker).toHaveCount(0);
 		colors[label] = await page.evaluate(() =>
@@ -803,8 +824,8 @@ test("failed preference writes retain edits and never allow a premature restart"
 	await page.keyboard.press("Escape");
 	await page.getByRole("button", { name: "Choose theme", exact: true }).click();
 	const picker = page.getByRole("dialog");
-	await picker.getByPlaceholder("Search themes…").fill("Porcelain");
-	await picker.locator("button[aria-pressed]").filter({ hasText: "Porcelain" }).click();
+	await picker.getByPlaceholder("Search themes…").fill("WISA Light");
+	await picker.locator("button[aria-pressed]").filter({ hasText: "WISA Light" }).click();
 	await expect(picker).toHaveCount(0);
 	await expect(page.getByRole("alert").filter({ hasText: "audit appearance write refused" })).toBeVisible();
 	expect(errors).toEqual([]);

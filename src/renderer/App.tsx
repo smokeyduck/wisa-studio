@@ -1,42 +1,29 @@
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, type ReactNode, Suspense, useEffect, useMemo, useState } from "react";
 import type { DeepLinkPayload, MenuAction, MenuActionPayload, RunProgressState } from "../shared/ipc-types";
 import { nextLanguage } from "../shared/languages";
 import { AgentHoverCardLayer } from "./components/agents/AgentHoverCard";
 import { PanelErrorBoundary, Spinner, ToastStack } from "./components/common";
 import { LinkMenuHost } from "./components/common/LinkMenu";
 import { WorkspacePageContext } from "./components/common/Modal";
-import { ActiveToolsDialog } from "./components/dialogs/ActiveToolsDialog";
 import { BranchPickerDialog } from "./components/dialogs/BranchPickerDialog";
 import { BtwDialog } from "./components/dialogs/BtwDialog";
-import { ChangelogDialog } from "./components/dialogs/ChangelogDialog";
 import { CollabDialog } from "./components/dialogs/CollabDialog";
 import { CommandPalette } from "./components/dialogs/CommandPalette";
-import { ComposerEditorDialog } from "./components/dialogs/ComposerEditorDialog";
-import { ContextReportDialog } from "./components/dialogs/ContextReportDialog";
 import { CopySelectorDialog } from "./components/dialogs/CopySelectorDialog";
-import { DebugConsoleDialog } from "./components/dialogs/DebugConsoleDialog";
 import { ExtensionDialog } from "./components/dialogs/ExtensionDialog";
 import { FirstRunOnboardingDialog } from "./components/dialogs/FirstRunOnboardingDialog";
 import { ForceToolDialog } from "./components/dialogs/ForceToolDialog";
 import { HandoffDialog } from "./components/dialogs/HandoffDialog";
-import { HotkeysDialog } from "./components/dialogs/HotkeysDialog";
-import { ImportForeignDialog } from "./components/dialogs/ImportForeignDialog";
-import { JobsDialog } from "./components/dialogs/JobsDialog";
 import { LiveVoiceDialog } from "./components/dialogs/LiveVoiceDialog";
-import { LogsDialog } from "./components/dialogs/LogsDialog";
 import { ModelPicker } from "./components/dialogs/ModelPicker";
 import { ModelRestoreDialog } from "./components/dialogs/ModelRestoreDialog";
 import { PhoneDialog } from "./components/dialogs/PhoneDialog";
 import { RenameSessionDialog } from "./components/dialogs/RenameSessionDialog";
-import { SessionInfoDialog } from "./components/dialogs/SessionInfoDialog";
 import { SessionPickerDialog } from "./components/dialogs/SessionPickerDialog";
 import { SessionSwitchDialog } from "./components/dialogs/SessionSwitchDialog";
-import { SessionTreeDialog } from "./components/dialogs/SessionTreeDialog";
 import { ShareSessionDialog } from "./components/dialogs/ShareSessionDialog";
-import { ThemeEditorDialog } from "./components/dialogs/ThemeEditorDialog";
 import { ThemePickerDialog } from "./components/dialogs/ThemePickerDialog";
 import { NewCodeSessionDialog } from "./components/dialogs/WorkspaceDialog";
-import { WorkspaceDirsDialog } from "./components/dialogs/WorkspaceDirsDialog";
 import { WorktreeCloseDialog } from "./components/dialogs/WorktreeCloseDialog";
 import { WorktreeDialog } from "./components/dialogs/WorktreeDialog";
 import { ConfigWarningsBanner } from "./components/layout/ConfigWarningsBanner";
@@ -47,10 +34,11 @@ import { TabBar } from "./components/layout/TabBar";
 import { TitleBar } from "./components/layout/TitleBar";
 import { UpdateBanner } from "./components/layout/UpdateBanner";
 import { PluginCatalogProvider } from "./components/panels/plugins/use-plugin-catalog";
-import { connectFileDraftGuard } from "./components/panels/WorkspaceFileEditor";
 import { useAwaitingConfirmation } from "./hooks/use-awaiting-confirmation";
 import { useExtensionUi } from "./hooks/use-extension-ui";
 import { useLearnedSkillsSync } from "./hooks/use-learned-skills";
+import { usePlanApproval } from "./hooks/use-plan-approval";
+import { usePlanSidebar } from "./hooks/use-plan-sidebar";
 import { useQuotaPolling } from "./hooks/use-quota-polling";
 import { useRpcEvents } from "./hooks/use-rpc-events";
 import { newSessionNow, requestSessionSwitch } from "./hooks/use-session-switch";
@@ -87,6 +75,7 @@ import {
 } from "./lib/themes";
 import { startVoiceAutoSpeak } from "./lib/voice";
 import { initCustomThemes } from "./stores/custom-themes";
+import { connectFileDraftGuard } from "./stores/file-drafts";
 import { openHandoffDialog } from "./stores/fork-handoff";
 import { useModelStore } from "./stores/model";
 import { useSchedulerStore } from "./stores/scheduler";
@@ -98,11 +87,10 @@ import { cycleTab, moveActiveTab, selectTabAt, useSessionTabs, useTabsStore } fr
 import { toast } from "./stores/toast";
 import { activeWorkspacePage, type PanelTab, useEffectiveKeymapOverrides, useUiStore } from "./stores/ui";
 import { subscribeUpdaterStatus } from "./stores/updater";
-import { usePlanApproval } from "./hooks/use-plan-approval";
-import { usePlanSidebar } from "./hooks/use-plan-sidebar";
+import { startWallpaperSync } from "./stores/wallpaper";
 
-// Heavy overlays code-split: they render null while closed, so they download
-// only on first open instead of bloating the eager bundle.
+// Keep secondary surfaces out of startup: lazy imports run only when the
+// corresponding workspace page or open dialog is actually mounted.
 const SettingsWindow = lazy(() =>
 	import("./components/settings/SettingsWindow").then(m => ({ default: m.SettingsWindow })),
 );
@@ -131,7 +119,6 @@ const ExtensionsPanel = lazy(() =>
 const InventoryPanel = lazy(() =>
 	import("./components/panels/InventoryPanel").then(m => ({ default: m.InventoryPanel })),
 );
-const ModesPanel = lazy(() => import("./components/panels/ModesPanel").then(m => ({ default: m.ModesPanel })));
 const AgentHubWindow = lazy(() =>
 	import("./components/panels/AgentHubWindow").then(m => ({ default: m.AgentHubWindow })),
 );
@@ -161,7 +148,50 @@ const ModelRolesWindow = lazy(() =>
 const ProvidersWindow = lazy(() =>
 	import("./components/settings/ProvidersWindow").then(m => ({ default: m.ProvidersWindow })),
 );
+const ActiveToolsDialog = lazy(() =>
+	import("./components/dialogs/ActiveToolsDialog").then(m => ({ default: m.ActiveToolsDialog })),
+);
+const ChangelogDialog = lazy(() =>
+	import("./components/dialogs/ChangelogDialog").then(m => ({ default: m.ChangelogDialog })),
+);
+const ContextReportDialog = lazy(() =>
+	import("./components/dialogs/ContextReportDialog").then(m => ({ default: m.ContextReportDialog })),
+);
+const DebugConsoleDialog = lazy(() =>
+	import("./components/dialogs/DebugConsoleDialog").then(m => ({ default: m.DebugConsoleDialog })),
+);
+const HotkeysDialog = lazy(() =>
+	import("./components/dialogs/HotkeysDialog").then(m => ({ default: m.HotkeysDialog })),
+);
+const JobsDialog = lazy(() => import("./components/dialogs/JobsDialog").then(m => ({ default: m.JobsDialog })));
+const LogsDialog = lazy(() => import("./components/dialogs/LogsDialog").then(m => ({ default: m.LogsDialog })));
+const SessionInfoDialog = lazy(() =>
+	import("./components/dialogs/SessionInfoDialog").then(m => ({ default: m.SessionInfoDialog })),
+);
+const SessionTreeDialog = lazy(() =>
+	import("./components/dialogs/SessionTreeDialog").then(m => ({ default: m.SessionTreeDialog })),
+);
+const WorkspaceDirsDialog = lazy(() =>
+	import("./components/dialogs/WorkspaceDirsDialog").then(m => ({ default: m.WorkspaceDirsDialog })),
+);
+const ImportForeignDialog = lazy(() =>
+	import("./components/dialogs/ImportForeignDialog").then(m => ({ default: m.ImportForeignDialog })),
+);
+const ComposerEditorDialog = lazy(() =>
+	import("./components/dialogs/ComposerEditorDialog").then(m => ({ default: m.ComposerEditorDialog })),
+);
+const ThemeEditorDialog = lazy(() =>
+	import("./components/dialogs/ThemeEditorDialog").then(m => ({ default: m.ThemeEditorDialog })),
+);
 
+/** Defer first mount, then preserve dialog state, async work, and close animations. */
+function MountOnDemand({ open, children }: { open: boolean; children: ReactNode }) {
+	const [mounted, setMounted] = useState(open);
+	useEffect(() => {
+		if (open) setMounted(true);
+	}, [open]);
+	return open || mounted ? children : null;
+}
 
 // Dev-only visual feedback overlay (dev/DevAgentation.tsx). The conditional is
 // `import.meta.env.DEV`, which Vite folds to `false` in a production build, so
@@ -188,7 +218,7 @@ function FocusedSessionEffects() {
 	const colorBlindMode = useUiStore(s => s.colorBlindMode);
 
 	useEffect(() => {
-		const name = titleSessionName ?? "WISA STUDIO";
+		const name = titleSessionName ?? "Wisa";
 		document.title = !titleRunState ? name : titleAwaiting ? `! ${name}` : titleStreaming ? `● ${name}` : `› ${name}`;
 	}, [titleRunState, titleAwaiting, titleStreaming, titleSessionName]);
 	useEffect(() => startVoiceAutoSpeak(), []);
@@ -217,6 +247,7 @@ function FocusedSessionEffects() {
  */
 export function App() {
 	useEffect(connectFileDraftGuard, []);
+	useEffect(startWallpaperSync, []);
 	useRpcEvents();
 	useExtensionUi();
 	// Session tabs: GET_TABS boot reconciliation + TAB_STATUS subscription.
@@ -244,9 +275,6 @@ export function App() {
 	const inventoryOpen = useUiStore(s => s.inventoryOpen);
 	const inventoryTab = useUiStore(s => s.inventoryTab);
 	const closeInventory = useUiStore(s => s.closeInventory);
-	const modesOpen = useUiStore(s => s.modesOpen);
-	const modesTab = useUiStore(s => s.modesTab);
-	const closeModes = useUiStore(s => s.closeModes);
 	const agentHubOpen = useUiStore(s => s.agentHubOpen);
 	const agentHubTab = useUiStore(s => s.agentHubTab);
 	const closeAgentHub = useUiStore(s => s.closeAgentHub);
@@ -254,6 +282,10 @@ export function App() {
 	const importDialogOpen = useUiStore(s => s.importDialogOpen);
 	const composerEditorOpen = useUiStore(s => s.composerEditorOpen);
 	const providerConfigOpen = useUiStore(s => s.providerConfigOpen);
+	const settingsOpen = useUiStore(s => s.settingsOpen);
+	const conversationSearchOpen = useUiStore(s => s.conversationSearchOpen);
+	const themeEditorOpen = useUiStore(s => s.themeEditor !== null);
+	const taskEditorOpen = useSchedulerStore(s => s.editor !== null);
 	const providerConfigEdit = useUiStore(s => s.providerConfigEdit);
 	const closeProviderConfig = useUiStore(s => s.closeProviderConfig);
 	const activeTabId = useTabsStore(s => s.activeTabId);
@@ -716,7 +748,7 @@ export function App() {
 			// Window-only surfaces do not require a live sidecar. Keep these actions
 			// usable while the agent is starting, asleep, or recovering.
 			if (action === "open-settings") {
-				ui.openSettings();
+				ui.openSettings(payload?.settingsTab);
 				return;
 			}
 			if (action === "open-usage") {
@@ -974,21 +1006,32 @@ export function App() {
 			<ForceToolDialog />
 			<HandoffDialog />
 			<Suspense fallback={null}>
-				<SettingsWindow />
-				<ModesPanel key={activeTabId} open={modesOpen} onClose={closeModes} initialTab={modesTab} />
-				<BenchmarkDialog open={benchmarkOpen} onClose={closeBenchmark} />
-				<TaskEditorDialog />
-				<ConversationSearchDialog />
-				<ProviderConfigDialog
-					open={providerConfigOpen}
-					editProvider={providerConfigEdit}
-					onClose={closeProviderConfig}
-				/>
+				<MountOnDemand open={settingsOpen}>
+					<SettingsWindow />
+				</MountOnDemand>
+				<MountOnDemand open={benchmarkOpen}>
+					<BenchmarkDialog open={benchmarkOpen} onClose={closeBenchmark} />
+				</MountOnDemand>
+				<MountOnDemand open={taskEditorOpen}>
+					<TaskEditorDialog />
+				</MountOnDemand>
+				<MountOnDemand open={conversationSearchOpen}>
+					<ConversationSearchDialog />
+				</MountOnDemand>
+				<MountOnDemand open={providerConfigOpen}>
+					<ProviderConfigDialog
+						open={providerConfigOpen}
+						editProvider={providerConfigEdit}
+						onClose={closeProviderConfig}
+					/>
+				</MountOnDemand>
+				<MountOnDemand open={themeEditorOpen}>
+					<ThemeEditorDialog />
+				</MountOnDemand>
+				{importDialogOpen && <ImportForeignDialog />}
+				{composerEditorOpen && <ComposerEditorDialog />}
 			</Suspense>
 			<ThemePickerDialog />
-			<ThemeEditorDialog />
-			{importDialogOpen && <ImportForeignDialog />}
-			{composerEditorOpen && <ComposerEditorDialog />}
 			<Suspense fallback={null}>{feedbackOpen && <FeedbackDialog />}</Suspense>
 			<ToastStack />
 			<AgentHoverCardLayer />

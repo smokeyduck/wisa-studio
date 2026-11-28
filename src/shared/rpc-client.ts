@@ -43,6 +43,8 @@ const RPC_COMMAND_TIMEOUTS: Record<string, number> = {
 	get_transcript: 30_000,
 	get_messages: 30_000,
 	get_transcript_page: 30_000,
+	preview_official_archive: 120_000,
+	import_official_archive: 660_000,
 	// Both reach the provider's reset-credit API.
 	list_reset_credits: 60_000,
 	redeem_reset_credit: 60_000,
@@ -67,12 +69,11 @@ function transcriptPageData(response: RpcResponse): MessagesPage | undefined {
 	return data as unknown as MessagesPage;
 }
 
-export async function fetchTranscript(transport: RpcTransport, folded = false): Promise<RpcResponse> {
-	const projection = folded ? { folded: true } : {};
+export async function fetchTranscript(transport: RpcTransport): Promise<RpcResponse> {
 	// Prefer one display snapshot; engines with a smaller transport ceiling use paging.
-	const snapshot = await transport({ type: "get_transcript", ...projection });
+	const snapshot = await transport({ type: "get_transcript" });
 	if (snapshot.success) return snapshot;
-	let page = await transport({ type: "get_transcript_page", limit: TRANSCRIPT_PAGE_LIMIT, ...projection });
+	let page = await transport({ type: "get_transcript_page", limit: TRANSCRIPT_PAGE_LIMIT });
 	if (!page.success) return snapshot;
 
 	const messages: MessagesPage["messages"] = [];
@@ -90,7 +91,7 @@ export async function fetchTranscript(transport: RpcTransport, folded = false): 
 		}
 		if (seenCursors.has(cursor)) return snapshot;
 		seenCursors.add(cursor);
-		page = await transport({ type: "get_transcript_page", cursor, limit: TRANSCRIPT_PAGE_LIMIT, ...projection });
+		page = await transport({ type: "get_transcript_page", cursor, limit: TRANSCRIPT_PAGE_LIMIT });
 		if (!page.success) return page;
 	}
 }
@@ -142,6 +143,9 @@ export function createSessionRpcClient(transport: RpcTransport): SessionRpcClien
 			rpcCommand({ type: "list_foreign_sessions", source }, 60_000),
 		importForeignSession: (source: "claude" | "codex", foreignId: string) =>
 			rpcCommand({ type: "import_foreign_session", source, foreignId }, 120_000),
+		previewOfficialArchive: (filePath: string) => rpcCommand({ type: "preview_official_archive", filePath }),
+		importOfficialArchive: (filePath: string, archiveId: string, conversationIds: string[]) =>
+			rpcCommand({ type: "import_official_archive", filePath, archiveId, conversationIds }),
 		forkFrom: (entryId: string) => rpcCommand({ type: "fork_from", entryId }),
 		switchLeaf: (entryId: string, options?: { summarize?: boolean; customInstructions?: string }) =>
 			rpcCommand({ type: "switch_leaf", entryId, ...options }),

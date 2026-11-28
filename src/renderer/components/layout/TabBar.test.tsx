@@ -24,6 +24,7 @@ import { useTabsStore } from "../../stores/tabs";
 import { useTodoStore } from "../../stores/todo";
 import { useToolsStore } from "../../stores/tools";
 import { useUiStore } from "../../stores/ui";
+import { useWorkspaceMode } from "../../stores/workspace-mode";
 import { TabBar } from "./TabBar";
 
 const { document, window, Event, CustomEvent, HTMLElement, Node } = parseHTML("<html><body></body></html>");
@@ -70,6 +71,7 @@ function listedSession(id: string, overrides: Partial<SessionInfo> = {}): Sessio
 }
 
 interface MockOmp {
+	initialLanguage?: "vi";
 	sidecar: { defaultWorkspace: Mock<() => Promise<string>> };
 	sessions: {
 		list: Mock<() => Promise<SessionInfo[]>>;
@@ -263,6 +265,7 @@ afterEach(async () => {
 	useComposerStore.getState().reset();
 	useSessionStore.getState().reset();
 	useSidebarPrefs.getState().reset();
+	useWorkspaceMode.setState({ defaultWorkspace: null });
 	useMessagesStore.getState().reset();
 	useTodoStore.getState().reset();
 	useQueueStore.setState({ steering: [], followUp: [] });
@@ -917,6 +920,23 @@ describe("TabBar close confirm", () => {
 });
 
 describe("TabBar chip labels (F-HYDRATE)", () => {
+	it("localizes the internal Work workspace without translating project or custom session names", async () => {
+		omp.initialLanguage = "vi";
+		useTabsStore.setState({
+			tabs: [
+				{ kind: "agent", id: "t0", cwd: "/default/work", status: "ready", unreadDone: false },
+				{ kind: "agent", id: "t1", cwd: "/default/work", status: "ready", unreadDone: false },
+				{ kind: "agent", id: "t2", cwd: "/project/work", status: "ready", unreadDone: false },
+				{ kind: "agent", id: "t3", cwd: "/default/work", title: "work", status: "ready", unreadDone: false },
+			],
+			activeTabId: "t0",
+			bundles: new Map(),
+		});
+		await mount(<TabBar />);
+		expect(tabTitles()).toEqual(["Làm việc", "Làm việc #2", "work", "work"]);
+		expect(tabWorkspaces()).toEqual(["Làm việc", "Làm việc", "work", "Làm việc"]);
+	});
+
 	it("disambiguates identical untitled labels with an index suffix in tab order", async () => {
 		useTabsStore.setState({
 			tabs: [

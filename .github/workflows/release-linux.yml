@@ -118,12 +118,23 @@ jobs:
           path: oh-my-pi
           persist-credentials: false
 
+      - name: Set dependency download cache path
+        run: printf 'BUN_INSTALL_CACHE_DIR=%s/bun-download-cache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - name: Cache the source-built ${{ matrix.variant }} addon
         id: native-cache
         uses: actions/cache@v5
         with:
           path: oh-my-pi/packages/natives/native/pi_natives.linux-x64-${{ matrix.variant }}.node
           key: wisa-natives-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.variant }}-${{ needs.source.outputs.core_sha }}
+
+      - name: Cache Bun dependency downloads
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.BUN_INSTALL_CACHE_DIR }}
+          key: wisa-bun-download-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('oh-my-pi/bun.lock', 'oh-my-pi/package.json', 'oh-my-pi/packages/**/package.json') }}
+          restore-keys: wisa-bun-download-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -135,6 +146,30 @@ jobs:
         working-directory: oh-my-pi
         run: bun install
 
+      - name: Fingerprint the native build toolchain
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        id: rust-toolchain
+        working-directory: oh-my-pi
+        shell: bash
+        run: |
+          # Run inside Core so rustup selects its pinned toolchain, not the runner default.
+          fingerprint="$({ set -e; rustc -Vv; cargo -V; cc --version; c++ --version; cmake --version; ninja --version; } | sha256sum | cut -d' ' -f1)"
+          printf 'fingerprint=%s\n' "$fingerprint" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Cargo downloads and native build intermediates
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+            ~/.cargo/git/db
+            oh-my-pi/target
+          # Only source changes may reuse intermediates. Cargo revalidates them;
+          # the exact-SHA addon cache above remains the sole shipping binary cache.
+          key: wisa-linux-cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.variant }}-ci-${{ steps.rust-toolchain.outputs.fingerprint }}-${{ hashFiles('oh-my-pi/**/Cargo.toml', 'oh-my-pi/Cargo.lock', 'oh-my-pi/.cargo/config*', 'oh-my-pi/rust-toolchain*', 'oh-my-pi/scripts/bazel-natives.ts', 'oh-my-pi/scripts/host-detect.ts', 'oh-my-pi/scripts/stamp-native-version.ts', 'oh-my-pi/packages/natives/scripts/**', 'oh-my-pi/packages/natives/package.json') }}-${{ needs.source.outputs.core_sha }}
+          restore-keys: wisa-linux-cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.variant }}-ci-${{ steps.rust-toolchain.outputs.fingerprint }}-${{ hashFiles('oh-my-pi/**/Cargo.toml', 'oh-my-pi/Cargo.lock', 'oh-my-pi/.cargo/config*', 'oh-my-pi/rust-toolchain*', 'oh-my-pi/scripts/bazel-natives.ts', 'oh-my-pi/scripts/host-detect.ts', 'oh-my-pi/scripts/stamp-native-version.ts', 'oh-my-pi/packages/natives/scripts/**', 'oh-my-pi/packages/natives/package.json') }}-
+
       - name: Build ${{ matrix.variant }} natives from the pinned Core source
         if: steps.native-cache.outputs.cache-hit != 'true'
         working-directory: oh-my-pi
@@ -142,6 +177,7 @@ jobs:
         env:
           OMP_NATIVE_CARGO_PROFILE: ci
           PI_NATIVE_VARIANT: ${{ matrix.variant }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/oh-my-pi/target
         run: bun --cwd=packages/natives run build
 
       - name: Verify the addon loads and reports the pinned version
@@ -190,12 +226,31 @@ jobs:
           path: oh-my-pi/packages/gui
           persist-credentials: false
 
+      - name: Set dependency download cache path
+        run: printf 'BUN_INSTALL_CACHE_DIR=%s/bun-download-cache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           # The sidecar build requires the monorepo's exact Bun (packageManager),
           # so follow the pinned checkout instead of a hard-coded version.
           bun-version-file: oh-my-pi/package.json
+
+      - name: Cache Bun dependency downloads
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.BUN_INSTALL_CACHE_DIR }}
+          key: wisa-bun-download-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('oh-my-pi/bun.lock', 'oh-my-pi/package.json', 'oh-my-pi/packages/**/package.json') }}
+          restore-keys: wisa-bun-download-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Electron and packaging-tool downloads
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: wisa-electron-download-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('oh-my-pi/bun.lock', 'oh-my-pi/package.json', 'oh-my-pi/packages/gui/package.json', 'oh-my-pi/packages/gui/electron-builder*.yml') }}
+          restore-keys: wisa-electron-download-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install dependencies
         working-directory: oh-my-pi
@@ -249,6 +304,28 @@ jobs:
         working-directory: oh-my-pi/packages/gui
         run: bun run check:locale
 
+      - name: Cache the offline Browser Use payload
+        id: browser-use-cache
+        uses: actions/cache@v5
+        with:
+          path: oh-my-pi/packages/gui/resources/browser-use
+          # No partial restore: the script pins uv, CPython and Chromium and
+          # installs Browser Use's Python dependencies. Include build inputs,
+          # licenses and packaging hooks rather than just the app version.
+          key: wisa-browser-use-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('oh-my-pi/packages/gui/scripts/build-browser-use.cjs', 'oh-my-pi/packages/gui/resources/LICENSE-CHROMIUM', 'oh-my-pi/packages/gui/resources/browser-use-bridge.py', 'oh-my-pi/packages/gui/resources/studio-agent.yml', 'oh-my-pi/packages/gui/scripts/after-pack.cjs', 'oh-my-pi/packages/gui/electron-builder*.yml') }}
+
+      - name: Build the offline Browser Use payload on cache miss
+        if: steps.browser-use-cache.outputs.cache-hit != 'true'
+        working-directory: oh-my-pi/packages/gui
+        # The builder is standalone Node code: its full contents contain every
+        # payload version, source URL and pinned archive checksum. Do not key on
+        # package.json's unrelated app version (which changes every release).
+        run: node scripts/build-browser-use.cjs
+
+      - name: Verify the built or restored offline Browser Use payload
+        working-directory: oh-my-pi/packages/gui
+        run: node scripts/build-browser-use.cjs --verify resources/browser-use
+
       - name: Build GUI + Linux packages
         working-directory: oh-my-pi/packages/gui
         # NOTE: invoke electron-builder through bun — the bunx shim falls back
@@ -256,7 +333,7 @@ jobs:
         # The monorepo's bun install hoists deps to the workspace root, so the
         # cli.js lives two levels up, not in packages/gui/node_modules.
         run: |
-          bun run build:browser-use
+          # Browser Use was built or restored and verified in the preceding steps.
           bun run build
           bun ../../node_modules/electron-builder/cli.js \
             --config electron-builder.yml --linux AppImage deb --publish never

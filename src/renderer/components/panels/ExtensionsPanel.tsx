@@ -30,14 +30,13 @@ import type {
 	RpcHookInfo,
 	RpcHooksResult,
 	RpcMcpServerInfo,
-	RpcMcpServersResult,
 	RpcResponse,
 } from "../../../shared/rpc-types";
 import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
+import { useMcpServers } from "../../hooks/use-mcp-servers";
 import { describeError } from "../../lib/errors";
 import { cx, shortenPath } from "../../lib/format";
 import { useT } from "../../lib/i18n";
-import { acceptsActiveTabEvents } from "../../lib/tab-routing";
 import { useSessionStore } from "../../stores/session";
 import { useTabsStore } from "../../stores/tabs";
 import { toast } from "../../stores/toast";
@@ -45,7 +44,6 @@ import { Badge, type BadgeVariant, Button, Modal, Spinner, type TabItem, Tabs } 
 import { SwitchTrack } from "../common/SwitchTrack";
 import { SettingsPageIntro } from "../settings/SettingsPageIntro";
 import { type McpTestView, summarizeMcpTestData } from "./mcp/McpFeedback";
-import { McpRegistry } from "./mcp/McpRegistry";
 import { type McpCardAction, type McpReauthPhase, McpServerCard } from "./mcp/McpServerCard";
 import { McpServerWizard } from "./mcp/McpServerWizard";
 
@@ -75,8 +73,6 @@ interface TabRpc<T> {
 
 const fetchHooks = (rpc: SessionRpc): Promise<RpcResponse> => rpc.getHooks();
 const pickHooks = (data: unknown): RpcHookInfo[] => (data as RpcHooksResult | undefined)?.hooks ?? [];
-const fetchMcpServers = (rpc: SessionRpc): Promise<RpcResponse> => rpc.getMcpServers();
-const pickMcpServers = (data: unknown): RpcMcpServerInfo[] => (data as RpcMcpServersResult | undefined)?.servers ?? [];
 const fetchCommands = (rpc: SessionRpc): Promise<RpcResponse> => rpc.getAvailableCommands();
 const pickCommands = (data: unknown): AvailableCommand[] =>
 	((data as { commands?: AvailableCommand[] } | undefined)?.commands ?? []).filter(isCustomCommand);
@@ -560,14 +556,12 @@ function McpTab({
 	onQueryChange,
 	showSearch,
 	embedded,
-	showRegistry = true,
 }: {
-	rpc: TabRpc<RpcMcpServerInfo[]>;
+	rpc: Pick<TabRpc<RpcMcpServerInfo[]>, "data" | "error" | "loading" | "ready" | "refresh">;
 	query: string;
 	onQueryChange: (q: string) => void;
 	showSearch?: boolean;
 	embedded?: boolean;
-	showRegistry?: boolean;
 }) {
 	const tabRpc = useSessionRpc();
 	const t = useT();
@@ -580,13 +574,6 @@ function McpTab({
 	// Mirrors `reauths` so the async reauth body can tell an intentional cancel
 	// (suppress its failure toast) from a genuine one after the await.
 	const reauthPhaseRef = useRef<Record<string, McpReauthPhase>>({});
-	const waitingForMcp = rpc.data?.some(server => server.status === "connecting") ?? false;
-	const { error: listError, loading, ready, refresh } = rpc;
-	useEffect(() => {
-		if (!waitingForMcp || !ready || loading || listError) return;
-		const timer = window.setTimeout(() => void refresh(), 1000);
-		return () => window.clearTimeout(timer);
-	}, [waitingForMcp, ready, loading, listError, refresh]);
 	// Prune stale per-server test/reauth entries whenever the server set
 	// changes: a removed server's result must not leak onto a same-name
 	// re-add after the next refetch (state is keyed by name, not identity).
@@ -645,6 +632,7 @@ function McpTab({
 			view = { kind: "error", error: describeError(cause) };
 		}
 		setTests(prev => ({ ...prev, [server.name]: { testing: false, view } }));
+		await rpc.refresh();
 	};
 
 	const runReauth = async (server: RpcMcpServerInfo): Promise<void> => {
@@ -755,9 +743,9 @@ function McpTab({
 	return (
 		<>
 			<div className={cx(!embedded && "min-h-0 flex-1 overflow-y-auto")}>
-				<section aria-label={t("mcp.registry.installedTitle")} className={cx(!embedded && "px-4")}>
+				<section aria-label={t("mcp.configuredTitle")} className={cx(!embedded && "px-4")}>
 					<h3 className={cx("pt-3 font-medium text-(--omp-text)", embedded && "px-4")}>
-						{t("mcp.registry.installedTitle")}
+						{t("mcp.configuredTitle")}
 					</h3>
 					<TabFrame
 						embedded
@@ -811,32 +799,6 @@ function McpTab({
 						</div>
 					</TabFrame>
 				</section>
-				{showRegistry && (
-					<McpRegistry
-						busyKey={mutation.busyKey}
-						canInstall={rpc.ready && rpc.data !== null && rpc.error === null && mutation.busyKey === null}
-						onInstall={(name, remote) => {
-							const { cwd, status } = useSessionStore.getState();
-							const { activeTabId } = useTabsStore.getState();
-							if (
-								status !== "ready" ||
-								!acceptsActiveTabEvents() ||
-								`${activeTabId ?? "none"}:${cwd}` !== rpc.routeKey
-							) {
-								return;
-							}
-							void mutation.run(
-								name,
-								null,
-								() => tabRpc.mcpAdd(name, { transport: remote.transport, url: remote.url }, "project"),
-								t("mcp.wizard.addFailed"),
-							);
-						}}
-						routeKey={rpc.routeKey}
-						servers={rpc.data ?? []}
-						workspace={rpc.workspace}
-					/>
-				)}
 			</div>
 			<McpServerWizard
 				onAdded={() => {
@@ -942,7 +904,7 @@ function CommandsTab({
 export function ExtensionSettingsPage({ tabId, query }: { tabId: TabId; query: string }) {
 	const t = useT();
 	const hooks = useTabRpc(true, tabId === "hooks", fetchHooks, pickHooks);
-	const mcp = useTabRpc(true, tabId === "mcp", fetchMcpServers, pickMcpServers);
+	const mcp = useMcpServers(tabId === "mcp");
 	const commands = useTabRpc(true, tabId === "commands", fetchCommands, pickCommands);
 	const onQueryChange = useCallback(() => {}, []);
 	return (
@@ -976,7 +938,7 @@ export function ExtensionsPanel({ open, onClose, initialTab = "hooks" }: Extensi
 	const [query, setQuery] = useState("");
 
 	const hooks = useTabRpc(open, tab === "hooks", fetchHooks, pickHooks);
-	const mcp = useTabRpc(open, tab === "mcp", fetchMcpServers, pickMcpServers);
+	const mcp = useMcpServers(open && tab === "mcp");
 	const commands = useTabRpc(open, tab === "commands", fetchCommands, pickCommands);
 
 	// Reopening starts fresh on the requested tab with no stale filter.
@@ -1012,7 +974,7 @@ export function ExtensionsPanel({ open, onClose, initialTab = "hooks" }: Extensi
 					tabs={tabs}
 				/>
 				{tab === "hooks" && <HooksTab onQueryChange={setQuery} query={query} rpc={hooks} />}
-				{tab === "mcp" && <McpTab onQueryChange={setQuery} query={query} rpc={mcp} showRegistry={open} />}
+				{tab === "mcp" && <McpTab onQueryChange={setQuery} query={query} rpc={mcp} />}
 				{tab === "commands" && <CommandsTab onQueryChange={setQuery} query={query} rpc={commands} />}
 				<div className="shrink-0 border-t border-(--omp-border-muted) px-4 py-2 text-omp-xs text-(--omp-dim)">
 					{t(`extPanel.footer.${tab}`)}

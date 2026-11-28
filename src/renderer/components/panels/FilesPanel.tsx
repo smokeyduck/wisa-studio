@@ -20,7 +20,7 @@ import {
 	RefreshCw,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type DocumentPage, HTML_DOCUMENT, OFFICE_DOCUMENT, TABLE_DOCUMENT } from "../../../shared/document-preview";
 import type { FileEditFailure, FsTreeEntry } from "../../../shared/ipc-types";
 import { isSessionOutputPath } from "../../../shared/session-output";
@@ -29,6 +29,7 @@ import { basename, copyText, formatBytes } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isSelectAll } from "../../lib/keymap";
 import { MarkdownRenderer } from "../../lib/markdown";
+import { setFileDraft, useFileDrafts } from "../../stores/file-drafts";
 import { useSessionStore } from "../../stores/session";
 import { useRuntimeTabId } from "../../stores/session-runtime-context";
 import { useTabsStore } from "../../stores/tabs";
@@ -49,8 +50,9 @@ import {
 	type WorkspaceFileTab,
 } from "./file-tabs";
 import { useWorkspaceExplorer } from "./use-workspace-explorer";
-import { setFileDraft, useFileDrafts, WorkspaceFileEditor } from "./WorkspaceFileEditor";
 import { FileLabel, PanelEmpty, PanelSearch, PanelToolbar, ToolbarIconButton } from "./workspace-ui";
+
+const WorkspaceFileEditor = lazy(() => import("./WorkspaceFileEditor").then(m => ({ default: m.WorkspaceFileEditor })));
 
 const PREVIEW_MAX_BYTES = 200_000;
 const SVG_NAME = /\.svg$/i;
@@ -477,14 +479,16 @@ export function FilesPanel() {
 					</p>
 				)}
 				{editing ? (
-					<WorkspaceFileEditor
-						key={draftId}
-						draftId={draftId}
-						path={filePreviewPath}
-						tabId={tabId}
-						line={filePreviewLine}
-						lineRequest={activeTab.lineRequest}
-					/>
+					<Suspense fallback={<Spinner size="sm" />}>
+						<WorkspaceFileEditor
+							key={draftId}
+							draftId={draftId}
+							path={filePreviewPath}
+							tabId={tabId}
+							line={filePreviewLine}
+							lineRequest={activeTab.lineRequest}
+						/>
+					</Suspense>
 				) : (
 					<div
 						ref={previewScrollRef}

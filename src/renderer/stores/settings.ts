@@ -27,8 +27,6 @@ export interface SettingsStore {
 	omitThinking: boolean;
 	/** Agent `display.showTokenUsage` setting: per-turn usage row on assistant messages. */
 	showTokenUsage: boolean;
-	/** Agent `display.collapseCompacted` setting: fold pre-compaction history behind an expander. */
-	collapseCompacted: boolean;
 	/** Agent `tui.titleState` setting: run-state marker in the window title. */
 	titleState: boolean;
 	/** Agent `goal.statusInFooter` setting: goal status chip in the composer. */
@@ -75,9 +73,8 @@ const initialState = {
 	hideThinkingBlock: false,
 	proseOnlyThinking: true,
 	omitThinking: false,
-	// Schema defaults: usage row off, compaction folded, title/goal chrome on.
+	// Schema defaults: usage row off, title/goal chrome on.
 	showTokenUsage: false,
-	collapseCompacted: true,
 	titleState: true,
 	goalStatusInFooter: true,
 	// Schema defaults: progress/speech/stt/tight/colorblind all off.
@@ -134,7 +131,6 @@ const DISPLAY_BOOL_MAP: Record<
 	| "proseOnlyThinking"
 	| "omitThinking"
 	| "showTokenUsage"
-	| "collapseCompacted"
 	| "titleState"
 	| "goalStatusInFooter"
 	| "showProgress"
@@ -146,7 +142,6 @@ const DISPLAY_BOOL_MAP: Record<
 	proseOnlyThinking: "proseOnlyThinking",
 	omitThinking: "omitThinking",
 	"display.showTokenUsage": "showTokenUsage",
-	"display.collapseCompacted": "collapseCompacted",
 	"tui.titleState": "titleState",
 	"goal.statusInFooter": "goalStatusInFooter",
 	"terminal.showProgress": "showProgress",

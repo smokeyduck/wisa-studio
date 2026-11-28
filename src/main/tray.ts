@@ -19,8 +19,10 @@ import {
 } from "../shared/ipc-types";
 import { languageDetails } from "../shared/languages";
 import { fullestWindow, quotaLevel, remainingQuotaFraction, splitQuotaRows } from "../shared/quotas";
+import { isQuitting } from "./app-quit";
 import { getMainLanguage } from "./i18n";
 import { encodePng, type Rgba, ringPixels } from "./quota-icon";
+import { writeRuntimeLog } from "./runtime-log";
 import {
 	approvalLabel,
 	formatTokens,
@@ -44,7 +46,7 @@ let trayState: TrayState | null = null;
 /** Label set the currently installed native menu renders, and whether it is open. */
 let installedSignature: string | null = null;
 let menuIsOpen = false;
-let tooltip = "WISA STUDIO";
+let tooltip = "Wisa";
 
 function buildIcon(): Electron.NativeImage {
 	// macOS status items are template images: the system applies the correct
@@ -118,8 +120,7 @@ function quotaItems(
 function send(windowManager: WindowManager, action: MenuAction, payload?: MenuActionPayload): void {
 	const win = windowManager.getTargetWindow();
 	if (win) {
-		win.show();
-		win.focus();
+		windowManager.focusWindowById(win.webContents.id);
 		win.webContents.send(IPC_EVENTS.MENU_ACTION, { action, ...payload });
 		return;
 	}
@@ -236,8 +237,8 @@ function buildContextMenu(windowManager: WindowManager, state: TrayState | null)
 			label: t(lang, "showHide"),
 			click: () => {
 				const win = windowManager.getTargetWindow();
-				if (win?.isVisible()) win.hide();
-				else if (win) win.show();
+				if (win?.isVisible() && !win.isMinimized()) windowManager.hideWindow(win);
+				else if (win) windowManager.focusWindowById(win.webContents.id);
 				else spawnWindowRef?.();
 			},
 		},
@@ -273,25 +274,31 @@ function onAppearanceChange(): void {
 	if (!menuIsOpen) installMenu();
 }
 
-export function createTray(windowManager: WindowManager, spawnWindow: SpawnWindow): Tray {
+export function createTray(windowManager: WindowManager, spawnWindow: SpawnWindow): Tray | null {
 	windowManagerRef = windowManager;
 	spawnWindowRef = spawnWindow;
-	tray = new Tray(buildIcon());
-	tray.setToolTip(trayTooltip(null));
-	installMenu();
-	nativeTheme.on("updated", onAppearanceChange);
-
-	tray.on("click", () => {
-		const win = windowManager.getTargetWindow();
-		if (win) {
-			win.show();
-			win.focus();
-		} else {
-			spawnWindowRef?.();
-		}
-	});
-
-	return tray;
+	windowManager.setBackgroundRestoreAvailable(() => tray !== null && !tray.isDestroyed());
+	try {
+		tray = new Tray(buildIcon());
+		tray.setToolTip(trayTooltip(null));
+		installMenu();
+		nativeTheme.on("updated", onAppearanceChange);
+		tray.on("click", () => {
+			const win = windowManager.getTargetWindow();
+			if (win) windowManager.focusWindowById(win.webContents.id);
+			else spawnWindowRef?.();
+		});
+		return tray;
+	} catch (error) {
+		destroyTray();
+		writeRuntimeLog({
+			source: "tray",
+			message:
+				"System tray could not start. Windows will stay open on Close unless the macOS Dock is available. Enable your desktop's tray/status notifier support, or use Quit to exit WISA.",
+			details: String(error),
+		});
+		return null;
+	}
 }
 
 /**
@@ -313,8 +320,14 @@ export function setTrayState(state: TrayState): void {
 export function destroyTray(): void {
 	nativeTheme.off("updated", onAppearanceChange);
 	tray?.destroy();
+	if (!isQuitting() && windowManagerRef) {
+		for (const win of windowManagerRef.getAllWindows()) {
+			if (!win.isVisible()) windowManagerRef.focusWindowById(win.webContents.id);
+		}
+	}
 	tray = null;
 	windowManagerRef = null;
+	spawnWindowRef = null;
 	trayState = null;
 	installedSignature = null;
 	menuIsOpen = false;

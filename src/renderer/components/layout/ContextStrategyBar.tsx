@@ -19,7 +19,7 @@ import {
 	detectStrategy,
 	type ExpectedMethod,
 	expectedMethod,
-	isLossless,
+	hasCompactionThresholdOverride,
 	type ModelProfile,
 	modelProfile,
 	STRATEGY_IDS,
@@ -48,6 +48,7 @@ export function Segmented<T extends number>({
 	options,
 	format,
 	autoLabel,
+	showCustomValue = true,
 	onChange,
 	disabled,
 }: {
@@ -57,19 +58,21 @@ export function Segmented<T extends number>({
 	format: (value: T) => string;
 	/** When set, a leading choice for the agent's default (`-1`). */
 	autoLabel?: string;
+	/** Keep legacy settings readable without offering a retired preset. */
+	showCustomValue?: boolean;
 	onChange: (value: T | -1) => void;
 	disabled: boolean;
 }) {
 	// A value set outside the offered choices (edited in Settings) still shows, selected.
 	const shown: Array<T | -1> = [...(autoLabel ? [-1 as const] : []), ...options];
-	if (!shown.includes(value)) shown.push(value);
+	if (showCustomValue && !shown.includes(value)) shown.push(value);
 	return (
-		<div className="flex items-center justify-between gap-3">
+		<div className="flex flex-wrap items-center justify-between gap-2">
 			<span className="text-omp-sm text-(--omp-muted)">{label}</span>
 			<div
 				role="radiogroup"
 				aria-label={label}
-				className="flex overflow-hidden rounded-md border border-(--omp-border-muted)"
+				className="flex flex-wrap rounded-md border border-(--omp-border-muted)"
 			>
 				{shown.map(option => (
 					<button
@@ -166,10 +169,10 @@ export function ContextStrategyBar() {
 	const openSettings = useUiStore(state => state.openSettings);
 	const { config, saving, write } = useCompactionConfig();
 	const [open, setOpen] = useState(false);
-	const [pos, setPos] = useState<{ left: number; bottom: number; width: number } | null>(null);
-	const { mounted, closing } = useOverlayPresence(open);
+	const [pos, setPos] = useState<{ left: number; bottom: number; width: number; maxHeight: number } | null>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const popoverRef = useRef<HTMLDivElement>(null);
+	const { mounted, closing } = useOverlayPresence(open, popoverRef, "popover");
 
 	useLayoutEffect(() => {
 		if (!open || !triggerRef.current) return;
@@ -181,6 +184,7 @@ export function ContextStrategyBar() {
 			left: Math.max(EDGE, Math.min(rect.left, viewportWidth - width - EDGE)),
 			bottom: viewportHeight - rect.top + 6,
 			width,
+			maxHeight: Math.max(0, Math.min(rect.top, viewportHeight) - EDGE - 6),
 		});
 	}, [open]);
 
@@ -208,18 +212,20 @@ export function ContextStrategyBar() {
 	const strategy = detectStrategy(config);
 	const method = expectedMethod(config, profile);
 	const threshold = compactionThreshold(config, profile);
+	const thresholdOverridden = hasCompactionThresholdOverride(config, profile);
 	const modelName = model.name ?? model.id;
 	const methodName = t(`contextStrategy.method.${methodKey(method)}`);
 	const atText = threshold !== null ? t("contextStrategy.at", { tokens: formatTokens(threshold) }) : null;
 
 	const applyStrategy = async (id: StrategyId) => {
-		if (strategy === id) return;
+		if (strategy === id || (id === "preserve" && !profile.vision)) return;
 		await write(strategyPatch(id));
 	};
 
 	return (
 		<div className="omp-context-bar flex h-6 min-w-0 items-center justify-between gap-2 px-1">
 			<button
+				data-tour="compact"
 				ref={triggerRef}
 				type="button"
 				aria-expanded={open}
@@ -255,10 +261,10 @@ export function ContextStrategyBar() {
 						aria-label={t("contextStrategy.title")}
 						aria-hidden={closing || undefined}
 						inert={closing}
-						style={{ left: pos.left, bottom: pos.bottom, width: pos.width }}
+						style={{ left: pos.left, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight }}
 						className={cx(
-							"fixed z-[100] rounded-xl border border-(--omp-border) bg-(--omp-panel-bg) p-3 shadow-(--omp-shadow-md)",
-							closing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
+							"fixed z-[100] overflow-y-auto overscroll-contain rounded-xl border border-(--omp-border) bg-(--omp-panel-bg) p-3 shadow-(--omp-shadow-md)",
+							closing && "pointer-events-none",
 						)}
 					>
 						<ModelSummary name={modelName} provider={model.provider} profile={profile} />
@@ -269,7 +275,7 @@ export function ContextStrategyBar() {
 									key={id}
 									id={id}
 									selected={strategy === id}
-									disabled={saving}
+									disabled={saving || (id === "preserve" && !profile.vision)}
 									onSelect={() => void applyStrategy(id)}
 								/>
 							))}
@@ -287,7 +293,11 @@ export function ContextStrategyBar() {
 							)}
 						</div>
 
-						<Outcome method={method} threshold={threshold} />
+						{thresholdOverridden && (
+							<p className="mt-2 text-omp-xs leading-snug text-(--omp-dim)">
+								{t("contextStrategy.thresholdOverride")}
+							</p>
+						)}
 
 						<div className="mt-3 space-y-2 border-t border-(--omp-border-muted) pt-3">
 							<Segmented
@@ -296,7 +306,8 @@ export function ContextStrategyBar() {
 								options={THRESHOLD_CHOICES}
 								format={value => `${value}%`}
 								autoLabel={t("contextStrategy.auto")}
-								disabled={saving}
+								showCustomValue={config.thresholdPercent !== 10}
+								disabled={saving || thresholdOverridden}
 								onChange={value => void write([{ path: CONTEXT_SETTING_PATHS.thresholdPercent, value }])}
 							/>
 							<Segmented
@@ -307,6 +318,7 @@ export function ContextStrategyBar() {
 								disabled={saving}
 								onChange={value => void write([{ path: CONTEXT_SETTING_PATHS.keepRecentTokens, value }])}
 							/>
+							<p className="text-omp-xs leading-snug text-(--omp-dim)">{t("contextStrategy.autoHint")}</p>
 							<Switch
 								label={t("contextStrategy.autoCompact")}
 								checked={autoCompaction}
@@ -408,6 +420,11 @@ function StrategyRow({
 			<span className="min-w-0 flex-1">
 				<span className="flex flex-wrap items-center gap-1.5">
 					<span className="text-omp-sm font-medium text-(--omp-text)">{t(`contextStrategy.strategy.${id}`)}</span>
+					{id === "balanced" && (
+						<span className="rounded-full border border-(--omp-border-muted) px-1.5 text-omp-xxs text-(--omp-muted)">
+							{t("contextStrategy.default")}
+						</span>
+					)}
 					{id === "notes" && (
 						<span className="rounded-full border border-(--omp-border-muted) px-1.5 text-omp-xxs text-(--omp-dim)">
 							{t("contextStrategy.experimental")}
@@ -419,29 +436,5 @@ function StrategyRow({
 				</span>
 			</span>
 		</button>
-	);
-}
-
-/** What will actually happen for this model under the current settings, in one sentence. */
-function Outcome({ method, threshold }: { method: ExpectedMethod | null; threshold: number | null }) {
-	const t = useT();
-	const key = methodKey(method);
-	return (
-		<div className="mt-3 rounded-lg border border-(--omp-border-muted) px-2.5 py-2 text-omp-xs leading-snug text-(--omp-muted)">
-			<div>
-				{threshold !== null
-					? t("contextStrategy.outcome", {
-							tokens: formatTokens(threshold),
-							method: t(`contextStrategy.method.${key}`),
-						})
-					: t("contextStrategy.outcomeNoWindow", { method: t(`contextStrategy.method.${key}`) })}
-			</div>
-			<div className="mt-0.5 text-(--omp-dim)">{t(`contextStrategy.method.${key}.desc`)}</div>
-			{method !== null && (
-				<div className={cx("mt-1", isLossless(method) ? "text-(--omp-success)" : "text-(--omp-dim)")}>
-					{t(isLossless(method) ? "contextStrategy.lossless" : "contextStrategy.lossy")}
-				</div>
-			)}
-		</div>
 	);
 }

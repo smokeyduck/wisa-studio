@@ -40,14 +40,14 @@ function state(overrides: Partial<TrayState> = {}): TrayState {
 
 describe("tray status surface", () => {
 	it("names the run state in the hover text, in the language the renderer reports", () => {
-		expect(trayTooltip(state({ status: "streaming" }))).toBe("WISA STUDIO - alpha - Running");
-		expect(trayTooltip(state({ status: "waiting", language: "zh" }))).toBe("WISA STUDIO - alpha - 等待确认");
+		expect(trayTooltip(state({ status: "streaming" }))).toBe("Wisa - alpha - Running");
+		expect(trayTooltip(state({ status: "waiting", language: "zh" }))).toBe("Wisa - alpha - 等待确认");
 		expect(trayTooltip(state({ status: "error" }))).toContain("Error");
 		expect(trayTooltip(state({ status: "idle" }))).toContain("Idle");
 	});
 
 	it("labels the project before any renderer state arrives", () => {
-		expect(trayTooltip(null)).toBe("WISA STUDIO");
+		expect(trayTooltip(null)).toBe("Wisa");
 	});
 });
 

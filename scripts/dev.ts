@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { DEV_RESTART_ENV, DEV_RESTART_EXIT_CODE } from "../src/shared/dev-restart";
 
 const checkout = realpathSync(join(import.meta.dir, ".."));
@@ -68,9 +68,7 @@ async function stopDev(): Promise<void> {
 		else if (response.status === 204) stopped++;
 		else throw new Error(await response.text());
 	}
-	console.log(
-		stopped ? "Stopped WISA STUDIO dev." : "No WISA STUDIO dev process is running for this checkout and profile.",
-	);
+	console.log(stopped ? "Stopped Wisa dev." : "No Wisa dev process is running for this checkout and profile.");
 }
 
 async function runDev(args: string[]): Promise<number> {
@@ -124,11 +122,14 @@ async function runDev(args: string[]): Promise<number> {
 		const setup = await run(process.execPath, ["run", "build:omp:dev"]);
 		if (stopping) return 0;
 		if (setup !== 0) return setup;
-		const cli = join(dirname(import.meta.resolveSync("electron-vite/package.json")), "bin", "electron-vite.js");
+		const notch = await run(process.execPath, ["run", "build:notch-island"]);
+		if (stopping) return 0;
+		if (notch !== 0) return notch;
+		const cli = join(checkout, "scripts", "dev-server.ts");
 		const env = { ...process.env, [DEV_RESTART_ENV]: "1" };
 		let exitCode: number;
 		do {
-			exitCode = await run("node", [cli, "dev", ...args], env);
+			exitCode = await run(process.execPath, [cli, ...args], env);
 		} while (!stopping && exitCode === DEV_RESTART_EXIT_CODE);
 		return stopping ? 0 : exitCode;
 	} finally {

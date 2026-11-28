@@ -73,6 +73,9 @@ describe("theme registry", () => {
 			assertReadable("--omp-diff-added", "--omp-diff-added-bg", color("--omp-code-bg"));
 			assertReadable("--omp-diff-removed", "--omp-diff-removed-bg", color("--omp-code-bg"));
 			assertReadable("--omp-btn-primary-text", "--omp-btn-primary-bg");
+			if (name === "dark" || name === "light") {
+				assertReadable("--omp-btn-primary-text", "--omp-accent-bright");
+			}
 			assertReadable("--omp-btn-danger-text", "--omp-btn-danger-bg");
 		}
 	});

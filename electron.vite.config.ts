@@ -12,13 +12,12 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 const MAIN_BUNDLED_DEPS = ["chokidar", "electron-store", "electron-updater", "yaml", "zod"];
 
 /**
- * Heavy renderer vendor libs split out of the eager main chunk. Patterns match
- * node_modules path segments; each family (and its transitive deps) lands in a
- * named chunk that lazy overlays load on demand instead of up front.
+ * Renderer vendor families with stable chunk names. Keep shared dependencies
+ * outside lazy-only families so an eager consumer cannot pull the whole family
+ * into startup. Rollup places unmatched dependencies according to their consumers.
  */
 const VENDOR_CHUNK_RULES: ReadonlyArray<readonly [RegExp, string]> = [
-	// React core: every chunk depends on it, so shared interop helpers land
-	// here — keeping cross-chunk imports one-way (no circular chunks).
+	// React core is shared by the shell and every overlay.
 	[/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/, "react"],
 	// Markdown pipeline: react-markdown + the unified/remark/rehype/mdast/hast ecosystem.
 	[
@@ -27,9 +26,11 @@ const VENDOR_CHUNK_RULES: ReadonlyArray<readonly [RegExp, string]> = [
 	],
 	// KaTeX (pulled in by rehype-katex; kept separate so the markdown chunk stays lean).
 	[/[\\/]node_modules[\\/]katex[\\/]/, "katex"],
+	// DOMPurify is also used by the eager file preview, not just Mermaid.
+	[/[\\/]node_modules[\\/]dompurify[\\/]/, "dompurify"],
 	// Mermaid + its rendering stack (lazy-imported).
 	[
-		/[\\/]node_modules[\\/](mermaid|@mermaid-js|d3[^\\/]*|dagre[^\\/]*|@dagrejs|elkjs|dompurify|khroma|cytoscape|stylis|ts-dedent|marked|lodash-es|dayjs|uuid|robust-predicates|topojson-client)[\\/]/,
+		/[\\/]node_modules[\\/](mermaid|@mermaid-js|d3[^\\/]*|dagre[^\\/]*|@dagrejs|elkjs|khroma|cytoscape|stylis|ts-dedent|marked|lodash-es|dayjs|uuid|robust-predicates|topojson-client)[\\/]/,
 		"mermaid",
 	],
 	// chart.js + react-chartjs-2.
@@ -56,6 +57,8 @@ function manualChunks(id: string): string | undefined {
 
 export default defineConfig({
 	main: {
+		// Main is ESM; all bundled asset lookups resolve beside their emitted chunk.
+		define: { __dirname: "import.meta.dirname" },
 		plugins: [externalizeDepsPlugin({ exclude: MAIN_BUNDLED_DEPS })],
 		build: {
 			rollupOptions: {
@@ -72,6 +75,8 @@ export default defineConfig({
 			rollupOptions: {
 				input: {
 					index: resolve(__dirname, "src/preload/index.ts"),
+					"notch-panel": resolve(__dirname, "src/preload/notch-panel.ts"),
+					"notch-app": resolve(__dirname, "src/preload/notch-app.ts"),
 				},
 				external: ["electron"],
 				output: { format: "cjs" },
@@ -88,8 +93,16 @@ export default defineConfig({
 		},
 		build: {
 			rollupOptions: {
-				input: { index: resolve(__dirname, "src/renderer/index.html") },
-				output: { manualChunks },
+				input: {
+					index: resolve(__dirname, "src/renderer/index.html"),
+					notchPanel: resolve(__dirname, "src/renderer/notch-panel/index.html"),
+				},
+				output: {
+					manualChunks,
+					// Do not absorb shared helpers (notably Vite's preload helper) into
+					// Mermaid: the eager shell needs them without evaluating Mermaid.
+					onlyExplicitManualChunks: true,
+				},
 			},
 		},
 	},

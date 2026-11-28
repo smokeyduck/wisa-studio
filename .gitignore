@@ -17,6 +17,10 @@ resources/omp.*
 /resources/browser-use/
 /resources/.browser-use-*/
 
+# Generated universal macOS Notch Island helper
+/resources/notch-island/
+/native/notch-island/.build/
+
 # Logs & OS cruft
 *.log
 .DS_Store

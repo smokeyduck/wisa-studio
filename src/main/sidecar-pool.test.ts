@@ -1,9 +1,10 @@
 import { EventEmitter } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import type { BrowserWindow } from "electron";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IPC_EVENTS, type IpcTabStatusPayload, type IpcTabWorktree } from "../shared/ipc-types";
 import type { RpcCommand, RpcResponse, SessionInfoUpdateFrame, SidecarStatus } from "../shared/rpc-types";
+import { notchResponse } from "./agent-notch-state";
 import type { SidecarManager } from "./sidecar";
 import { SidecarPool } from "./sidecar-pool";
 import type { PersistedTabLayout } from "./tab-layout";
@@ -1486,5 +1487,187 @@ describe("parked partial message continuity", () => {
 		sidecars[1]!.emit("events", batch);
 		expect(fw.sentTo(IPC_EVENTS.EVENTS_BATCH)).toEqual([]);
 		fw.close();
+	});
+});
+
+describe("Notch request origin and single-use responses", () => {
+	it("approves only the captured tab with repeated titles; mirrored displays race once", () => {
+		const { pool, sidecars } = fakePool();
+		const fw = fakeWindow(1);
+		pool.acquire("/a", fw.win, "a");
+		pool.acquire("/b", fw.win, "b");
+		for (const sidecar of sidecars) {
+			sidecar.emitStatus("ready");
+			sidecar.emitSessionInfo({ title: "Same title" });
+		}
+		sidecars[0]!.emitExtensionUi("approval-a");
+		sidecars[1]!.emitExtensionUi("approval-b");
+		const first = pool.notchSessions().find(session => session.tabId === "a")!.requests[0]!;
+		const mirror = pool.notchSessions().find(session => session.tabId === "a")!.requests[0]!;
+		pool.setActiveTab(fw.win, "b");
+		const response = notchResponse(first.request, { _request_id: "approval-a", behavior: "allow" })!;
+		expect(first.respond(response)).toBe(true);
+		expect(mirror.respond(response)).toBe(false);
+		expect(pool.routeSideChannel("approval-a", response, true)).toBe(true);
+		expect(sidecars[0]!.sentFrames).toEqual([response]);
+		expect(sidecars[1]!.sentFrames).toEqual([]);
+		expect(fw.sentTo(IPC_EVENTS.EXTENSION_UI).at(-1)?.data).toMatchObject({
+			tabId: "a",
+			request: { method: "cancel", targetId: "approval-a" },
+		});
+	});
+
+	it("a main-window response wins and invalidates every captured native responder", () => {
+		const { pool, sidecars } = fakePool();
+		const fw = fakeWindow(1);
+		pool.acquire("/a", fw.win, "a");
+		sidecars[0]!.emitStatus("ready");
+		sidecars[0]!.emitExtensionUi("id");
+		const pending = pool.notchSessions()[0]!.requests[0]!;
+		const denied = { type: "extension_ui_response", id: "id", confirmed: false } as const;
+		expect(pool.routeSideChannel("id", denied, true)).toBe(true);
+		expect(pending.respond({ type: "extension_ui_response", id: "id", confirmed: true })).toBe(false);
+		expect(sidecars[0]!.sentFrames).toEqual([denied]);
+	});
+
+	it.each(["cancel", "restart", "session", "owner", "release"])(
+		"rejects stale response after %s without writing to either process",
+		change => {
+			const { pool, sidecars } = fakePool();
+			const fw = fakeWindow(1);
+			pool.acquire("/a", fw.win, "a");
+			pool.acquire("/b", fw.win, "b");
+			for (const sidecar of sidecars) sidecar.emitStatus("ready");
+			sidecars[0]!.emitSessionInfo({ sessionId: "old" });
+			sidecars[0]!.emitExtensionUi("id");
+			const captured = pool.notchSessions().find(session => session.tabId === "a")!.requests[0]!;
+			if (change === "cancel")
+				sidecars[0]!.emit("extensionUi", {
+					type: "extension_ui_request",
+					id: "cancel",
+					method: "cancel",
+					targetId: "id",
+				});
+			if (change === "restart") {
+				sidecars[0]!.emitStatus("restarting");
+				sidecars[0]!.emitStatus("ready");
+			}
+			if (change === "session") sidecars[0]!.emitSessionInfo({ sessionId: "new" });
+			if (change === "owner") sidecars[1]!.emitExtensionUi("id");
+			if (change === "release") fw.close();
+			expect(captured.respond({ type: "extension_ui_response", id: "id", confirmed: true })).toBe(false);
+			expect(sidecars.flatMap(sidecar => sidecar.sentFrames)).toEqual([]);
+		},
+	);
+
+	it("expires native capability without approving or denying the original dialog", () => {
+		vi.useFakeTimers();
+		try {
+			const { pool, sidecars } = fakePool();
+			const fw = fakeWindow(1);
+			pool.acquire("/a", fw.win, "a");
+			sidecars[0]!.emitStatus("ready");
+			sidecars[0]!.emit("extensionUi", {
+				type: "extension_ui_request",
+				id: "id",
+				method: "confirm",
+				title: "Title",
+				message: "Body",
+				timeout: 50,
+			});
+			const captured = pool.notchSessions()[0]!.requests[0]!;
+			vi.advanceTimersByTime(51);
+			expect(captured.respond({ type: "extension_ui_response", id: "id", confirmed: true })).toBe(false);
+			expect(sidecars[0]!.sentFrames).toEqual([]);
+			const timedOut = { type: "extension_ui_response", id: "id", cancelled: true, timedOut: true } as const;
+			expect(pool.routeSideChannel("id", timedOut, true)).toBe(true);
+			expect(sidecars[0]!.sentFrames).toEqual([timedOut]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("publishes Computer Use and completed assistant previews, not individual text deltas", () => {
+		const { pool, sidecars } = fakePool();
+		const fw = fakeWindow(1);
+		pool.acquire("/a", fw.win, "a");
+		sidecars[0]!.emitStatus("ready");
+		const listener = vi.fn();
+		const unsubscribe = pool.subscribeNotch(listener);
+		sidecars[0]!.emit("events", [
+			{
+				type: "message_update",
+				message: { role: "assistant" },
+				assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "x" },
+			},
+		]);
+		expect(listener).not.toHaveBeenCalled();
+		sidecars[0]!.emit("events", [
+			{
+				type: "tool_execution_start",
+				toolCallId: "tool",
+				toolName: "eval",
+				args: { code: "await computer.window({ app: 'Safari' })" },
+			},
+		]);
+		expect(pool.notchSessions()[0]!.tools).toEqual(["Computer Use"]);
+		sidecars[0]!.emit("events", [
+			{ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Complete" }] } },
+		]);
+		expect(pool.notchSessions()[0]!.preview).toBe("Complete");
+		unsubscribe();
+	});
+});
+
+describe("Notch answers preserve upstream question protocol", () => {
+	it.each(["ask", "askDialog"] as const)("sends validated %s choices only to the captured sidecar", method => {
+		const { pool, sidecars } = fakePool();
+		const fw = fakeWindow(1);
+		pool.acquire("/a", fw.win, "a");
+		pool.acquire("/b", fw.win, "b");
+		for (const sidecar of sidecars) sidecar.emitStatus("ready");
+		sidecars[0]!.emit("extensionUi", {
+			type: "extension_ui_request",
+			id: "q",
+			method,
+			questions: [{ id: "q1", question: "Choose", options: [{ label: "A" }, { label: "B" }] }],
+		});
+		pool.setActiveTab(fw.win, "b");
+		const captured = pool.notchSessions().find(session => session.tabId === "a")!.requests[0]!;
+		expect(
+			notchResponse(captured.request, { _request_id: "q", behavior: "answer", answers: { Choose: "invented" } }),
+		).toBeNull();
+		expect(sidecars[0]!.sentFrames).toEqual([]);
+		const response = notchResponse(captured.request, {
+			_request_id: "q",
+			behavior: "answer",
+			answers: { Choose: "B" },
+		})!;
+		expect(captured.respond(response)).toBe(true);
+		expect(sidecars[0]!.sentFrames).toEqual([
+			method === "ask"
+				? {
+						type: "extension_ui_response",
+						id: "q",
+						answers: [{ id: "q1", selectedOptions: ["B"] }],
+					}
+				: {
+						type: "extension_ui_response",
+						id: "q",
+						askDialog: {
+							kind: "submit",
+							results: [
+								{
+									id: "q1",
+									question: "Choose",
+									options: ["A", "B"],
+									multi: false,
+									selectedOptions: ["B"],
+								},
+							],
+						},
+					},
+		]);
+		expect(sidecars[1]!.sentFrames).toEqual([]);
 	});
 });

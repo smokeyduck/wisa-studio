@@ -23,14 +23,28 @@ export function useSubagentStreamPoll(pollMs = STREAM_POLL_MS): void {
 
 	useEffect(() => {
 		if (!isStreaming || !hasAgents) return;
-		const timer = setInterval(() => {
+		let timer: number | undefined;
+		const poll = () => {
+			if (document.hidden) return;
 			// A poll resolving after a tab/session switch must not paint this
 			// tab's agents over the new foreground session — the guard is
 			// re-checked inside the store AFTER the await, before the write.
 			const origin = capture();
 			if (!isActive(origin)) return;
 			void refresh({ expect: () => isActive(origin) });
-		}, pollMs);
-		return () => clearInterval(timer);
+		};
+		const syncVisibility = () => {
+			window.clearInterval(timer);
+			timer = undefined;
+			if (document.hidden) return;
+			poll();
+			timer = window.setInterval(poll, pollMs);
+		};
+		document.addEventListener("visibilitychange", syncVisibility);
+		if (!document.hidden) timer = window.setInterval(poll, pollMs);
+		return () => {
+			window.clearInterval(timer);
+			document.removeEventListener("visibilitychange", syncVisibility);
+		};
 	}, [capture, hasAgents, isActive, isStreaming, pollMs, refresh]);
 }

@@ -64,7 +64,7 @@ export function ActiveToolsDialog() {
 
 	return (
 		<Modal dockable onClose={close} open={open} size="lg" title={t("activeTools.title")}>
-			<div className="space-y-3">
+			<div className="space-y-3" data-tour="tools">
 				<div className="relative">
 					<Search
 						className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-(--omp-dim)"

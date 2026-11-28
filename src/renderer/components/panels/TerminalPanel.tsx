@@ -1,10 +1,12 @@
 import "@xterm/xterm/css/xterm.css";
-import { Bot, SquareTerminal, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { Bot, Plus, SquareTerminal, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RpcTerminalInfo } from "../../../shared/rpc-types";
+import { describeError } from "../../lib/errors";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { scrollStripOnWheel, useActiveChipInView } from "../../lib/strip-scroll";
+import { useRuntimeTabId } from "../../stores/session-runtime-context";
 import { useTabsStore } from "../../stores/tabs";
 import {
 	closeTerminal,
@@ -12,7 +14,9 @@ import {
 	syncTerminals,
 	terminalView,
 	useTabTerminals,
+	useTerminalsStore,
 } from "../../stores/terminals";
+import { toast } from "../../stores/toast";
 import { PanelEmpty } from "./workspace-ui";
 
 function TerminalChip({
@@ -107,20 +111,40 @@ function SessionNotice({ terminal }: { terminal: RpcTerminalInfo }) {
 	);
 }
 
-/**
- * Embedded terminal for Core's interactive commands, CLI surfaces and agent
- * sessions. User-initiated workspace shells open in the OS terminal instead.
- */
+/** Embedded Core terminals and user-initiated workspace shells. */
 export function TerminalPanel() {
 	const t = useT();
-	const tabId = useTabsStore(state => state.activeTabId);
+	const activeTabId = useTabsStore(state => state.activeTabId);
+	const tabId = useRuntimeTabId() ?? activeTabId;
 	const sidecarUp = useTabsStore(state => {
-		const status = state.tabs.find(tab => tab.id === state.activeTabId)?.status;
+		const status = state.tabs.find(tab => tab.id === tabId)?.status;
 		return status === "ready" || status === "running";
 	});
 	const { terminals, activeId } = useTabTerminals(tabId);
 	const active = terminals.find(terminal => terminal.terminalId === activeId) ?? null;
 	const containerRef = useRef<HTMLDivElement>(null);
+	const [opening, setOpening] = useState(false);
+	const openShell = async () => {
+		if (!tabId || !sidecarUp || opening) return;
+		const previous = useTerminalsStore.getState().byTab[tabId]?.terminals ?? [];
+		setOpening(true);
+		try {
+			const response = await window.omp.rpc.commandForTab(tabId, { type: "terminal_open" });
+			if (!response.success) throw new Error(response.error);
+			await syncTerminals(tabId);
+			const shell = useTerminalsStore
+				.getState()
+				.byTab[tabId]?.terminals.find(
+					terminal =>
+						terminal.kind === "shell" && !previous.some(existing => existing.terminalId === terminal.terminalId),
+				);
+			if (shell) setActiveTerminal(tabId, shell.terminalId);
+		} catch (error) {
+			toast({ variant: "error", message: t("terminal.openFailed", { error: describeError(error) }) });
+		} finally {
+			setOpening(false);
+		}
+	};
 
 	// Adopt Core terminals that started before the panel was shown.
 	useEffect(() => {
@@ -173,6 +197,16 @@ export function TerminalPanel() {
 							onClose={() => void closeTerminal(tabId, terminal.terminalId)}
 						/>
 					))}
+				<button
+					type="button"
+					aria-label={t("terminal.newShell")}
+					title={t("terminal.newShell")}
+					disabled={!tabId || !sidecarUp || opening}
+					onClick={() => void openShell()}
+					className="omp-pressable flex size-7 shrink-0 items-center justify-center rounded-md text-(--omp-muted) hover:bg-(--omp-selected-bg) hover:text-(--omp-text) disabled:opacity-40"
+				>
+					<Plus aria-hidden size={14} />
+				</button>
 			</div>
 			{active?.kind === "session" && active.running ? (
 				<SessionNotice terminal={active} />

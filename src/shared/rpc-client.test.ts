@@ -66,24 +66,40 @@ describe("model RPC timeouts", () => {
 		expect(calls).toEqual(["get_transcript", "get_transcript_page", "get_transcript_page"]);
 	});
 
-	it("keeps the folded live projection across transport-limited transcript pages", async () => {
+	it("loads ordered user and assistant history beyond 1000 rows through native cursor paging", async () => {
+		const messages = Array.from({ length: 1281 }, (_, index) => ({
+			role: index % 2 === 0 ? "user" : "assistant",
+			content: `Message ${index}`,
+			entryId: `entry-${index}`,
+			timestamp: index,
+		}));
 		const calls: RpcCommand[] = [];
-		const message = { role: "user", content: "after compaction", timestamp: 1 };
 		const result = await fetchTranscript(async command => {
 			calls.push(command);
-			return command.type === "get_transcript_page"
-				? {
-						type: "response",
-						command: command.type,
-						success: true,
-						data: { messages: [message], totalMessages: 1 },
-					}
-				: { type: "response", command: command.type, success: false, error: "transport limit" };
-		}, true);
-		expect(result).toMatchObject({ success: true, data: { messages: [message] } });
+			if (command.type !== "get_transcript_page")
+				return { type: "response", command: command.type, success: false, error: "transport limit" };
+			const start = command.cursor === undefined ? 0 : Number(command.cursor);
+			const end = Math.min(start + (command.limit ?? 256), messages.length);
+			return {
+				type: "response",
+				command: command.type,
+				success: true,
+				data: {
+					messages: messages.slice(start, end),
+					totalMessages: messages.length,
+					...(end < messages.length ? { nextCursor: String(end) } : {}),
+				},
+			};
+		});
+		expect(result).toMatchObject({ success: true, data: { messages } });
 		expect(calls).toEqual([
-			{ type: "get_transcript", folded: true },
-			{ type: "get_transcript_page", limit: 256, folded: true },
+			{ type: "get_transcript" },
+			{ type: "get_transcript_page", limit: 256 },
+			...[256, 512, 768, 1024, 1280].map(cursor => ({
+				type: "get_transcript_page",
+				limit: 256,
+				cursor: String(cursor),
+			})),
 		]);
 	});
 });

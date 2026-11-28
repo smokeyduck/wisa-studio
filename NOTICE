@@ -58,9 +58,48 @@ wheel metadata. The local browser is Chromium from the official snapshots
 archive, not Google Chrome. Its BSD license is at `browser-use/chromium/LICENSE`
 in the app resources; Chromium lists third-party notices at `chrome://credits`.
 
-Manufacturer icons
-------------------
-Monochrome manufacturer icons are adapted from Lobe Icons:
+Notch Island (macOS helper)
+https://github.com/MANISH007700/notch-island
+Source revision: 6217ed2360ad4c0887abc725f9cd9e6e2ea02427
+Copyright (c) 2026 Manish Sharma. Licensed under the MIT License.
+The original license is preserved in native/notch-island/LICENSE and in the
+helper's Contents/Resources/LICENSE. Wisa retains the upstream SwiftUI panel
+and adapts its transport, display selection and lifecycle for isolated Wisa
+sessions. No upstream agent-hook installer or login item is run.
+
+GSAP 3.15.1 (https://gsap.com) drives interface motion.
+Copyright 2008-2026, GreenSock. All rights reserved.
+Subject to the Standard No Charge GSAP License:
+https://gsap.com/standard-license
+
+OpenGlass UI 0.5.1 (https://github.com/moekoelueker/open-glass-ui) supplies
+the Liquid Glass material recipes used by the desktop interface.
+
+MIT License
+
+Copyright (c) 2026 Moe Luker
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Manufacturer and agent icons
+----------------------------
+Monochrome manufacturer and agent icons are adapted from Lobe Icons:
 https://github.com/lobehub/lobe-icons/tree/05260484d9f4de68f90cc87a634ae68fa4043efd/packages/static-svg/icons
 
 MIT License

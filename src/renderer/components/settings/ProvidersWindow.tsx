@@ -11,9 +11,9 @@ import { customProviderNeedsApiKey } from "../../../shared/custom-provider";
 import type { CustomProviderView } from "../../../shared/ipc-types";
 import type { LogoutAccount, ProviderDiscoveryState, ProviderInfo, ProvidersResult } from "../../../shared/rpc-types";
 import { WISA_CONNECT_PAGE_URL, WISA_PROVIDER_ID } from "../../../shared/wisa";
+import { useProviderCredentials } from "../../hooks/use-provider-credentials";
 import { describeError, describeProviderError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
-import { watchSignInRequests } from "../../stores/extension-ui";
 import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
 import { toast } from "../../stores/toast";
@@ -96,8 +96,8 @@ export function ProviderRow({
 	customConfigs: CustomProviderView[];
 	onLogin: (id: string) => void;
 	onApiKey: (id: string) => void;
-	onLogout: (id: string) => void;
-	onEdit: (id: string) => void;
+	onLogout?: (id: string) => void;
+	onEdit?: (id: string) => void;
 	busy: boolean;
 	/** When this row's login started; set while the user signs in in the browser. */
 	signInStartedAt?: number;
@@ -153,7 +153,7 @@ export function ProviderRow({
 				)}
 			</div>
 			<div className="flex shrink-0 items-center gap-1.5">
-				{showEdit && editAction && (
+				{showEdit && editAction && onEdit && (
 					<Button
 						size="sm"
 						variant="ghost"
@@ -194,7 +194,7 @@ export function ProviderRow({
 						{t("providers.apiKey.use")}
 					</Button>
 				)}
-				{showLogout && (
+				{showLogout && onLogout && (
 					<Button
 						size="sm"
 						variant="ghost"
@@ -227,8 +227,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 	const [configError, setConfigError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
-	const [busyProvider, setBusyProvider] = useState<string | null>(null);
-	const [signIn, setSignIn] = useState<{ providerId: string; startedAt: number } | null>(null);
+	const [localBusyProvider, setLocalBusyProvider] = useState<string | null>(null);
 	const [pendingLogout, setPendingLogout] = useState<{ id: string; name: string } | null>(null);
 	const [query, setQuery] = useState("");
 	const requestVersion = useRef(0);
@@ -272,6 +271,18 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 		[refreshProviders, sidecarReady, t],
 	);
 
+	const {
+		busyProvider: credentialBusyProvider,
+		signIn,
+		handleLogin,
+		handleSaveApiKey,
+	} = useProviderCredentials({
+		rpc: tabRpc,
+		providers,
+		reload: () => load(true),
+	});
+	const busyProvider = credentialBusyProvider ?? localBusyProvider;
+
 	// A read can be superseded by a tab switch; the store guard replaces the list,
 	// so the flags this window owns have to be released the same way.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: tabRpc is the only signal that the task these responses belong to changed.
@@ -298,54 +309,12 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 		return () => clearInterval(timer);
 	}, [open, refreshPending, load, pollMs]);
 
-	const handleLogin = async (providerId: string) => {
-		const name = providers.find(p => p.id === providerId)?.name ?? providerId;
-		setBusyProvider(providerId);
-		setSignIn({ providerId, startedAt: Date.now() });
-		const dismissLeftoverSignIn = watchSignInRequests();
-		try {
-			const res = await tabRpc.login(providerId);
-			if (!res.success) {
-				// The user dismissed the sign-in page themselves; nothing failed.
-				if (res.code === "login_cancelled") return;
-				toast({ variant: "error", title: t("providers.loginFailed"), message: res.error });
-				return;
-			}
-			await load(true);
-			toast({ variant: "success", message: t("providers.loginSuccess", { provider: name }) });
-		} catch (cause) {
-			toast({ variant: "error", title: t("providers.loginFailed"), message: String(cause) });
-		} finally {
-			// The sign-in is over whichever way it ended; drop any of its dialogs the agent did not close.
-			dismissLeftoverSignIn();
-			setBusyProvider(null);
-			setSignIn(null);
-		}
-	};
-
 	const [apiKeyFor, setApiKeyFor] = useState<string | null>(null);
-
-	/** Returns the failure message, or null once the key is stored and the list is fresh. */
-	const handleSaveApiKey = async (providerId: string, apiKey: string): Promise<string | null> => {
-		const name = providers.find(p => p.id === providerId)?.name ?? providerId;
-		setBusyProvider(providerId);
-		try {
-			const res = await tabRpc.setApiKey(providerId, apiKey);
-			if (!res.success) return res.error;
-			await load(true);
-			toast({ variant: "success", message: t("providers.apiKey.saved", { provider: name }) });
-			return null;
-		} catch (cause) {
-			return describeError(cause);
-		} finally {
-			setBusyProvider(null);
-		}
-	};
 
 	const handleLogout = async (providerId: string) => {
 		setPendingLogout(null);
 		const name = providers.find(p => p.id === providerId)?.name ?? providerId;
-		setBusyProvider(providerId);
+		setLocalBusyProvider(providerId);
 		try {
 			// Upstream logout is credential-scoped: sign out every stored
 			// credential for the provider to preserve the row's "log out"
@@ -373,7 +342,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 		} catch (cause) {
 			toast({ variant: "error", title: t("providers.logoutFailed"), message: String(cause) });
 		} finally {
-			setBusyProvider(null);
+			setLocalBusyProvider(null);
 		}
 	};
 
@@ -386,7 +355,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 	};
 
 	const handleEdit = async (providerId: string) => {
-		setBusyProvider(providerId);
+		setLocalBusyProvider(providerId);
 		try {
 			const provider = providers.find(p => p.id === providerId);
 			if (!provider) return;
@@ -400,7 +369,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 		} catch (cause) {
 			toast({ variant: "error", title: t("providers.editFailed"), message: String(cause) });
 		} finally {
-			setBusyProvider(null);
+			setLocalBusyProvider(null);
 		}
 	};
 
@@ -469,7 +438,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 				/>
 			)}
 			<Modal dockable open={open} onClose={close} title={t("providers.title")} size="lg">
-				<div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+				<div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto" data-tour="providers">
 					<div className="flex items-center justify-between">
 						<span className="omp-section-label">
 							{t("providers.authenticated")}
@@ -481,6 +450,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 								variant="primary"
 								icon={<Plus size={12} />}
 								onClick={() => openProviderConfig("new")}
+								disabled={busyProvider !== null}
 							>
 								{t("providerCfg.list.add")}
 							</Button>
@@ -488,6 +458,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 								size="sm"
 								variant="ghost"
 								icon={<ExternalLink size={12} />}
+								disabled={busyProvider !== null}
 								onClick={() => {
 									void window.omp.models.openConfig().catch(cause => {
 										toast({ variant: "error", title: t("providers.editConfig"), message: String(cause) });
@@ -501,7 +472,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 								variant="ghost"
 								icon={<RefreshCw size={12} />}
 								onClick={() => void load(true)}
-								disabled={!sidecarReady}
+								disabled={!sidecarReady || busyProvider !== null}
 								loading={loading}
 								title={!sidecarReady ? t("providers.notConnected") : t("providers.refresh")}
 							>
@@ -528,7 +499,12 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 							<span className="min-w-0 flex-1">
 								{t("providers.modelsYmlRejected", { id: rejectedConfig.id })}
 							</span>
-							<Button size="sm" variant="secondary" onClick={() => openProviderConfig(rejectedConfig)}>
+							<Button
+								size="sm"
+								variant="secondary"
+								disabled={busyProvider !== null}
+								onClick={() => openProviderConfig(rejectedConfig)}
+							>
 								{t("providers.fixProvider")}
 							</Button>
 						</div>
@@ -591,6 +567,7 @@ export function ProvidersWindow({ pollMs = 2_500 }: { pollMs?: number }) {
 								size="sm"
 								variant="primary"
 								icon={<ExternalLink size={12} />}
+								disabled={busyProvider !== null}
 								onClick={() => {
 									void window.omp.system.openExternal(WISA_CONNECT_PAGE_URL);
 								}}

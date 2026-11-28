@@ -1,6 +1,6 @@
 /** Model role assignments and eligible candidates are owned by the backend. */
 
-import { ChevronDown, RefreshCw, Search, Tag } from "lucide-react";
+import { ChevronDown, RefreshCw, Search } from "lucide-react";
 import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	useCallback,
@@ -15,24 +15,38 @@ import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { useTabRpc } from "../../lib/tab-rpc";
+import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
 import { toast } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
 import { AsyncSection, Button, Modal } from "../common";
-
-const COLOR_MAP: Record<string, string> = {
-	success: "var(--omp-success)",
-	warning: "var(--omp-warning)",
-	accent: "var(--omp-accent)",
-	error: "var(--omp-error)",
-	info: "var(--omp-link)",
-	muted: "var(--omp-muted)",
-	dim: "var(--omp-dim)",
-	default: "var(--omp-muted)",
-};
+import { JevRoutingSection } from "./JevRoutingSection";
 
 type ThinkingSelector = ThinkingLevel | "auto";
 type Translate = (k: string, p?: Record<string, string | number>) => string;
+
+const BUILTIN_ROLES: Record<string, true> = {
+	default: true,
+	smol: true,
+	slow: true,
+	vision: true,
+	plan: true,
+	commit: true,
+	tiny: true,
+	memory: true,
+	task: true,
+	advisor: true,
+	widget: true,
+	image: true,
+	web: true,
+	speech: true,
+	dictation: true,
+	judge: true,
+};
+
+function roleName(role: ModelRoleEntry, t: Translate): string {
+	return Object.hasOwn(BUILTIN_ROLES, role.id) ? t(`modelRoles.role.${role.id}.name`) : role.name;
+}
 
 interface RoleChange {
 	role: string;
@@ -76,7 +90,7 @@ function RoleRow({
 	sidecarReady: boolean;
 	t: Translate;
 }) {
-	const color = COLOR_MAP[role.color ?? "default"] ?? COLOR_MAP.default;
+	const name = roleName(role, t);
 	const candidates = role.candidates ?? [];
 	// The backend splits the `:level` suffix off; an older sidecar without
 	// `selected` still matches unsuffixed selectors verbatim.
@@ -144,7 +158,7 @@ function RoleRow({
 			if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
 		};
 		document.addEventListener("pointerdown", onPointerDown);
-		requestAnimationFrame(() => searchRef.current?.focus());
+		searchRef.current?.focus();
 		return () => document.removeEventListener("pointerdown", onPointerDown);
 	}, [open]);
 
@@ -160,43 +174,19 @@ function RoleRow({
 		group.push(model);
 		providerGroups.set(model.provider, group);
 	}
-	const currentLabel = currentCandidate
-		? `${currentCandidate.name} - ${currentCandidate.provider}/${currentCandidate.id}`
-		: savedOnly
-			? role.model
-			: role.model
-				? role.model
-				: t("modelRoles.default");
+	const currentLabel =
+		currentCandidate?.name ??
+		(role.model ? (role.selected?.id ?? role.model.split("/").pop()) : t("modelRoles.default"));
 
 	return (
-		<div className="omp-list-row flex items-center gap-3 rounded-lg border border-[var(--omp-border-muted)] px-3 py-2.5">
-			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<div className="flex items-center gap-2">
-					<Tag size={12} style={{ color }} />
-					<span className="text-omp-lg font-semibold text-[var(--omp-text)]">{role.name}</span>
-					{role.tag && (
-						<span
-							className="rounded px-1.5 py-px text-omp-xxs font-bold tracking-wider"
-							style={{ backgroundColor: `${color}20`, color }}
-						>
-							{role.tag}
-						</span>
-					)}
-				</div>
-				<span className="text-omp-xs text-[var(--omp-dim)]">
-					{t("modelRoles.source", { source: role.source })}
-					{role.model && <span className="ml-2">→ {role.model}</span>}
-				</span>
-				{candidates.length === 0 && (
-					<span className="text-omp-xs text-[var(--omp-dim)]">{t("modelRoles.noCandidates")}</span>
-				)}
-			</div>
-			<div className="relative min-w-[180px] max-w-[50%] flex-1" ref={rootRef}>
+		<div className="omp-list-row flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[var(--omp-border-muted)] py-2">
+			<span className="min-w-0 basis-28 text-omp-sm font-medium text-[var(--omp-text)] sm:basis-36">{name}</span>
+			<div className="relative min-w-0 flex-1 basis-36" ref={rootRef}>
 				<button
 					aria-expanded={open}
 					aria-controls={open ? listId : undefined}
 					aria-haspopup="listbox"
-					aria-label={t("modelRoles.select", { role: role.name })}
+					aria-label={t("modelRoles.select", { role: name })}
 					className="flex h-7 w-full items-center gap-1 rounded-md border border-[var(--omp-border-muted)] bg-[var(--omp-input-bg)] px-2 text-left text-omp-sm text-[var(--omp-text)] focus:border-[var(--omp-border-accent)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 					disabled={busy || !sidecarReady}
 					onClick={() => {
@@ -204,15 +194,15 @@ function RoleRow({
 						setOpen(value => !value);
 					}}
 					ref={triggerRef}
-					title={!sidecarReady ? t("modelRoles.notConnected") : undefined}
+					title={!sidecarReady ? t("modelRoles.notConnected") : (role.model ?? t("modelRoles.default"))}
 					type="button"
 				>
-					<span className="min-w-0 flex-1 truncate font-mono">{currentLabel}</span>
+					<span className="min-w-0 flex-1 truncate">{currentLabel}</span>
 					<ChevronDown className="shrink-0 text-[var(--omp-dim)]" size={12} />
 				</button>
 				{open && (
 					<div
-						className="absolute right-0 z-30 mt-1 max-h-72 w-[min(30rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-[var(--omp-border)] bg-[var(--omp-panel-bg)] p-1 shadow-[var(--omp-shadow-lg)]"
+						className="absolute inset-x-0 z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-[var(--omp-border)] bg-[var(--omp-panel-bg)] p-1 shadow-[var(--omp-shadow-lg)]"
 						id={listId}
 						role="listbox"
 					>
@@ -258,7 +248,7 @@ function RoleRow({
 						{savedOnly && (
 							<button
 								aria-selected
-								className="flex w-full items-center rounded px-2 py-1.5 text-left text-omp-sm hover:bg-[var(--omp-selected-bg)]"
+								className="flex w-full items-center break-all rounded px-2 py-1.5 text-left text-omp-sm hover:bg-[var(--omp-selected-bg)]"
 								disabled={!sidecarReady}
 								onClick={() => {
 									closePicker();
@@ -273,6 +263,9 @@ function RoleRow({
 								{t("modelRoles.savedSelector", { model: role.model! })}
 							</button>
 						)}
+						{candidates.length === 0 && (
+							<p className="px-2 py-1 text-omp-xs text-[var(--omp-dim)]">{t("modelRoles.noCandidates")}</p>
+						)}
 						{[...providerGroups].map(([provider, models]) => (
 							<div aria-label={provider} key={provider} role="group">
 								<div className="px-2 pt-2 pb-0.5 text-omp-xxs font-semibold text-[var(--omp-dim)]">
@@ -284,7 +277,7 @@ function RoleRow({
 										<button
 											key={value}
 											aria-selected={value === selectedKey}
-											className="flex w-full items-center rounded px-2 py-1.5 text-left text-omp-sm hover:bg-[var(--omp-selected-bg)]"
+											className="flex w-full min-w-0 flex-col items-start rounded px-2 py-1.5 text-left text-omp-sm hover:bg-[var(--omp-selected-bg)]"
 											disabled={!sidecarReady}
 											onClick={() => {
 												closePicker();
@@ -293,11 +286,11 @@ function RoleRow({
 											onKeyDown={handleOptionKeyDown}
 											role="option"
 											tabIndex={-1}
-											title={!sidecarReady ? t("modelRoles.notConnected") : undefined}
+											title={!sidecarReady ? t("modelRoles.notConnected") : value}
 											type="button"
 										>
-											<span className="min-w-0 flex-1 truncate">{model.name}</span>
-											<span className="ml-2 shrink-0 font-mono text-omp-xs text-[var(--omp-dim)]">
+											<span className="w-full truncate">{model.name}</span>
+											<span className="w-full truncate font-mono text-omp-xs text-[var(--omp-dim)]">
 												{model.provider}/{model.id}
 											</span>
 										</button>
@@ -310,8 +303,8 @@ function RoleRow({
 			</div>
 			{currentCandidate && levelOptions.length > 0 && (
 				<select
-					aria-label={t("modelRoles.thinking", { role: role.name })}
-					className="h-7 shrink-0 rounded-md border border-[var(--omp-border-muted)] bg-[var(--omp-input-bg)] px-1.5 text-omp-sm text-[var(--omp-text)] focus:border-[var(--omp-border-accent)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+					aria-label={t("modelRoles.thinking", { role: name })}
+					className="h-7 min-w-0 max-w-full rounded-md border border-[var(--omp-border-muted)] bg-[var(--omp-input-bg)] px-1.5 text-omp-sm text-[var(--omp-text)] focus:border-[var(--omp-border-accent)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 					disabled={busy || !sidecarReady}
 					onChange={event =>
 						onChange({
@@ -320,7 +313,7 @@ function RoleRow({
 							thinkingLevel: event.target.value as ThinkingSelector,
 						})
 					}
-					title={!sidecarReady ? t("modelRoles.notConnected") : t("modelRoles.thinking", { role: role.name })}
+					title={!sidecarReady ? t("modelRoles.notConnected") : t("modelRoles.thinking", { role: name })}
 					value={savedLevel}
 				>
 					{/* A hand-written level the model does not list still shows as saved. */}
@@ -346,6 +339,8 @@ export function ModelRolesWindow() {
 	const close = useUiStore(s => s.closeModelRoles);
 	const t = useT();
 	const sidecarReady = useSessionStore(s => s.status) === "ready";
+	const catalogGeneration = useModelStore(s => s.catalogGeneration);
+	const requestVersion = useRef(0);
 
 	const [roles, setRoles] = useState<ModelRoleEntry[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -353,6 +348,7 @@ export function ModelRolesWindow() {
 	const [busyRole, setBusyRole] = useState<string | null>(null);
 
 	const load = useCallback(async () => {
+		const version = ++requestVersion.current;
 		setLoading(true);
 		if (!sidecarReady) {
 			// Not connecting is a distinct state from an empty answer: the list keeps
@@ -365,6 +361,7 @@ export function ModelRolesWindow() {
 			// The backend owns role metadata and the eligible candidate pool per
 			// role; get_model_roles returns everything the window renders.
 			const res = await tabRpc.getModelRoles();
+			if (version !== requestVersion.current) return;
 			if (res.success) {
 				setRoles((res.data as ModelRolesResult).roles);
 				setError(null);
@@ -372,15 +369,23 @@ export function ModelRolesWindow() {
 				setError(describeError(res.error));
 			}
 		} catch (cause) {
-			setError(describeError(cause));
+			if (version === requestVersion.current) setError(describeError(cause));
 		} finally {
-			setLoading(false);
+			if (version === requestVersion.current) setLoading(false);
 		}
 	}, [sidecarReady, t, tabRpc.getModelRoles]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: invalidate replies when their originating RPC client changes.
+	useEffect(() => {
+		return () => {
+			requestVersion.current++;
+		};
+	}, [tabRpc.getModelRoles]);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: discovery can change the eligible role pool without changing the RPC client.
 	useEffect(() => {
 		if (open) void load();
-	}, [open, load]);
+	}, [open, load, catalogGeneration]);
 
 	const sections = useMemo(() => {
 		const visible = roles.filter(role => !role.hidden);
@@ -398,7 +403,11 @@ export function ModelRolesWindow() {
 			if (res.success) {
 				// The receipt carries the stored selector, `:level` suffix included.
 				const saved = (res.data as { modelId?: string | null } | undefined)?.modelId ?? modelId;
-				const message = saved ? t("modelRoles.set", { role, model: saved }) : t("modelRoles.cleared", { role });
+				const entry = roles.find(entry => entry.id === role);
+				const name = entry ? roleName(entry, t) : role;
+				const message = saved
+					? t("modelRoles.set", { role: name, model: saved })
+					: t("modelRoles.cleared", { role: name });
 				toast(
 					droppedLevel && modelId
 						? {
@@ -421,7 +430,8 @@ export function ModelRolesWindow() {
 
 	return (
 		<Modal dockable open={open} onClose={close} title={t("modelRoles.title")} size="lg">
-			<div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+			<div className="flex min-w-0 flex-col gap-3" data-tour="roles">
+				<JevRoutingSection open={open} roles={roles} onRefresh={load} />
 				<div className="flex items-center justify-between">
 					<span className="omp-section-label">{t("modelRoles.header")}</span>
 					<Button
@@ -449,7 +459,7 @@ export function ModelRolesWindow() {
 					staleLabel={t("modelRoles.stale")}
 				>
 					{sections.map(section => (
-						<div key={section.key} className="mb-4 flex flex-col gap-2">
+						<div key={section.key} className="mb-3 flex min-w-0 flex-col">
 							<span className="omp-section-label">{t(`modelRoles.section.${section.key}`)}</span>
 							{section.roles.map(role => (
 								<RoleRow
@@ -463,6 +473,21 @@ export function ModelRolesWindow() {
 							))}
 						</div>
 					))}
+					<details className="text-omp-sm text-[var(--omp-muted)]">
+						<summary className="cursor-pointer py-1 font-medium">{t("modelRoles.help")}</summary>
+						<dl className="mt-2 grid gap-2">
+							{sections
+								.flatMap(section => section.roles)
+								.map(role => (
+									<div key={role.id}>
+										<dt className="font-medium text-[var(--omp-text)]">{roleName(role, t)}</dt>
+										{Object.hasOwn(BUILTIN_ROLES, role.id) && (
+											<dd>{t(`modelRoles.role.${role.id}.description`)}</dd>
+										)}
+									</div>
+								))}
+						</dl>
+					</details>
 				</AsyncSection>
 			</div>
 		</Modal>

@@ -1,5 +1,5 @@
 appId: org.wisa.studio
-productName: WISA STUDIO
+productName: Wisa
 beforePack: scripts/build-browser-use.cjs
 afterPack: scripts/after-pack.cjs
 directories:
@@ -17,6 +17,8 @@ extraResources:
     to: browser-use-bridge.py
   - from: resources/studio-agent.yml
     to: studio-agent.yml
+  - from: resources/notch-agent-hook.cjs
+    to: notch-agent-hook.cjs
   - from: .
     to: licenses
     filter: [LICENSE, NOTICE, LICENSE-SCOPE.md, LICENSE-POLYFORM-STRICT]
@@ -31,6 +33,9 @@ asar: true
 compression: maximum
 
 mac:
+  extraResources:
+    - from: resources/notch-island
+      to: notch-island
   # Keep updater ZIP compression at the normal level; maximum runs 15 Deflate passes.
   compression: normal
   category: public.app-category.developer-tools
@@ -52,12 +57,12 @@ mac:
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
   extendInfo:
-    NSMicrophoneUsageDescription: WISA STUDIO uses the microphone for voice dictation in the composer.
+    NSMicrophoneUsageDescription: Wisa uses the microphone for voice dictation in the composer.
     # Electron's stock bundle asks for camera and Bluetooth with text that names no
-    # app; WISA STUDIO never calls either API, so the prompt a user might see stays honest.
-    NSCameraUsageDescription: WISA STUDIO does not use the camera.
-    NSBluetoothAlwaysUsageDescription: WISA STUDIO does not use Bluetooth.
-    NSBluetoothPeripheralUsageDescription: WISA STUDIO does not use Bluetooth.
+    # app; Wisa never calls either API, so the prompt a user might see stays honest.
+    NSCameraUsageDescription: Wisa does not use the camera.
+    NSBluetoothAlwaysUsageDescription: Wisa does not use Bluetooth.
+    NSBluetoothPeripheralUsageDescription: Wisa does not use Bluetooth.
     # Two origins only: the loopback stats server and GitHub releases over TLS.
     # Declaring that is stricter than the default, so an accidental remote
     # cleartext request cannot start working because some build set
@@ -66,9 +71,7 @@ mac:
       NSAllowsArbitraryLoads: false
       NSAllowsLocalNetworking: true
   notarize: false
-  # productName carries a space ("WISA STUDIO"), so every artifact name is
-  # pinned explicitly: the default would bake the space into the file name and
-  # therefore into the release URL and the updater's asset lookup. mac-level
+  # Keep release URLs and updater lookups independent of the display name.
   # `artifactName` covers the zip target — electron-builder 26 has no root
   # `zip:` section (it rejects the whole config with "unknown property 'zip'").
   artifactName: wisa-studio-${version}-${arch}.${ext}
@@ -117,13 +120,10 @@ linux:
 # canonical AppImage compression.
 appImage:
   compression: gzip
-  # Without this the name derives from productName and ships as
-  # `WISA.STUDIO-0.9.46.AppImage` — a space turned into a dot, which no
-  # download link or updater lookup expects.
+  # Keep the established release and updater asset name.
   artifactName: wisa-studio-${version}.${ext}
 
-# artifactName is pinned for the same reason as the mac/win targets: productName
-# carries a space, and the default would embed it.
+# Keep the established release and updater asset name.
 deb:
   artifactName: wisa-studio_${version}_${arch}.${ext}
 

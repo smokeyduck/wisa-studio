@@ -8,6 +8,7 @@ export type RuntimeStoreKey =
 	| "composer"
 	| "extensionUi"
 	| "messages"
+	| "mcp"
 	| "model"
 	| "planApproval"
 	| "queue"
@@ -33,6 +34,8 @@ export function activeTabCommand(command: RpcCommand, timeoutMs?: number): Promi
 			return rpc.getTranscript();
 		case "get_subagents":
 			return rpc.getSubagents();
+		case "get_mcp_servers":
+			return rpc.getMcpServers();
 		case "get_queue":
 			return rpc.getQueue();
 		case "get_goal":

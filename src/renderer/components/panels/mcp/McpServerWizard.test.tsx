@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { RpcMcpServerInfo, RpcResponse } from "../../../../shared/rpc-types";
 import { I18nProvider } from "../../../lib/i18n";
 import { MCP_TEST_SHOWN_LIMIT, McpTestResultView, summarizeMcpTestData } from "./McpFeedback";
-import { MCP_AUTH_BADGE_VARIANT, MCP_STATUS_VARIANT, McpServerCard } from "./McpServerCard";
+import { MCP_AUTH_BADGE_VARIANT, McpServerCard } from "./McpServerCard";
 import {
 	buildMcpServerInput,
 	initialMcpWizardValues,
@@ -172,7 +172,6 @@ describe("summarizeMcpTestData", () => {
 
 describe("MCP badge variant maps", () => {
 	it("covers every connection status and auth state", () => {
-		expect(Object.keys(MCP_STATUS_VARIANT).sort()).toEqual(["connected", "connecting", "disconnected"]);
 		expect(Object.keys(MCP_AUTH_BADGE_VARIANT).sort()).toEqual(["authorized", "expired", "none", "required"]);
 	});
 });
@@ -290,6 +289,21 @@ describe("McpServerCard SSR", () => {
 		expect(renderCard(pluginServer)).toContain("Re-authorize");
 		expect(renderCard({ ...pluginServer, enabled: false })).not.toContain("Re-authorize");
 		expect(renderCard(pluginServer, "running")).not.toContain("Re-authorize");
+	});
+
+	it("does not advertise cached tools as usable after the server disconnects", () => {
+		const html = renderCard(server({ status: "disconnected", toolCount: 283, lastError: "Connection closed" }));
+		expect(html).toContain("0 tools");
+		expect(html).not.toContain("283 tools");
+		expect(html).toContain(">Error<");
+		expect(html).toContain("Connection closed");
+	});
+
+	it("does not override a live connection with an older error", () => {
+		const html = renderCard(server({ status: "connected", lastError: "Old failure" }));
+		expect(html).toContain(">Connected<");
+		expect(html).toContain("3 tools");
+		expect(html).not.toContain("Old failure");
 	});
 
 	it("shows the reauth-in-flight strip with a cancel action", () => {

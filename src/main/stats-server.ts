@@ -2,13 +2,12 @@
  * The GUI's built-in stats dashboard server, spawned from the SAME bundled
  * omp binary as the agent sidecar (`omp stats --no-open`).
  *
- * Internal to the GUI's closed loop: spawned on app start, killed on quit (and
- * exits by itself if the app dies without quitting), localhost-only. No external `omp stats` process is required and none is
- * consulted — if an external process already owns the port, this reports the
- * conflict rather than silently using it.
+ * Internal to the GUI's closed loop: spawned on the first stats request, killed
+ * on quit (and exits by itself if the app dies without quitting), localhost-only.
+ * No external `omp stats` process is required or consulted.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { stripVTControlCharacters } from "node:util";
 import { agentSpawnEnv } from "./dev-profile";
 import { dropUnsupportedProxies } from "./proxy-env";
@@ -23,6 +22,7 @@ export class StatsServerManager extends EventEmitter {
 	#restartTimer: NodeJS.Timeout | null = null;
 	#disposed = false;
 	#port = DEFAULT_PORT;
+	#readiness: Promise<Revive> | null = null;
 	readonly #binaryPath: string;
 	/**
 	 * Whether the binary accepts `stats --no-open`. A dev fallback may be an
@@ -57,6 +57,21 @@ export class StatsServerManager extends EventEmitter {
 		const verdict = this.#budget.revive(Date.now());
 		if (verdict === "scheduled") this.#spawn();
 		return verdict;
+	}
+
+	/** Share the first boot wait across dashboard queries and one-shot /trace links. */
+	ensureReady(): Promise<Revive> {
+		const revive = this.ensureRunning();
+		if (this.#port || revive === "exhausted") return Promise.resolve(revive);
+		this.#readiness ??= once(this, "ready", { signal: AbortSignal.timeout(10_000) })
+			.then(
+				() => revive,
+				(): Revive => (this.#disposed ? "exhausted" : revive),
+			)
+			.finally(() => {
+				this.#readiness = null;
+			});
+		return this.#readiness;
 	}
 
 	#spawn(): void {

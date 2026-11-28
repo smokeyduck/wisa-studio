@@ -1,0 +1,482 @@
+/* OpenGlass UI supplies all three Liquid material recipes in liquid-glass.ts.
+   This is the single application-wide mapping, not a second component kit.
+   Specular light follows the pointer on one surface at a time. Navigation and
+   utility controls show glass at rest; hover adds light. Text/code stay clear. */
+
+:root {
+	--ogui-color-text: var(--omp-text);
+	--ogui-color-muted: var(--omp-muted);
+	--ogui-glass-tint: var(--omp-bg-elevated);
+	--wisa-glass-edge: color-mix(in srgb, var(--wisa-glass-regular-highlight) 16%, var(--omp-border-muted));
+	--wisa-glass-rim: color-mix(in srgb, var(--wisa-glass-regular-highlight) 28%, transparent);
+	--wisa-glass-light: rgb(255 255 255 / 0.045);
+	--wisa-glass-hover-light: rgb(255 255 255 / 0.09);
+	--wisa-glass-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.055), transparent 48%, rgb(255 255 255 / 0.015));
+	--wisa-glass-depth: inset 0 1px 0 var(--wisa-glass-rim), 0 3px 12px rgb(0 0 0 / 0.08);
+	--wisa-glass-canvas:
+		radial-gradient(ellipse at 12% 8%, color-mix(in srgb, var(--omp-accent) 13%, transparent), transparent 55%),
+		radial-gradient(ellipse at 90% 35%, color-mix(in srgb, var(--omp-info) 7%, transparent), transparent 60%),
+		radial-gradient(ellipse at 40% 100%, color-mix(in srgb, var(--omp-accent) 6%, transparent), transparent 55%);
+	--omp-segment-track: color-mix(in srgb, var(--omp-bg-elevated) 28%, transparent);
+	--omp-segment-thumb: var(--wisa-glass-clear-background);
+}
+
+/* Vendor optical multipliers are theme-specific: dark needs less bloom, while
+   light needs less white paint so the tinted backdrop remains visible. */
+:root:not([data-theme="light"]) {
+	--ogui-glass-shadow: 0.35;
+	--ogui-glass-rim: 0.55;
+	--ogui-glass-lensing: 0.4;
+	--ogui-glass-saturation: 0.75;
+	--ogui-glass-brightness: 1.3;
+}
+
+:root[data-theme="light"] {
+	--ogui-glass-shadow: 0.45;
+	--ogui-glass-rim: 0.75;
+	--ogui-glass-lensing: 0.55;
+	--ogui-glass-saturation: 0.8;
+	--ogui-glass-brightness: 0.95;
+	--ogui-glass-opacity: 0.9;
+	--wisa-glass-edge: color-mix(in srgb, var(--omp-text) 12%, transparent);
+	--wisa-glass-rim: rgb(255 255 255 / 0.65);
+	--wisa-glass-light: rgb(255 255 255 / 0.24);
+	--wisa-glass-hover-light: rgb(255 255 255 / 0.4);
+	--wisa-glass-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.32), transparent 48%, rgb(255 255 255 / 0.06));
+	--wisa-glass-canvas:
+		radial-gradient(ellipse at 12% 8%, color-mix(in srgb, var(--omp-accent) 24%, transparent), transparent 55%),
+		radial-gradient(ellipse at 90% 35%, color-mix(in srgb, var(--omp-info) 16%, transparent), transparent 60%),
+		radial-gradient(ellipse at 40% 100%, color-mix(in srgb, var(--omp-accent) 13%, transparent), transparent 55%);
+}
+
+/* Keep this recipe on the surface: pointer coordinates must resolve locally,
+   not on :root before custom properties inherit into the hovered control. */
+.omp-button,
+.omp-pressable,
+.omp-send-button,
+.omp-tabs [role="tab"],
+.settings-nav-item,
+.omp-segmented,
+.omp-glide--thumb,
+.omp-tab-unit,
+.omp-card,
+.omp-onboarding-choice,
+.omp-note,
+.omp-composer-box,
+.omp-session-sidebar,
+.settings-sidebar,
+.omp-inspector,
+.omp-dialog-panel,
+.omp-thinking-slider-panel,
+[role="menu"],
+[role="listbox"] {
+	background-image:
+		radial-gradient(
+			ellipse 160px 100px at var(--wisa-glass-x, 25%) var(--wisa-glass-y, 0%),
+			var(--wisa-glass-light),
+			transparent 72%
+		),
+		var(--wisa-glass-sheen);
+}
+
+:is(.omp-button, .omp-pressable, .omp-send-button, .omp-tabs [role="tab"], .settings-nav-item, .omp-card, .omp-onboarding-choice):is(:hover, :focus-visible):not(:disabled) {
+	--wisa-glass-light: var(--wisa-glass-hover-light);
+}
+
+body {
+	background-image: var(--wisa-glass-canvas);
+	background-attachment: fixed;
+}
+
+/* The canvas stays clear so a single, static atmospheric background reaches
+   every workspace. Code, terminal, diff and semantic status fills stay intact. */
+.omp-workspace-main,
+.settings-main-canvas {
+	background: transparent;
+}
+
+/* Settings is a full-screen portal: own a canvas, never expose chat beneath. */
+.omp-settings-window {
+	background: var(--wisa-glass-canvas), var(--omp-bg-primary);
+}
+/* Window chrome, workspace navigation, and the right inspector. No ancestor
+   transform/filter on the app root: fixed dialogs retain viewport coordinates. */
+.omp-session-sidebar,
+.settings-sidebar,
+.omp-inspector {
+	background-color: var(--wisa-glass-regular-background);
+	border-color: var(--wisa-glass-edge);
+	box-shadow: var(--wisa-glass-regular-shadow), inset 0 1px var(--wisa-glass-rim);
+	backdrop-filter: var(--wisa-glass-regular-filter);
+}
+
+.omp-session-sidebar {
+	border-radius: 0 24px 24px 0;
+}
+
+.omp-inspector {
+	border-radius: 24px 0 0 24px;
+}
+
+.omp-titlebar,
+.omp-workspace-main [class~="drag-region"]:has(> .omp-tab-scroller),
+.omp-workspace-page-header,
+.settings-main-canvas > header {
+	background: var(--wisa-glass-clear-background);
+	border-color: var(--wisa-glass-edge);
+}
+
+/* Floating surfaces use the denser library material so underlying text never
+   competes with labels. Portals inherit the same tokens from the document. */
+.omp-dialog-panel,
+.omp-thinking-slider-panel,
+[role="menu"],
+[role="listbox"],
+.omp-agent-hover-card,
+.omp-find-bar,
+.omp-quote-action,
+.omp-toast-in,
+.omp-toast-out {
+	background-color: var(--wisa-glass-frosted-background);
+	border-color: var(--wisa-glass-edge);
+	box-shadow: var(--wisa-glass-frosted-shadow), inset 0 1px var(--wisa-glass-edge);
+	backdrop-filter: var(--wisa-glass-frosted-filter);
+}
+
+/* Toast severity comes from its semantic left-border utility. */
+.omp-toast-in,
+.omp-toast-out {
+	border-left-color: revert-layer;
+}
+
+.omp-dialog-panel {
+	border-radius: 28px;
+}
+
+.omp-dialog-panel::before {
+	height: 1px;
+	background: linear-gradient(90deg, transparent, var(--wisa-glass-regular-highlight), transparent);
+}
+
+/* Do not blur a full-screen scrim: that multiplies the compositor cost under
+   every dialog. Optical depth belongs to the bounded panel, not the scrim. */
+.omp-dialog-overlay,
+.omp-drop-overlay {
+	backdrop-filter: none;
+}
+
+/* An opacity animation on the scrim creates a backdrop root, trapping a
+   child's blur inside an otherwise empty overlay. Keep sampling the app. */
+.omp-dialog-overlay {
+	animation: none;
+}
+
+/* Cards now share the actual material, including catalog and capability cards.
+   Blur only the card being inspected, not an entire grid of compositor layers. */
+.omp-card,
+.omp-onboarding-choice,
+.omp-settings-window .settings-form-measure > section {
+	background-color: var(--wisa-glass-clear-background);
+	border-color: var(--wisa-glass-edge);
+	border-radius: 20px;
+	box-shadow: var(--wisa-glass-depth);
+	transition:
+		border-color var(--omp-motion-fast) var(--omp-ease),
+		background-color var(--omp-motion-fast) var(--omp-ease),
+		box-shadow var(--omp-motion-fast) var(--omp-ease),
+		scale var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-settings-window .settings-form-measure > section {
+	background-image: var(--wisa-glass-sheen);
+}
+
+.omp-card[data-featured] {
+	border-color: var(--omp-border-accent);
+}
+
+.omp-card:is(:hover, :focus-within),
+.omp-onboarding-choice:is(:hover, :focus-visible) {
+	background-color: var(--wisa-glass-regular-background);
+	border-color: var(--omp-border-accent);
+	box-shadow: var(--wisa-glass-depth);
+	backdrop-filter: var(--wisa-glass-clear-filter);
+}
+
+.omp-note {
+	background-color: var(--wisa-glass-clear-background);
+	box-shadow: inset 0 1px var(--wisa-glass-edge), 0 4px 14px rgb(0 0 0 / 0.06);
+}
+
+.omp-composer-box {
+	background-color: var(--wisa-glass-regular-background);
+	border-color: var(--wisa-glass-edge);
+	border-radius: 28px;
+	box-shadow: var(--wisa-glass-regular-shadow), inset 0 1px var(--wisa-glass-edge);
+	backdrop-filter: var(--wisa-glass-regular-filter);
+}
+
+.omp-composer-box:focus-within {
+	border-color: var(--omp-input-focus-border);
+	box-shadow: 0 0 0 3px var(--omp-input-glow), var(--wisa-glass-regular-shadow);
+}
+
+/* Glass remains visible without hover. Use sheen and optical edges on controls,
+   not one backdrop-filter layer per button or transcript action. */
+.omp-button,
+.omp-pressable,
+.omp-send-button,
+.omp-tabs [role="tab"],
+.settings-nav-item {
+	box-shadow: inset 0 1px var(--wisa-glass-rim), inset 0 0 0 1px var(--wisa-glass-edge), 0 1px 3px rgb(0 0 0 / 0.06);
+	transition:
+		background-color var(--omp-motion-fast) var(--omp-ease),
+		border-color var(--omp-motion-fast) var(--omp-ease),
+		color var(--omp-motion-fast) var(--omp-ease),
+		box-shadow var(--omp-motion-fast) var(--omp-ease),
+		filter var(--omp-motion-fast) var(--omp-ease),
+		scale var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-button {
+	border-radius: 999px;
+}
+
+.omp-button[data-variant="secondary"] {
+	background-color: var(--wisa-glass-clear-background);
+	border-color: var(--wisa-glass-edge);
+}
+
+.omp-button:not([data-variant="ghost"]),
+.omp-send-button {
+	box-shadow: inset 0 1px var(--wisa-glass-rim), 0 1px 3px rgb(0 0 0 / 0.06);
+}
+
+.omp-button[data-variant="ghost"] {
+	background-color: var(--wisa-glass-clear-background);
+	border-color: var(--wisa-glass-edge);
+}
+
+.omp-button:is([data-variant="primary"], [data-variant="danger"]),
+.omp-send-button {
+	--wisa-glass-light: rgb(255 255 255 / 0.06);
+	--wisa-glass-hover-light: rgb(255 255 255 / 0.1);
+	--wisa-glass-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.06), transparent 48%, rgb(0 0 0 / 0.12));
+}
+
+/* Keep the brand fill readable: a white lens would wash out light bronze. */
+.omp-button[data-variant="primary"],
+.omp-send-button:not(.omp-send-button--secondary, .omp-send-button--follow-up) {
+	--wisa-glass-light: transparent;
+	--wisa-glass-hover-light: transparent;
+	--wisa-glass-sheen: linear-gradient(135deg, transparent 48%, rgb(0 0 0 / 0.12));
+}
+
+.omp-session-sidebar .omp-pressable,
+.settings-nav-item {
+	border-radius: 12px;
+	background-color: var(--wisa-glass-clear-background);
+}
+
+.omp-session-sidebar .omp-pressable[aria-current="page"],
+.settings-nav-item[aria-current="page"],
+.omp-session-sidebar [data-sidebar-new-agent] {
+	background-color: color-mix(in srgb, var(--omp-accent) 14%, var(--wisa-glass-clear-background));
+	box-shadow: inset 0 1px var(--wisa-glass-rim), inset 0 0 0 1px var(--omp-border-accent);
+}
+
+.omp-button:is(:hover, :focus-visible):not(:disabled),
+.omp-pressable:is(:hover, :focus-visible):not(:disabled),
+.omp-send-button:is(:hover, :focus-visible):not(:disabled),
+.omp-tabs [role="tab"]:is(:hover, :focus-visible):not(:disabled),
+.settings-nav-item:is(:hover, :focus-visible):not(:disabled) {
+	box-shadow: inset 0 1px var(--wisa-glass-rim), inset 0 0 0 1px var(--wisa-glass-edge), 0 3px 10px rgb(0 0 0 / 0.12);
+}
+
+.omp-button[data-variant="ghost"]:is(:hover, :focus-visible):not(:disabled),
+.omp-session-sidebar .omp-pressable:is(:hover, :focus-visible):not(:disabled),
+.settings-nav-item:is(:hover, :focus-visible):not(:disabled) {
+	background-color: var(--wisa-glass-regular-background);
+	color: var(--omp-text);
+}
+
+.omp-button:active:not(:disabled),
+.omp-pressable:active:not(:disabled),
+.omp-send-button:active:not(:disabled),
+.settings-nav-item:active:not(:disabled),
+.omp-onboarding-choice:active {
+	scale: 0.975;
+	box-shadow: inset 0 2px 5px rgb(0 0 0 / 0.18), inset 0 1px var(--wisa-glass-edge);
+}
+
+.omp-button:disabled,
+.omp-pressable:disabled,
+.omp-send-button:disabled {
+	box-shadow: none;
+}
+
+input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], .bg-transparent),
+select,
+textarea:not(.xterm-helper-textarea, .bg-transparent) {
+	background-color: var(--wisa-glass-clear-background);
+	border-color: var(--wisa-glass-edge);
+	background-image: var(--wisa-glass-sheen);
+	box-shadow: inset 0 1px var(--wisa-glass-edge), inset 0 2px 4px rgb(0 0 0 / 0.06);
+}
+
+/* Native option popups are separate OS surfaces; keep their labels opaque. */
+option,
+optgroup {
+	background: var(--omp-bg-elevated);
+	color: var(--omp-text);
+}
+
+.omp-segmented {
+	border: 1px solid var(--wisa-glass-edge);
+	border-radius: 999px;
+	box-shadow: inset 0 1px 3px color-mix(in srgb, var(--omp-text) 5%, transparent);
+}
+
+.omp-segmented > button,
+.omp-glide--thumb,
+.omp-glide--pill,
+.omp-tab-unit {
+	border-radius: 999px;
+}
+
+.omp-glide--thumb,
+.omp-segmented:not([data-glide-ready]) > button[aria-pressed="true"],
+.omp-tab-unit[aria-selected="true"] {
+	background-color: var(--wisa-glass-clear-background);
+	box-shadow: inset 0 1px var(--wisa-glass-rim), inset 0 -1px var(--wisa-glass-edge), var(--omp-shadow-sm);
+}
+
+.omp-switch-track {
+	box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.18), 0 1px var(--wisa-glass-edge);
+}
+
+.omp-switch-thumb {
+	background-image: linear-gradient(155deg, white, rgb(230 234 240));
+	box-shadow: inset 0 1px white, 0 2px 5px rgb(0 0 0 / 0.2);
+}
+
+/* A bounded reasoning instrument: native range semantics and a glass thumb. */
+.omp-thinking-range {
+	appearance: none;
+	width: 100%;
+	height: 32px;
+	margin: 0;
+	background: transparent;
+	cursor: ew-resize;
+	accent-color: var(--omp-accent);
+}
+
+.omp-thinking-range::-webkit-slider-runnable-track {
+	height: 6px;
+	border-radius: 999px;
+	background: linear-gradient(90deg, var(--omp-thinking-low), var(--omp-thinking-high));
+	box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.2), 0 1px var(--wisa-glass-rim);
+}
+
+.omp-thinking-range::-webkit-slider-thumb {
+	appearance: none;
+	width: 24px;
+	height: 24px;
+	margin-top: -9px;
+	border: 1px solid var(--wisa-glass-rim);
+	border-radius: 50%;
+	background: var(--wisa-glass-sheen), var(--omp-bg-elevated);
+	box-shadow: inset 0 1px var(--wisa-glass-rim), 0 2px 8px rgb(0 0 0 / 0.25);
+	transition: box-shadow var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-thinking-range:is(:hover, :focus-visible)::-webkit-slider-thumb {
+	box-shadow: inset 0 1px var(--wisa-glass-rim), 0 0 0 4px var(--omp-accent-dim), 0 2px 8px rgb(0 0 0 / 0.25);
+}
+
+.omp-thinking-range:disabled {
+	cursor: default;
+	opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.omp-thinking-range::-webkit-slider-thumb {
+		transition: none;
+	}
+}
+
+@media (forced-colors: active) {
+	.omp-thinking-range {
+		appearance: auto;
+	}
+
+	.omp-thinking-range::-webkit-slider-runnable-track {
+		background: CanvasText;
+		box-shadow: none;
+	}
+
+	.omp-thinking-range::-webkit-slider-thumb {
+		appearance: auto;
+		background: Highlight;
+		border-color: CanvasText;
+		box-shadow: none;
+	}
+}
+
+/* Large blur layers are deliberately excluded on platforms with the known
+   4K compositor regression. Small floating surfaces keep the same material. */
+:root:is([data-platform="win32"], [data-platform="linux"]) :is(.omp-session-sidebar, .settings-sidebar, .omp-inspector) {
+	background-color: color-mix(in srgb, var(--omp-bg-elevated) 92%, transparent);
+	backdrop-filter: none;
+}
+
+/* An overlay must hide the conversation beneath it, not blur its text. */
+:root .omp-inspector[data-layout="overlay"] {
+	background: var(--omp-bg-primary);
+	backdrop-filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	body :is(.omp-button, .omp-pressable, .omp-send-button, .settings-nav-item, .omp-onboarding-choice) {
+		scale: none;
+	}
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+	:root,
+	:root[data-theme] {
+		--wisa-glass-canvas: none;
+		--wisa-glass-sheen: none;
+		--wisa-glass-edge: var(--omp-border-strong);
+		--wisa-glass-rim: var(--omp-border-strong);
+		--wisa-glass-light: transparent;
+		--wisa-glass-hover-light: transparent;
+	}
+
+	body :is(.omp-session-sidebar, .settings-sidebar, .omp-inspector) {
+		background-color: var(--wisa-glass-regular-background);
+	}
+
+	body :is(.omp-session-sidebar, .settings-sidebar, .omp-inspector, .omp-card, .omp-onboarding-choice, .omp-button, .omp-pressable, .omp-send-button, .settings-nav-item, .omp-note, .omp-segmented, .omp-glide--thumb, .omp-tab-unit, .omp-composer-box, .omp-dialog-panel, .omp-thinking-slider-panel, .omp-tabs [role="tab"], .settings-form-measure > section, input, textarea, select, [role="menu"], [role="listbox"]) {
+		background-image: none;
+		backdrop-filter: none;
+	}
+}
+
+@media (forced-colors: active) {
+	:root,
+	:root[data-theme] {
+		--wisa-glass-canvas: none;
+		--wisa-glass-sheen: none;
+		--wisa-glass-edge: CanvasText;
+	}
+
+	:root .omp-inspector[data-layout="overlay"],
+	body :is(.omp-session-sidebar, .settings-sidebar, .omp-inspector, .omp-card, .omp-onboarding-choice, .omp-note, .omp-switch-thumb, .omp-button, .omp-pressable, .omp-send-button, .settings-nav-item, .omp-segmented, .omp-glide--thumb, .omp-tab-unit, .omp-composer-box, .omp-dialog-panel, .omp-thinking-slider-panel, .omp-tabs [role="tab"], .settings-form-measure > section, input, textarea, select, [role="menu"], [role="listbox"]) {
+		background: Canvas;
+		color: CanvasText;
+		background-image: none;
+		backdrop-filter: none;
+		box-shadow: none;
+	}
+}

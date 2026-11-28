@@ -1,22 +1,22 @@
-/**
- * Side questions drawer: this session's `/btw` topics, the selected thread, and
- * a follow-up/new-question composer. Mirrors the main conversation's layout
- * (user turns right, answers left) and the TUI's BTW history sheet; the modal
- * remains the inline surface for a single question. Both read the same per-tab
- * store, so a question started in either place appears in both.
- */
-import { GitBranch, Plus } from "lucide-react";
+/** Session-scoped side questions, with a separate history picker and local image drafts. */
+import { GitBranch, History, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type BtwHistoryTurn, getBtwCopyText, getBtwLatestTurn, getBtwTurns } from "../../../shared/rpc-types";
 import { hydrateSession, hydrateTabSession } from "../../hooks/use-rpc-events";
+import { modelProfile } from "../../lib/context-strategy";
 import { describeError } from "../../lib/errors";
 import { copyText, cx, formatClock } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { MarkdownRenderer } from "../../lib/markdown";
 import { useBtwStore } from "../../stores/btw";
+import type { ComposerImage } from "../../stores/composer";
+import { useModelStore } from "../../stores/model";
+import { useSessionStore } from "../../stores/session";
 import { useRuntimeTabId } from "../../stores/session-runtime-context";
 import { toast } from "../../stores/toast";
-import { Badge, type BadgeVariant, Button, Spinner, TextArea } from "../common";
+import { Badge, type BadgeVariant, Button, Modal, Spinner, TextArea } from "../common";
+import { ZoomableImage } from "../common/ImageViewer";
+import { fileToImage } from "../layout/input-area-utils";
 import { BtwAnswer } from "./BtwAnswer";
 
 const STATUS_LABEL_KEYS: Record<BtwHistoryTurn["status"], string | null> = {
@@ -32,6 +32,16 @@ function statusVariant(status: BtwHistoryTurn["status"]): BadgeVariant {
 	return status === "error" ? "error" : "warning";
 }
 
+interface BtwDraft {
+	text: string;
+	images: ComposerImage[];
+	reading: number;
+	error: string | null;
+	generation: number;
+}
+
+const EMPTY_DRAFT: BtwDraft = { text: "", images: [], reading: 0, error: null, generation: 0 };
+
 export function BtwPanel() {
 	const t = useT();
 	const tabId = useRuntimeTabId();
@@ -46,8 +56,17 @@ export function BtwPanel() {
 	const ask = useBtwStore(state => state.ask);
 	const cancel = useBtwStore(state => state.cancel);
 	const branch = useBtwStore(state => state.branch);
-	const [draft, setDraft] = useState("");
-	const [askError, setAskError] = useState<string | null>(null);
+	const sessionId = useSessionStore(state => state.sessionId);
+	const model = useModelStore(state => state.model);
+	const imagesUnsupported = model?.input !== undefined && !modelProfile(model).vision;
+	const draftKey = JSON.stringify([tabId, sessionId]);
+	const [drafts, setDrafts] = useState<Record<string, BtwDraft>>({});
+	const currentDraft = drafts[draftKey] ?? EMPTY_DRAFT;
+	const { text: draft, images, reading, error: askError } = currentDraft;
+	const updateDraft = (update: (current: BtwDraft) => BtwDraft): void => {
+		setDrafts(current => ({ ...current, [draftKey]: update(current[draftKey] ?? EMPTY_DRAFT) }));
+	};
+	const [historyOpen, setHistoryOpen] = useState(false);
 	const [branching, setBranching] = useState(false);
 	const threadRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -76,22 +95,54 @@ export function BtwPanel() {
 	const newQuestion = (): void => {
 		followRef.current = true;
 		select(null);
-		setDraft("");
-		setAskError(null);
+		updateDraft(current => ({ ...EMPTY_DRAFT, generation: current.generation + 1 }));
 		inputRef.current?.focus();
 	};
 
 	const submit = async (): Promise<void> => {
-		const question = draft.trim();
-		if (!question || busy) return;
-		setAskError(null);
+		if ((!draft.trim() && images.length === 0) || busy || reading > 0) return;
+		if (images.length > 0 && imagesUnsupported) {
+			updateDraft(current => ({ ...current, error: t("btw.imagesUnsupported") }));
+			return;
+		}
+		const question = draft.trim() || t("btw.imageQuestion");
+		updateDraft(current => ({ ...current, error: null }));
 		try {
-			await ask(question, selectedId ?? undefined);
-			setDraft("");
+			await ask(question, selectedId ?? undefined, images.length ? images.map(image => image.content) : undefined);
+			updateDraft(current =>
+				current.text === draft && current.images === images
+					? { ...EMPTY_DRAFT, generation: current.generation + 1 }
+					: current,
+			);
 			followRef.current = true;
 		} catch (cause) {
-			setAskError(describeError(cause));
+			updateDraft(current => ({ ...current, error: describeError(cause) }));
 		}
+	};
+
+	const pasteImages = async (files: File[]): Promise<void> => {
+		if (imagesUnsupported) {
+			updateDraft(current => ({ ...current, error: t("btw.imagesUnsupported") }));
+			return;
+		}
+		const generation = currentDraft.generation;
+		updateDraft(current => ({ ...current, reading: current.reading + 1, error: null }));
+		const results = await Promise.allSettled(files.map(fileToImage));
+		updateDraft(current =>
+			current.generation !== generation
+				? current
+				: {
+						...current,
+						images: [
+							...current.images,
+							...results.flatMap(result => (result.status === "fulfilled" ? [result.value] : [])),
+						],
+						reading: current.reading - 1,
+						error: results.some(result => result.status === "rejected")
+							? t("input.attachmentFailed")
+							: current.error,
+					},
+		);
 	};
 
 	const stop = (): void => {
@@ -143,6 +194,9 @@ export function BtwPanel() {
 				<Button icon={<Plus size={14} />} onClick={newQuestion} size="sm" variant="ghost">
 					{t("btw.newQuestion")}
 				</Button>
+				<Button icon={<History size={14} />} onClick={() => setHistoryOpen(true)} size="sm" variant="ghost">
+					{t("btw.history")}
+				</Button>
 			</div>
 
 			{error ? (
@@ -157,8 +211,15 @@ export function BtwPanel() {
 				</div>
 			) : null}
 
-			{records.length > 0 ? (
-				<div className="max-h-48 shrink-0 overflow-y-auto border-b border-(--omp-border-muted)">
+			<Modal
+				open={historyOpen}
+				onClose={() => setHistoryOpen(false)}
+				title={t("btw.history")}
+				bodyClassName="p-0"
+				size="md"
+			>
+				<div className="max-h-[60vh] overflow-y-auto">
+					{records.length === 0 ? <div className="p-4 text-omp-sm text-(--omp-dim)">{t("btw.empty")}</div> : null}
 					{records.map(entry => {
 						const followUps = entry.followUps?.length ?? 0;
 						const active = entry.id === selectedId;
@@ -173,6 +234,7 @@ export function BtwPanel() {
 								onClick={() => {
 									followRef.current = true;
 									select(entry.id);
+									setHistoryOpen(false);
 								}}
 								type="button"
 							>
@@ -190,7 +252,7 @@ export function BtwPanel() {
 						);
 					})}
 				</div>
-			) : null}
+			</Modal>
 
 			<div
 				className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
@@ -208,7 +270,6 @@ export function BtwPanel() {
 					<div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
 						<div className="text-omp-lg font-medium text-(--omp-text)">{t("btw.empty")}</div>
 						<div className="max-w-xs text-omp-sm text-(--omp-dim)">{t("btw.emptyHint")}</div>
-						<div className="max-w-xs text-omp-xs text-(--omp-dim)">{t("btw.scopeHint")}</div>
 					</div>
 				) : record ? (
 					<div className="space-y-5">
@@ -227,6 +288,14 @@ export function BtwPanel() {
 										<div className="max-w-[85%] rounded-xl border border-[var(--omp-user-msg-border)] bg-[var(--omp-user-msg-bg)] px-3 py-2 text-omp-md leading-[1.6] text-[var(--omp-text)]">
 											<MarkdownRenderer content={turn.question} />
 										</div>
+										{turn.images?.map((image, imageIndex) => (
+											<ZoomableImage
+												key={imageIndex}
+												src={`data:${image.mimeType};base64,${image.data}`}
+												alt={t("input.attachmentAlt", { index: imageIndex + 1 })}
+												className="max-h-56 max-w-full rounded-lg border border-(--omp-border-muted) object-contain"
+											/>
+										))}
 										<div className="text-omp-xs tabular-nums text-(--omp-dim)">
 											{index === 0
 												? formatClock(turn.createdAt)
@@ -291,12 +360,48 @@ export function BtwPanel() {
 						</Button>
 					</div>
 				) : null}
-				{askError ? <div className="mb-1.5 break-words text-omp-sm text-[var(--omp-error)]">{askError}</div> : null}
+				{askError ? (
+					<div className="mb-1.5 break-words text-omp-sm text-[var(--omp-error)]" role="alert">
+						{askError}
+					</div>
+				) : null}
+				{images.length > 0 ? (
+					<div className="mb-2 flex flex-wrap gap-2" data-btw-attachments>
+						{images.map((image, index) => (
+							<div key={index} className="relative">
+								<ZoomableImage
+									src={image.preview}
+									alt={t("input.attachmentAlt", { index: index + 1 })}
+									className="h-20 w-24 rounded-lg border border-(--omp-border-muted) object-cover"
+								/>
+								<button
+									type="button"
+									aria-label={t("input.removeAttachment")}
+									onClick={() =>
+										updateDraft(current => ({
+											...current,
+											images: current.images.filter((_, itemIndex) => itemIndex !== index),
+										}))
+									}
+									className="absolute right-1 top-1 grid size-5 place-items-center rounded-full border border-(--omp-border-muted) bg-(--omp-bg-elevated) text-(--omp-text)"
+								>
+									<X size={11} />
+								</button>
+							</div>
+						))}
+					</div>
+				) : null}
 				<TextArea
 					aria-label={t("btw.title")}
 					autoGrow
 					className="max-h-40 w-full"
-					onChange={event => setDraft(event.target.value)}
+					onChange={event => updateDraft(current => ({ ...current, text: event.target.value }))}
+					onPaste={event => {
+						const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith("image/"));
+						if (files.length === 0) return;
+						event.preventDefault();
+						void pasteImages(files);
+					}}
 					onKeyDown={event => {
 						// Enter asks; Shift+Enter is a newline. The separate "Ask now"
 						// button was a second way to do the same thing.
@@ -305,14 +410,14 @@ export function BtwPanel() {
 						if ((event.nativeEvent as KeyboardEvent | undefined)?.isComposing) return;
 						if (event.metaKey || event.ctrlKey) return;
 						event.preventDefault();
-						if (draft.trim() && !busy) void submit();
+						if ((draft.trim() || images.length > 0) && !busy && reading === 0) void submit();
 					}}
 					placeholder={selectedId ? t("btw.followUpPlaceholder") : t("btw.questionPlaceholder")}
 					ref={inputRef}
 					rows={2}
 					value={draft}
 				/>
-				{pending ? (
+				{pending || reading > 0 ? (
 					<div className="mt-1.5 flex items-center gap-2 text-omp-xs text-(--omp-dim)">
 						<Spinner size="sm" />
 					</div>

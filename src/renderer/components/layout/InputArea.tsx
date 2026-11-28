@@ -35,6 +35,7 @@ import { parseComposerMode } from "../../lib/input-modes";
 import { effectiveOverrides, FOLLOW_UP_CHORD, isComposerShortcut, isFollowUpSend, onEscape } from "../../lib/keymap";
 import { abortActiveTurn } from "../../lib/messages";
 import { modelLabel } from "../../lib/model-label";
+import { manufacturerLabel } from "../../lib/model-manufacturer";
 import {
 	dropReferencedPastes,
 	expandPasteMarkers,
@@ -44,6 +45,7 @@ import {
 	storePaste,
 	wrapPasteInAttachmentBlock,
 } from "../../lib/paste-blobs";
+import { manufacturerIcon } from "../../lib/provider-brand";
 import { parseQueueShorthand, splitQueuedMessages } from "../../lib/queue-input";
 import { insertQuote } from "../../lib/quote-selection";
 import { supportsFastMode, supportsPriorityMode, supportsUltrafastMode } from "../../lib/service-tier";
@@ -68,18 +70,64 @@ import { ChatContextBar } from "./ChatContextBar";
 import { CompletionMenuList } from "./CompletionMenuList";
 import { ComposerModes } from "./ComposerModes";
 import { ContextStrategyBar } from "./ContextStrategyBar";
-import { CurrentWorkspaceControl } from "./CurrentWorkspaceControl";
 import { DictationStrip } from "./DictationStrip";
 import { HistorySearchOverlay } from "./HistorySearchOverlay";
-import { fileToImage, listMentionFiles, mentionFileCache } from "./input-area-utils";
+import { listMentionFiles, mentionFileCache } from "./input-area-utils";
 import { ThinkingControl } from "./ThinkingControl";
 import { type CompletionItem, type CompletionMenu, useCompletionMenu } from "./use-completion-menu";
 import { useComposerFiles } from "./use-composer-files";
 import { useComposerMenuPosition } from "./use-composer-menu-position";
 import { useComposerSubmit } from "./use-composer-submit";
 import { useDictation } from "./use-dictation";
+import { WallpaperControl } from "./WallpaperControl";
+import "./composer-model-material.css";
 
 const MENTION_FS_DEBOUNCE_MS = 150;
+
+/** Local brand tints, keyed by the same manufacturer aliases as the bundled marks. */
+const COMPOSER_MODEL_COLORS: Readonly<Record<string, string>> = {
+	openai: "#10a37f",
+	openaicodex: "#10a37f",
+	gpt: "#10a37f",
+	chatgpt: "#10a37f",
+	codex: "#10a37f",
+	anthropic: "#d97757",
+	claude: "#d97757",
+	google: "#4285f4",
+	googleai: "#4285f4",
+	googlevertex: "#4285f4",
+	gemini: "#4285f4",
+	xai: "#8899a6",
+	grok: "#8899a6",
+	meta: "#0866ff",
+	metallama: "#0866ff",
+	metaai: "#0866ff",
+	llama: "#0866ff",
+	mistral: "#f5a623",
+	mistralai: "#f5a623",
+	mixtral: "#f5a623",
+	codestral: "#f5a623",
+	deepseek: "#4d6bfe",
+	deepseekai: "#4d6bfe",
+	qwen: "#615ced",
+	qwenai: "#615ced",
+	alibaba: "#615ced",
+	dashscope: "#615ced",
+	tongyi: "#615ced",
+	minimax: "#ed4e68",
+	minimaxi: "#ed4e68",
+	moonshot: "#7884e8",
+	moonshotai: "#7884e8",
+	kimi: "#7884e8",
+	kimicode: "#7884e8",
+	zai: "#5378f6",
+	zhipu: "#5378f6",
+	zhipuai: "#5378f6",
+	glm: "#5378f6",
+	nvidia: "#76b900",
+	stepfun: "#2878ff",
+	capcut: "#25a9b8",
+};
 
 /**
  * Composer: auto-growing textarea, Enter to send / Shift+Enter for newline,
@@ -88,7 +136,7 @@ const MENTION_FS_DEBOUNCE_MS = 150;
  * off macOS) queues a follow-up, which holding the modifier previews.
  */
 export function InputArea() {
-	const { attachFiles, readOnly: collabReadOnly } = useComposerFiles();
+	const { attachFiles, attachImages, readingImages, readOnly: collabReadOnly } = useComposerFiles();
 	const isStreaming = useSessionStore(s => s.isStreaming);
 	const t = useT();
 	const rpc = useTabRpc();
@@ -104,13 +152,32 @@ export function InputArea() {
 	// the `/` command menu) describe a project that is not there.
 	const isWork = useTabIsWork(runtimeTabId);
 	const status = useSessionStore(s => s.status);
-	const isCompacting = useSessionStore(s => s.isCompacting);
 	const sessionId = useSessionStore(s => s.sessionId);
+	const placeholder =
+		status !== "ready"
+			? t("input.placeholder.connecting")
+			: isStreaming
+				? t("input.placeholder.streaming", { chord: FOLLOW_UP_CHORD })
+				: isChat
+					? t("input.placeholder.chat")
+					: isWork
+						? t("input.placeholder.work")
+						: t("input.placeholder.idle");
 	const queuedMessageCount = useSessionStore(s => s.queuedMessageCount);
 	const cwd = useSessionStore(s => s.cwd);
 	const model = useModelStore(s => s.model);
 	/** Display name for the model trigger: catalog name, else a prettified id. */
 	const modelName = modelLabel(model);
+	// A recognizable family wins over a gateway namespace (e.g. openrouter/claude-sonnet-4).
+	const modelFamilyManufacturer = model
+		? manufacturerLabel({ id: model.id.slice(model.id.lastIndexOf("/") + 1) })
+		: "";
+	const modelManufacturer = modelFamilyManufacturer || (model ? manufacturerLabel(model) : "");
+	const ModelBrand = manufacturerIcon(modelManufacturer);
+	const manufacturerKey = modelManufacturer.toLowerCase().replace(/[^a-z0-9]+/g, "");
+	const modelMaterialColor = Object.hasOwn(COMPOSER_MODEL_COLORS, manufacturerKey)
+		? COMPOSER_MODEL_COLORS[manufacturerKey]
+		: undefined;
 	const fastModeActive = useModelStore(s => s.fastModeActive && supportsFastMode(s.model));
 	const modelPickerOpen = useUiStore(s => s.modelPickerOpen) && runtimeTabId === activeTabId;
 	/** Agent `stt.enabled` setting: microphone dictation button in the composer. */
@@ -148,10 +215,14 @@ export function InputArea() {
 	const [pasteMenu, setPasteMenu] = useState<{ content: string; lineCount: number } | null>(null);
 	const pasteMenuRef = useRef<HTMLDivElement>(null);
 	const [runSettingsOpen, setRunSettingsOpen] = useState(false);
-	const { mounted: runSettingsMounted, closing: runSettingsClosing } = useOverlayPresence(runSettingsOpen);
 	const ownedRunSettingsClick = useRef<MouseEvent>(null);
 	const runSettingsTriggerRef = useRef<HTMLButtonElement>(null);
 	const runSettingsMenuRef = useRef<HTMLDivElement>(null);
+	const { mounted: runSettingsMounted, closing: runSettingsClosing } = useOverlayPresence(
+		runSettingsOpen,
+		runSettingsMenuRef,
+		"popover",
+	);
 	const runSettingsStyle = useComposerMenuPosition(runSettingsOpen, runSettingsTriggerRef, runSettingsMenuRef, 248);
 	const runSettingsReady = runSettingsStyle.visibility !== "hidden";
 	const composerToolbarRef = useRef<HTMLDivElement>(null);
@@ -159,6 +230,10 @@ export function InputArea() {
 	const approvalMode = useSettingsStore(s => s.approvalMode);
 	const planModeEnabled = useSessionStore(s => s.planModeEnabled);
 	const runSettingsActive = fastModeActive || planModeEnabled || approvalMode !== "yolo";
+	const sessionControlsOpen = useUiStore(state => state.modesOpen);
+	useEffect(() => {
+		if (sessionControlsOpen) setRunSettingsOpen(false);
+	}, [sessionControlsOpen]);
 
 	useLayoutEffect(() => {
 		const toolbar = composerToolbarRef.current;
@@ -314,18 +389,34 @@ export function InputArea() {
 		};
 	}, [status, sessionId, runtimeTabId, rpc]);
 
-	// Auto-grow the textarea to fit its content (up to ~40% of the session pane; one line while empty).
-	useEffect(() => {
+	// Grow wrapped drafts and placeholders with the pane, capped at 40% of its height.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: An empty textarea's scrollHeight depends on its rendered placeholder.
+	useLayoutEffect(() => {
 		const el = textareaRef.current;
 		if (!el) return;
-		el.style.height = "0px";
-		const paneHeight = el.closest<HTMLElement>(".omp-session-pane")?.clientHeight ?? window.innerHeight;
-		const maxHeight = text.length === 0 ? 24 : paneHeight * 0.4;
-		el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
-		// An empty composer is one line tall. In a narrow pane the placeholder
-		// wraps past it, which would otherwise surface a scrollbar in an empty box.
-		el.style.overflowY = text.length === 0 ? "hidden" : "";
-	}, [text]);
+		const pane = el.closest<HTMLElement>(".omp-session-pane");
+		let width = -1;
+		let height = -1;
+		const resize = () => {
+			const nextWidth = el.clientWidth;
+			const nextHeight = pane?.clientHeight ?? window.innerHeight;
+			if (width === nextWidth && height === nextHeight) return;
+			width = nextWidth;
+			height = nextHeight;
+			el.style.height = "0px";
+			el.style.height = `${Math.min(el.scrollHeight, height * 0.4)}px`;
+			el.style.overflowY = text.length === 0 ? "hidden" : "";
+		};
+		resize();
+		const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+		observer?.observe(el);
+		if (pane) observer?.observe(pane);
+		if (!observer) window.addEventListener("resize", resize);
+		return () => {
+			observer?.disconnect();
+			if (!observer) window.removeEventListener("resize", resize);
+		};
+	}, [text, placeholder]);
 
 	useCompletionMenu({
 		text,
@@ -570,7 +661,6 @@ export function InputArea() {
 
 	const send = useComposerSubmit({
 		text,
-		images,
 		sending,
 		status,
 		isStreaming,
@@ -740,7 +830,7 @@ export function InputArea() {
 		const files = Array.from(e.clipboardData.files).filter(f => f.type.startsWith("image/"));
 		if (files.length > 0) {
 			e.preventDefault();
-			void Promise.all(files.map(fileToImage)).then(pasted => setImages(prev => [...prev, ...pasted]));
+			attachImages(files);
 			return;
 		}
 		// Large TEXT paste (TUI editor.ts:1996-2044 parity): sanitize, then collapse
@@ -892,7 +982,16 @@ export function InputArea() {
 						data-working={isStreaming}
 						style={modeColor ? { borderColor: modeColor } : undefined}
 					>
-						<div className="px-4 pb-1 pt-3">
+						{modelMaterialColor && (
+							<div
+								className="omp-composer-model-material"
+								style={{ color: modelMaterialColor }}
+								aria-hidden="true"
+							>
+								<ModelBrand className="omp-composer-model-watermark" focusable="false" />
+							</div>
+						)}
+						<div className="px-4 pb-1 pt-3" data-tour="commands">
 							{submissionUncertain && (
 								<div
 									role="alert"
@@ -944,6 +1043,7 @@ export function InputArea() {
 								</div>
 							)}
 							<textarea
+								data-tour="compose"
 								readOnly={collabReadOnly}
 								ref={textareaRef}
 								autoCapitalize="sentences"
@@ -990,18 +1090,9 @@ export function InputArea() {
 								onClick={() => setMenu(null)}
 								onPaste={handlePaste}
 								rows={2}
-								placeholder={
-									status !== "ready"
-										? t("input.placeholder.connecting")
-										: isStreaming
-											? t("input.placeholder.streaming", { chord: FOLLOW_UP_CHORD })
-											: isChat
-												? t("input.placeholder.chat")
-												: isWork
-													? t("input.placeholder.work")
-													: t("input.placeholder.idle")
-								}
-								className="max-h-[40vh] min-h-[44px] w-full resize-none bg-transparent text-omp-xl leading-[1.5] text-[var(--omp-text)] outline-none placeholder:truncate placeholder:text-[var(--omp-dim)]"
+								wrap="soft"
+								placeholder={placeholder}
+								className="omp-composer-input max-h-[40vh] min-h-[44px] w-full resize-none bg-transparent text-omp-xl leading-[1.5] text-[var(--omp-text)] outline-none placeholder:text-[var(--omp-dim)]"
 							/>
 						</div>
 
@@ -1035,10 +1126,10 @@ export function InputArea() {
 						<div
 							ref={composerToolbarRef}
 							aria-busy={!routeReady}
-							className="omp-composer-toolbar flex h-11 min-w-0 items-center gap-1 px-2 pb-2 pt-1"
+							className="omp-composer-toolbar flex h-12 min-w-0 items-center gap-2 px-3 pb-2 pt-1"
 							inert={!routeReady}
 						>
-							<div className="omp-composer-controls flex min-w-0 flex-1 items-center gap-1">
+							<div className="omp-composer-controls flex min-w-0 flex-1 items-center gap-2">
 								<button
 									type="button"
 									onClick={() => {
@@ -1060,7 +1151,10 @@ export function InputArea() {
 									}
 									className="omp-composer-model omp-pressable flex h-8 min-w-8 items-center gap-1.5 rounded-full px-2 text-omp-md font-medium text-[var(--omp-text-secondary)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
 								>
-									<span className="min-w-0 flex-1 truncate">{modelName ?? t("input.chooseModel")}</span>
+									<ModelBrand size={18} className="shrink-0" />
+									<span className="omp-composer-model-label min-w-0 flex-1 truncate">
+										<bdi dir="auto">{modelName ?? t("input.chooseModel")}</bdi>
+									</span>
 									<ChevronDown aria-hidden="true" size={13} className="shrink-0 text-[var(--omp-dim)]" />
 								</button>
 
@@ -1072,6 +1166,8 @@ export function InputArea() {
 											aria-expanded={runSettingsOpen}
 											aria-haspopup="menu"
 											data-run-settings-overflow-trigger
+											data-tour="run-settings"
+											data-tour-approvals={!isChat ? "" : undefined}
 											disabled={collabReadOnly}
 											title={t("input.moreModes")}
 											aria-label={t("input.moreModes")}
@@ -1097,26 +1193,13 @@ export function InputArea() {
 													style={runSettingsStyle}
 													className={cx(
 														"omp-composer-menu fixed z-[100] flex flex-col items-stretch gap-1 overflow-y-auto rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] p-1.5 shadow-[var(--omp-shadow-md)]",
-														runSettingsClosing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
+														runSettingsClosing && "pointer-events-none",
 													)}
 												>
-													{!isChat && (
-														<CurrentWorkspaceControl
-															tabId={runtimeTabId}
-															disabled={
-																collabReadOnly ||
-																!routeReady ||
-																status !== "ready" ||
-																isStreaming ||
-																isCompacting
-															}
-														/>
-													)}
 													{!isChat && <AdvisorBadge />}
 													<ThinkingControl />
 													<FastModeControl menuItem />
 													{!isChat && <ApprovalControl />}
-													{!isChat && <ComposerModes />}
 												</div>,
 												document.body,
 											)}
@@ -1125,26 +1208,22 @@ export function InputArea() {
 									<div
 										data-run-settings-inline
 										inert={collabReadOnly}
-										className="omp-composer-inline-settings flex min-w-0 shrink-0 items-center gap-0.5"
+										className="omp-composer-inline-settings flex min-w-0 shrink-0 items-center gap-1.5"
 									>
-										{!isChat && (
-											<CurrentWorkspaceControl
-												tabId={runtimeTabId}
-												disabled={
-													collabReadOnly || !routeReady || status !== "ready" || isStreaming || isCompacting
-												}
-											/>
-										)}
 										{!isChat && <AdvisorBadge />}
 										<ThinkingControl />
 										<FastModeControl />
 										{!isChat && <ApprovalControl />}
-										{!isChat && <ComposerModes />}
+									</div>
+								)}
+								{!isChat && (
+									<div className="shrink-0" inert={collabReadOnly}>
+										<ComposerModes />
 									</div>
 								)}
 							</div>
 
-							<div className="omp-composer-attachments flex shrink-0 items-center gap-0.5">
+							<div className="omp-composer-attachments flex shrink-0 items-center gap-1.5" data-tour="attachments">
 								<button
 									type="button"
 									disabled={collabReadOnly}
@@ -1317,17 +1396,24 @@ export function InputArea() {
 											collabReadOnly ||
 											status !== "ready" ||
 											sending ||
+											readingImages ||
 											submissionUncertain ||
 											dictating ||
 											!hasDraft
 										}
 										aria-label={followUpHeld ? t("input.sendFollowUp") : t("input.send")}
 										title={
-											isStreaming ? t("input.sendStreaming", { chord: FOLLOW_UP_CHORD }) : t("input.send")
+											readingImages
+												? t("common.loading")
+												: isStreaming
+													? t("input.sendStreaming", { chord: FOLLOW_UP_CHORD })
+													: t("input.send")
 										}
 										className={cx("omp-send-button", followUpHeld && "omp-send-button--follow-up")}
 									>
-										{followUpHeld ? (
+										{readingImages ? (
+											<Loader2 aria-hidden size={16} className="animate-spin" />
+										) : followUpHeld ? (
 											<ListEnd size={16} strokeWidth={2.2} />
 										) : (
 											<ArrowUp size={16} strokeWidth={2.2} />
@@ -1350,7 +1436,10 @@ export function InputArea() {
 						</div>
 					</div>
 				</div>
-				{isChat ? <ChatContextBar /> : <ContextStrategyBar />}
+				<div className="omp-composer-footer flex min-w-0 items-center gap-1">
+					<WallpaperControl />
+					<div className="min-w-0 flex-1">{isChat ? <ChatContextBar /> : <ContextStrategyBar />}</div>
+				</div>
 			</div>
 		</div>
 	);

@@ -9,7 +9,7 @@ import { StatsServerManager } from "./stats-server";
 
 afterEach(() => vi.restoreAllMocks());
 
-test("a live listener is never respawned by a demand-driven revive", async () => {
+test("concurrent first readers wait for one private listener without respawning it", async () => {
 	const directory = await fs.mkdtemp(path.join(os.tmpdir(), "omp-stats-revive-"));
 	const binary = path.join(directory, "stats-live.ts");
 	await fs.writeFile(
@@ -22,8 +22,9 @@ await Bun.sleep(5000);
 	await fs.chmod(binary, 0o755);
 	const server = new StatsServerManager(binary);
 	try {
-		server.start();
-		await expect.poll(() => server.port, { timeout: 5000 }).toBe(55123);
+		expect(server.port).toBe(0);
+		await Promise.all([server.ensureReady(), server.ensureReady()]);
+		expect(server.port).toBe(55123);
 		// Every open dashboard polls; a revive that ignored the live child would
 		// stack listeners and hand the client a port nobody owns after the first exit.
 		expect(server.ensureRunning()).toBe("already-pending");

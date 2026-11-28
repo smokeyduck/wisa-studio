@@ -67,6 +67,7 @@ WISA STUDIO keeps its own agent data under `~/.wisa-studio/agent` (not `~/.omp`)
 - **Scheduled tasks:** cron or interval, running in the background with run history, reports and a verification step.
 - **Session overview:** context by category, cost, cache, speed, running subagents and MCP servers.
 - **MCP, Skills, plugins, hooks:** managed from Settings instead of hand-edited JSON.
+- **Jev / TypeSafe:** connect TypeSafe or enter its API key in **Model Roles**, choose a native Judge from the catalog, then click **Enable Jev routing**. Core routes unpinned subagent tasks among approved chat models without changing chat/Default assignments. Enabling shares a short assignment excerpt with TypeSafe, not conversation history or shared context. Turning routing off preserves the key and Judge role.
 - **SSH hosts, custom themes, command palette, voice mode, relay collaboration.**
 - **Work mode:** read, search, track tasks and control the desktop by default, without shell or general-purpose eval. The global **Computer** setting and input approval still apply.
 
@@ -93,6 +94,15 @@ In Memory → Project Knowledge, choose an existing Obsidian Vault after enablin
 Studio defaults to local Whisper Small with Vietnamese for dictation unless you configure a model or language. Cloud dictation requires explicitly selecting a cloud model; a local error does not send the recording to a cloud service.
 
 In Settings → Providers → Services, choose the Vietnamese voice and use **Preview** to hear it. VAIS-1000 is a Northern Vietnamese voice that may need a one-time download; text is synthesized locally. The system option uses an installed Vietnamese voice or reports that one is missing. Read-aloud plays new messages in order, can be stopped for the current run, and does not replay loaded history.
+
+### Import Claude and ChatGPT data (unreleased)
+
+Open the import dialog, choose an official export, and select the downloaded ZIP or JSON. Preview conversations, filter, select individual chats or all chats, then import and continue them in WISA. Claude Code and Codex remain separate local-session sources, not history from the Claude or ChatGPT apps.
+
+- Claude: **Settings → Privacy → Export data**; see the [official instructions](https://support.claude.com/en/articles/9450526-export-your-claude-data).
+- ChatGPT: **Settings → Data controls → Export data**; see the [official instructions](https://help.openai.com/en/articles/7260999-exporting-your-chatgpt-history-and-data).
+- Import runs locally without source-account cookies or sign-in. WISA leaves the source unchanged, keeps a private copy in its agent profile, and provides a reference workspace for projects, documents, files and metadata present in the export. Source settings, memories and instructions never become active WISA configuration or permissions automatically.
+- This is not full account migration: Anthropic excludes original uploaded files from Claude exports. A standalone JSON file does not include its sibling files either. Data that cannot become chat is retained as reference with reported limitations; missing files cannot be recovered. Continuing a conversation still sends model requests to your configured provider.
 
 ### Browse with Browser Use
 
@@ -177,6 +187,8 @@ bun run package:linux     -- --publish never   # AppImage + deb
 ```
 
 The full release runbook, including sidecar build order and artifact checks, is in [AGENTS.md](AGENTS.md) — read it before cutting a build. The packaging identity and cutover steps are in [docs/vi/appid-va-cap-nhat.md](docs/vi/appid-va-cap-nhat.md).
+
+Actions reuse dependency downloads and host-specific Browser Use payloads keyed by the build recipe and verified again before packaging. Native addons remain pinned to the exact Core commit; source rebuilds let Cargo revalidate cached intermediates. macOS proves DMG/ZIP packages on each build host before transferring artifacts; Windows uses 7z level 5 to reduce compression CPU. All runtime and updater gates remain mandatory; installers are never restored from cache.
 
 ## License and credits
 

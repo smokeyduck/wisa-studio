@@ -38,6 +38,11 @@ export type RpcCollabState = Accepts<Gui.RpcCollabState, Wire<Core.RpcCollabStat
 export type RpcContextReportResult = Accepts<Gui.RpcContextReportResult, Wire<Core.RpcContextReportResult>>;
 export type RpcForceToolState = Accepts<Gui.RpcForceToolState, Wire<Core.RpcForceToolState>>;
 export type RpcForeignSessionInfo = Accepts<Gui.RpcForeignSessionInfo, Wire<Core.RpcForeignSessionInfo>>;
+export type RpcOfficialArchivePreview = Accepts<Gui.RpcOfficialArchivePreview, Wire<Core.RpcOfficialArchivePreview>>;
+export type RpcOfficialArchiveImportResult = Accepts<
+	Gui.RpcOfficialArchiveImportResult,
+	Wire<Core.RpcOfficialArchiveImportResult>
+>;
 export type RpcGitStatus = Accepts<Gui.RpcGitStatus, Wire<Core.RpcGitStatus>>;
 export type RpcGuiThemeInfo = Accepts<Gui.RpcGuiThemeInfo, Wire<Core.RpcGuiThemeInfo>>;
 export type RpcGuiThemesResult = Accepts<Gui.RpcGuiThemesResult, Wire<Core.RpcGuiThemesResult>>;

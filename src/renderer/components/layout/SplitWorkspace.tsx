@@ -19,12 +19,15 @@ import { SessionRuntimeProvider } from "../../stores/session-runtime-context";
 import { ensureTabRuntime } from "../../stores/tab-runtime";
 import { type SplitAxis, type SplitPlacement, tabDisplayTitle, useTabsStore } from "../../stores/tabs";
 import { useUiStore } from "../../stores/ui";
+import { useDefaultWorkspace } from "../../stores/workspace-mode";
 import { AgentBeside } from "../agents/AgentBeside";
 import { AgentPage } from "../agents/AgentPage";
 import { ChatStream } from "../chat/ChatStream";
 import { TodoRibbon } from "../chat/dock/TodoDockCard";
 import { WorkspaceDock } from "../chat/dock/WorkspaceDock";
 import { ComposerQuestions } from "../dialogs/ExtensionDialog";
+import { ModesPanel } from "../panels/ModesPanel";
+import { ConversationWallpaper } from "./ConversationWallpaper";
 import { InputArea } from "./InputArea";
 import { PanelContainer } from "./PanelContainer";
 import { useComposerFiles } from "./use-composer-files";
@@ -104,6 +107,9 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 	const switchTab = useTabsStore(state => state.switchTab);
 	const unsplit = useTabsStore(state => state.unsplit);
 	const panelVisible = useUiStore(state => state.panelVisible && state.panelOwnerTabId === tabId);
+	const modesOpen = useUiStore(state => state.modesOpen);
+	const modesTab = useUiStore(state => state.modesTab);
+	const closeModes = useUiStore(state => state.closeModes);
 	const openReview = async () => {
 		if (!active) await switchTab(tabId);
 		if (useTabsStore.getState().activeTabId !== tabId) return;
@@ -181,10 +187,13 @@ function SessionPane({ tabId, split, label }: { tabId: string; split: boolean; l
 				)}
 				<TodoRibbon active={active} />
 				<div className="relative isolate flex min-h-0 min-w-0 flex-1 overflow-hidden">
-					<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-						<SessionPaneBody label={label} tabId={tabId} />
+					<div className="relative flex min-w-0 flex-1 overflow-hidden">
+						<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+							<SessionPaneBody label={label} tabId={tabId} />
+						</div>
+						{active && <ModesPanel open={modesOpen} onClose={closeModes} initialTab={modesTab} split={split} />}
 					</div>
-					{active && panelVisible && <PanelContainer />}
+					<PanelContainer open={active && panelVisible} split={split} />
 				</div>
 			</section>
 		</SessionRuntimeProvider>
@@ -231,7 +240,7 @@ function SessionConversation() {
 	return (
 		<div
 			className={cx(
-				"omp-session-conversation relative flex min-h-0 min-w-0 flex-1 flex-col",
+				"omp-session-conversation relative isolate flex min-h-0 min-w-0 flex-1 flex-col",
 				draggingFiles &&
 					!readOnly &&
 					"after:pointer-events-none after:absolute after:inset-0 after:z-10 after:rounded-lg after:border-2 after:border-(--omp-accent)",
@@ -259,6 +268,7 @@ function SessionConversation() {
 				requestAnimationFrame(() => composer?.focus());
 			}}
 		>
+			<ConversationWallpaper />
 			<div ref={setChatHost} className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col">
 				<ChatStream footer={<WorkspaceDock />} subagentDialogHost={chatHost} />
 			</div>
@@ -278,6 +288,7 @@ function splitGrid(axis: SplitAxis, ratio: number): CSSProperties {
 
 export function SplitWorkspace() {
 	const t = useT();
+	useDefaultWorkspace();
 	const { sessions } = useSessionList("global");
 	const tabs = useTabsStore(state => state.tabs);
 	const activeTabId = useTabsStore(state => state.activeTabId);

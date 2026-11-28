@@ -72,9 +72,9 @@ export function NotificationBell({ className }: { className: string }) {
 	const unread = useUnreadNoticeCount() + turns.reduce((count, notice) => count + Number(!notice.read), 0);
 	const [open, setOpen] = useState(false);
 	const [style, setStyle] = useState<CSSProperties | null>(null);
-	const { mounted, closing } = useOverlayPresence(open);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const panelRef = useRef<HTMLDivElement>(null);
+	const { mounted, closing } = useOverlayPresence(open, panelRef, "popover");
 
 	const place = useCallback(() => {
 		const rect = buttonRef.current?.getBoundingClientRect();
@@ -150,7 +150,7 @@ export function NotificationBell({ className }: { className: string }) {
 						style={style}
 						className={cx(
 							"fixed z-[80] flex max-h-[min(480px,70vh)] flex-col overflow-hidden rounded-2xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] shadow-[var(--omp-shadow-lg)]",
-							closing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
+							closing && "pointer-events-none",
 						)}
 					>
 						<div className="flex items-center justify-between gap-3 border-b border-[var(--omp-border-muted)] px-4 py-2.5">

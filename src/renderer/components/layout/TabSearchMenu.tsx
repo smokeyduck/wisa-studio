@@ -7,6 +7,7 @@
 import { Check, Columns2, Rows2, Search } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSurfaceMotion } from "../../hooks/use-overlay-presence";
 import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
@@ -44,6 +45,7 @@ export function TabSearchMenu({
 }) {
 	const t = useT();
 	const menuRef = useRef<HTMLDivElement>(null);
+	useSurfaceMotion(menuRef, "popover");
 	const [query, setQuery] = useState("");
 	const [activeIndex, setActiveIndex] = useState(0);
 	const [pos, setPos] = useState({ left: x, top: y });
@@ -56,9 +58,7 @@ export function TabSearchMenu({
 	useLayoutEffect(() => {
 		const menu = menuRef.current;
 		if (!menu) return;
-		// Layout size, not the bounding box: the pop-in animation is still
-		// scaling the menu down when this measures, so the box reads too small
-		// and the menu would hang off the window's right edge.
+		// Layout metrics ignore the entrance transform and describe the settled box.
 		const left = Math.min(x, window.innerWidth - (menu.offsetWidth || 0) - 8);
 		const top = Math.min(y, window.innerHeight - (menu.offsetHeight || 0) - 8);
 		setPos({ left: Math.max(8, left), top: Math.max(8, top) });
@@ -118,7 +118,7 @@ export function TabSearchMenu({
 					pick(matches[activeIndex]);
 				}
 			}}
-			className="omp-pop-in fixed z-50 flex max-h-[min(28rem,70vh)] w-80 flex-col overflow-hidden rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] shadow-xl"
+			className="fixed z-50 flex max-h-[min(28rem,70vh)] w-80 flex-col overflow-hidden rounded-xl border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] shadow-xl"
 		>
 			{title && <div className="truncate px-3 pt-2.5 text-omp-xs font-medium text-[var(--omp-dim)]">{title}</div>}
 			<label className="flex shrink-0 items-center gap-2 border-b border-[var(--omp-border-muted)] px-3 py-2">

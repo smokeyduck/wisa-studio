@@ -1,4 +1,6 @@
 [
+	"modelRoles.jev.title",
+	"onboarding.wisa.title",
 	"activeTools.source.mcp",
 	"activeTools.source.plugin",
 	"agentHub.defs.detail.prewalk",
@@ -72,7 +74,6 @@
 	"modelRoles.kind.chat",
 	"modesPanel.tabs.goal",
 	"modesPanel.tabs.loop",
-	"modesPanel.tabs.vibe",
 	"overview.servers.title",
 	"overview.workspace.branch",
 	"overview.workspace.detached",

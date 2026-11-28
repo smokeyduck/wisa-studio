@@ -4,8 +4,10 @@ import * as fs from "node:fs";
 import { createInterface } from "node:readline";
 import type {
 	AgentMessage,
+	BtwHistoryRecord,
 	ExtensionUIResponse,
 	RpcCommand,
+	RpcLoopModeState,
 	RpcSecurityDashboardResult,
 	RpcSessionState,
 	SubagentSnapshot,
@@ -97,6 +99,7 @@ if (process.argv.includes("stats")) {
 	}
 } else {
 	const messages: AgentMessage[] = [];
+	const btwRecords: BtwHistoryRecord[] = [];
 	const count = Math.min(50_000, Number(process.env.OMP_GUI_TEST_HISTORY ?? 0));
 	for (let index = 0; index < count; index++) {
 		const common = { timestamp: 1700000000000 + index * 1000, entryId: `history-${index}` };
@@ -152,13 +155,13 @@ if (process.argv.includes("stats")) {
 	}
 
 	const model = {
-		id: "local-fixture",
-		name: "Local fixture",
+		id: process.env.OMP_GUI_TEST_MODEL_ID ?? "local-fixture",
+		name: process.env.OMP_GUI_TEST_MODEL_NAME ?? "Local fixture",
 		provider: "fixture",
 		reasoning: true,
 		contextWindow: 128000,
 		maxTokens: 4096,
-		input: ["text"],
+		input: process.env.OMP_GUI_TEST_VISION === "1" ? ["text", "image"] : ["text"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 	};
 	const state: RpcSessionState = {
@@ -189,12 +192,24 @@ if (process.argv.includes("stats")) {
 		agentsPaused: false,
 	};
 	const subagents: SubagentSnapshot[] = [];
-	let queue: { id: string; text: string; lane: string }[] = [];
+	let loopMode: RpcLoopModeState = { enabled: false, state: "off" };
+	let vibeModeEnabled = false;
+	let queue: { id: string; text: string; lane: string; editable: boolean; timestamp: number }[] = [];
 	let securityMode = "disabled";
 	let streamTimer: Timer | null = null;
 	let streamChunks = 0;
 	let holdSettings = false;
 	let releaseSettings: (() => void) | undefined;
+	let configWarnings: string[] = [];
+	const jevFixture = process.env.OMP_GUI_TEST_JEV === "1";
+	let typesafeAuthenticated = false;
+	let judgeSelector: string | undefined;
+	const nativeJudge = {
+		provider: "typesafe",
+		id: "fixture-native-judge",
+		name: "Jev fixture",
+		kind: "judge" as const,
+	};
 	const write = (data: unknown) => process.stdout.write(`${JSON.stringify(data)}\n`);
 	const values: Record<string, unknown> = {
 		"approval.mode": "ask",
@@ -202,6 +217,7 @@ if (process.argv.includes("stats")) {
 		"theme.light": "light",
 		"theme.mode": "dark",
 		"security.enabled": false,
+		"task.judgeRouting": false,
 		"compaction.reserveTokens": 8192,
 	};
 	const stats = {
@@ -226,6 +242,20 @@ if (process.argv.includes("stats")) {
 		switch (command.type) {
 			case "get_state":
 				ok(state);
+				break;
+			case "set_thinking_level":
+				state.thinkingConfigured = command.level;
+				state.thinkingLevel = command.level === "auto" ? undefined : command.level;
+				ok({ thinkingLevel: state.thinkingLevel, thinkingConfigured: state.thinkingConfigured });
+				break;
+			case "get_config_warnings":
+				ok({ warnings: configWarnings });
+				break;
+			case "set_model":
+				state.model = { ...model, provider: command.provider, id: command.modelId };
+				write({ type: "model_changed" });
+				// Startup warnings deliberately remain: this is the stale Core snapshot regression.
+				ok(state.model);
 				break;
 			case "get_messages":
 			case "get_transcript":
@@ -252,14 +282,33 @@ if (process.argv.includes("stats")) {
 				});
 				break;
 			case "get_queue":
-				ok({ steering: [], followUp: [], entries: queue });
+				ok({
+					steering: queue.filter(item => item.lane === "steering"),
+					followUp: queue.filter(item => item.lane === "followUp"),
+					entries: queue,
+				});
 				break;
 			case "get_available_models":
 				ok({ models: [model], discoveryStates: [], refreshPending: false, generation: 1 });
 				break;
 			case "get_providers":
 				ok({
-					providers: [{ id: "fixture", name: "Local fixture", hasAuth: true, authenticated: true, modelCount: 1 }],
+					providers: [
+						{ id: "fixture", name: "Local fixture", hasAuth: true, authenticated: true, modelCount: 1 },
+						...(jevFixture
+							? [
+									{
+										id: "typesafe",
+										name: "TypeSafe",
+										authenticated: typesafeAuthenticated,
+										loginAvailable: true,
+										apiKeyLogin: true,
+										disabled: false,
+										modelCount: typesafeAuthenticated ? 1 : 0,
+									},
+								]
+							: []),
+					],
 					models: [model],
 					discoveryStates: [],
 					refreshPending: false,
@@ -268,6 +317,85 @@ if (process.argv.includes("stats")) {
 				break;
 			case "get_login_providers":
 				ok({ providers: [] });
+				break;
+			case "get_model_roles":
+				ok({
+					roles: [
+						{
+							id: "default",
+							name: "Default",
+							section: "chat",
+							source: "settings",
+							model: `${model.provider}/${model.id}`,
+							candidates: [{ ...model, kind: "chat" }],
+						},
+						...(jevFixture
+							? [
+									{ id: "smol", name: "Fast", section: "chat" },
+									{ id: "slow", name: "Thinking", section: "chat" },
+									{ id: "vision", name: "Vision", section: "chat" },
+									{ id: "plan", name: "Architect", section: "chat" },
+									{ id: "commit", name: "Commit", section: "chat" },
+									{ id: "tiny", name: "Tiny", section: "chat" },
+									{ id: "memory", name: "Memory", section: "chat" },
+									{ id: "task", name: "Subtask", section: "chat" },
+									{ id: "advisor", name: "Advisor", section: "chat" },
+									{ id: "widget", name: "Job widgets", section: "chat" },
+									{ id: "image", name: "Image generation", section: "kind" },
+									{ id: "web", name: "Web search", section: "kind" },
+									{ id: "speech", name: "Speech", section: "kind" },
+									{ id: "dictation", name: "Dictation", section: "kind" },
+								].map(role => ({
+									...role,
+									tag: role.id.toUpperCase(),
+									source: "default",
+									candidates: role.section === "chat" ? [{ ...model, kind: "chat" }] : [],
+								}))
+							: []),
+						{
+							id: "judge",
+							name: "Judge",
+							section: "kind",
+							source: judgeSelector ? "settings" : "default",
+							model: judgeSelector,
+							selected: judgeSelector ? { provider: nativeJudge.provider, id: nativeJudge.id } : undefined,
+							candidates: jevFixture && typesafeAuthenticated ? [nativeJudge] : [],
+						},
+					],
+				});
+				break;
+			case "set_api_key":
+				if (!jevFixture || command.providerId !== "typesafe" || !command.apiKey.trim()) {
+					write({
+						type: "response",
+						id: command.id,
+						command: command.type,
+						success: false,
+						error: "Unsupported fixture credential",
+					});
+					break;
+				}
+				typesafeAuthenticated = true;
+				ok({ providerId: command.providerId });
+				break;
+			case "set_model_role":
+				if (
+					!jevFixture ||
+					!typesafeAuthenticated ||
+					command.role !== "judge" ||
+					command.modelId !== `${nativeJudge.provider}/${nativeJudge.id}`
+				) {
+					write({
+						type: "response",
+						id: command.id,
+						command: command.type,
+						success: false,
+						error: "Unsupported fixture role",
+					});
+					break;
+				}
+				judgeSelector = command.modelId;
+				ok({ role: command.role, modelId: judgeSelector });
 				break;
 			case "get_settings":
 				if (holdSettings && !command.paths) {
@@ -278,8 +406,27 @@ if (process.argv.includes("stats")) {
 				}
 				ok({ values, advisorEnabled: false, advisorActive: false });
 				break;
+			case "set_session_compaction":
+				if (command.sessionId !== state.sessionId) throw new Error("The session changed");
+				Object.assign(values, command.values);
+				if (typeof command.values["compaction.enabled"] === "boolean") {
+					state.autoCompactionEnabled = command.values["compaction.enabled"];
+				}
+				write({ type: "config_update", model: state.model, autoCompactionEnabled: state.autoCompactionEnabled });
+				ok();
+				break;
 			case "set_setting":
 				values[command.path] = command.value;
+				if (command.path === "fixture.missingModel") {
+					state.model = command.value ? null : model;
+					configWarnings = command.value
+						? [
+								"No default model selected. Use /login, set an API key environment variable, or select a local model with /model or --model.",
+							]
+						: [];
+					write({ type: "model_changed" });
+					write({ type: "config_warnings_changed" });
+				}
 				ok({ path: command.path, value: command.value });
 				break;
 			case "get_settings_schema":
@@ -312,11 +459,26 @@ if (process.argv.includes("stats")) {
 			case "get_goal":
 				ok({ enabled: false, status: "none" });
 				break;
+			case "guided_goal":
+				ok({ started: true });
+				break;
 			case "get_loop_mode":
-				ok({ enabled: false, state: "off" });
+				ok(loopMode);
+				break;
+			case "set_loop_mode":
+				loopMode = {
+					enabled: command.enabled,
+					state: command.enabled ? "waiting" : "off",
+					prompt: command.args,
+				};
+				ok(loopMode);
 				break;
 			case "get_vibe_mode":
-				ok({ enabled: false });
+				ok({ enabled: vibeModeEnabled });
+				break;
+			case "set_vibe_mode":
+				vibeModeEnabled = command.enabled;
+				ok({ enabled: command.enabled });
 				break;
 			case "get_gui_themes":
 			case "get_themes":
@@ -411,8 +573,27 @@ if (process.argv.includes("stats")) {
 				write({ type: "live_end" });
 				ok();
 				break;
-			case "btw":
-				ok({ question: command.question, replyText: "Local side answer", canBranch: false });
+			case "btw": {
+				const now = Date.now();
+				const turn = {
+					question: command.question,
+					...(command.images?.length ? { images: command.images } : {}),
+					answer: "Local side answer",
+					status: "complete" as const,
+					createdAt: now,
+					updatedAt: now,
+				};
+				const previous = btwRecords.find(record => record.id === command.recordId);
+				const record: BtwHistoryRecord = previous
+					? { ...previous, followUps: [...(previous.followUps ?? []), turn] }
+					: { ...turn, id: `btw-${btwRecords.length + 1}`, leafId: null };
+				if (previous) btwRecords.splice(btwRecords.indexOf(previous), 1);
+				btwRecords.unshift(record);
+				ok({ record });
+				break;
+			}
+			case "get_btw_history":
+				ok({ records: btwRecords });
 				break;
 			case "get_plugins":
 				ok({ plugins: [] });
@@ -576,6 +757,15 @@ if (process.argv.includes("stats")) {
 				state.planModeEnabled = command.enabled;
 				ok({ enabled: command.enabled });
 				break;
+			case "queue_remove":
+				queue = queue.filter(item => item.id !== command.queueId);
+				ok({ removed: true });
+				write({
+					type: "queue_update",
+					steering: queue.filter(item => item.lane === "steering"),
+					followUp: queue.filter(item => item.lane === "followUp"),
+				});
+				break;
 			case "steer":
 			case "follow_up":
 				queue = [
@@ -584,9 +774,16 @@ if (process.argv.includes("stats")) {
 						id: crypto.randomUUID(),
 						text: command.message,
 						lane: command.type === "steer" ? "steering" : "followUp",
+						editable: true,
+						timestamp: Date.now(),
 					},
 				];
 				ok();
+				write({
+					type: "queue_update",
+					steering: queue.filter(item => item.lane === "steering"),
+					followUp: queue.filter(item => item.lane === "followUp"),
+				});
 				break;
 			case "abort":
 				if (streamTimer) clearInterval(streamTimer);

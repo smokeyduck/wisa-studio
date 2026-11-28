@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMessage, SessionStats } from "../../../shared/rpc-types";
-import { sessionCacheHitPercent, sessionExecutionDurationMs } from "./session-metrics";
+import { prepareSessionExecutionDuration, sessionCacheHitPercent } from "./session-metrics";
 
 const stats = {
 	tokens: { input: 100, output: 20, reasoning: 0, cacheRead: 300, cacheWrite: 100, total: 520 },
@@ -21,27 +21,44 @@ describe("session metrics", () => {
 			["b", { startTime: 4_000, endTime: 6_000 }],
 		]);
 		expect(
-			sessionExecutionDurationMs({
+			prepareSessionExecutionDuration({
 				messages,
 				streamingMessage: null,
 				tools,
 				awaitingModelSince: null,
 				isStreaming: false,
-				now: 10_000,
-			}),
+			})(10_000),
 		).toBe(7_000);
 	});
 
 	it("keeps the active request clock moving before the response arrives", () => {
 		expect(
-			sessionExecutionDurationMs({
+			prepareSessionExecutionDuration({
 				messages: [],
 				streamingMessage: null,
 				tools: new Map(),
 				awaitingModelSince: 8_000,
 				isStreaming: true,
-				now: 10_000,
-			}),
+			})(10_000),
 		).toBe(2_000);
+	});
+
+	it("reuses settled ranges while active work crosses overlapping and future intervals", () => {
+		const durationAt = prepareSessionExecutionDuration({
+			messages: [
+				{ role: "assistant", timestamp: 1_000, duration: 3_000 },
+				{ role: "assistant", timestamp: 3_000, duration: 3_000 },
+				{ role: "assistant", timestamp: 9_000, duration: 2_000 },
+			],
+			streamingMessage: { role: "assistant", timestamp: 5_000 },
+			tools: new Map([["active", { startTime: 4_000, endTime: null }]]),
+			awaitingModelSince: 2_000,
+			isStreaming: true,
+		});
+		expect(durationAt(3_000)).toBe(7_000);
+		expect(durationAt(5_000)).toBe(7_000);
+		expect(durationAt(8_000)).toBe(9_000);
+		expect(durationAt(10_000)).toBe(10_000);
+		expect(durationAt(12_000)).toBe(11_000);
 	});
 });

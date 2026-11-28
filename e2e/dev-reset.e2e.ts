@@ -45,7 +45,7 @@ test("resetting preferences restarts both Electron and the renderer server in de
 	try {
 		const before = await connect(0);
 		const settings = before.getByRole("button", { name: "Settings", exact: true });
-		const welcome = before.getByRole("dialog", { name: "Welcome to WISA STUDIO" });
+		const welcome = before.getByRole("dialog", { name: "Welcome to Wisa" });
 		await expect(settings.or(welcome).first()).toBeVisible();
 		const closeWelcome = welcome.getByRole("button", { name: "Close", exact: true });
 		await settings.click({ timeout: 1500 }).catch(async error => {

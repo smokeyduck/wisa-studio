@@ -1,5 +1,5 @@
 appId: org.wisa.studio
-productName: WISA STUDIO
+productName: Wisa
 beforePack: scripts/build-browser-use.cjs
 afterPack: scripts/after-pack.cjs
 directories:
@@ -17,6 +17,8 @@ extraResources:
     to: browser-use-bridge.py
   - from: resources/studio-agent.yml
     to: studio-agent.yml
+  - from: resources/notch-agent-hook.cjs
+    to: notch-agent-hook.cjs
   - from: .
     to: licenses
     filter: [LICENSE, NOTICE, LICENSE-SCOPE.md, LICENSE-POLYFORM-STRICT]
@@ -45,9 +47,9 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   # Display name and executable: electron-builder names the installed exe from
-  # productName ("WISA STUDIO.exe"); the sidecar stays `omp.exe` in extraResources.
+  # productName ("Wisa.exe"); the sidecar stays `omp.exe` in extraResources.
   # userData is pinned explicitly in src/main/index.ts, not derived from the exe name.
-  shortcutName: WISA STUDIO
+  shortcutName: Wisa
   artifactName: wisa-studio-${version}-setup.${ext}
 
 portable:

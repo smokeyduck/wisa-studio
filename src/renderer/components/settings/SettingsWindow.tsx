@@ -1,3 +1,4 @@
+import type { AgentNotchSettings as NotchSettings } from "../../../shared/agent-notch";
 import {
 	GUI_DISPLAY_BOOL_FIELDS,
 	saveGuiPreference,
@@ -51,6 +52,7 @@ import {
 } from "../../../shared/launch-profile";
 import { isUnsupportedProxyUrl } from "../../../shared/proxy";
 import type { SettingEntry, SettingsSchemaResult, SidecarStatus } from "../../../shared/rpc-types";
+import { useSurfaceMotion } from "../../hooks/use-overlay-presence";
 import { describeError } from "../../lib/errors";
 import { cx } from "../../lib/format";
 import { useLang, useT } from "../../lib/i18n";
@@ -76,6 +78,7 @@ import { Button, ConfirmDialog, Input, Spinner, type TabItem, TextArea } from ".
 import { isTopmostDialog, registerDialogLayer } from "../common/dialog-layer";
 import { ExtensionSettingsPage } from "../panels/ExtensionsPanel";
 import { InventorySettingsPage, type TabId as InventoryTabId } from "../panels/InventoryPanel";
+import { AgentNotchSettings } from "./AgentNotchSettings";
 import { ConfigEditorSetting } from "./ConfigEditorSetting";
 import { ArrayChipEditor } from "./editors/ArrayChipEditor";
 import { RadioGroup } from "./editors/RadioGroup";
@@ -110,6 +113,7 @@ import {
 	type LoadState,
 	MANAGEMENT_TAB_IDS,
 	MCP_TAB_ID,
+	NOTCH_TAB_ID,
 	RESOURCES_TAB_ID,
 	type SettingsResponseData,
 	SHORTCUTS_TAB_ID,
@@ -129,6 +133,7 @@ const SETTINGS_NAV_ICONS: Record<string, typeof SlidersHorizontal> = {
 	[UPDATES_TAB_ID]: HardDriveDownload,
 	[SHORTCUTS_TAB_ID]: Keyboard,
 	[APP_HELP_TAB_ID]: HelpCircle,
+	[NOTCH_TAB_ID]: SlidersHorizontal,
 	model: Cpu,
 	providers: Network,
 	files: Folder,
@@ -280,6 +285,7 @@ export function SettingsWindow() {
 	const t = useT();
 	const { lang } = useLang();
 	const contentRef = useRef<HTMLDivElement>(null);
+	const pageRef = useRef<HTMLDivElement>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 	const [focusedSetting, setFocusedSetting] = useState<string | null>(null);
 	const open = useUiStore(state => state.settingsOpen);
@@ -318,6 +324,7 @@ export function SettingsWindow() {
 	const [resourceTab, setResourceTab] = useState<InventoryTabId>("catalog");
 	const [query, setQuery] = useState("");
 	const [loadState, setLoadState] = useState<LoadState>("loading");
+	const [notchDraft, setNotchDraft] = useState<NotchSettings | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [schema, setSchema] = useState<SettingsSchemaResult | null>(null);
 	const [values, setValues] = useState<Record<string, unknown>>({});
@@ -837,6 +844,8 @@ export function SettingsWindow() {
 
 	// Focus management for the fullscreen dialog: initial focus, Tab trap, restore.
 	const dialogRef = useRef<HTMLDivElement>(null);
+	useSurfaceMotion(dialogRef, "page", open);
+	useSurfaceMotion(pageRef, "page", `${open}:${tab}`);
 	const restoreFocusRef = useRef<HTMLElement | null>(null);
 	useEffect(() => {
 		if (!open) return;
@@ -902,6 +911,7 @@ export function SettingsWindow() {
 
 	return createPortal(
 		<div
+			data-tour="settings"
 			aria-label={t("settings.title")}
 			aria-modal="true"
 			className={
@@ -917,14 +927,14 @@ export function SettingsWindow() {
 				>
 					<div aria-hidden className="omp-window-caption drag-region" />
 					<div className="px-3 pb-3 pt-2">
-						<button
-							className="no-drag mb-2 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-omp-sm text-(--omp-muted) hover:bg-(--omp-selected-bg) hover:text-(--omp-text)"
+						<Button
+							className="no-drag mb-2 w-full justify-start"
+							icon={<ArrowLeft aria-hidden="true" size={15} />}
 							onClick={close}
-							type="button"
+							variant="ghost"
 						>
-							<ArrowLeft aria-hidden="true" size={15} />
 							{t("settings.backToChat")}
-						</button>
+						</Button>
 						<div className="mb-2 px-2 text-omp-lg font-semibold">{t("settings.title")}</div>
 						{showGlobalSearch && (
 							<div className="no-drag relative min-w-0">
@@ -944,7 +954,7 @@ export function SettingsWindow() {
 							</div>
 						)}
 					</div>
-					<div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
+					<div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-4">
 						{navItems.map(item => {
 							const active = item.id === tab;
 							const Icon = SETTINGS_NAV_ICONS[item.id] ?? SlidersHorizontal;
@@ -998,6 +1008,7 @@ export function SettingsWindow() {
 					    every page body start on the same left edge. */}
 					<div className="settings-scroll min-h-0 flex-1 overflow-y-auto" ref={contentRef}>
 						<div
+							ref={pageRef}
 							className={cx(
 								"settings-page-frame pb-8 pt-1",
 								!wideTab && "settings-page-frame--form",
@@ -1029,6 +1040,9 @@ export function SettingsWindow() {
 								/>
 								{searchGroups === null ? (
 									<>
+										{tab === NOTCH_TAB_ID && (
+											<AgentNotchSettings draft={notchDraft} onDraftChange={setNotchDraft} />
+										)}
 										{tab === SKILLS_TAB_ID && <SkillsSettingsPage query={query} />}
 										{tab === MCP_TAB_ID && <ExtensionSettingsPage query={query} tabId="mcp" />}
 										{tab === RESOURCES_TAB_ID && (
@@ -1616,7 +1630,7 @@ export function SettingsWindow() {
 										))}
 									</>
 								)}
-								{!managementTab && tab !== APP_HELP_TAB_ID && (
+								{!managementTab && tab !== APP_HELP_TAB_ID && tab !== NOTCH_TAB_ID && (
 									<div className="mt-8 border-t border-(--omp-border-muted) pt-4">
 										<span className="text-omp-sm text-(--omp-dim)">{t("settings.applyImmediately")}</span>
 									</div>

@@ -95,7 +95,7 @@ function WorkspacePage({ open, onClose, title, ariaLabel, bodyClassName = "px-4 
 				<button
 					aria-label={t("settings.backToChat")}
 					title={t("settings.backToChat")}
-					className="no-drag flex size-8 shrink-0 items-center justify-center rounded-lg text-(--omp-muted) hover:bg-(--omp-selected-bg) hover:text-(--omp-text)"
+					className="omp-pressable no-drag flex size-8 shrink-0 items-center justify-center rounded-lg text-(--omp-muted) hover:bg-(--omp-selected-bg) hover:text-(--omp-text)"
 					onClick={onClose}
 					type="button"
 				>
@@ -134,7 +134,7 @@ function OverlayModal({
 	// Exit phase lives in the shared overlay-presence hook: `mounted` — not `open` —
 	// gates the portal, the phase starts in the SAME commit's effect while the panel
 	// is still in the DOM, and reduced motion skips straight to unmount.
-	const { mounted, closing } = useOverlayPresence(open);
+	const { mounted, closing } = useOverlayPresence(open, panelRef, "dialog");
 	onCloseRef.current = onClose;
 
 	// What actually animates out. A dialog whose payload clears on close rebuilds
@@ -147,7 +147,7 @@ function OverlayModal({
 
 	// Focus + keyboard + layer scope all live with `open`: the layer releases
 	// the moment close begins, handing Escape to the dialog beneath even while
-	// this one plays its exit animation (unmounted after OVERLAY_EXIT_MS).
+	// this one plays its exit animation, then unmounts on completion.
 	useEffect(() => {
 		if (!open) return;
 		const unregisterLayer = registerDialogLayer(panelRef.current);
@@ -228,7 +228,7 @@ function OverlayModal({
 				aria-label={shown.ariaLabel ?? (typeof shown.title === "string" ? shown.title : undefined)}
 				aria-labelledby={!chromeless && shown.title ? titleId : undefined}
 				aria-modal={!closing}
-				className={`omp-dialog-panel ${closing ? "omp-scale-out" : "omp-scale-in"} flex flex-col overflow-hidden rounded-2xl border border-(--omp-modal-border) bg-(--omp-modal-bg) shadow-(--omp-shadow-lg) ${SIZE_CLASSES[size]} ${panelClassName ?? ""}`.trim()}
+				className={`omp-dialog-panel flex flex-col overflow-hidden rounded-2xl border border-(--omp-modal-border) bg-(--omp-modal-bg) shadow-(--omp-shadow-lg) ${SIZE_CLASSES[size]} ${panelClassName ?? ""}`.trim()}
 				onKeyDown={event => {
 					if (event.key === "Escape") event.stopPropagation();
 				}}

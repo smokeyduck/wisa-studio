@@ -122,6 +122,22 @@ jobs:
           # so follow the pinned checkout instead of a hard-coded version.
           bun-version-file: oh-my-pi/package.json
 
+      - name: Cache Bun package downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: wisa-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('oh-my-pi/bun.lock', 'oh-my-pi/packages/gui/bun.lock', 'oh-my-pi/packages/gui/package.json') }}
+          restore-keys: wisa-bun-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Electron and packaging downloads
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: wisa-electron-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('oh-my-pi/packages/gui/bun.lock', 'oh-my-pi/packages/gui/package.json') }}
+          restore-keys: wisa-electron-v1-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Install dependencies
         working-directory: oh-my-pi
         run: bun install
@@ -197,6 +213,13 @@ jobs:
             }
           '
 
+      - name: Cache the native offline Browser Use payload
+        id: browser-cache
+        uses: actions/cache@v5
+        with:
+          path: oh-my-pi/packages/gui/resources/browser-use
+          key: wisa-browser-use-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('oh-my-pi/packages/gui/scripts/build-browser-use.cjs', 'oh-my-pi/packages/gui/resources/LICENSE-CHROMIUM') }}
+
       - name: Build the native Browser Use payload and GUI packages
         working-directory: oh-my-pi/packages/gui
         # Run the hoisted electron-builder CLI under Bun (see issue #10).
@@ -204,8 +227,12 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
           CONFIG: ${{ matrix.config }}
+          BROWSER_CACHE_HIT: ${{ steps.browser-cache.outputs.cache-hit }}
         run: |
-          bun run build:browser-use
+          if [ "$BROWSER_CACHE_HIT" != true ]; then
+            bun run build:browser-use
+          fi
+          node scripts/build-browser-use.cjs --verify resources/browser-use
           bun run build
           bun ../../node_modules/electron-builder/cli.js \
             --config "$CONFIG" --mac "--$ARCH" --publish never
@@ -226,47 +253,8 @@ jobs:
           node -e 'const fs = require("node:fs"); const yaml = require("js-yaml"); fs.writeFileSync("release-proof/latest-mac.json", JSON.stringify(yaml.load(fs.readFileSync("dist/latest-mac.yml", "utf8"))));'
           cp scripts/smoke-sidecar.mjs scripts/smoke-packaged-gui.mjs scripts/build-browser-use.cjs release-proof/
           cp e2e/browser-use.e2e.ts release-proof/browser-use.spec.ts
-          node -e 'require("fs").writeFileSync("release-proof/package.json", JSON.stringify({private: true, dependencies: {playwright: require("playwright/package.json").version, "@playwright/test": require("@playwright/test/package.json").version}}))'
-          cp ../../package.json release-proof/core-package.json
-
-      - name: Pass immutable packages to native runtime gates
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-release-proof-${{ matrix.arch }}
-          path: oh-my-pi/packages/gui/release-proof/
-          if-no-files-found: error
-
-  runtime:
-    needs: macos
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-            machine: arm64
-          - runner: macos-15-intel
-            arch: x64
-            machine: x86_64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
-    steps:
-      - name: Download the exact produced packages
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-release-proof-${{ matrix.arch }}
-          path: release-proof
-
-      - name: Setup the pinned Core Bun for the runtime probe
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: release-proof/core-package.json
-
-      - name: Install the exact Playwright used by the build (no browsers)
-        working-directory: release-proof
-        run: bun install --ignore-scripts
-
       - name: Verify seals and execute both release packages on native hardware
+        working-directory: oh-my-pi/packages/gui
         timeout-minutes: 12
         shell: bash
         env:
@@ -338,12 +326,20 @@ jobs:
             bun release-proof/smoke-sidecar.mjs "$app/Contents/Resources/omp"
             echo 'probing packaged GUI READY, settings IPC, persistence, and live renderer'
             node release-proof/smoke-packaged-gui.mjs "$executable"
-            (cd release-proof && OMP_GUI_TEST_APP="$executable" node node_modules/@playwright/test/cli.js test browser-use.spec.ts)
+            (cd release-proof && OMP_GUI_TEST_APP="$executable" node ../../../node_modules/@playwright/test/cli.js test browser-use.spec.ts)
             rm -rf "$root/extracted"
           done
 
+      - name: Stage packages proven on the matching native host
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-proof-${{ matrix.arch }}
+          path: oh-my-pi/packages/gui/release-proof/
+          if-no-files-found: error
+          compression-level: 0
+
   upload:
-    needs: [macos, runtime]
+    needs: macos
     runs-on: ubuntu-latest
     steps:
       - name: Download packages proven on both native hosts

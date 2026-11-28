@@ -7,9 +7,19 @@
  */
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { useSessionStore } from "../stores/session";
+import {
+	deleteSessionRuntime,
+	registerSessionRuntime,
+	setFocusedSessionRuntime,
+} from "../stores/session-runtime-context";
 import { useToastStore } from "../stores/toast";
 import { useUiStore } from "../stores/ui";
-import { buildCommandMenu, type CommandAffordance, type CommandRegistryContext } from "./command-registry";
+import {
+	buildCommandMenu,
+	type CommandAffordance,
+	type CommandRegistryContext,
+	commandArgPrefill,
+} from "./command-registry";
 import { translate } from "./i18n";
 
 const ok = (data?: unknown) => ({ type: "response" as const, command: "x", success: true as const, data });
@@ -95,6 +105,7 @@ beforeEach(() => {
 		shakeContext: vi.fn(async () => ok({ removed: "Shook 2 tool results (~1200 tokens freed)." })),
 		reloadPlugins: vi.fn(async () => ok({ plugins: 3, skills: 5, commands: 42 })),
 		dropSession: vi.fn(async () => ok({ cancelled: true })),
+		guidedGoal: vi.fn(async () => ok({ started: true })),
 	};
 	confirmMock = vi.fn(() => true);
 	dispatchMock = vi.fn();
@@ -128,6 +139,72 @@ const wired = (name: string): CommandAffordance => {
 };
 
 describe("one-shot action wiring", () => {
+	it("binds notch customization to its originating tab and handles off without injecting prompt text", async () => {
+		const customize = vi.fn(async (_tabId: string, enabled: boolean) => ({ enabled }));
+		Object.assign(window.omp, { notchApps: { customize } });
+		registerSessionRuntime({ tabId: "notch-origin", command: vi.fn(async () => ok()), stores: new Map() });
+		registerSessionRuntime({ tabId: "notch-other", command: vi.fn(async () => ok()), stores: new Map() });
+		try {
+			setFocusedSessionRuntime("notch-origin");
+			const affordance = wired("customize-notch");
+			if (affordance.kind !== "action") throw new Error("customize-notch is not an action");
+			setFocusedSessionRuntime("notch-other");
+			await affordance.run();
+			await affordance.run("off");
+			expect(customize.mock.calls).toEqual([
+				["notch-origin", true],
+				["notch-origin", false],
+			]);
+			await expect(affordance.run("invalid")).rejects.toThrow(translate("notch.customizeUsage"));
+		} finally {
+			deleteSessionRuntime("notch-origin");
+			deleteSessionRuntime("notch-other");
+		}
+	});
+	it("offers /goal as an optional-argument action that opens the goal sidebar without starting an interview", async () => {
+		const openModes = vi.fn();
+		ctx = { ...ctx, openModes };
+		const item = buildCommandMenu(ctx).find(candidate => candidate.name === "goal");
+		if (item?.affordance.kind !== "action") throw new Error("goal is not an action");
+		expect(commandArgPrefill(item)).toBeNull();
+		await item.affordance.run();
+		expect(openModes).toHaveBeenCalledWith("goal");
+		expect(rpc.guidedGoal).not.toHaveBeenCalled();
+	});
+
+	it("binds goal interview objectives to the originating session, not the subsequently focused tab", async () => {
+		const originCommand = vi.fn(async () => ok({ started: true }));
+		const otherCommand = vi.fn(async () => ok({ started: true }));
+		registerSessionRuntime({ tabId: "goal-origin", command: originCommand, stores: new Map() });
+		registerSessionRuntime({ tabId: "goal-other", command: otherCommand, stores: new Map() });
+		try {
+			setFocusedSessionRuntime("goal-origin");
+			const affordance = wired("goal");
+			if (affordance.kind !== "action") throw new Error("goal is not an action");
+			setFocusedSessionRuntime("goal-other");
+			await affordance.run("ship reliable sync");
+			expect(originCommand).toHaveBeenCalledWith({ type: "guided_goal", initial: "ship reliable sync" }, undefined);
+			expect(otherCommand).not.toHaveBeenCalled();
+			expect(rpc.guidedGoal).not.toHaveBeenCalled();
+		} finally {
+			deleteSessionRuntime("goal-origin");
+			deleteSessionRuntime("goal-other");
+		}
+	});
+
+	it("does not replace extension /goal palette rows with the builtin action", () => {
+		ctx = {
+			...ctx,
+			availableCommands: [
+				{ name: "goal", source: "builtin", description: "Core goal", textModeExecutable: true },
+				{ name: "goal", source: "extension", description: "Extension objective", textModeExecutable: true },
+			],
+		};
+		const item = buildCommandMenu(ctx).find(candidate => candidate.name === "goal");
+		expect(item?.description).toBe("Extension objective");
+		expect(item?.affordance).toEqual({ kind: "prompt", text: "/goal", argUsage: undefined });
+	});
+
 	it("does not restore Fast from the sidecar's static command list for an unsupported route", () => {
 		const commands = buildCommandMenu({
 			...ctx,

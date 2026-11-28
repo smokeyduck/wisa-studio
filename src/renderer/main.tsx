@@ -3,14 +3,17 @@ import { App } from "./App";
 import { RootErrorBoundary } from "./components/common/RootErrorBoundary";
 import { getCurrentLanguage, I18nProvider } from "./lib/i18n";
 import { startKeyboardLayoutSync } from "./lib/keyboard-layout";
+import { installLiquidGlass } from "./lib/liquid-glass";
 import { installGlobalRuntimeErrorHandlers, reportRuntimeError } from "./lib/runtime-errors";
 import { startWindowChrome } from "./lib/window-chrome";
 import "./styles/global.css";
 import "./styles/theme-dark.css";
 import "./styles/theme-light.css";
 import "./styles/components.css";
+import "./styles/liquid-glass.css";
 
 document.documentElement.lang = window.omp?.initialLanguage ?? getCurrentLanguage();
+installLiquidGlass();
 installGlobalRuntimeErrorHandlers();
 startWindowChrome();
 startKeyboardLayoutSync();

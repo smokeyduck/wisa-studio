@@ -24,6 +24,7 @@ const SESSION_REPLACING_COMMANDS: Record<string, true> = { new: true, clear: tru
 // directly executable text command, or command discovery has not completed.
 // `drop` is a GUI alias for `delete`, no longer advertised by Core.
 const GUI_CONFIRMATION_COMMANDS = new Set(["share", "live", "btw", "delete", "drop"]);
+const GUI_NATIVE_COMMANDS: Record<string, true> = { "customize-notch": true };
 
 export type ComposerSubmit =
 	/** Session-replacing command while busy — draft stays, warning toasted. */
@@ -68,9 +69,32 @@ function runGuiAffordance(affordance: CommandAffordance, args?: string): boolean
 function findGuiOnlyBuiltin(message: string, commands: AvailableCommand[]): AvailableCommand | undefined {
 	const name = /^\/([a-z0-9-]+)/i.exec(message)?.[1]?.toLowerCase();
 	if (!name) return undefined;
-	const command = commands.find(
+	const matchingCommands = commands.filter(
 		command => command.name.toLowerCase() === name || command.aliases?.some(alias => alias.toLowerCase() === name),
 	);
+	if (GUI_NATIVE_COMMANDS[name]) {
+		return { name, source: "builtin", description: name, textModeExecutable: false };
+	}
+	// A user/extension command wins over the builtin even if discovery lists
+	// both, and aliases must retain the same ownership as their command.
+	const command =
+		(name === "goal"
+			? matchingCommands.find(command => command.source && command.source !== "builtin")
+			: undefined) ?? matchingCommands[0];
+	if (name === "goal" && (!command?.source || command.source === "builtin")) {
+		const subcommand = /^\/goal\s+(\S+)/i.exec(message)?.[1];
+		// Preserve Core's explicitly executable management grammar. Prefer its
+		// advertised grammar; older discovery omits subcommands but supports the
+		// show/pause/resume/drop/budget grammar from builtin-modes.ts. `set`
+		// starts a new objective, so it must use the guided interview instead.
+		const management =
+			subcommand !== "set" &&
+			(command?.subcommands
+				? command.subcommands.some(candidate => candidate.name === subcommand)
+				: subcommand !== undefined && ["show", "pause", "resume", "drop", "budget"].includes(subcommand));
+		if (command?.textModeExecutable === true && management) return undefined;
+		return command ?? { name, source: "builtin", description: name, textModeExecutable: false };
+	}
 	if (GUI_CONFIRMATION_COMMANDS.has(name) && (!command || command.source === "builtin")) {
 		return command ?? { name, source: "builtin", description: name, textModeExecutable: false };
 	}

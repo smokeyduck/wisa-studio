@@ -1,28 +1,14 @@
-/**
- * Compact composer entry for session modes and lower-frequency coding
- * toggles. The trigger surfaces active mode count; the menu keeps every
- * existing control reachable without turning the primary toolbar into a
- * second settings row.
- */
-
-import { Check, ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { ClipboardList, SlidersHorizontal } from "lucide-react";
+import { useState } from "react";
 import type { RpcResponse, RpcSessionState } from "../../../shared/rpc-types";
-import { useOverlayPresence } from "../../hooks/use-overlay-presence";
-import { useDisplayPreference } from "../../lib/display-preferences";
-import { isDevOverlayEvent } from "../../lib/dev-overlay";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
-import { onEscape } from "../../lib/keymap";
-import { loopLimitText, parseLoopLimit } from "../../lib/loop-mode";
 import { useTabRpc } from "../../lib/tab-rpc";
 import { type SessionStore, useSessionStore } from "../../stores/session";
 import { sessionRuntimeStore, useRuntimeTabId } from "../../stores/session-runtime-context";
 import { type SettingsStore, useSettingsStore } from "../../stores/settings";
 import { toast } from "../../stores/toast";
 import { useUiStore } from "../../stores/ui";
-import { useComposerMenuPosition } from "./use-composer-menu-position";
 
 const triggerClass = (active: boolean) =>
 	cx(
@@ -32,92 +18,12 @@ const triggerClass = (active: boolean) =>
 			: "border-transparent text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)]",
 	);
 
-export function ComposerModes() {
+/** Mutations stay attached to the originating session, even after a tab switch. */
+function useModeUpdate() {
 	const t = useT();
 	const rpc = useTabRpc();
 	const tabId = useRuntimeTabId();
-	const planModeEnabled = useSessionStore(s => s.planModeEnabled);
-	const goalActive = useSessionStore(s => s.goalState?.status === "active" || !!s.goal);
-	const goalObjective = useSessionStore(s => s.goal?.objective ?? null);
-	const loopMode = useSessionStore(s => s.loopMode);
-	const loopActive = loopMode?.enabled === true;
-	const vibeModeEnabled = useSessionStore(s => s.vibeModeEnabled);
-	const prewalkArmed = useSessionStore(s => s.prewalkArmed);
-	const goalStatusInFooter = useDisplayPreference("goalStatusInFooter");
-	const autoCompaction = useSettingsStore(s => s.autoCompaction);
-	const autoRetry = useSettingsStore(s => s.autoRetry);
-	const steeringMode = useSettingsStore(s => s.steeringMode);
-	const interruptMode = useSettingsStore(s => s.interruptMode);
-	const openModelRoles = useUiStore(s => s.openModelRoles);
-	const openModes = useUiStore(s => s.openModes);
-
 	const [pending, setPending] = useState(false);
-	const [menuOpen, setMenuOpen] = useState(false);
-	const { mounted: menuMounted, closing: menuClosing } = useOverlayPresence(menuOpen);
-	const triggerRef = useRef<HTMLButtonElement>(null);
-	const menuRef = useRef<HTMLDivElement>(null);
-	const menuStyle = useComposerMenuPosition(menuOpen, triggerRef, menuRef, 288);
-	const menuReady = menuStyle.visibility !== "hidden";
-
-	const loopLimit = loopMode ? parseLoopLimit(loopMode.limit) : null;
-	const loopArgs = loopLimit ? loopLimitText(t, loopLimit) : t("modesPanel.loop.noLimit");
-	const activeModeLabels = [
-		planModeEnabled ? t("input.plan.label") : null,
-		prewalkArmed ? t("cmd.prewalk") : null,
-		goalStatusInFooter && goalActive ? t("modesPanel.tabs.goal") : null,
-		loopActive ? t("modesPanel.tabs.loop") : null,
-		vibeModeEnabled ? t("modesPanel.tabs.vibe") : null,
-	].filter((label): label is string => label !== null);
-	const triggerTitle =
-		activeModeLabels.length > 0
-			? t("input.modes.activeTitle", { modes: activeModeLabels.join(" - ") })
-			: t("input.modes.title");
-
-	useEffect(() => {
-		if (menuOpen && menuReady) menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-	}, [menuOpen, menuReady]);
-
-	useEffect(() => {
-		if (!menuOpen) return;
-		const onDown = (event: PointerEvent) => {
-			if (isDevOverlayEvent(event)) return;
-			const target = event.target as Node;
-			if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
-			setMenuOpen(false);
-		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (
-				onEscape(event, () => {
-					setMenuOpen(false);
-					triggerRef.current?.focus();
-				})
-			) {
-				event.stopImmediatePropagation();
-			}
-		};
-		document.addEventListener("pointerdown", onDown);
-		document.addEventListener("keydown", onKeyDown, true);
-		return () => {
-			document.removeEventListener("pointerdown", onDown);
-			document.removeEventListener("keydown", onKeyDown, true);
-		};
-	}, [menuOpen]);
-
-	const moveMenuFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-		if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-		const items = Array.from(event.currentTarget.querySelectorAll("button"));
-		if (items.length === 0) return;
-		event.preventDefault();
-		const current = items.indexOf(document.activeElement as HTMLButtonElement);
-		const next =
-			event.key === "Home"
-				? 0
-				: event.key === "End" || (event.key === "ArrowUp" && current < 0)
-					? items.length - 1
-					: (current + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
-		items[next]?.focus();
-	};
-
 	const update = async (action: () => Promise<RpcResponse>, mode: "settings" | "plan" | "prewalk" = "settings") => {
 		if (pending) return;
 		const session = sessionRuntimeStore<SessionStore>(tabId, "session") ?? useSessionStore;
@@ -127,13 +33,12 @@ export function ComposerModes() {
 		try {
 			const response = await action();
 			if (!response.success) throw new Error(response.error);
-			const plan = response.data as { enabled?: boolean } | undefined;
-			if (mode === "plan" && typeof plan?.enabled === "boolean") {
-				if (session.getState().sessionId === originSession) session.setState({ planModeEnabled: plan.enabled });
-				return;
-			}
-			if (mode === "prewalk" && typeof plan?.enabled === "boolean") {
-				if (session.getState().sessionId === originSession) session.setState({ prewalkArmed: plan.enabled });
+			const data = response.data as { enabled?: boolean } | undefined;
+			if (mode !== "settings" && typeof data?.enabled === "boolean") {
+				if (session.getState().sessionId === originSession) {
+					if (mode === "plan") session.setState({ planModeEnabled: data.enabled });
+					else session.setState({ prewalkArmed: data.enabled });
+				}
 				return;
 			}
 			const current = await rpc.getState();
@@ -148,174 +53,123 @@ export function ComposerModes() {
 			setPending(false);
 		}
 	};
+	return { rpc, pending, update };
+}
 
-	const togglePlan = () => void update(() => rpc.setPlanMode(!planModeEnabled), "plan");
-
-	const select = (action: () => void) => {
-		setMenuOpen(false);
-		triggerRef.current?.focus();
-		action();
-	};
-
+/** Active Plan can be disabled immediately; other session controls live in the sidebar. */
+export function ComposerModes() {
+	const t = useT();
+	const { rpc, pending, update } = useModeUpdate();
+	const plan = useSessionStore(state => state.planModeEnabled);
+	const goal = useSessionStore(state => state.goalState?.status === "active" || !!state.goal);
+	const loop = useSessionStore(state => state.loopMode?.enabled === true);
+	const team = useSessionStore(state => state.vibeModeEnabled);
+	const open = useUiStore(state => state.modesOpen);
+	const openModes = useUiStore(state => state.openModes);
+	const closeModes = useUiStore(state => state.closeModes);
+	const active = [
+		goal ? t("modesPanel.tabs.goal") : null,
+		loop ? t("modesPanel.tabs.loop") : null,
+		team ? t("modesPanel.tabs.vibe") : null,
+	].filter((label): label is string => label !== null);
+	const title = active.length ? t("input.modes.activeTitle", { modes: active.join(" - ") }) : t("modesPanel.title");
 	return (
-		<div className="relative">
+		<div className="flex items-center gap-2">
+			{plan && (
+				<button
+					type="button"
+					aria-pressed={plan}
+					aria-label={t("input.plan.title")}
+					title={t("input.plan.title")}
+					disabled={pending}
+					className={triggerClass(plan)}
+					onClick={() => void update(() => rpc.setPlanMode(false), "plan")}
+				>
+					<ClipboardList aria-hidden size={14} />
+					<span className="omp-composer-control-label">{t("input.plan.label")}</span>
+				</button>
+			)}
 			<button
-				ref={triggerRef}
 				type="button"
-				aria-expanded={menuOpen}
-				aria-haspopup="menu"
-				onClick={() => setMenuOpen(value => !value)}
-				aria-label={triggerTitle}
-				title={triggerTitle}
-				className={triggerClass(activeModeLabels.length > 0)}
+				data-session-controls-trigger
+				aria-expanded={open}
+				aria-label={title}
+				title={title}
+				className={triggerClass(open || active.length > 0)}
+				onClick={() => (open ? closeModes() : openModes())}
 			>
-				<SlidersHorizontal size={14} />
-				<span className="omp-composer-control-label">{t("modesPanel.title")}</span>
-				{activeModeLabels.length > 0 && (
+				<SlidersHorizontal aria-hidden size={14} />
+				<span className="omp-composer-control-label">{t("input.modes.label")}</span>
+				{active.length > 0 && (
 					<span className="rounded-full bg-(--omp-btn-primary-bg) px-1.5 text-omp-xs leading-4 text-(--omp-btn-primary-text) tabular-nums">
-						{activeModeLabels.length}
+						{active.length}
 					</span>
 				)}
-				<ChevronDown size={12} className="shrink-0 text-[var(--omp-dim)]" />
 			</button>
-
-			{menuMounted
-				? createPortal(
-						<div
-							ref={menuRef}
-							style={menuStyle}
-							onKeyDown={moveMenuFocus}
-							data-composer-modes-menu
-							aria-hidden={menuClosing || undefined}
-							className={cx(
-								"omp-composer-menu fixed z-[110] overflow-y-auto rounded-xl border border-[var(--omp-border)] bg-[var(--omp-panel-bg)] p-1 shadow-[var(--omp-shadow-md)]",
-								menuClosing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
-							)}
-							role="menu"
-							aria-busy={pending}
-							inert={pending || menuClosing}
-						>
-							<ModeRow
-								label={t("input.plan.label")}
-								description={t("input.modes.planDesc")}
-								title={t("input.plan.title")}
-								checked={planModeEnabled}
-								onSelect={() => select(togglePlan)}
-							/>
-							{goalStatusInFooter && (
-								<ModeRow
-									label={t("modesPanel.tabs.goal")}
-									description={t("input.modes.goalDesc")}
-									title={
-										goalActive && goalObjective
-											? t("input.goal.activeTitle", { objective: goalObjective })
-											: t("input.goal.title")
-									}
-									checked={goalActive}
-									navigates
-									onSelect={() => select(() => openModes("goal"))}
-								/>
-							)}
-							<ModeRow
-								label={t("modesPanel.tabs.loop")}
-								description={t("input.modes.loopDesc")}
-								title={loopActive ? t("input.loop.activeTitle", { args: loopArgs }) : t("input.loop.title")}
-								checked={loopActive}
-								navigates
-								onSelect={() => select(() => openModes("loop"))}
-							/>
-							<ModeRow
-								label={t("modesPanel.tabs.vibe")}
-								description={t("input.modes.vibeDesc")}
-								title={t("modesPanel.vibe.toggleDesc")}
-								checked={vibeModeEnabled}
-								navigates
-								onSelect={() => select(() => openModes("vibe"))}
-							/>
-							<ModeRow
-								label={t("input.roles.label")}
-								description={t("input.modes.rolesDesc")}
-								title={t("input.roles.title")}
-								checked={false}
-								navigates
-								onSelect={() => select(openModelRoles)}
-							/>
-							<div className="mx-2 my-1 border-t border-[var(--omp-border-muted)]" />
-							<div className="px-2.5 pt-1 pb-0.5 text-omp-xs font-semibold text-[var(--omp-dim)]">
-								{t("input.more.label")}
-							</div>
-							<MoreRow
-								label={t("input.more.autoCompact")}
-								checked={autoCompaction}
-								onToggle={() => void update(() => rpc.setAutoCompaction(!autoCompaction))}
-							/>
-							<MoreRow
-								label={t("input.more.autoRetry")}
-								checked={autoRetry}
-								onToggle={() => void update(() => rpc.setAutoRetry(!autoRetry))}
-							/>
-							<MoreRow
-								label={t("cmd.prewalk")}
-								checked={prewalkArmed}
-								onToggle={() => void update(() => rpc.setPrewalk(!prewalkArmed), "prewalk")}
-							/>
-							<MoreRow
-								label={t("input.more.steeringAll")}
-								checked={steeringMode === "all"}
-								onToggle={() => {
-									const next = steeringMode === "all" ? "one-at-a-time" : "all";
-									void update(() => rpc.setSteeringMode(next));
-								}}
-							/>
-							<MoreRow
-								label={t("input.more.interruptImmediate")}
-								checked={interruptMode === "immediate"}
-								onToggle={() => {
-									const next = interruptMode === "immediate" ? "wait" : "immediate";
-									void update(() => rpc.setInterruptMode(next));
-								}}
-							/>
-						</div>,
-						document.body,
-					)
-				: null}
 		</div>
 	);
 }
 
-function ModeRow({
-	label,
-	description,
-	title,
-	checked,
-	navigates,
-	onSelect,
-}: {
-	label: string;
-	description: string;
-	title: string;
-	checked: boolean;
-	navigates?: boolean;
-	onSelect: () => void;
-}) {
+/** Plan and lower-frequency controls remain available inside the session sidebar. */
+export function SessionModeOptions() {
+	const t = useT();
+	const { rpc, pending, update } = useModeUpdate();
+	const plan = useSessionStore(state => state.planModeEnabled);
+	const prewalk = useSessionStore(state => state.prewalkArmed);
+	const autoCompaction = useSettingsStore(state => state.autoCompaction);
+	const autoRetry = useSettingsStore(state => state.autoRetry);
+	const steering = useSettingsStore(state => state.steeringMode);
+	const interrupt = useSettingsStore(state => state.interruptMode);
+	const openModelRoles = useUiStore(state => state.openModelRoles);
 	return (
-		<button
-			type="button"
-			aria-pressed={checked}
-			className="omp-pressable group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-[var(--omp-selected-bg)]"
-			onClick={onSelect}
-			title={title}
-			role="menuitem"
-		>
-			<span className="min-w-0 flex-1">
-				<span className="block break-words text-omp-md font-medium text-[var(--omp-text-secondary)] group-hover:text-[var(--omp-text)]">
-					{label}
-				</span>
-				<span className="block break-words text-omp-xs text-[var(--omp-dim)]">{description}</span>
-			</span>
-			{checked && <Check size={13} className="shrink-0 text-[var(--omp-accent)]" strokeWidth={3} />}
-			{navigates && <ChevronRight size={13} className="shrink-0 text-[var(--omp-dim)]" />}
-		</button>
+		<div className="shrink-0 border-t border-(--omp-border-muted) p-3">
+			<details className="mt-2">
+				<summary className="cursor-pointer text-omp-sm font-medium text-(--omp-muted)">
+					{t("input.more.label")}
+				</summary>
+				<div className="mt-2" aria-busy={pending} inert={pending}>
+					<MoreRow
+						label={t("input.plan.label")}
+						checked={plan}
+						onToggle={() => void update(() => rpc.setPlanMode(!plan), "plan")}
+					/>
+					<MoreRow
+						label={t("input.more.autoCompact")}
+						checked={autoCompaction}
+						onToggle={() => void update(() => rpc.setAutoCompaction(!autoCompaction))}
+					/>
+					<MoreRow
+						label={t("input.more.autoRetry")}
+						checked={autoRetry}
+						onToggle={() => void update(() => rpc.setAutoRetry(!autoRetry))}
+					/>
+					<MoreRow
+						label={t("cmd.prewalk")}
+						checked={prewalk}
+						onToggle={() => void update(() => rpc.setPrewalk(!prewalk), "prewalk")}
+					/>
+					<MoreRow
+						label={t("input.more.steeringAll")}
+						checked={steering === "all"}
+						onToggle={() => void update(() => rpc.setSteeringMode(steering === "all" ? "one-at-a-time" : "all"))}
+					/>
+					<MoreRow
+						label={t("input.more.interruptImmediate")}
+						checked={interrupt === "immediate"}
+						onToggle={() =>
+							void update(() => rpc.setInterruptMode(interrupt === "immediate" ? "wait" : "immediate"))
+						}
+					/>
+					<button
+						type="button"
+						className="omp-pressable mt-2 w-full rounded-md px-2.5 py-2 text-left text-omp-sm text-(--omp-text) hover:bg-(--omp-selected-bg)"
+						onClick={openModelRoles}
+					>
+						{t("input.roles.label")}
+					</button>
+				</div>
+			</details>
+		</div>
 	);
 }
 
@@ -324,7 +178,7 @@ function MoreRow({ label, checked, onToggle }: { label: string; checked: boolean
 		<button
 			type="button"
 			onClick={onToggle}
-			role="menuitemcheckbox"
+			role="switch"
 			aria-checked={checked}
 			className="omp-pressable flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-omp-md font-medium text-[var(--omp-muted)] hover:bg-[var(--omp-selected-bg)] hover:text-[var(--omp-text)]"
 		>

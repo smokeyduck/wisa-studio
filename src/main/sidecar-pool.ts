@@ -39,14 +39,15 @@ import {
 	type IpcTabWorktree,
 } from "../shared/ipc-types";
 import {
-	agentTurnOutcome,
 	type AgentSessionEvent,
 	type AvailableCommand,
+	agentTurnOutcome,
 	BLOCKING_UI_METHODS,
 	type CommandOutputFrame,
 	type ConfigUpdateFrame,
 	type ExtensionErrorFrame,
 	type ExtensionUIRequest,
+	type ExtensionUIResponse,
 	type HostToolCallRequest,
 	type HostToolDefinition,
 	type HostUriRequest,
@@ -162,6 +163,23 @@ interface PoolEntry {
 	detachFull: (() => void) | null;
 }
 
+export interface NotchPoolRequest {
+	request: ExtensionUIRequest;
+	/** Captures the exact process/session/request instance; never routes by title or current tab. */
+	respond(response: ExtensionUIResponse): boolean;
+}
+
+export interface NotchPoolSession {
+	tabId: string;
+	windowId: number;
+	title: string;
+	cwd: string;
+	running: boolean;
+	tools: string[];
+	preview: string;
+	requests: NotchPoolRequest[];
+}
+
 function entryHasWork(entry: PoolEntry): boolean {
 	return entry.running || entry.compacting === true || entry.manualCompaction != null;
 }
@@ -193,6 +211,11 @@ export class SidecarPool {
 	 * response or when the owning entry is released.
 	 */
 	#requestOwners = new Map<string, PoolEntry>();
+	#notchListeners = new Set<() => void>();
+	#notchRequests = new Map<string, { entry: PoolEntry; value: NotchPoolRequest; timer?: NodeJS.Timeout }>();
+	#finishedNotchRequests = new Set<string>();
+	#notchPreviews = new Map<string, string>();
+	#notchTools = new Map<string, Map<string, string>>();
 	readonly #factory: SidecarFactory;
 	/** Suppress partial snapshots while a saved layout is being reconstructed. */
 	#restoringWindows = new Set<number>();
@@ -245,6 +268,92 @@ export class SidecarPool {
 
 	get size(): number {
 		return this.#entries.size;
+	}
+
+	subscribeNotch(listener: () => void): () => void {
+		this.#notchListeners.add(listener);
+		return () => this.#notchListeners.delete(listener);
+	}
+
+	notchSessions(): NotchPoolSession[] {
+		return [...this.#entries]
+			.filter(entry => entry.status === "ready")
+			.map(entry => ({
+				tabId: entry.tabId,
+				windowId: entry.winId,
+				title: entry.title || entry.sidecar.cwd,
+				cwd: entry.sidecar.cwd,
+				running: entryHasWork(entry),
+				tools: [...(this.#notchTools.get(entry.tabId)?.values() ?? [])],
+				preview: this.#notchPreviews.get(entry.tabId) ?? "",
+				requests: [...this.#notchRequests.values()].filter(item => item.entry === entry).map(item => item.value),
+			}));
+	}
+
+	#publishNotch(): void {
+		for (const listener of this.#notchListeners) listener();
+	}
+
+	#forgetNotchRequest(id: string): void {
+		const pending = this.#notchRequests.get(id);
+		if (!pending) return;
+		clearTimeout(pending.timer);
+		this.#notchRequests.delete(id);
+		this.#publishNotch();
+	}
+
+	#clearNotchEntry(entry: PoolEntry): void {
+		for (const [id, item] of this.#notchRequests) {
+			if (item.entry !== entry) continue;
+			this.#requestOwners.delete(id);
+			this.#forgetNotchRequest(id);
+		}
+		this.#notchTools.delete(entry.tabId);
+		this.#notchPreviews.delete(entry.tabId);
+		this.#publishNotch();
+	}
+
+	#trackNotchRequest(entry: PoolEntry, request: ExtensionUIRequest): void {
+		this.#forgetNotchRequest(request.id);
+		this.#finishedNotchRequests.delete(request.id);
+		const value: NotchPoolRequest = {
+			request,
+			respond: response => {
+				if (
+					response.id !== request.id ||
+					this.#notchRequests.get(request.id)?.value !== value ||
+					this.#requestOwners.get(request.id) !== entry ||
+					entry.status !== "ready" ||
+					entry.win.isDestroyed()
+				)
+					return false;
+				this.#requestOwners.delete(request.id);
+				this.#finishedNotchRequests.add(request.id);
+				// Consume a duplicate renderer response after native already answered it.
+				this.#forgetNotchRequest(request.id);
+				entry.sidecar.sendSideChannel(response);
+				forwardToWindow(entry.win, IPC_EVENTS.EXTENSION_UI, {
+					tabId: entry.tabId,
+					request: {
+						type: "extension_ui_request",
+						id: `notch-cancel-${request.id}`,
+						method: "cancel",
+						targetId: request.id,
+					},
+				});
+				return true;
+			},
+		};
+		const item: { entry: PoolEntry; value: NotchPoolRequest; timer?: NodeJS.Timeout } = { entry, value };
+		this.#notchRequests.set(request.id, item);
+		if ("timeout" in request && typeof request.timeout === "number" && request.timeout > 0) {
+			item.timer = setTimeout(() => {
+				if (this.#notchRequests.get(request.id) !== item) return;
+				this.#forgetNotchRequest(request.id);
+			}, request.timeout);
+			item.timer.unref();
+		}
+		this.#publishNotch();
 	}
 
 	/**
@@ -433,6 +542,7 @@ export class SidecarPool {
 			}
 			// A restart/exit kills any in-flight run along with the process.
 			if (payload.status !== "ready") {
+				this.#clearNotchEntry(entry);
 				this.#invalidatePeerSession(entry);
 				entry.activeTools?.clear();
 				entry.running = false;
@@ -451,6 +561,7 @@ export class SidecarPool {
 				}
 			}
 			forwardToWindow(win, IPC_EVENTS.TAB_STATUS, tabStatusPayload(entry));
+			this.#publishNotch();
 		});
 		// Terminal output must reach the renderer for background tabs too: a
 		// panel shown later continues from the frames, not a gap.
@@ -476,6 +587,7 @@ export class SidecarPool {
 				// the current file after a real change.
 				if (previousId !== undefined && previousId !== frame.sessionId) {
 					entry.activeTools?.clear();
+					this.#clearNotchEntry(entry);
 					this.#unregisterSessionFile(entry);
 					this.sidecarLifecycle?.sessionChanged?.(entry.tabId);
 					entry.settledRun = undefined;
@@ -484,6 +596,7 @@ export class SidecarPool {
 			// Session meta changes ride the light channel too, so a background
 			// tab's title/id updates without waiting for a status flip.
 			forwardToWindow(win, IPC_EVENTS.TAB_STATUS, tabStatusPayload(entry));
+			this.#publishNotch();
 		});
 		const publishRunStatus = (): void => {
 			const payload = tabStatusPayload(entry);
@@ -492,6 +605,7 @@ export class SidecarPool {
 				entry.settledRun = undefined;
 			}
 			forwardToWindow(win, IPC_EVENTS.TAB_STATUS, payload);
+			this.#publishNotch();
 		};
 		const setRunning = (running: boolean): void => {
 			const wasBusy = entryHasWork(entry);
@@ -521,8 +635,10 @@ export class SidecarPool {
 			// needed, and switch-back hydration cannot recover unfinished deltas.
 			// plan_proposal must also reach its host decision while parked.
 			const parkedEvents: AgentSessionEvent[] | null = !entry.detachFull && entry.status === "ready" ? [] : null;
+			let notchChanged = false;
 			for (const event of events) {
 				if (event.type === "agent_start") {
+					this.#notchPreviews.delete(entry.tabId);
 					entry.running = true;
 					entry.placeholder = false;
 					entry.settledRun = undefined;
@@ -570,7 +686,8 @@ export class SidecarPool {
 					entry.manualCompaction = null;
 					entry.compacting ??= false;
 				} else if (event.type === "tool_execution_start" && sidecar.allowsInteractiveHostTools) {
-					(entry.activeTools ??= new Map()).set(event.toolCallId, event.toolName);
+					entry.activeTools ??= new Map();
+					entry.activeTools.set(event.toolCallId, event.toolName);
 				} else if (event.type === "tool_execution_end") {
 					entry.activeTools?.delete(event.toolCallId);
 				}
@@ -582,6 +699,34 @@ export class SidecarPool {
 						event.type === "plan_proposal")
 				) {
 					parkedEvents.push(event);
+				}
+				if (event.type === "tool_execution_start") {
+					const code = event.toolName === "eval" ? String(event.args.code ?? "") : "";
+					const name =
+						event.toolName === "computer" || /\bcomputer\s*\./.test(code) ? "Computer Use" : event.toolName;
+					let tools = this.#notchTools.get(entry.tabId);
+					if (!tools) {
+						tools = new Map();
+						this.#notchTools.set(entry.tabId, tools);
+					}
+					tools.set(event.toolCallId, name);
+					notchChanged = true;
+				} else if (event.type === "tool_execution_end") {
+					this.#notchTools.get(entry.tabId)?.delete(event.toolCallId);
+					notchChanged = true;
+				} else if (event.type === "agent_end") {
+					this.#notchTools.delete(entry.tabId);
+					notchChanged = true;
+				} else if (event.type === "message_end" && event.message.role === "assistant") {
+					const text =
+						typeof event.message.content === "string"
+							? event.message.content
+							: (event.message.content ?? [])
+									.filter(item => item.type === "text")
+									.map(item => item.text)
+									.join("\n");
+					this.#notchPreviews.set(entry.tabId, text.slice(0, 2000));
+					notchChanged = true;
 				}
 			}
 			if (parkedEvents && parkedEvents.length > 0) {
@@ -599,6 +744,7 @@ export class SidecarPool {
 				publishRunStatus();
 			}
 			if (entry.placeholder !== wasPlaceholder) this.#notifyWindowTabsChanged(win);
+			if (notchChanged) this.#publishNotch();
 		});
 		// Request/response channels live on the light wiring: a sidecar parked
 		// in a background tab still emits these, and an emitted request with no
@@ -609,7 +755,15 @@ export class SidecarPool {
 			if (this.uiResponder?.(sidecar, request)) return;
 			// Only response-bearing requests need an origin route. Fire-and-forget
 			// UI updates never reply, so retaining them here leaks the owning tab.
-			if (BLOCKING_UI_METHODS[request.method]) this.#requestOwners.set(request.id, entry);
+			if (request.method === "cancel") {
+				if (this.#requestOwners.get(request.targetId) === entry) {
+					this.#requestOwners.delete(request.targetId);
+					this.#forgetNotchRequest(request.targetId);
+				}
+			} else if (BLOCKING_UI_METHODS[request.method]) {
+				this.#requestOwners.set(request.id, entry);
+				this.#trackNotchRequest(entry, request);
+			}
 			forwardToWindow(win, IPC_EVENTS.EXTENSION_UI, { tabId: entry.tabId, request });
 		});
 		sidecar.on("hostToolCall", (request: HostToolCallRequest) => {
@@ -689,7 +843,8 @@ export class SidecarPool {
 					reply(`Provide a non-empty message of at most ${PEER_MESSAGE_LIMIT} characters.`, true);
 					break;
 				}
-				const inbox = (peer.peerInbox ??= []);
+				peer.peerInbox ??= [];
+				const inbox = peer.peerInbox;
 				if (inbox.length >= PEER_INBOX_LIMIT) {
 					reply("Your peer's inbox is full. Wait for the peer to read the pending messages.", true);
 					break;
@@ -789,6 +944,7 @@ export class SidecarPool {
 	 */
 	#releaseEntry(entry: PoolEntry): void {
 		if (!this.#entries.delete(entry)) return;
+		this.#clearNotchEntry(entry);
 		this.#clearPeerInbox(entry);
 		this.#byTabId.delete(entry.tabId);
 		this.#unregisterSessionFile(entry);
@@ -1032,7 +1188,10 @@ export class SidecarPool {
 	/** Suspend peer traffic while Core can replace the session behind a tab. */
 	beginPeerSessionChange(tabId: string): ((changed: boolean) => void) | undefined {
 		const entry = this.#byTabId.get(tabId);
-		if (!entry?.sidecar.allowsInteractiveHostTools) return undefined;
+		if (!entry) return undefined;
+		this.#clearNotchEntry(entry);
+		this.sidecarLifecycle?.sessionChanged?.(tabId);
+		if (!entry.sidecar.allowsInteractiveHostTools) return undefined;
 		this.#clearPeerInbox(entry);
 		entry.peerEpoch = (entry.peerEpoch ?? 0) + 1;
 		entry.peerSessionChanges = (entry.peerSessionChanges ?? 0) + 1;
@@ -1076,8 +1235,11 @@ export class SidecarPool {
 	 */
 	routeSideChannel(id: string, frame: object, final: boolean): boolean {
 		const entry = this.#requestOwners.get(id);
-		if (!entry) return false;
-		if (final) this.#requestOwners.delete(id);
+		if (!entry) return this.#finishedNotchRequests.has(id);
+		if (final) {
+			this.#requestOwners.delete(id);
+			this.#forgetNotchRequest(id);
+		}
 		entry.sidecar.sendSideChannel(frame);
 		return true;
 	}

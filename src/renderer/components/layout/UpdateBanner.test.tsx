@@ -65,7 +65,7 @@ describe("UpdateBanner", () => {
 		});
 		await mount(<UpdateBanner />);
 
-		expect(container.textContent).toContain("drag WISA STUDIO into Applications");
+		expect(container.textContent).toContain("drag Wisa into Applications");
 		expect(container.textContent).toContain("Privacy & Security");
 		const openButton = container
 			.querySelectorAll("button")

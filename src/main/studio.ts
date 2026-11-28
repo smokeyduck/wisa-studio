@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { app, BrowserWindow, desktopCapturer, nativeImage, session, webContents } from "electron";
 import Store from "electron-store";
 import type { SessionKind } from "../shared/ipc-types";
+import { NOTCH_APPS_CHANNELS } from "../shared/notch-apps";
 import { installQuitGuard, requestQuit } from "./app-quit";
 import { BROWSER_USE_TOOL, BrowserUseHost } from "./browser-use-host";
 import { BrowserUseRuntime } from "./browser-use-runtime";
@@ -26,6 +27,8 @@ import { registerIpcHandlers } from "./ipc";
 import { LogWatcher } from "./log-watcher";
 import { MemoryWatcher } from "./memory-watcher";
 import { createMenu } from "./menu";
+import { NotchApps } from "./notch-apps";
+import { NotchCustomizeHost } from "./notch-customize-host";
 import { PhoneHub } from "./phone-hub";
 import { dropUnsupportedProxies, type ProxyResolution, resolveProxyForSpawn } from "./proxy-env";
 import { writeRuntimeLog } from "./runtime-log";
@@ -156,6 +159,8 @@ let schedulerHost: SchedulerHost | null = null;
 let collabPhone: CollabPhoneHost | null = null;
 let phoneHub: PhoneHub | null = null;
 let browserUse: BrowserUseHost | undefined;
+let notchApps: NotchApps | undefined;
+let notchCustomize: NotchCustomizeHost | undefined;
 let browserUseUpdateTimer: NodeJS.Timeout | undefined;
 
 function errorMessage(value: unknown): { message: string; stack?: string } {
@@ -227,7 +232,7 @@ function spawnWindowWithLayout(layout: PersistedTabLayout): BrowserWindow | null
 	if (!activeCwd) return null;
 	const win = windowManager.createWindow({ cwd: activeCwd });
 	if (sidecarPool.restoreLayout(win, layout) > 0) return win;
-	win.close();
+	win.destroy();
 	return null;
 }
 
@@ -262,7 +267,7 @@ function spawnWindow(cwd?: string, pendingSessionPath?: string, kind?: SessionKi
 		target.placeholder,
 	);
 	if (!sidecar) {
-		win.close();
+		win.destroy();
 		return null;
 	}
 	return win;
@@ -283,6 +288,18 @@ app.whenReady().then(() => {
 	const browserRuntime = new BrowserUseRuntime(resources, app.getPath("userData"));
 	const browserHost = new BrowserUseHost(browserRuntime);
 	browserUse = browserHost;
+	const apps = new NotchApps({
+		directory: join(app.getPath("userData"), "notch-apps"),
+		sessions: () => sidecarPool.notchSessions(),
+		onChanged: snapshot => {
+			for (const win of windowManager.getAllWindows()) {
+				if (!win.isDestroyed()) win.webContents.send(NOTCH_APPS_CHANNELS.changed, snapshot);
+			}
+		},
+	});
+	notchApps = apps;
+	const customize = new NotchCustomizeHost((args, owner, signal) => apps.execute(args, owner, signal));
+	notchCustomize = customize;
 	if (app.isPackaged && process.env.WISA_BROWSER_USE_AUTO_UPDATE !== "0") {
 		const checkBrowserUpdate = () => {
 			browserRuntime.checkForUpdate().then(
@@ -369,19 +386,23 @@ app.whenReady().then(() => {
 				const tools = schedulerHost ? [SCHEDULE_TASK_TOOL_DEFINITION, MANAGE_TASKS_TOOL_DEFINITION] : [];
 				if (browserHost.register(tab.tabId, tab.sidecar)) tools.push(BROWSER_USE_TOOL);
 				if (tab.sidecar.allowsInteractiveHostTools) tools.push(WORKSPACE_PEER_TOOL);
-				if (tools.length > 0) {
-					void tab.sidecar.rpcClient?.command({ type: "set_host_tools", tools: tools.map(stripEmptyEnumValues) }).then(response => {
-						if (!response.success) throw new Error(response.error ?? "Could not register host tools");
-					}).catch(error => writeRuntimeLog({ source: "sidecar", message: "set_host_tools failed", details: String(error) }));
-				}
+				void customize
+					.register(tab.tabId, tab.sidecar, tools.map(stripEmptyEnumValues))
+					.catch(error =>
+						writeRuntimeLog({ source: "sidecar", message: "set_host_tools failed", details: String(error) }),
+					);
 			}
 			void collabPhone?.ready(tab.tabId, tab.sidecar);
 		},
 		down: tabId => {
 			browserHost.close(tabId);
+			customize.close(tabId);
 			collabPhone?.down(tabId);
 		},
-		sessionChanged: tabId => browserHost.reset(tabId),
+		sessionChanged: tabId => {
+			browserHost.reset(tabId);
+			customize.reset(tabId);
+		},
 	};
 	// A closed window's tabs have to leave the saved session with it, or the next
 	// launch resurrects a window the user deliberately shut.
@@ -418,8 +439,8 @@ app.whenReady().then(() => {
 		schedulerHost = null;
 	}
 	statsClient = new StatsClient();
-	// Built-in stats dashboard: spawned from the SAME bundled binary. No
-	// external `omp stats` process is required (closed loop).
+	// Built-in stats dashboard: boot on the first dashboard/trace request, not
+	// for every chat window. The same private bundled binary serves all queries.
 	if (bundledOmp) {
 		statsServer = new StatsServerManager(bundledOmp);
 		statsServer.on("ready", (port: number) => {
@@ -428,7 +449,6 @@ app.whenReady().then(() => {
 		statsServer.on("exit", () => {
 			statsClient.port = 0;
 		});
-		statsServer.start();
 	}
 	logWatcher = new LogWatcher();
 	memoryWatcher = new MemoryWatcher();
@@ -444,7 +464,7 @@ app.whenReady().then(() => {
 		sidecarPool,
 		sessionIndex,
 		statsClient,
-		statsRestart: () => statsServer?.ensureRunning() ?? "exhausted",
+		statsRestart: () => statsServer?.ensureReady() ?? "exhausted",
 		logWatcher,
 		memoryWatcher,
 		customThemesWatcher,
@@ -463,6 +483,8 @@ app.whenReady().then(() => {
 		collabPhone,
 		phoneHub,
 		browserUse: browserHost,
+		notchApps: apps,
+		notchCustomize: customize,
 	});
 	schedulerHost?.start();
 
@@ -472,17 +494,13 @@ app.whenReady().then(() => {
 	bindWindowToggle(() => {
 		const focused = BrowserWindow.getFocusedWindow();
 		if (focused && !focused.isDestroyed() && windowManager.recordFor(focused)) {
-			if (focused.isVisible()) focused.hide();
-			else {
-				focused.show();
-				focused.focus();
-			}
+			if (focused.isVisible() && !focused.isMinimized()) windowManager.hideWindow(focused);
+			else windowManager.focusWindowById(focused.webContents.id);
 			return;
 		}
-		const win = windowManager.getMainWindow();
+		const win = windowManager.getTargetWindow();
 		if (win) {
-			win.show();
-			win.focus();
+			windowManager.focusWindowById(win.webContents.id);
 			return;
 		}
 		spawnWindow();
@@ -525,11 +543,12 @@ app.whenReady().then(() => {
 	statsClient.probe().catch(() => {});
 });
 
-// macOS: re-create window on dock click
+// macOS Dock clicks restore a retained shell before creating another session.
 app.on("activate", () => {
-	if (windowManager && windowManager.getAllWindows().length === 0) {
-		spawnWindow();
-	}
+	if (!windowManager) return;
+	const win = windowManager.getTargetWindow();
+	if (win) windowManager.focusWindowById(win.webContents.id);
+	else spawnWindow();
 });
 
 // Quit on all windows closed (except macOS)
@@ -546,6 +565,8 @@ installQuitGuard(
 	() => {
 		clearInterval(browserUseUpdateTimer);
 		browserUse?.dispose();
+		notchCustomize?.dispose();
+		notchApps?.dispose();
 		schedulerHost?.dispose();
 		statsServer?.kill();
 		sidecarPool?.disposeAll();

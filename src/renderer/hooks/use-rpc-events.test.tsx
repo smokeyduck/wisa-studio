@@ -28,6 +28,7 @@ import type {
 } from "../../shared/rpc-types";
 import { TurnStatusRow } from "../components/chat/ChatStream";
 import { StreamingText } from "../components/chat/StreamingText";
+import { hydrateDisplayPreferences } from "../lib/display-preferences";
 import { formatClock } from "../lib/format";
 import { I18nProvider, translate } from "../lib/i18n";
 import type { BtwStore } from "../stores/btw";
@@ -1436,7 +1437,7 @@ describe("desktop notifications", () => {
 		await act(async () => {
 			emitTabBatch(settledTurn, "t0");
 		});
-		expect(notify).toHaveBeenCalledWith("WISA STUDIO", "Complete");
+		expect(notify).toHaveBeenCalledWith("Wisa", "Complete");
 	});
 
 	it("notifies a focused window when the preference is on", async () => {
@@ -1449,7 +1450,7 @@ describe("desktop notifications", () => {
 		await act(async () => {
 			emitTabBatch(settledTurn, "t0");
 		});
-		expect(notify).toHaveBeenCalledWith("WISA STUDIO", "Complete");
+		expect(notify).toHaveBeenCalledWith("Wisa", "Complete");
 	});
 
 	it("honours the master switch over the focused preference", async () => {
@@ -1504,7 +1505,7 @@ describe("desktop notifications", () => {
 			{ tone: "failed", detail: "Unavailable", read: false },
 		]);
 		expect(notify).toHaveBeenCalledTimes(1);
-		expect(notify).toHaveBeenCalledWith("WISA STUDIO", "Complete");
+		expect(notify).toHaveBeenCalledWith("Wisa", "Complete");
 	});
 });
 
@@ -1675,36 +1676,57 @@ describe("hydrateSession streaming reconcile (F-HYDRATE)", () => {
 		expect(commandForTab.mock.calls.filter(([, command]) => command.type === "get_transcript")).toHaveLength(1);
 	});
 
-	it("does not reuse a pending transcript read after the compaction display preference changes", async () => {
-		const { commandForTab } = installTabRoutedMockOmp();
-		const session = seedReadyTab("t-folded");
-		const foldedTranscript = Promise.withResolvers<RpcResponse>();
-		const expandedTranscript = Promise.withResolvers<RpcResponse>();
-		const original = commandForTab.getMockImplementation()!;
-		commandForTab.mockImplementation((tabId, command) =>
-			command.type === "get_transcript"
-				? (command.folded ? foldedTranscript : expandedTranscript).promise
-				: original(tabId, command),
-		);
-		useUiStore.setState({ displayPreferences: { collapseCompacted: true } });
-		const folded = hydrateTabSession("t-folded");
-		useUiStore.setState({ displayPreferences: { collapseCompacted: false } });
-		const expanded = hydrateTabSession("t-folded");
-		const transcriptReads = commandForTab.mock.calls
-			.map(([, command]) => command)
-			.filter(command => command.type === "get_transcript");
-		expect(transcriptReads).toEqual([
-			{ type: "get_transcript", folded: true },
-			{ type: "get_transcript" },
-		]);
-
-		expandedTranscript.resolve(success({ messages: [{ role: "user", content: "Before compaction" }] }));
-		await expanded;
-		foldedTranscript.resolve(success({ messages: [{ role: "compactionSummary", summary: "Folded history" }] }));
-		await folded;
-		expect(useMessagesStore.getState().messages).toMatchObject([{ content: "Before compaction" }]);
-		expect(session.getState().transcriptFolded).toBe(false);
-	});
+	it.each([true, false])(
+		"keeps full native history across compactions and handoff with legacy collapseCompacted=%s",
+		async collapseCompacted => {
+			const { commandForTab } = installTabRoutedMockOmp();
+			seedReadyTab("t-history");
+			const transcript = Promise.withResolvers<RpcResponse>();
+			const original = commandForTab.getMockImplementation()!;
+			commandForTab.mockImplementation((tabId, command) => {
+				if (command.type !== "get_transcript") return original(tabId, command);
+				return transcript.promise.then(response => {
+					if (command.folded) return success({ messages: history.slice(6) });
+					return response;
+				});
+			});
+			hydrateDisplayPreferences({ collapseCompacted });
+			const first = hydrateTabSession("t-history");
+			hydrateDisplayPreferences({ collapseCompacted: !collapseCompacted });
+			const second = hydrateTabSession("t-history");
+			const history: AgentMessage[] = [
+				{ role: "user", content: "Original request", entryId: "request", timestamp: 1 },
+				{ role: "assistant", content: "Original reply", entryId: "reply", timestamp: 2 },
+				{ role: "compactionSummary", summary: "First compaction", content: "", entryId: "compact-1", timestamp: 3 },
+				{ role: "user", content: "After first compaction", entryId: "request-2", timestamp: 4 },
+				{
+					role: "compactionSummary",
+					summary: "Second compaction",
+					content: "",
+					entryId: "compact-2",
+					timestamp: 5,
+				},
+				{ role: "assistant", content: "After second compaction", entryId: "reply-2", timestamp: 6 },
+				{
+					role: "compactionSummary",
+					summary: "Handoff",
+					method: "handoff",
+					content: "",
+					entryId: "handoff",
+					timestamp: 7,
+				},
+				{ role: "user", content: "After handoff", entryId: "request-3", timestamp: 8 },
+			];
+			transcript.resolve(success({ messages: history }));
+			await Promise.all([first, second]);
+			const messages = sessionRuntimeStore<MessagesStore>("t-history", "messages")!;
+			expect(messages.getState().messages).toEqual(history);
+			await hydrateTabSession("t-history");
+			expect(messages.getState().messages).toEqual(history);
+			expect(new Set(messages.getState().messages.map(message => message.entryId)).size).toBe(history.length);
+			expect(commandForTab.mock.calls.some(([, command]) => command.type === "get_transcript_page")).toBe(false);
+		},
+	);
 
 	it("does not join or apply a snapshot from before an in-place session change", async () => {
 		const { commandForTab } = installTabRoutedMockOmp();
@@ -1895,11 +1917,6 @@ describe("hydrateSession streaming reconcile (F-HYDRATE)", () => {
 		await hydrateTabSession("t-page");
 
 		expect(sessionRuntimeStore<MessagesStore>("t-page", "messages")?.getState().messages).toEqual([hydrated]);
-		expect(commandForTab.mock.calls.map(([, command]) => command)).toContainEqual({
-			type: "get_transcript_page",
-			limit: 256,
-			folded: true,
-		});
 	});
 
 	it("clears the stale streaming bubble when the hydrated tab has settled", async () => {

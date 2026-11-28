@@ -25,12 +25,14 @@
         "electron-log": "^5.3.0",
         "electron-store": "^10.0.0",
         "electron-updater": "^6.8.9",
+        "gsap": "3.15.1",
         "highlight.js": "^11.11.0",
         "katex": "^0.16.0",
         "lucide-react": "^0.500.0",
         "mermaid": "^11.0.0",
         "micromark-factory-space": "2.0.1",
         "micromark-util-character": "2.1.1",
+        "open-glass-ui": "0.5.1",
         "react": "^19.0.0",
         "react-chartjs-2": "^5.3.0",
         "react-dom": "^19.0.0",
@@ -942,6 +944,8 @@
 
     "graceful-fs": ["graceful-fs@4.2.11", "", {}, "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ=="],
 
+    "gsap": ["gsap@3.15.1", "", {}, "sha512-63yjWRFWj3QRP1UOuD8kcidCcy3nxb1mMRpwHr/xJRvPfm9GtWOXFAYUiL0ro1fgPq2nY53LR+98pAgy9BumBg=="],
+
     "hachure-fill": ["hachure-fill@0.5.2", "", {}, "sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg=="],
 
     "has-flag": ["has-flag@4.0.0", "", {}, "sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ=="],
@@ -1259,6 +1263,8 @@
     "object-keys": ["object-keys@1.1.1", "", {}, "sha512-NuAESUOUMrlIXOfHKzD6bpPu3tYt3xvjNdRIQ+FeT0lNb4K8WR70CaDxhuNguS2XG+GjkyMwOzsN5ZktImfhLA=="],
 
     "once": ["once@1.4.0", "", { "dependencies": { "wrappy": "1" } }, "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w=="],
+
+    "open-glass-ui": ["open-glass-ui@0.5.1", "", { "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-cnM/uT6vzioF14S2niPqiQVLvjpchoHksUBQPdGbMoUkYpSJStFLkoM2Rqm37HT+IofICBtWSntITOPXlFhJlQ=="],
 
     "p-cancelable": ["p-cancelable@2.1.1", "", {}, "sha512-BZOr3nRQHOntUjTrH8+Lh54smKHoHyur8We1V8DSMVrl5A2malOOwuJRnKRDjSnkoeBh4at6BwEnb5I7Jl31wg=="],
 

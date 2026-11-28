@@ -197,6 +197,42 @@ describe("ModelPicker manufacturer-first groups", () => {
 		expect(groups.every(group => group.querySelector("[role='option']"))).toBe(true);
 	});
 
+	it("orders makers by priority and models by finite INT, with unscored models last", async () => {
+		const models: ModelInfo[] = [
+			{ provider: "wisa", id: "gpt-low", name: "A low", int: 5 },
+			{ provider: "wisa", id: "gemini-test", name: "Google model", int: 100 },
+			{ provider: "wisa", id: "claude-test", name: "Anthropic model", int: 100 },
+			{ provider: "wisa", id: "gpt-high", name: "Z high", int: 90 },
+			{ provider: "direct", id: "gpt-high", name: "Z high", int: 90 },
+			{ provider: "wisa", id: "gpt-tie-z", name: "Z tie", int: 50 },
+			{ provider: "wisa", id: "gpt-tie-a", name: "A tie", int: 50 },
+			{ provider: "wisa", id: "gpt-zero", name: "Zero", int: 0 },
+			{ provider: "wisa", id: "gpt-unknown", name: "A unknown" },
+			{ provider: "wisa", id: "gpt-invalid", name: "B invalid", int: NaN },
+			{ provider: "wisa", id: "gpt-infinite", name: "C infinite", int: Infinity },
+		];
+		useModelStore.setState({ availableModels: models, catalogRefreshPending: true });
+		await openPicker();
+		const groups = Array.from(panel()?.querySelectorAll("section[role='group']") ?? []);
+		expect(groups.map(group => group.getAttribute("aria-label"))).toEqual(["OpenAI", "Anthropic", "Google"]);
+		expect(Array.from(groups[0].querySelectorAll("[role='option']")).map(rowId)).toEqual([
+			"gpt-high",
+			"gpt-high",
+			"gpt-tie-a",
+			"gpt-tie-z",
+			"gpt-low",
+			"gpt-zero",
+			"gpt-unknown",
+			"gpt-invalid",
+			"gpt-infinite",
+		]);
+		await pressKey("Home");
+		await pressKey("Enter");
+		expect(setModelCalls()).toEqual([
+			expect.objectContaining({ type: "set_model", provider: "direct", modelId: "gpt-high" }),
+		]);
+	});
+
 	it("puts each maker's rows inside that maker's group", async () => {
 		useModelStore.setState({ model: { provider: "wisa", id: "grok-4.7" }, availableModels: WISA_MODELS });
 		await openPicker();

@@ -1,7 +1,7 @@
-/** Composer reasoning control. Only the active model's verified selectors reach the portal menu. */
+/** Composer reasoning slider. Only the active model's verified selectors are offered. */
 
-import { Brain, Check, ChevronDown } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Brain, ChevronDown } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { RpcThinkingLevelState, ThinkingLevel } from "../../../shared/rpc-types";
 import { refreshModelState } from "../../hooks/session-hydration";
@@ -39,10 +39,18 @@ export function ThinkingControl() {
 	const options = useModelStore(s => s.availableThinkingSelectors);
 	const modelDefault = useModelStore(s => s.model?.thinking?.defaultLevel);
 	const [open, setOpen] = useState(false);
-	const { mounted, closing } = useOverlayPresence(open);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
+	const { mounted, closing } = useOverlayPresence(open, menuRef, "popover");
 	const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
+	const rangeRef = useRef<HTMLInputElement>(null);
+	const titleId = useId();
+	const descriptionId = useId();
+	const [draft, setDraft] = useState<ThinkingSelector>();
+	const draftRef = useRef<ThinkingSelector | undefined>(undefined);
+	const gestureRef = useRef<string | undefined>(undefined);
+	const [pending, setPending] = useState(false);
+	const pendingRef = useRef(false);
 
 	const supportsThinking = options.length > 0;
 	const selected =
@@ -63,11 +71,25 @@ export function ThinkingControl() {
 		void refreshModelState(tabId ?? undefined);
 	}, [open, tabId]);
 
-	// Position the portal menu above the trigger whenever it opens.
+	// Keep the glass panel within the viewport, including during resize/scroll.
 	useLayoutEffect(() => {
-		if (!open || !triggerRef.current) return;
-		const rect = triggerRef.current.getBoundingClientRect();
-		setPos({ left: rect.left, bottom: window.innerHeight - rect.top + 6 });
+		if (!open) return;
+		const position = () => {
+			const rect = triggerRef.current?.getBoundingClientRect();
+			if (!rect) return;
+			const width = Math.min(320, window.innerWidth - 24);
+			setPos({
+				left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
+				bottom: Math.max(12, Math.min(window.innerHeight - rect.top + 8, window.innerHeight - 220)),
+			});
+		};
+		position();
+		window.addEventListener("resize", position);
+		window.addEventListener("scroll", position, true);
+		return () => {
+			window.removeEventListener("resize", position);
+			window.removeEventListener("scroll", position, true);
+		};
 	}, [open]);
 
 	// Close on outside pointer press, and consume Escape: an open dropdown must
@@ -79,6 +101,8 @@ export function ThinkingControl() {
 			if (isDevOverlayEvent(event)) return;
 			const target = event.target as Node;
 			if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+			draftRef.current = undefined;
+			gestureRef.current = undefined;
 			setOpen(false);
 		};
 		const onKey = (event: KeyboardEvent) => {
@@ -86,6 +110,8 @@ export function ThinkingControl() {
 			if (event.key !== "Escape") return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
+			draftRef.current = undefined;
+			gestureRef.current = undefined;
 			setOpen(false);
 			triggerRef.current?.focus();
 		};
@@ -98,32 +124,46 @@ export function ThinkingControl() {
 	}, [open]);
 
 	useEffect(() => {
-		if (!open) return;
-		requestAnimationFrame(() => {
-			menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitemradio"][aria-checked="true"]')?.focus();
+		if (!open || pending) return;
+		const frame = requestAnimationFrame(() => {
+			(rangeRef.current && !rangeRef.current.disabled ? rangeRef.current : menuRef.current)?.focus();
 		});
-	}, [open]);
+		return () => cancelAnimationFrame(frame);
+	}, [open, pending]);
 
-	const moveMenuFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-		if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-		const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []);
-		if (items.length === 0) return;
-		event.preventDefault();
-		const current = items.indexOf(document.activeElement as HTMLButtonElement);
-		const next =
-			event.key === "Home"
-				? 0
-				: event.key === "End"
-					? items.length - 1
-					: (current + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
-		items[next]?.focus();
+	const interactionContext = () => {
+		const state = (modelStore ?? useModelStore).getState();
+		return JSON.stringify([
+			tabId ?? useTabsStore.getState().activeTabId,
+			useSessionStore.getState().sessionId,
+			state.model?.provider,
+			state.model?.id,
+			state.availableThinkingSelectors,
+		]);
+	};
+	const beginGesture = () => {
+		gestureRef.current ??= interactionContext();
+	};
+	const preview = draft && options.includes(draft) ? draft : (current ?? options[0]);
+	const previewIndex = preview ? options.indexOf(preview) : 0;
+	const commit = () => {
+		const level = draftRef.current;
+		const context = gestureRef.current;
+		draftRef.current = undefined;
+		gestureRef.current = undefined;
+		if (context !== interactionContext()) {
+			setDraft(undefined);
+			return;
+		}
+		if (level && level !== current) select(level);
 	};
 
 	const select = (level: ThinkingSelector) => {
 		const targetStore = modelStore ?? useModelStore;
 		const { model, availableThinkingSelectors } = targetStore.getState();
-		if (!availableThinkingSelectors.includes(level)) return;
-		setOpen(false);
+		if (pendingRef.current || !availableThinkingSelectors.includes(level)) return;
+		pendingRef.current = true;
+		setPending(true);
 		const fallbackTabId = useTabsStore.getState().activeTabId;
 		const fallbackSessionId = useSessionStore.getState().sessionId;
 		void rpc
@@ -153,19 +193,34 @@ export function ThinkingControl() {
 			})
 			.catch(error => {
 				toast({ variant: "error", title: t("input.thinking.failed"), message: String(error) });
+			})
+			.finally(() => {
+				pendingRef.current = false;
+				setPending(false);
+				setDraft(undefined);
 			});
 	};
 
 	return (
 		<>
 			<button
+				data-tour="thinking"
 				ref={triggerRef}
 				type="button"
 				aria-expanded={open}
-				aria-haspopup="menu"
-				onClick={() => setOpen(value => !value)}
+				aria-haspopup="dialog"
+				onClick={() => {
+					setDraft(undefined);
+					draftRef.current = undefined;
+					gestureRef.current = undefined;
+					setOpen(value => !value);
+				}}
 				title={
-					current ? t("input.thinking", { level: label }) : supportsThinking ? label : t("input.thinking.unsupported")
+					current
+						? t("input.thinking", { level: label })
+						: supportsThinking
+							? label
+							: t("input.thinking.unsupported")
 				}
 				className="omp-pressable flex h-8 items-center gap-1.5 rounded-full px-2.5 text-omp-md font-medium hover:bg-[var(--omp-selected-bg)]"
 				style={{ color: `var(--omp-thinking-${colorLevel})` }}
@@ -179,56 +234,137 @@ export function ThinkingControl() {
 				? createPortal(
 						<div
 							ref={menuRef}
-							style={{ left: pos.left, bottom: pos.bottom }}
+							style={{
+								left: pos.left,
+								bottom: pos.bottom,
+								width: "min(320px, calc(100vw - 24px))",
+								maxHeight: "calc(100vh - 24px)",
+							}}
 							aria-hidden={closing || undefined}
-							role="menu"
-							onKeyDown={moveMenuFocus}
+							role="dialog"
+							aria-labelledby={titleId}
+							tabIndex={-1}
+							onBlur={event => {
+								if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+									commit();
+									setOpen(false);
+								}
+							}}
 							inert={closing}
 							className={cx(
-								"fixed z-[100] w-64 overflow-hidden rounded-xl border border-[var(--omp-border)] bg-[var(--omp-panel-bg)] p-1 shadow-[var(--omp-shadow-md)]",
-								closing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
+								"omp-thinking-slider-panel fixed z-[100] overflow-auto rounded-2xl border border-[var(--omp-border)] bg-[var(--omp-panel-bg)] p-4 shadow-[var(--omp-shadow-md)] outline-none",
+								closing && "pointer-events-none",
 							)}
 						>
-							{supportsThinking ? (
-								options.map(option => {
-									const active = option === current;
-									return (
-										<button
-											key={option}
-											type="button"
-											role="menuitemradio"
-											aria-checked={active}
-											onClick={() => select(option)}
-											className="omp-pressable flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--omp-selected-bg)]"
+							<div
+								id={titleId}
+								className="mb-3 flex items-center gap-2 text-omp-sm font-medium text-[var(--omp-muted)]"
+							>
+								<Brain size={14} />
+								{t("input.thinking.label")}
+							</div>
+							{preview ? (
+								<>
+									<div className="flex items-baseline justify-between gap-3">
+										<span
+											className="font-mono text-lg font-semibold"
+											style={{
+												color: THEMED_LEVELS[preview]
+													? `var(--omp-thinking-${preview})`
+													: "var(--omp-accent)",
+											}}
 										>
-											<span className="mt-0.5 w-4 shrink-0 text-[var(--omp-accent)]">
-												{active ? <Check size={14} /> : null}
+											{t(`input.thinking.name.${preview}`)}
+										</span>
+										<span aria-hidden="true" className="font-mono text-omp-xs text-[var(--omp-dim)]">
+											{previewIndex + 1} / {options.length}
+										</span>
+									</div>
+									<p
+										id={descriptionId}
+										className="mt-1 min-h-10 text-omp-sm leading-snug text-[var(--omp-muted)]"
+									>
+										{t(`input.thinking.level.${preview}`)}
+									</p>
+									<input
+										ref={rangeRef}
+										type="range"
+										min={0}
+										max={Math.max(0, options.length - 1)}
+										step={1}
+										value={previewIndex}
+										disabled={pending || options.length === 1}
+										aria-label={t("input.thinking.label")}
+										aria-valuetext={t(`input.thinking.name.${preview}`)}
+										aria-describedby={descriptionId}
+										className="omp-thinking-range my-3 block h-6 w-full cursor-pointer accent-[var(--omp-accent)] disabled:cursor-default disabled:opacity-50"
+										onPointerDown={event => {
+											beginGesture();
+											event.currentTarget.setPointerCapture(event.pointerId);
+										}}
+										onInput={event => {
+											beginGesture();
+											const level = options[Number(event.currentTarget.value)];
+											draftRef.current = level;
+											setDraft(level);
+										}}
+										onPointerUp={commit}
+										onPointerCancel={() => {
+											draftRef.current = undefined;
+											gestureRef.current = undefined;
+											setDraft(undefined);
+										}}
+										onKeyDown={event => {
+											if (isImeKeyEvent(event)) return;
+											if (
+												[
+													"ArrowLeft",
+													"ArrowRight",
+													"ArrowUp",
+													"ArrowDown",
+													"Home",
+													"End",
+													"PageUp",
+													"PageDown",
+												].includes(event.key)
+											)
+												beginGesture();
+											if (event.key === "Enter") {
+												event.preventDefault();
+												commit();
+											}
+										}}
+										onKeyUp={event => {
+											if (isImeKeyEvent(event)) return;
+											if (
+												[
+													"ArrowLeft",
+													"ArrowRight",
+													"ArrowUp",
+													"ArrowDown",
+													"Home",
+													"End",
+													"PageUp",
+													"PageDown",
+												].includes(event.key)
+											)
+												commit();
+										}}
+									/>
+									<div
+										aria-hidden="true"
+										className="flex justify-between gap-2 text-omp-xs text-[var(--omp-dim)]"
+									>
+										<span>{t(`input.thinking.name.${options[0]}`)}</span>
+										{options.length > 1 && (
+											<span className="text-right">
+												{t(`input.thinking.name.${options[options.length - 1]}`)}
 											</span>
-											<span className="min-w-0 flex-1">
-												<span
-													className={cx(
-														"block font-mono text-omp-md font-medium",
-														!active && "text-[var(--omp-muted)]",
-													)}
-													style={
-														option === "auto" || !THEMED_LEVELS[option]
-															? undefined
-															: { color: `var(--omp-thinking-${option})` }
-													}
-												>
-													{t(`input.thinking.name.${option}`)}
-												</span>
-												<span className="block text-omp-sm leading-snug text-[var(--omp-dim)]">
-													{t(`input.thinking.level.${option}`)}
-												</span>
-											</span>
-										</button>
-									);
-								})
+										)}
+									</div>
+								</>
 							) : (
-								<div className="px-2.5 py-2 text-omp-md text-[var(--omp-muted)]">
-									{t("input.thinking.unsupported")}
-								</div>
+								<p className="text-omp-md text-[var(--omp-muted)]">{t("input.thinking.unsupported")}</p>
 							)}
 						</div>,
 						document.body,

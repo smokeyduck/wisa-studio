@@ -150,7 +150,7 @@ export class BrowserUseRuntime {
 	}
 
 	#worker(installation: BrowserUseInstallation, directory: string) {
-		if (!this.#seed) throw new Error("Browser Use is missing. Reinstall WISA Studio.");
+		if (!this.#seed) throw new Error("Browser Use is missing. Reinstall Wisa.");
 		return {
 			python: this.#python,
 			args: ["-s", "-P", "-B", "-X", "utf8", this.#script, this.#seed.executable],

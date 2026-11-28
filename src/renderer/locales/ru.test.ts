@@ -42,13 +42,9 @@ describe("Russian locale completeness", () => {
 		expect(ru["tabs.kindMismatch"]).toContain("Agent");
 		expect(ru["tabs.kindMismatch"]).toContain("Chat");
 	});
-	it("localizes visible starter templates while preserving their parameters", () => {
+	it("localizes plan approval prompts while preserving their parameters", () => {
 		for (const key of Object.keys(en)) {
-			if (
-				(key.startsWith("chat.starter.") && key.endsWith(".prompt")) ||
-				key === "planPanel.approveMessage" ||
-				key === "planPanel.reviseMessage"
-			) {
+			if (key === "planPanel.approveMessage" || key === "planPanel.reviseMessage") {
 				expect(ru[key], key).toMatch(/[А-Яа-яЁё]/);
 				expect(placeholders(ru[key]), key).toEqual(placeholders(en[key]));
 			}

@@ -35,6 +35,9 @@ export interface ComposerStore {
 	setSending: (value: boolean) => void;
 	setSubmissionUncertain: (value: boolean) => void;
 	images: ComposerImage[];
+	pendingImageReads: number;
+	imageReadEpoch: number;
+	readImages: (read: () => Promise<ComposerImage[]>) => Promise<void>;
 	files: ComposerFile[];
 	/** Replace the draft, or compute the next value from the current one
 	 * (React setState parity — InputArea's updater-form call sites unchanged). */
@@ -46,19 +49,47 @@ export interface ComposerStore {
 }
 
 export const createComposerStore = () =>
-	createStore<ComposerStore>()(set => ({
+	createStore<ComposerStore>()((set, get) => ({
 		draft: "",
 		sending: false,
 		submissionUncertain: false,
 		setSending: sending => set({ sending }),
 		setSubmissionUncertain: submissionUncertain => set({ submissionUncertain }),
 		images: [],
+		pendingImageReads: 0,
+		imageReadEpoch: 0,
+		readImages: async read => {
+			const epoch = get().imageReadEpoch;
+			set(state => ({ pendingImageReads: state.pendingImageReads + 1 }));
+			let images: ComposerImage[] = [];
+			try {
+				images = await read();
+			} finally {
+				set(state =>
+					state.imageReadEpoch === epoch
+						? {
+								images: images.length > 0 ? [...state.images, ...images] : state.images,
+								pendingImageReads: state.pendingImageReads - 1,
+							}
+						: state,
+				);
+			}
+		},
 		files: [],
 		setDraft: next => set(state => ({ draft: typeof next === "function" ? next(state.draft) : next })),
 		setImages: next => set(state => ({ images: typeof next === "function" ? next(state.images) : next })),
 		addFiles: files => set(state => ({ files: mergeComposerFiles(state.files, files) })),
 		removeFile: key => set(state => ({ files: state.files.filter(file => composerFileKey(file) !== key) })),
-		reset: () => set({ draft: "", images: [], files: [], sending: false, submissionUncertain: false }),
+		reset: () =>
+			set(state => ({
+				draft: "",
+				images: [],
+				files: [],
+				sending: false,
+				submissionUncertain: false,
+				pendingImageReads: 0,
+				imageReadEpoch: state.imageReadEpoch + 1,
+			})),
 	}));
 
 const defaultComposerStore = createComposerStore();

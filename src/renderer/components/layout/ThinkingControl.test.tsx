@@ -1,4 +1,4 @@
-/** The menu renders only verified selectors and applies authoritative sidecar receipts. */
+/** The slider previews verified selectors and commits authoritative sidecar receipts. */
 
 import { parseHTML } from "linkedom";
 import { act, type ReactElement } from "react";
@@ -21,6 +21,7 @@ globals.HTMLElement = HTMLElement;
 globals.Node = Node;
 globals.IS_REACT_ACT_ENVIRONMENT = true;
 globals.requestAnimationFrame = (callback: () => void) => setTimeout(callback, 0);
+globals.cancelAnimationFrame = (frame: number) => clearTimeout(frame);
 
 const elementPrototype = HTMLElement.prototype as unknown as Record<string, unknown>;
 if (typeof elementPrototype.scrollIntoView !== "function") elementPrototype.scrollIntoView = () => {};
@@ -36,6 +37,7 @@ elementPrototype.getBoundingClientRect = () => ({
 	toJSON: () => ({}),
 });
 Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
 
 interface TestElement {
 	textContent: string | null;
@@ -53,7 +55,10 @@ function installMockOmp(): void {
 				type: "response",
 				command: "set_thinking_level",
 				success: true,
-				data: { thinkingLevel: level === "auto" || level === "inherit" ? undefined : level, thinkingConfigured: level },
+				data: {
+					thinkingLevel: level === "auto" || level === "inherit" ? undefined : level,
+					thinkingConfigured: level,
+				},
 			}) as RpcResponse,
 	);
 	const ompWindow = window as unknown as { omp: { rpc: { setThinkingLevel: typeof setThinkingLevelMock } } };
@@ -95,6 +100,40 @@ function labelFor(level: string): string {
 	return translate(`input.thinking.name.${level}`);
 }
 
+function slider(): HTMLInputElement {
+	const input = document.querySelector('input[type="range"]');
+	if (!input) throw new Error("reasoning slider missing");
+	return input as unknown as HTMLInputElement;
+}
+
+function inputLevel(index: number): void {
+	const input = slider();
+	input.value = String(index);
+	input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function release(): void {
+	slider().dispatchEvent(new Event("pointerup", { bubbles: true }));
+}
+
+function key(target: HTMLInputElement, type: "keydown" | "keyup", value: string): void {
+	const event = new Event(type, { bubbles: true, cancelable: true });
+	Object.defineProperty(event, "key", { value });
+	if (value === "Escape") {
+		document.dispatchEvent(event);
+		return;
+	}
+	// linkedom lacks native input tracking; dispatch the same React handler directly.
+	const propsKey = Object.keys(target).find(name => name.startsWith("__reactProps$"));
+	if (!propsKey) throw new Error("slider React props missing");
+	const props = (target as unknown as Record<string, Record<string, (event: object) => void>>)[propsKey];
+	props[type === "keydown" ? "onKeyDown" : "onKeyUp"]({
+		key: value,
+		nativeEvent: event,
+		preventDefault: () => event.preventDefault(),
+	});
+}
+
 afterEach(async () => {
 	if (root) {
 		await act(async () => {
@@ -110,7 +149,7 @@ afterEach(async () => {
 });
 
 describe("ThinkingControl", () => {
-	it("checks the declared High default without offering a generic default or unsupported Off", async () => {
+	it("uses only the verified ladder and starts at the declared High default", async () => {
 		installMockOmp();
 		useModelStore.getState().setFromState({
 			model: {
@@ -130,11 +169,10 @@ describe("ThinkingControl", () => {
 			click(trigger);
 		});
 
-		const choices = Array.from(document.querySelectorAll('[role="menuitemradio"]'));
-		const checked = choices.find(choice => choice.getAttribute("aria-checked") === "true");
-		expect(checked?.textContent).toContain(labelFor("high"));
-		expect(choices).toHaveLength(2);
-		expect(choices.some(choice => choice.textContent?.includes(labelFor("low")))).toBe(true);
+		expect(slider().getAttribute("max")).toBe("1");
+		expect(slider().value).toBe("1");
+		expect(slider().getAttribute("aria-valuetext")).toBe(labelFor("high"));
+		expect(document.body.textContent).toContain(labelFor("low"));
 	});
 
 	it("sends the explicitly picked value and applies the authoritative receipt", async () => {
@@ -151,12 +189,11 @@ describe("ThinkingControl", () => {
 		await act(async () => {
 			click(trigger);
 		});
-		const high = buttonWithMono(labelFor("high"));
-		expect(high).toBeDefined();
-		if (!high) return;
-		await act(async () => {
-			click(high);
-		});
+		await act(async () => inputLevel(3));
+		expect(setThinkingLevelMock).not.toHaveBeenCalled();
+		expect(slider().getAttribute("aria-valuetext")).toBe(labelFor("high"));
+		expect(document.body.textContent).toContain(translate("input.thinking.level.high"));
+		await act(async () => release());
 		await flush();
 
 		expect(setThinkingLevelMock).toHaveBeenCalledWith("high");
@@ -182,10 +219,11 @@ describe("ThinkingControl", () => {
 		const trigger = buttonWithMono(labelFor("medium"));
 		if (!trigger) throw new Error("trigger missing");
 		await act(async () => click(trigger));
-		const max = buttonWithMono(labelFor("max"));
-		if (!max) throw new Error("max option missing");
-		await act(async () => click(max));
+		await act(async () => inputLevel(5));
+		await act(async () => release());
 		await flush();
+		expect(slider().getAttribute("aria-valuetext")).toBe(labelFor("high"));
+		expect(document.querySelector('[aria-haspopup="dialog"]')?.getAttribute("aria-expanded")).toBe("true");
 
 		expect(setThinkingLevelMock).toHaveBeenCalledWith("max");
 		expect(useModelStore.getState().thinkingConfigured).toBe("high");
@@ -215,9 +253,8 @@ describe("ThinkingControl", () => {
 		const trigger = buttonWithMono(labelFor("medium"));
 		if (!trigger) throw new Error("trigger missing");
 		await act(async () => click(trigger));
-		const high = buttonWithMono(labelFor("high"));
-		if (!high) throw new Error("high option missing");
-		await act(async () => click(high));
+		await act(async () => inputLevel(2));
+		await act(async () => release());
 
 		await act(async () => {
 			useTabsStore.setState({ activeTabId: "t1" });
@@ -250,12 +287,9 @@ describe("ThinkingControl", () => {
 		await act(async () => {
 			click(trigger);
 		});
-		const auto = buttonWithMono(labelFor("auto"));
-		expect(auto).toBeDefined();
-		if (!auto) return;
-		await act(async () => {
-			click(auto);
-		});
+		await act(async () => inputLevel(1));
+		expect(slider().getAttribute("aria-valuetext")).toBe(labelFor("auto"));
+		await act(async () => release());
 		await flush();
 
 		expect(setThinkingLevelMock).toHaveBeenCalledWith("auto");
@@ -265,7 +299,11 @@ describe("ThinkingControl", () => {
 
 	it("shows an honest note when the model has no verified controls", async () => {
 		installMockOmp();
-		useModelStore.setState({ thinkingLevel: undefined, thinkingConfigured: undefined, availableThinkingSelectors: [] });
+		useModelStore.setState({
+			thinkingLevel: undefined,
+			thinkingConfigured: undefined,
+			availableThinkingSelectors: [],
+		});
 		await mount(<ThinkingControl />);
 
 		const trigger = buttonWithMono(translate("input.thinking.label"));
@@ -312,11 +350,133 @@ describe("ThinkingControl", () => {
 		await act(async () => {
 			click(trigger);
 		});
-		const body = document.body.textContent ?? "";
-		for (const option of ["off", "minimal", "low", "medium", "high", "xhigh"]) {
-			expect(body).toContain(labelFor(option));
-		}
-		expect(buttonWithMono(labelFor("max"))).toBeUndefined();
-		expect(buttonWithMono(labelFor("auto"))).toBeUndefined();
+		expect(slider().getAttribute("max")).toBe("5");
+		await act(async () => inputLevel(0));
+		expect(slider().getAttribute("aria-valuetext")).toBe(labelFor("off"));
+		await act(async () => inputLevel(5));
+		expect(slider().getAttribute("aria-valuetext")).toBe(labelFor("xhigh"));
+	});
+
+	it("previews repeated keyboard changes and commits once on key release", async () => {
+		installMockOmp();
+		useModelStore.setState({
+			thinkingLevel: "low",
+			thinkingConfigured: "low",
+			availableThinkingSelectors: ["low", "medium", "high"],
+		});
+		await mount(<ThinkingControl />);
+		const trigger = buttonWithMono(labelFor("low"));
+		if (!trigger) throw new Error("trigger missing");
+		await act(async () => click(trigger));
+		await act(async () => {
+			key(slider(), "keydown", "ArrowRight");
+			inputLevel(1);
+			inputLevel(2);
+		});
+		expect(setThinkingLevelMock).not.toHaveBeenCalled();
+		await act(async () => key(slider(), "keyup", "ArrowRight"));
+		expect(setThinkingLevelMock).toHaveBeenCalledTimes(1);
+		expect(setThinkingLevelMock).toHaveBeenCalledWith("high");
+	});
+
+	it("cancels a preview on Escape without submitting it", async () => {
+		installMockOmp();
+		useModelStore.setState({
+			thinkingLevel: "low",
+			thinkingConfigured: "low",
+			availableThinkingSelectors: ["low", "high"],
+		});
+		await mount(<ThinkingControl />);
+		const trigger = buttonWithMono(labelFor("low"));
+		if (!trigger) throw new Error("trigger missing");
+		await act(async () => click(trigger));
+		await act(async () => inputLevel(1));
+		await act(async () => key(slider(), "keydown", "Escape"));
+		expect(setThinkingLevelMock).not.toHaveBeenCalled();
+		expect(document.querySelector('[aria-haspopup="dialog"]')?.getAttribute("aria-expanded")).toBe("false");
+	});
+
+	it("disables a single verified level without inventing additional choices", async () => {
+		installMockOmp();
+		useModelStore.setState({
+			thinkingLevel: "high",
+			thinkingConfigured: "high",
+			availableThinkingSelectors: ["high"],
+		});
+		await mount(<ThinkingControl />);
+		const trigger = buttonWithMono(labelFor("high"));
+		if (!trigger) throw new Error("trigger missing");
+		await act(async () => click(trigger));
+		expect(slider().hasAttribute("disabled")).toBe(true);
+		expect(slider().getAttribute("aria-valuetext")).toBe(labelFor("high"));
+		expect(setThinkingLevelMock).not.toHaveBeenCalled();
+	});
+
+	it("discards a drag if the model changes before release", async () => {
+		installMockOmp();
+		useModelStore.setState({
+			model: { provider: "fixture", id: "one" },
+			thinkingLevel: "low",
+			thinkingConfigured: "low",
+			availableThinkingSelectors: ["low", "high"],
+		});
+		await mount(<ThinkingControl />);
+		const trigger = buttonWithMono(labelFor("low"));
+		if (!trigger) throw new Error("trigger missing");
+		await act(async () => click(trigger));
+		await act(async () => inputLevel(1));
+		await act(async () => useModelStore.setState({ model: { provider: "fixture", id: "two" } }));
+		await act(async () => release());
+		expect(setThinkingLevelMock).not.toHaveBeenCalled();
+	});
+
+	it("discards the pending preview on outside press", async () => {
+		installMockOmp();
+		useModelStore.setState({
+			thinkingLevel: "low",
+			thinkingConfigured: "low",
+			availableThinkingSelectors: ["low", "high"],
+		});
+		await mount(<ThinkingControl />);
+		const trigger = buttonWithMono(labelFor("low"));
+		if (!trigger) throw new Error("trigger missing");
+		await act(async () => click(trigger));
+		await act(async () => inputLevel(1));
+		await act(async () => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+		expect(setThinkingLevelMock).not.toHaveBeenCalled();
+		expect(document.querySelector('[aria-haspopup="dialog"]')?.getAttribute("aria-expanded")).toBe("false");
+	});
+
+	it("locks the slider until the authoritative receipt and then allows another adjustment", async () => {
+		installMockOmp();
+		const receipt = Promise.withResolvers<RpcResponse>();
+		setThinkingLevelMock.mockReturnValueOnce(receipt.promise);
+		useModelStore.setState({
+			thinkingLevel: "low",
+			thinkingConfigured: "low",
+			availableThinkingSelectors: ["low", "high"],
+		});
+		await mount(<ThinkingControl />);
+		const trigger = buttonWithMono(labelFor("low"));
+		if (!trigger) throw new Error("trigger missing");
+		await act(async () => click(trigger));
+		await act(async () => inputLevel(1));
+		await act(async () => release());
+		expect(slider().hasAttribute("disabled")).toBe(true);
+		await act(async () => release());
+		expect(setThinkingLevelMock).toHaveBeenCalledTimes(1);
+		await act(async () =>
+			receipt.resolve({
+				type: "response",
+				command: "set_thinking_level",
+				success: true,
+				data: { thinkingLevel: "high", thinkingConfigured: "high" },
+			}),
+		);
+		expect(slider().hasAttribute("disabled")).toBe(false);
+		await act(async () => inputLevel(0));
+		await act(async () => release());
+		expect(setThinkingLevelMock).toHaveBeenCalledTimes(2);
+		expect(setThinkingLevelMock).toHaveBeenLastCalledWith("low");
 	});
 });

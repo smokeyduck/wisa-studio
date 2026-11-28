@@ -5,6 +5,7 @@ import {
 	DEFAULT_COMPACTION_CONFIG,
 	detectStrategy,
 	expectedMethod,
+	hasCompactionThresholdOverride,
 	type ModelProfile,
 	modelProfile,
 	parseCompactionConfig,
@@ -24,9 +25,14 @@ const native: ModelProfile = { windowTokens: 400_000, vision: true, nativeRemote
 
 describe("modelProfile", () => {
 	it("reads window, vision and server compaction from the wire model", () => {
-		expect(modelProfile({ api: "openai-responses", contextWindow: 400_000, input: ["text", "image"] })).toEqual(
-			native,
-		);
+		expect(
+			modelProfile({
+				api: "openai-responses",
+				provider: "openai",
+				contextWindow: 400_000,
+				input: ["text", "image"],
+			}),
+		).toEqual(native);
 		expect(modelProfile({ api: "openai-completions", contextWindow: 262_144, input: ["text"] })).toEqual(textOnly);
 	});
 
@@ -40,12 +46,49 @@ describe("modelProfile", () => {
 		expect(expectedMethod(config(), profile)).toBe("snapcompact");
 	});
 
-	it("treats an Anthropic-lane model as native only when the catalog says its route supports it", () => {
-		expect(modelProfile({ api: "anthropic-messages", compat: { supportsServerCompaction: true } }).nativeRemote).toBe(
-			true,
-		);
+	it("requires model policy and a supported Anthropic route, not a capability flag alone", () => {
+		const model = {
+			api: "anthropic-messages",
+			provider: "anthropic",
+			compat: { supportsServerCompaction: true, firstPartyProvider: true },
+		};
+		expect(modelProfile(model).nativeRemote).toBe(true);
+		expect(modelProfile({ ...model, baseUrl: "https://gateway.example/anthropic" }).nativeRemote).toBe(false);
+		expect(modelProfile({ ...model, remoteCompaction: { enabled: false } }).nativeRemote).toBe(false);
+		expect(modelProfile({ ...model, compat: { supportsServerCompaction: false } }).nativeRemote).toBe(false);
+	});
+
+	it("does not mistake a Responses-compatible API for compaction support", () => {
+		expect(modelProfile({ api: "openai-responses", provider: "gateway" }).nativeRemote).toBe(false);
 		expect(
-			modelProfile({ api: "anthropic-messages", compat: { supportsServerCompaction: false } }).nativeRemote,
+			modelProfile({ api: "openai-responses", provider: "gateway", remoteCompaction: { enabled: true } })
+				.nativeRemote,
+		).toBe(true);
+		expect(
+			modelProfile({ api: "openai-responses", provider: "openai", remoteCompaction: { enabled: false } })
+				.nativeRemote,
+		).toBe(false);
+		expect(
+			modelProfile({
+				api: "openai-codex-responses",
+				provider: "openai-codex",
+				remoteCompaction: { v2StreamingEnabled: true },
+			}).nativeRemote,
+		).toBe(true);
+		expect(modelProfile({ api: "openai-codex-responses", provider: "openai-codex" }).nativeRemote).toBe(false);
+		expect(
+			modelProfile({ api: "openai-responses", baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1" })
+				.nativeRemote,
+		).toBe(true);
+		expect(
+			modelProfile({ api: "openai-responses", baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com/" })
+				.nativeRemote,
+		).toBe(false);
+		expect(
+			modelProfile({
+				api: "openai-responses",
+				baseUrl: "https://gateway.example/bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+			}).nativeRemote,
 		).toBe(false);
 	});
 
@@ -64,6 +107,20 @@ describe("expectedMethod", () => {
 		expect(expectedMethod(config(), textOnly)).toBe("handoff");
 	});
 
+	it("uses Core's default method order for Balanced and skips unsupported methods", () => {
+		const balanced = config({ ...STRATEGIES.balanced });
+		expect(expectedMethod(balanced, vision)).toBe("snapcompact");
+		expect(expectedMethod(balanced, textOnly)).toBe("handoff");
+		expect(expectedMethod(balanced, native)).toBe("remote");
+		expect(balanced.methodOrder).toEqual(["remote", "snapcompact", "handoff", "shake", "soft"]);
+	});
+
+	it("prioritizes image archiving in Preserve and falls back on text-only routes", () => {
+		const preserve = config({ ...STRATEGIES.preserve });
+		expect(expectedMethod(preserve, vision)).toBe("snapcompact");
+		expect(expectedMethod(preserve, textOnly)).toBe("shake");
+	});
+
 	it("names the notes mode over any method order", () => {
 		expect(expectedMethod(config({ notesBacked: true }), native)).toBe("notes");
 	});
@@ -76,6 +133,7 @@ describe("expectedMethod", () => {
 describe("detectStrategy", () => {
 	it("recognizes each strategy from its settings, and anything else as custom", () => {
 		expect(detectStrategy(config())).toBe("balanced");
+		expect(detectStrategy(config({ ...STRATEGIES.balanced }))).toBe("balanced");
 		expect(detectStrategy(config({ ...STRATEGIES.preserve }))).toBe("preserve");
 		expect(detectStrategy(config({ ...STRATEGIES.notes }))).toBe("notes");
 		// One setting off the strategy is a custom setup, not a silent match.
@@ -90,16 +148,28 @@ describe("detectStrategy", () => {
 			expect(detectStrategy(parseCompactionConfig(values))).toBe(id);
 		}
 	});
+
+	it("keeps thresholds, promotion and automatic maintenance independent of strategy patches", () => {
+		for (const id of ["balanced", "preserve", "notes"] as const) {
+			expect(strategyPatch(id).map(({ path }) => path)).toEqual([
+				"compaction.methodOrder",
+				"compaction.keepRecentTokens",
+				"compaction.experimentalContextManagement",
+			]);
+		}
+	});
 });
 
 describe("compactionThreshold", () => {
-	it("uses the reserve-based Auto threshold by default", () => {
-		expect(compactionThreshold(config(), { ...textOnly, windowTokens: 1_000_000 })).toBe(850_000);
-		expect(compactionThreshold(config(), { ...textOnly, windowTokens: 262_144 })).toBe(222_823);
+	it("defaults to compaction at 20% of the model window", () => {
+		expect(compactionThreshold(config(), { ...textOnly, windowTokens: 1_000_000 })).toBe(200_000);
+		expect(compactionThreshold(config(), { ...textOnly, windowTokens: 262_144 })).toBe(52_428);
 	});
 
-	it("uses the fixed reserve on a small window", () => {
-		expect(compactionThreshold(config(), { ...textOnly, windowTokens: 32_000 })).toBe(32_000 - 16_384);
+	it("uses the fixed reserve on a small window when Auto is selected", () => {
+		expect(compactionThreshold(config({ thresholdPercent: -1 }), { ...textOnly, windowTokens: 32_000 })).toBe(
+			32_000 - 16_384,
+		);
 	});
 
 	it("honors an explicit percentage and reports an unknown window as unknown", () => {
@@ -107,6 +177,50 @@ describe("compactionThreshold", () => {
 			140_000,
 		);
 		expect(compactionThreshold(config(), { ...textOnly, windowTokens: null })).toBeNull();
+	});
+
+	it("honors fixed limits ahead of percentages and falls back to the reserve when a limit cannot fit", () => {
+		expect(compactionThreshold(config({ thresholdPercent: 20, thresholdTokens: 100_000 }), native)).toBe(100_000);
+		expect(compactionThreshold(config({ thresholdTokens: 400_000 }), native)).toBe(340_000);
+		expect(
+			compactionThreshold(config({ thresholdPercent: -1, reserveTokens: 50_000 }), {
+				...native,
+				windowTokens: 200_000,
+			}),
+		).toBe(150_000);
+	});
+
+	it("keeps default reserves usable on small windows and honors explicit reserves", () => {
+		expect(compactionThreshold(config({ thresholdPercent: -1 }), { ...textOnly, windowTokens: 16_000 })).toBe(13_600);
+		expect(
+			compactionThreshold(config({ thresholdPercent: -1, reserveTokens: 14_000 }), {
+				...textOnly,
+				windowTokens: 16_000,
+			}),
+		).toBe(2_000);
+		expect(compactionThreshold(config({ thresholdPercent: 100 }), native)).toBe(396_000);
+	});
+
+	it("uses exact model rules before the longest provider prefix, including base and fixed token entries", () => {
+		const profile = { ...native, windowTokens: 1_000_000, key: "openrouter/anthropic/test" };
+		const settings = config({
+			thresholdPercent: -1,
+			thresholdTokens: 250_000,
+			modelThresholds: { "openrouter/*": "80%", "openrouter/anthropic/*": 200_000 },
+		});
+		expect(compactionThreshold(settings, profile)).toBe(170_000);
+		expect(hasCompactionThresholdOverride(settings, profile)).toBe(true);
+		settings.modelThresholds[profile.key] = "f90000";
+		expect(compactionThreshold(settings, profile)).toBe(90_000);
+		settings.modelThresholds[profile.key] = "20%";
+		expect(compactionThreshold(settings, profile)).toBe(200_000);
+		settings.modelThresholdsEnabled = false;
+		expect(compactionThreshold(settings, profile)).toBe(250_000);
+	});
+
+	it("does not let unrelated or invalid model rules block a session preset", () => {
+		const settings = config({ modelThresholds: { "other/*": "20%", "openai/*": "bad" } });
+		expect(hasCompactionThresholdOverride(settings, { ...native, key: "openai/test" })).toBe(false);
 	});
 });
 
@@ -124,5 +238,16 @@ describe("parseCompactionConfig", () => {
 		expect(parseCompactionConfig({ "compaction.methodOrder": ["bogus"] }).methodOrder).toEqual(
 			DEFAULT_COMPACTION_CONFIG.methodOrder,
 		);
+		expect(parseCompactionConfig(undefined).methodOrder).toEqual([
+			"remote",
+			"snapcompact",
+			"handoff",
+			"shake",
+			"soft",
+		]);
+		expect(parseCompactionConfig({ "compaction.methodOrder": ["snapcompact", "soft"] }).methodOrder).toEqual([
+			"snapcompact",
+			"soft",
+		]);
 	});
 });

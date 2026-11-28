@@ -32,7 +32,7 @@ export function CatalogCard({
 	return (
 		<article
 			className={cx(
-				"relative flex min-w-0 flex-col gap-2 rounded-xl border border-(--omp-border-muted) p-3.5 transition-colors hover:border-(--omp-border) hover:bg-(--omp-selected-bg)",
+				"omp-card relative flex min-w-0 flex-col gap-2 rounded-xl border border-(--omp-border-muted) p-3.5 transition-colors hover:border-(--omp-border) hover:bg-(--omp-selected-bg)",
 				square && "aspect-square",
 			)}
 		>

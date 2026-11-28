@@ -1,25 +1,20 @@
-import { ArrowRight, Bot, FileCode2, KeyRound, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowRight, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CustomProviderView } from "../../../shared/ipc-types";
-import type { ProviderInfo } from "../../../shared/rpc-types";
+import type { ModelInfo, ProviderInfo } from "../../../shared/rpc-types";
 import { WISA_CONNECT_PAGE_URL } from "../../../shared/wisa";
+import anthropicMark from "../../assets/provider-anthropic.svg";
+import geminiMark from "../../assets/provider-gemini.svg";
+import openaiMark from "../../assets/provider-openai.svg";
 import { describeError } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
 import { useTabRpc } from "../../lib/tab-rpc";
+import { useAllPendingRequests } from "../../stores/extension-ui";
+import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
 import { useUiStore } from "../../stores/ui";
-import { Badge, Button, Modal } from "../common";
-
-const CUSTOM_PROVIDER_EXAMPLE = `providers:
-  my-provider:
-    api: openai-completions
-    baseUrl: https://api.example.com/v1
-    apiKey: \${MY_PROVIDER_API_KEY}
-    models:
-      - id: model-id
-        name: My Model
-        contextWindow: 128000
-        maxTokens: 8192`;
+import { Button, Modal, WisaLogo } from "../common";
+import { FirstUseTutorial, TUTORIAL_COMPLETION_KEY } from "./FirstUseTutorial";
 
 function isProviderInfo(value: unknown): value is ProviderInfo {
 	if (!value || typeof value !== "object") return false;
@@ -39,37 +34,69 @@ function isProviderInfo(value: unknown): value is ProviderInfo {
 	);
 }
 
-/** A usable setup needs both a model and a non-disabled credential/config path. */
+/** Require a model in the live inventory belonging to this same usable provider. */
 export function hasUsableModelProvider(
 	providers: readonly ProviderInfo[],
 	configs: readonly CustomProviderView[],
+	models: readonly Pick<ModelInfo, "id" | "provider">[],
 ): boolean {
-	if (providers.some(provider => provider.authenticated && !provider.disabled && provider.modelCount > 0)) {
-		return true;
-	}
-
-	const providerById = new Map(providers.map(provider => [provider.id, provider]));
-	return configs.some(config => {
-		const provider = providerById.get(config.id);
-		return config.auth === "none" && provider !== undefined && !provider.disabled && provider.modelCount > 0;
-	});
+	return providers.some(
+		provider =>
+			!provider.disabled &&
+			(provider.authenticated || configs.some(config => config.id === provider.id && config.auth === "none")) &&
+			models.some(model => model.provider === provider.id && model.id.length > 0),
+	);
 }
 
 export function FirstRunOnboardingDialog() {
 	const tabRpc = useTabRpc();
 	const t = useT();
 	const sidecarStatus = useSessionStore(state => state.status);
+	const isStreaming = useSessionStore(state => state.isStreaming);
+	const requests = useAllPendingRequests();
+	const tutorialOpen = useUiStore(state => state.tutorialOpen);
+	const closeTutorial = useUiStore(state => state.closeTutorial);
+	const [tourStarted, setTourStarted] = useState(false);
+	const [tourDismissed, setTourDismissed] = useState(false);
 	const openProviders = useUiStore(state => state.openProviders);
-	const openProviderConfig = useUiStore(state => state.openProviderConfig);
-	const checkedThisLaunch = useRef(false);
+	const setupVisible = useUiStore(state => state.providersOpen || state.providerConfigOpen || state.settingsOpen);
+	const [completed, setCompleted] = useState<boolean | null>(null);
+	const [usable, setUsable] = useState(false);
+	const [dismissed, setDismissed] = useState(false);
+	const [dialogBlocked, setDialogBlocked] = useState(false);
 	const requestVersion = useRef(0);
 	const [open, setOpen] = useState(false);
 	const [checking, setChecking] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	useEffect(() => {
+		let active = true;
+		void window.omp.prefs
+			.get(TUTORIAL_COMPLETION_KEY)
+			.then(value => {
+				if (active) setCompleted(value === true);
+			})
+			.catch(() => {});
+		return () => {
+			active = false;
+		};
+	}, []);
+
+	useEffect(() => {
+		const update = () =>
+			setDialogBlocked(
+				[...document.querySelectorAll('[role="dialog"]')].some(dialog => !dialog.querySelector("[data-first-run]")),
+			);
+		update();
+		const observer = new MutationObserver(update);
+		observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["role"] });
+		return () => observer.disconnect();
+	}, []);
+
 	const checkReadiness = useCallback(
 		async (manual: boolean) => {
 			if (sidecarStatus !== "ready") {
+				setUsable(false);
 				setError(t("common.notConnected"));
 				return;
 			}
@@ -83,6 +110,7 @@ export function FirstRunOnboardingDialog() {
 				]);
 				if (version !== requestVersion.current) return;
 				if (providerResult.status === "rejected") throw providerResult.reason;
+				if (configResult.status === "rejected") throw configResult.reason;
 				if (!providerResult.value.success) throw new Error(providerResult.value.error);
 
 				const data = providerResult.value.data;
@@ -96,183 +124,199 @@ export function FirstRunOnboardingDialog() {
 					throw new Error(t("onboarding.invalidResponse"));
 				}
 				const providers = data.providers;
-				const configs = configResult.status === "fulfilled" ? configResult.value : [];
-				// Deterministic outcomes latch the once-per-launch gate. A thrown
-				// error is transient (sidecar/transport) — leave it unlatched so the
-				// next ready transition retries instead of abandoning first-run users.
-				checkedThisLaunch.current = true;
-				if (hasUsableModelProvider(providers, configs)) {
+				const configs = configResult.value;
+				if (
+					!("models" in data) ||
+					!Array.isArray(data.models) ||
+					!data.models.every(
+						model =>
+							model &&
+							typeof model === "object" &&
+							typeof model.id === "string" &&
+							typeof model.provider === "string",
+					)
+				) {
+					throw new Error(t("onboarding.invalidResponse"));
+				}
+				const ready = hasUsableModelProvider(providers, configs, data.models);
+				setUsable(ready);
+				if (ready) {
 					setOpen(false);
 					setError(null);
 					return;
 				}
-
-				// A slow startup check must not cover a page the user already opened.
-				if (!manual && document.querySelector('[role="dialog"]')) return;
+				if (!manual && (dismissed || setupVisible || document.querySelector('[role="dialog"]'))) return;
 				setOpen(true);
-				setError(
-					configResult.status === "rejected"
-						? t("onboarding.configReadFailed")
-						: manual
-							? t("onboarding.stillMissing")
-							: null,
-				);
+				setError(manual ? t("onboarding.stillMissing") : null);
 			} catch (cause) {
-				if (version !== requestVersion.current || !manual) return;
+				if (version !== requestVersion.current) return;
+				setUsable(false);
+				if (!manual) return;
 				setOpen(true);
 				setError(t("onboarding.checkFailed", { error: describeError(cause) }));
 			} finally {
 				if (version === requestVersion.current) setChecking(false);
 			}
 		},
-		[sidecarStatus, t, tabRpc.getProviders],
+		[sidecarStatus, t, tabRpc.getProviders, dismissed, setupVisible],
 	);
 
 	useEffect(() => {
-		if (sidecarStatus !== "ready" || checkedThisLaunch.current) return;
+		if (sidecarStatus !== "ready") {
+			setUsable(false);
+			return;
+		}
+		if (completed === null) return;
 		void checkReadiness(false);
-	}, [sidecarStatus, checkReadiness]);
+		if (completed) return;
+		const refresh = () => void checkReadiness(false);
+		const unsubscribe = useModelStore.subscribe((next, previous) => {
+			if (
+				next.catalogGeneration !== previous.catalogGeneration ||
+				next.availableModels !== previous.availableModels
+			) {
+				refresh();
+			}
+		});
+		const timer = window.setInterval(refresh, 5000);
+		window.addEventListener("focus", refresh);
+		return () => {
+			unsubscribe();
+			window.clearInterval(timer);
+			window.removeEventListener("focus", refresh);
+			requestVersion.current++;
+		};
+	}, [sidecarStatus, completed, checkReadiness]);
+
+	useEffect(() => {
+		if (
+			completed === false &&
+			usable &&
+			sidecarStatus === "ready" &&
+			!setupVisible &&
+			!dialogBlocked &&
+			!open &&
+			!isStreaming &&
+			!requests.length &&
+			!tourDismissed
+		)
+			setTourStarted(true);
+	}, [
+		completed,
+		usable,
+		sidecarStatus,
+		setupVisible,
+		dialogBlocked,
+		open,
+		isStreaming,
+		requests.length,
+		tourDismissed,
+	]);
+
+	const closeSetup = () => {
+		setOpen(false);
+		setDismissed(true);
+	};
 
 	return (
-		<Modal
-			bodyClassName="p-0"
-			onClose={() => setOpen(false)}
-			open={open}
-			panelClassName="max-h-[86vh]"
-			size="lg"
-			title={t("onboarding.title")}
-		>
-			<div className="flex flex-col gap-5 p-5">
-				<div className="flex items-start gap-3">
-					<div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-(--omp-border-accent) text-(--omp-accent)">
-						<Sparkles size={17} />
-					</div>
-					<div className="min-w-0">
-						<div className="mb-1 flex flex-wrap items-center gap-2">
-							<h2 className="text-omp-xl font-semibold text-(--omp-text)">{t("onboarding.heading")}</h2>
-							<Badge variant="warning">{t("onboarding.setupRequired")}</Badge>
-						</div>
-						<p className="text-omp-md leading-relaxed text-(--omp-muted)">{t("onboarding.description")}</p>
-					</div>
-				</div>
-
-				<section className="flex flex-col rounded-xl border border-(--omp-border-accent) bg-[color-mix(in_srgb,var(--omp-accent)_6%,transparent)] p-4">
-					<div className="mb-3 flex flex-wrap items-center gap-2">
-						<Sparkles className="text-(--omp-accent)" size={16} />
-						<h3 className="text-omp-lg font-semibold text-(--omp-text)">{t("onboarding.wisa.title")}</h3>
-						<Badge variant="success">{t("onboarding.recommended")}</Badge>
-					</div>
-					<p className="mb-3 text-omp-md leading-relaxed text-(--omp-muted)">{t("onboarding.wisa.description")}</p>
-					<p className="mb-4 text-omp-sm leading-relaxed text-(--omp-dim)">{t("onboarding.wisa.location")}</p>
-					<Button
-						className="mt-auto w-full"
-						icon={<KeyRound size={14} />}
-						onClick={() => {
-							setOpen(false);
-							void window.omp.system.openExternal(WISA_CONNECT_PAGE_URL);
-						}}
-						trailingIcon={<ArrowRight size={13} />}
-					>
-						{t("onboarding.wisa.action")}
-					</Button>
-				</section>
-
-				<div className="grid gap-3 md:grid-cols-2">
-					<section className="flex flex-col rounded-xl border border-(--omp-border-muted) p-4">
-						<div className="mb-3 flex items-center gap-2">
-							<KeyRound className="text-(--omp-accent)" size={16} />
-							<h3 className="text-omp-lg font-semibold text-(--omp-text)">{t("onboarding.provider.title")}</h3>
-							<Badge variant="success">{t("onboarding.recommended")}</Badge>
-						</div>
-						<p className="mb-3 text-omp-md leading-relaxed text-(--omp-muted)">
-							{t("onboarding.provider.description")}
-						</p>
-						<p className="mb-4 text-omp-sm leading-relaxed text-(--omp-dim)">
-							{t("onboarding.provider.location")}
-						</p>
-						<Button
-							className="mt-auto w-full"
-							icon={<Bot size={14} />}
-							onClick={openProviders}
-							trailingIcon={<ArrowRight size={13} />}
+		<>
+			<Modal
+				ariaLabel={t("onboarding.title")}
+				bodyClassName="p-0"
+				chromeless
+				onClose={closeSetup}
+				open={open && !setupVisible && !dialogBlocked}
+				size="lg"
+			>
+				<div className="omp-onboarding" data-first-run>
+					<header className="relative pr-9">
+						<p className="mb-3 text-omp-xs font-medium tracking-[0.16em] text-(--omp-dim)">Wisa</p>
+						<h2 className="font-display text-omp-display font-semibold leading-tight tracking-[-0.035em]">
+							{t("onboarding.heading")}
+						</h2>
+						<p className="mt-2 text-omp-md text-(--omp-muted)">{t("onboarding.description")}</p>
+						<button
+							aria-label={t("common.close")}
+							className="absolute top-0 right-0 rounded-lg p-1.5 text-(--omp-muted) hover:bg-(--omp-bg-tertiary) focus-visible:outline-2 focus-visible:outline-(--omp-accent)"
+							onClick={closeSetup}
+							type="button"
 						>
-							{t("onboarding.provider.action")}
-						</Button>
-					</section>
+							<X size={16} />
+						</button>
+					</header>
 
-					<section className="flex flex-col rounded-xl border border-(--omp-border-muted) p-4">
-						<div className="mb-3 flex items-center gap-2">
-							<FileCode2 className="text-(--omp-accent)" size={16} />
-							<h3 className="text-omp-lg font-semibold text-(--omp-text)">{t("onboarding.custom.title")}</h3>
-						</div>
-						<p className="mb-3 text-omp-md leading-relaxed text-(--omp-muted)">
-							{t("onboarding.custom.description")}
-						</p>
-						<p className="mb-4 text-omp-sm leading-relaxed text-(--omp-dim)">{t("onboarding.custom.location")}</p>
-						<Button
-							className="mt-auto w-full"
-							icon={<FileCode2 size={14} />}
-							onClick={() => openProviderConfig()}
-							trailingIcon={<ArrowRight size={13} />}
+					<div className="omp-onboarding-choices">
+						<button
+							className="omp-onboarding-choice omp-onboarding-wisa"
+							onClick={() => {
+								closeSetup();
+								void window.omp.system.openExternal(WISA_CONNECT_PAGE_URL);
+							}}
+							type="button"
 						>
-							{t("onboarding.custom.action")}
-						</Button>
-					</section>
-				</div>
+							<span aria-hidden="true" className="omp-onboarding-art">
+								<span className="omp-onboarding-tile omp-onboarding-wisa-back" />
+								<span className="omp-onboarding-tile omp-onboarding-wisa-mid" />
+								<span className="omp-onboarding-tile omp-onboarding-wisa-mark">
+									<WisaLogo size={52} />
+								</span>
+							</span>
+							<span className="omp-onboarding-copy">
+								<span className="text-omp-2xl font-semibold tracking-[-0.02em]">
+									{t("onboarding.wisa.title")}
+								</span>
+								<span className="text-omp-md leading-relaxed text-(--omp-muted)">
+									{t("onboarding.wisa.description")}
+								</span>
+								<span className="omp-onboarding-action">
+									{t("onboarding.wisa.action")}
+									<ArrowRight aria-hidden="true" size={16} />
+								</span>
+							</span>
+						</button>
 
-				<details className="rounded-xl border border-(--omp-border-muted) p-4">
-					<summary className="cursor-pointer text-omp-lg font-semibold text-(--omp-text)">
-						{t("onboarding.parameters.title")}
-					</summary>
-					<p className="mb-3 text-omp-sm leading-relaxed text-(--omp-dim)">
-						{t("onboarding.parameters.description")}
-					</p>
-					<div className="grid gap-x-5 gap-y-2 text-omp-sm md:grid-cols-2">
-						<div>
-							<code className="font-mono text-(--omp-text)">id</code>
-							<span className="ml-2 text-(--omp-muted)">{t("onboarding.parameters.id")}</span>
-						</div>
-						<div>
-							<code className="font-mono text-(--omp-text)">api</code>
-							<span className="ml-2 text-(--omp-muted)">{t("onboarding.parameters.api")}</span>
-						</div>
-						<div>
-							<code className="font-mono text-(--omp-text)">baseUrl</code>
-							<span className="ml-2 text-(--omp-muted)">{t("onboarding.parameters.baseUrl")}</span>
-						</div>
-						<div>
-							<code className="font-mono text-(--omp-text)">apiKey / auth</code>
-							<span className="ml-2 text-(--omp-muted)">{t("onboarding.parameters.auth")}</span>
-						</div>
-						<div>
-							<code className="font-mono text-(--omp-text)">models[].id</code>
-							<span className="ml-2 text-(--omp-muted)">{t("onboarding.parameters.modelId")}</span>
-						</div>
-						<div>
-							<code className="font-mono text-(--omp-text)">contextWindow / maxTokens</code>
-							<span className="ml-2 text-(--omp-muted)">{t("onboarding.parameters.limits")}</span>
-						</div>
+						<button
+							className="omp-onboarding-choice"
+							onClick={() => {
+								closeSetup();
+								openProviders();
+							}}
+							type="button"
+						>
+							<span aria-hidden="true" className="omp-onboarding-art">
+								<span className="omp-onboarding-tile omp-onboarding-gemini">
+									<img alt="" draggable={false} height={44} src={geminiMark} width={44} />
+								</span>
+								<span className="omp-onboarding-tile omp-onboarding-anthropic">
+									<img alt="" draggable={false} height={44} src={anthropicMark} width={44} />
+								</span>
+								<span className="omp-onboarding-tile omp-onboarding-openai">
+									<img alt="" draggable={false} height={44} src={openaiMark} width={44} />
+								</span>
+							</span>
+							<span className="omp-onboarding-copy">
+								<span className="text-omp-2xl font-semibold tracking-[-0.02em]">
+									{t("onboarding.provider.title")}
+								</span>
+								<span className="text-omp-md leading-relaxed text-(--omp-muted)">
+									{t("onboarding.provider.description")}
+								</span>
+								<span className="omp-onboarding-action">
+									{t("onboarding.provider.action")}
+									<ArrowRight aria-hidden="true" size={16} />
+								</span>
+							</span>
+						</button>
 					</div>
-					<div className="mt-4">
-						<div className="mb-1.5 text-omp-sm font-medium text-(--omp-text)">{t("onboarding.example")}</div>
-						<pre className="overflow-x-auto rounded-lg border border-(--omp-border-muted) bg-(--omp-code-bg) p-3 font-mono text-omp-xs leading-[1.55] text-(--omp-muted)">
-							{CUSTOM_PROVIDER_EXAMPLE}
-						</pre>
-					</div>
-				</details>
 
-				{error && (
-					<div className="rounded-lg border border-[color-mix(in_srgb,var(--omp-warning)_40%,transparent)] px-3 py-2 text-omp-sm text-(--omp-warning)">
-						{error}
-					</div>
-				)}
+					{error && (
+						<p role="alert" className="text-omp-sm leading-relaxed text-(--omp-warning)">
+							{error}
+						</p>
+					)}
 
-				<div className="flex flex-wrap items-center justify-between gap-3 border-t border-(--omp-border-muted) pt-4">
-					<p className="min-w-0 flex-1 text-omp-xs leading-relaxed text-(--omp-dim)">
-						{t("onboarding.checkHint")}
-					</p>
-					<div className="flex shrink-0 gap-2">
-						<Button disabled={checking} onClick={() => setOpen(false)} variant="ghost">
+					<footer className="flex flex-wrap items-center justify-between gap-2">
+						<Button onClick={closeSetup} variant="ghost">
 							{t("onboarding.later")}
 						</Button>
 						<Button
@@ -281,13 +325,30 @@ export function FirstRunOnboardingDialog() {
 							loading={checking}
 							onClick={() => void checkReadiness(true)}
 							title={sidecarStatus !== "ready" ? t("common.notConnected") : undefined}
-							variant="primary"
+							variant="ghost"
 						>
 							{t("onboarding.recheck")}
 						</Button>
-					</div>
+					</footer>
 				</div>
-			</div>
-		</Modal>
+			</Modal>
+			<FirstUseTutorial
+				open={
+					(tourStarted || tutorialOpen) &&
+					!requests.length &&
+					(tutorialOpen || (usable && sidecarStatus === "ready"))
+				}
+				onDismiss={() => {
+					setTourStarted(false);
+					setTourDismissed(true);
+					closeTutorial();
+				}}
+				onComplete={() => {
+					setCompleted(true);
+					setTourStarted(false);
+					closeTutorial();
+				}}
+			/>
+		</>
 	);
 }

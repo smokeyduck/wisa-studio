@@ -76,7 +76,6 @@ const ALLOW_IDENTICAL: Record<string, true> = {
 	"providers.badge.oauth": true, // OAuth — brand name
 	"modelCompare.noRole": true, // "—" — punctuation, no letters
 	"extPanel.tabs.mcp": true, // MCP — protocol acronym
-	"modesPanel.tabs.vibe": true, // Vibe — feature name
 	"stats.col.ttft": true, // TTFT — latency acronym
 	"stats.col.tps": true, // Tok/s — unit symbol
 	"stats.overview.ttftSub": true, // TTFT {time} — acronym + placeholder

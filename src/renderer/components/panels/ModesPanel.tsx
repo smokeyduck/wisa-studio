@@ -1,21 +1,6 @@
-/**
- * Modes window: Vibe / Goal / Loop session modes, backed by the mode RPCs
- * (get/set_vibe_mode, get/set_goal, get/set_loop_mode) plus live sidecar
- * events (`goal_updated` → silent re-fetch, `loop_mode_update` → applied in
- * place).
- *
- * Each tab lazy-loads on first view, then silently revalidates whenever it is
- * re-activated. Mutations keep the confirmed value while pending. A successful response
- * supplies the effective value; failures remain visible and preserve the last
- * confirmed state.
- *
- * Parent wiring (parent-owned files): mount once beside the other windows and
- * drive it from a ui-store flag + command-registry entry; deep-link a tab via:
- *   <ModesPanel open={modesOpen} onClose={closeModes} initialTab="goal" />
- */
-
-import { RefreshCw } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+/** Session-scoped controls in an independent, non-modal right sidebar. */
+import { RefreshCw, SlidersHorizontal, X } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
 	AgentSessionEvent,
 	RpcGoalState,
@@ -23,34 +8,28 @@ import type {
 	RpcResponse,
 	RpcVibeModeState,
 } from "../../../shared/rpc-types";
+import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { describeError } from "../../lib/errors";
 import { formatDuration, formatTokens } from "../../lib/format";
 import { useT } from "../../lib/i18n";
+import { isImeKeyEvent } from "../../lib/ime";
 import { loopLimitText, normalizeLoopUpdate, parseLoopLimit } from "../../lib/loop-mode";
 import { acceptsActiveTabEvents } from "../../lib/tab-routing";
 import { type TabRpc, useTabRpc } from "../../lib/tab-rpc";
 import { type SessionStore, useSessionStore } from "../../stores/session";
 import { sessionRuntimeStore, useRuntimeTabId } from "../../stores/session-runtime-context";
 import { toast } from "../../stores/toast";
-import {
-	Badge,
-	type BadgeVariant,
-	Button,
-	Input,
-	Modal,
-	ProgressBar,
-	Spinner,
-	type TabItem,
-	Tabs,
-	TextArea,
-} from "../common";
+import { useUiStore } from "../../stores/ui";
+import { Badge, type BadgeVariant, Button, Input, ProgressBar, Spinner, type TabItem, Tabs, TextArea } from "../common";
 import { SwitchTrack } from "../common/SwitchTrack";
+import { SessionModeOptions } from "../layout/ComposerModes";
 
 export interface ModesPanelProps {
 	open: boolean;
 	onClose: () => void;
-	/** Deep-link a specific tab on open (defaults to "vibe"). */
+	/** Deep-link the requested session control. */
 	initialTab?: ModesTabId;
+	split?: boolean;
 }
 
 export type ModesTabId = "vibe" | "goal" | "loop";
@@ -354,6 +333,7 @@ function Toggle({
 			</span>
 			<button
 				aria-checked={checked}
+				aria-label={label}
 				className="mt-0.5 shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--omp-accent) disabled:cursor-not-allowed disabled:opacity-50"
 				disabled={disabled}
 				onClick={() => onChange(!checked)}
@@ -530,61 +510,71 @@ function GoalEnabledView({ rpc, state }: { rpc: ModeRpc<RpcGoalState>; state: Rp
 	);
 }
 
-function GoalStartForm({ rpc }: { rpc: ModeRpc<RpcGoalState> }) {
+function GoalStartForm({ rpc, onStarted }: { rpc: ModeRpc<RpcGoalState>; onStarted: () => void }) {
 	const t = useT();
+	const client = useTabRpc();
+	const sessionId = useSessionStore(state => state.sessionId);
+	const streaming = useSessionStore(state => state.isStreaming || state.isCompacting);
 	const [objective, setObjective] = useState("");
-	const [budget, setBudget] = useState("");
-
-	const trimmed = objective.trim();
-	const parsedBudget = Number(budget);
-	const tokenBudget =
-		budget.trim() !== "" && Number.isFinite(parsedBudget) && parsedBudget > 0 ? Math.floor(parsedBudget) : null;
-
-	const start = () => {
-		if (!trimmed) return;
-		void rpc.mutate(client =>
-			client.setGoal(tokenBudget === null ? { objective: trimmed } : { objective: trimmed, tokenBudget }),
-		);
+	const [pending, setPending] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const generation = useRef(0);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset drafts and invalidate in-flight work on session replacement.
+	useEffect(() => {
+		generation.current++;
+		setObjective("");
+		setPending(false);
+		setError(null);
+		return () => {
+			generation.current++;
+		};
+	}, [client, sessionId]);
+	const start = async () => {
+		if (pending || !rpc.ready || streaming) return;
+		const version = ++generation.current;
+		setPending(true);
+		setError(null);
+		try {
+			const response = await client.guidedGoal(objective.trim() || undefined);
+			if (version !== generation.current) return;
+			if (!response.success) throw new Error(response.error);
+			onStarted();
+		} catch (cause) {
+			if (version === generation.current) setError(describeError(cause));
+		} finally {
+			if (version === generation.current) setPending(false);
+		}
 	};
-
 	return (
-		<div className="flex flex-col gap-3">
-			<SectionLabel>{t("modesPanel.goal.startFormTitle")}</SectionLabel>
+		<div className="flex flex-col gap-4">
 			<TextArea
 				autoGrow
 				label={t("modesPanel.goal.objectiveLabel")}
 				onChange={event => setObjective(event.target.value)}
-				placeholder={t("modesPanel.goal.objectivePlaceholder")}
-				rows={3}
+				placeholder={t("modesPanel.goal.guidedPlaceholder")}
+				rows={5}
 				value={objective}
+				disabled={pending}
 			/>
-			<Input
-				hint={t("modesPanel.goal.budgetHint")}
-				label={t("modesPanel.goal.budgetLabel")}
-				min={0}
-				onChange={event => setBudget(event.target.value)}
-				placeholder={t("modesPanel.goal.budgetPlaceholder")}
-				step={1000}
-				type="number"
-				value={budget}
-			/>
-			<div>
-				<Button
-					disabled={!trimmed || rpc.busy || !rpc.ready}
-					loading={rpc.busy}
-					onClick={start}
-					size="sm"
-					title={!rpc.ready ? t("modesPanel.notConnected") : undefined}
-					variant="primary"
-				>
-					{t("modesPanel.goal.start")}
-				</Button>
-			</div>
+			<p className="text-omp-sm leading-relaxed text-(--omp-muted)">{t("modesPanel.goal.guidedHint")}</p>
+			{error && (
+				<p role="alert" className="text-omp-sm text-(--omp-error)">
+					{error}
+				</p>
+			)}
+			<Button
+				disabled={pending || !rpc.ready || streaming}
+				loading={pending}
+				onClick={() => void start()}
+				variant="primary"
+			>
+				{t(pending ? "modesPanel.goal.guidedBusy" : "modesPanel.goal.guidedStart")}
+			</Button>
 		</div>
 	);
 }
 
-function GoalTab({ rpc }: { rpc: ModeRpc<RpcGoalState> }) {
+function GoalTab({ rpc, onStarted }: { rpc: ModeRpc<RpcGoalState>; onStarted: () => void }) {
 	const t = useT();
 	const state = rpc.state;
 	return (
@@ -598,7 +588,11 @@ function GoalTab({ rpc }: { rpc: ModeRpc<RpcGoalState> }) {
 			{state && (
 				<div className="flex flex-col gap-4">
 					<p className="text-omp-sm leading-relaxed text-(--omp-muted)">{t("modesPanel.goal.desc")}</p>
-					{state.enabled ? <GoalEnabledView rpc={rpc} state={state} /> : <GoalStartForm rpc={rpc} />}
+					{state.enabled ? (
+						<GoalEnabledView rpc={rpc} state={state} />
+					) : (
+						<GoalStartForm rpc={rpc} onStarted={onStarted} />
+					)}
 				</div>
 			)}
 		</ModeFrame>
@@ -686,10 +680,33 @@ function LoopTab({ rpc }: { rpc: ModeRpc<RpcLoopModeState> }) {
 // Window
 // ---------------------------------------------------------------------------
 
-export function ModesPanel({ open, onClose, initialTab = "vibe" }: ModesPanelProps) {
+export function ModesPanel({ open, onClose, initialTab = "goal", split = false }: ModesPanelProps) {
 	const t = useT();
 	const [tab, setTab] = useState<ModesTabId>(initialTab);
 	const tabId = useRuntimeTabId();
+	const panelRef = useRef<HTMLElement>(null);
+	const { mounted, closing } = useOverlayPresence(open, panelRef, "drawer");
+	const closeRef = useRef<HTMLButtonElement>(null);
+	const [docked, setDocked] = useState(false);
+	useLayoutEffect(() => {
+		if (!open) return;
+		const host = panelRef.current?.parentElement;
+		if (!host) return;
+		const measure = () => setDocked(!split && host.clientWidth >= 960);
+		measure();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(measure);
+		observer.observe(host);
+		return () => observer.disconnect();
+	}, [open, split]);
+	useEffect(() => {
+		if (open) closeRef.current?.focus();
+	}, [open]);
+	const close = () => {
+		const host = panelRef.current?.parentElement;
+		onClose();
+		host?.querySelector<HTMLButtonElement>("[data-session-controls-trigger]")?.focus();
+	};
 
 	const confirmVibe = useCallback(
 		(state: RpcVibeModeState) => {
@@ -728,47 +745,63 @@ export function ModesPanel({ open, onClose, initialTab = "vibe" }: ModesPanelPro
 
 	const tabs: TabItem[] = useMemo(
 		() => [
-			{
-				id: "vibe",
-				label: t("modesPanel.tabs.vibe"),
-				badge: vibe.state?.enabled ? t("modesPanel.on") : undefined,
-			},
-			{
-				id: "goal",
-				label: t("modesPanel.tabs.goal"),
-				badge: goal.state?.enabled ? goalStatusLabel(t, goal.state.status) : undefined,
-			},
-			{
-				id: "loop",
-				label: t("modesPanel.tabs.loop"),
-				badge:
-					loop.state && loop.state.state !== "off" ? t(`modesPanel.loop.state.${loop.state.state}`) : undefined,
-			},
+			{ id: "goal", label: t("modesPanel.tabs.goal") },
+			{ id: "loop", label: t("modesPanel.tabs.loop") },
+			{ id: "vibe", label: t("modesPanel.tabs.vibe") },
 		],
-		[t, vibe.state, goal.state, loop.state],
+		[t],
 	);
 
 	const handleTabChange = useCallback((id: string) => {
 		setTab(id as ModesTabId);
+		useUiStore.setState({ modesTab: id as ModesTabId });
 	}, []);
 
+	if (!mounted) return null;
 	return (
-		<Modal onClose={onClose} open={open} size="md" title={t("modesPanel.title")} bodyClassName="p-0">
-			<div className="flex max-h-[min(65vh,640px)] min-h-0 flex-col">
-				<Tabs
-					activeId={tab}
-					ariaLabel={t("modesPanel.title")}
-					className="shrink-0 px-4"
-					onChange={handleTabChange}
-					tabs={tabs}
-				/>
+		<aside
+			data-tour="modes"
+			ref={panelRef}
+			aria-label={t("modesPanel.title")}
+			aria-hidden={closing || undefined}
+			inert={closing}
+			className={`omp-session-controls z-40 flex min-h-0 max-w-full shrink-0 flex-col border-l border-(--omp-border-muted) bg-(--omp-panel-bg) ${closing ? "pointer-events-none" : ""} ${docked ? "relative" : "absolute inset-y-0 right-0 shadow-xl"}`}
+			style={{ width: "min(400px, 100%)" }}
+			onKeyDown={event => {
+				if (!open || event.key !== "Escape" || event.defaultPrevented || isImeKeyEvent(event)) return;
+				event.preventDefault();
+				event.stopPropagation();
+				close();
+			}}
+		>
+			<header className="flex h-12 shrink-0 items-center gap-2 border-b border-(--omp-border-muted) px-4">
+				<SlidersHorizontal aria-hidden size={16} className="text-(--omp-accent)" />
+				<h2 className="min-w-0 flex-1 text-omp-md font-semibold text-(--omp-text)">{t("modesPanel.title")}</h2>
+				<button
+					ref={closeRef}
+					type="button"
+					onClick={close}
+					aria-label={t("modesPanel.close")}
+					title={t("modesPanel.close")}
+					className="omp-pressable flex size-8 items-center justify-center rounded-md text-(--omp-muted) hover:bg-(--omp-selected-bg)"
+				>
+					<X aria-hidden size={16} />
+				</button>
+			</header>
+			<Tabs
+				activeId={tab}
+				ariaLabel={t("modesPanel.title")}
+				className="shrink-0 px-2"
+				compact
+				onChange={handleTabChange}
+				tabs={tabs}
+			/>
+			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-tour={tab}>
 				{tab === "vibe" && <VibeTab rpc={vibe} />}
-				{tab === "goal" && <GoalTab rpc={goal} />}
+				{tab === "goal" && <GoalTab rpc={goal} onStarted={close} />}
 				{tab === "loop" && <LoopTab rpc={loop} />}
-				<div className="shrink-0 border-t border-(--omp-border-muted) px-4 py-2 text-omp-xs text-(--omp-dim)">
-					{t("modesPanel.footerNote")}
-				</div>
+				<SessionModeOptions />
 			</div>
-		</Modal>
+		</aside>
 	);
 }

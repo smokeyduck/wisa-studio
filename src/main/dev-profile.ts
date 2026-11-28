@@ -25,7 +25,7 @@ function profileRoot(): string | undefined {
 }
 
 export function applyAppProfile(): AppProfilePaths {
-	app.setName("WISA STUDIO");
+	app.setName("Wisa");
 	app.commandLine.removeSwitch("user-data-dir");
 	app.commandLine.removeSwitch("disk-cache-dir");
 	const root = profileRoot();

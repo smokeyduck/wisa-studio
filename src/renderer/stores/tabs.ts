@@ -64,6 +64,7 @@ import { SUBAGENT_SUBSCRIPTION_LEVEL } from "./subagents";
 import { ensureTabRuntime, replaceTabRuntime } from "./tab-runtime";
 import { toast } from "./toast";
 import { useUiStore } from "./ui";
+import { isWorkCwd, useWorkspaceMode } from "./workspace-mode";
 
 export interface SessionTab {
 	id: string;
@@ -268,7 +269,7 @@ function splitForPlacement(activeTabId: string, targetTabId: string, placement: 
 
 /**
  * Chip label for the tab strip (F-HYDRATE): session title when known, else
- * the cwd basename (both empty → the localized "New session"). Identical
+ * the workspace name (localized for Work; both empty → "New session"). Identical
  * UNTITLED labels disambiguate with a short index suffix ("gui #2") — the
  * common same-cwd parallel-tabs case. Titled tabs are never suffixed: an
  * explicit title is itself the disambiguator, and the suffix disappears as
@@ -280,10 +281,13 @@ export function tabChipLabel(tab: SessionTab, tabs: readonly SessionTab[]): stri
 	// cwd basename is the hash-suffixed dir (gui-<name>-<hash7>), unreadable.
 	// Untitled chats are global: their internal process cwd must never masquerade
 	// as a selected workspace in the tab strip.
-	const untitledBase = (entry: SessionTab) =>
-		entry.kind === "chat"
-			? translate("sidebar.newSession")
-			: entry.worktree?.name || basename(entry.cwd) || translate("sidebar.newSession");
+	const defaultWorkspace = useWorkspaceMode.getState().defaultWorkspace;
+	const untitledBase = (entry: SessionTab) => {
+		if (entry.kind === "chat") return translate("sidebar.newSession");
+		if (entry.worktree?.name) return entry.worktree.name;
+		if (isWorkCwd(entry.cwd, defaultWorkspace)) return translate("sidebar.mode.work");
+		return basename(entry.cwd) || translate("sidebar.newSession");
+	};
 	const base = tab.title || untitledBase(tab);
 	if (tab.title) return base;
 	let occurrence = 0;

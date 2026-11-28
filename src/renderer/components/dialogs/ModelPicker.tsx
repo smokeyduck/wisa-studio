@@ -48,6 +48,27 @@ const PANEL_MAX_HEIGHT_PX = 44 * 16;
 /** Share of the viewport height the list may claim before it scrolls. */
 const PANEL_VIEWPORT_HEIGHT = 0.7;
 
+// Editorial popularity order, not live usage/market-share data. Unlisted makers
+// and connection-only groups follow alphabetically; routing ids stay untouched.
+const MANUFACTURER_PRIORITY = new Map(
+	[
+		"openai",
+		"anthropic",
+		"google",
+		"deepseek",
+		"qwen",
+		"xai",
+		"meta",
+		"mistral",
+		"moonshot",
+		"zai",
+		"minimax",
+		"nvidia",
+		"stepfun",
+		"capcut",
+	].map((name, index) => [name, index]),
+);
+
 function modelTrigger(tabId: string | null | undefined): HTMLButtonElement | undefined {
 	return Array.from(document.querySelectorAll<HTMLButtonElement>("[data-model-picker-trigger]")).find(
 		button => button.dataset.modelPickerTrigger === (tabId ?? "") && button.getClientRects().length > 0,
@@ -269,14 +290,26 @@ export function ModelPicker() {
 			}
 		}
 		for (const { models } of map.values()) {
-			models.sort(
-				(a, b) =>
+			models.sort((a, b) => {
+				const aInt = a.int != null && Number.isFinite(a.int) ? a.int : -Infinity;
+				const bInt = b.int != null && Number.isFinite(b.int) ? b.int : -Infinity;
+				if (aInt !== bInt) return aInt > bInt ? -1 : 1;
+				return (
 					(modelLabel(a) ?? a.id).localeCompare(modelLabel(b) ?? b.id) ||
 					a.id.localeCompare(b.id) ||
-					a.provider.localeCompare(b.provider),
-			);
+					a.provider.localeCompare(b.provider)
+				);
+			});
 		}
-		return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+		return [...map.entries()].sort(([a, aGroup], [b, bGroup]) => {
+			const aRank =
+				MANUFACTURER_PRIORITY.get(aGroup.manufacturer.toLowerCase().replace(/[^a-z0-9]+/g, "")) ??
+				MANUFACTURER_PRIORITY.size;
+			const bRank =
+				MANUFACTURER_PRIORITY.get(bGroup.manufacturer.toLowerCase().replace(/[^a-z0-9]+/g, "")) ??
+				MANUFACTURER_PRIORITY.size;
+			return aRank - bRank || a.localeCompare(b);
+		});
 	}, [availableModels, query]);
 
 	const searching = query.trim().length > 0;
@@ -405,6 +438,7 @@ export function ModelPicker() {
 	if (!open) return null;
 	return createPortal(
 		<div
+			data-tour="model"
 			aria-label={t("modelPicker.searchLabel")}
 			className="omp-pop-in fixed z-[100] flex max-h-[min(70vh,44rem)] w-[min(23rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-(--omp-border) bg-(--omp-bg-elevated) shadow-(--omp-shadow-md)"
 			id="omp-model-picker"

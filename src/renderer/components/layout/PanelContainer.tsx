@@ -1,12 +1,4 @@
-import {
-	ClipboardList,
-	Diff,
-	FolderTree,
-	LayoutDashboard,
-	MessageCircleQuestion,
-	SquareTerminal,
-	X,
-} from "lucide-react";
+import { ClipboardList, Diff, FolderTree, LayoutDashboard, MessageCircleQuestion, SquareTerminal } from "lucide-react";
 import {
 	memo,
 	type PointerEvent as ReactPointerEvent,
@@ -17,14 +9,13 @@ import {
 	useState,
 } from "react";
 import { useActiveTabRouteReady } from "../../hooks/use-active-tab-route";
-import { describeError } from "../../lib/errors";
+import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { cx } from "../../lib/format";
 import { useT } from "../../lib/i18n";
 import { isImeKeyEvent } from "../../lib/ime";
 import { usePlanApprovalStore } from "../../stores/plan-approval";
 import { useSessionStore } from "../../stores/session";
 import { useActiveTabKind, useTabsStore } from "../../stores/tabs";
-import { toast } from "../../stores/toast";
 import { CHAT_PANEL_TABS, type PanelTab, useUiStore } from "../../stores/ui";
 import { PanelErrorBoundary } from "../common";
 import { Glide } from "../common/Glide";
@@ -37,6 +28,8 @@ import { PlanPanel } from "../panels/PlanPanel";
 import { TerminalPanel } from "../panels/TerminalPanel";
 
 const MIN_WIDTH = 360;
+/** Keep the conversation readable when the inspector shares its row. */
+const MIN_CONVERSATION_WIDTH = 560;
 const PANEL_WIDTH_PREF = "gui.panelWidth";
 
 const TABS: { id: PanelTab; labelKey: string; icon: typeof Diff }[] = [
@@ -45,6 +38,7 @@ const TABS: { id: PanelTab; labelKey: string; icon: typeof Diff }[] = [
 	{ id: "btw", labelKey: "panel.tabs.btw", icon: MessageCircleQuestion },
 	{ id: "diff", labelKey: "panel.tabs.diff", icon: Diff },
 	{ id: "files", labelKey: "panel.tabs.files", icon: FolderTree },
+	{ id: "terminal", labelKey: "panel.tabs.terminal", icon: SquareTerminal },
 ];
 
 interface InspectorTabProps {
@@ -64,9 +58,13 @@ function InspectorTab({ label, icon: Icon, active, onSelect, ready }: InspectorT
 			aria-pressed={active}
 			type="button"
 			onClick={onSelect}
-			className="relative flex h-8 min-w-0 flex-1 items-center justify-center"
+			className={cx(
+				"relative flex h-8 min-w-0 items-center justify-center gap-1.5 px-2",
+				active ? "flex-[2]" : "flex-1",
+			)}
 		>
-			<Icon aria-hidden size={14} />
+			<Icon aria-hidden size={14} className="shrink-0" />
+			{active && <span className="truncate text-omp-xs">{label}</span>}
 		</button>
 	);
 }
@@ -99,7 +97,7 @@ function InspectorPlan() {
 }
 
 /** Session inspector: plans and approvals live here; execution cards stay in the transcript. */
-export function PanelContainer() {
+export function PanelContainer({ open, split = false }: { open: boolean; split?: boolean }) {
 	const t = useT();
 	const panelTab = useUiStore(s => s.panelTab);
 	const setPanelTab = useUiStore(s => s.setPanelTab);
@@ -111,28 +109,22 @@ export function PanelContainer() {
 	const isChat = useActiveTabKind() === "chat";
 	const visibleTabs = isChat ? TABS.filter(tab => CHAT_PANEL_TABS.has(tab.id)) : TABS;
 	const visiblePanelTab = isChat && !CHAT_PANEL_TABS.has(panelTab) ? "files" : panelTab;
-	const terminalLabel = t("panel.tabs.terminal");
-	const openTerminal = async () => {
-		if (!activeTabId) return;
-		try {
-			const result = await window.omp.system.openTerminal(activeTabId);
-			if (!result.ok) throw new Error(result.error);
-		} catch (error) {
-			toast({ variant: "error", message: t("terminal.openFailed", { error: describeError(error) }) });
-		}
-	};
 
 	const panelRef = useRef<HTMLElement>(null);
+	const { mounted, closing } = useOverlayPresence(open, panelRef, "drawer");
 	const [paneWidth, setPaneWidth] = useState(0);
 	const [width, setWidth] = useState<number | "full" | null>(null);
 	const dragging = useRef(false);
 	const minWidth = Math.min(MIN_WIDTH, paneWidth);
 	const defaultWidth = Math.min(520, Math.max(380, paneWidth * 0.42));
 	const requestedWidth = width === "full" ? paneWidth : (width ?? Math.max(MIN_WIDTH, Math.round(defaultWidth)));
-	const panelWidth = Math.min(requestedWidth, paneWidth);
+	const docked = !split && width !== "full" && paneWidth >= MIN_WIDTH + MIN_CONVERSATION_WIDTH;
+	const maxWidth = docked ? paneWidth - MIN_CONVERSATION_WIDTH : paneWidth;
+	const panelWidth = Math.min(requestedWidth, maxWidth);
 	const atLeftEdge = panelWidth === paneWidth;
 
 	useLayoutEffect(() => {
+		if (!mounted) return;
 		const pane = panelRef.current?.parentElement;
 		if (!pane) return;
 		const measure = () => setPaneWidth(pane.clientWidth);
@@ -141,7 +133,7 @@ export function PanelContainer() {
 		const observer = new ResizeObserver(measure);
 		observer.observe(pane);
 		return () => observer.disconnect();
-	}, []);
+	}, [mounted]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -178,24 +170,35 @@ export function PanelContainer() {
 	const onDrag = useCallback(
 		(e: ReactPointerEvent<HTMLDivElement>) => {
 			const bounds = panelRef.current?.parentElement?.getBoundingClientRect();
-			if (!dragging.current || !bounds) return;
+			if (!open || !dragging.current || !bounds) return;
 			setWidth(e.clientX <= bounds.left ? "full" : Math.max(minWidth, Math.round(bounds.right - e.clientX)));
 		},
-		[minWidth],
+		[minWidth, open],
 	);
 
 	const endDrag = useCallback(() => {
 		dragging.current = false;
 	}, []);
 
+	if (!mounted) return null;
+
 	return (
 		<aside
+			data-tour="inspector"
+			data-layout={docked ? "docked" : "overlay"}
 			aria-busy={!routeReady}
+			aria-hidden={closing || undefined}
+			inert={closing}
 			ref={panelRef}
-			className="omp-inspector absolute inset-y-0 right-0 z-30 flex max-w-full flex-col border-l border-[var(--omp-border-muted)] shadow-xl"
+			className={cx(
+				"omp-inspector z-30 flex max-w-full shrink-0 flex-col border-l border-[var(--omp-border-muted)]",
+				docked ? "relative" : "absolute inset-y-0 right-0 shadow-xl",
+				closing && "pointer-events-none",
+			)}
 			style={{ width: paneWidth > 0 ? panelWidth : "100%" }}
 			onKeyDown={event => {
 				if (
+					!open ||
 					event.key !== "Escape" ||
 					event.defaultPrevented ||
 					isImeKeyEvent(event) ||
@@ -224,27 +227,6 @@ export function PanelContainer() {
 							ready={routeReady}
 						/>
 					))}
-					{!isChat && (
-						<button
-							aria-label={terminalLabel}
-							className="omp-pressable flex h-8 min-w-0 flex-1 items-center justify-center hover:bg-(--omp-selected-bg)"
-							disabled={!routeReady || !activeTabId}
-							onClick={() => void openTerminal()}
-							title={terminalLabel}
-							type="button"
-						>
-							<SquareTerminal aria-hidden size={14} />
-						</button>
-					)}
-					<button
-						aria-label={t("common.close")}
-						className="omp-pressable flex h-8 min-w-0 flex-1 items-center justify-center hover:bg-(--omp-selected-bg)"
-						onClick={closePanel}
-						title={t("common.close")}
-						type="button"
-					>
-						<X aria-hidden size={16} />
-					</button>
 				</div>
 			</header>
 			<div className="min-h-0 flex-1 overflow-hidden">
@@ -259,7 +241,7 @@ export function PanelContainer() {
 				aria-label={t("panel.resize")}
 				aria-orientation="vertical"
 				aria-valuemin={minWidth}
-				aria-valuemax={paneWidth}
+				aria-valuemax={maxWidth}
 				aria-valuenow={Math.round(panelWidth)}
 				tabIndex={0}
 				onPointerDown={startDrag}
@@ -274,7 +256,7 @@ export function PanelContainer() {
 							? minWidth
 							: event.key === "End"
 								? "full"
-								: Math.min(paneWidth, Math.max(minWidth, panelWidth + (event.key === "ArrowLeft" ? 24 : -24))),
+								: Math.min(maxWidth, Math.max(minWidth, panelWidth + (event.key === "ArrowLeft" ? 24 : -24))),
 					);
 				}}
 				className={cx(

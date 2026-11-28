@@ -43,7 +43,6 @@ describe("settings store display sync", () => {
 				proseOnlyThinking: false,
 				omitThinking: true,
 				"display.showTokenUsage": true,
-				"display.collapseCompacted": false,
 				"tui.titleState": false,
 				"goal.statusInFooter": false,
 			}),
@@ -51,7 +50,6 @@ describe("settings store display sync", () => {
 		await useSettingsStore.getState().syncDisplaySettings();
 		const state = useSettingsStore.getState();
 		expect(state.showTokenUsage).toBe(true);
-		expect(state.collapseCompacted).toBe(false);
 		expect(state.titleState).toBe(false);
 		expect(state.goalStatusInFooter).toBe(false);
 		expect(state.hideThinkingBlock).toBe(true);
@@ -82,10 +80,10 @@ describe("settings store display sync", () => {
 	});
 
 	it("keeps current values when the read fails", async () => {
-		useSettingsStore.setState({ collapseCompacted: false });
+		useSettingsStore.setState({ showTokenUsage: true });
 		getSettings.mockRejectedValueOnce(new Error("sidecar down"));
 		await useSettingsStore.getState().syncDisplaySettings();
-		expect(useSettingsStore.getState().collapseCompacted).toBe(false);
+		expect(useSettingsStore.getState().showTokenUsage).toBe(true);
 	});
 
 	it("keeps the latest sync when an older sidecar reply arrives last", async () => {

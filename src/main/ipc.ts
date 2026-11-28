@@ -4,8 +4,10 @@
 import { type Dirent, existsSync, promises as fsp } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, net, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, net, protocol, shell } from "electron";
 import Store from "electron-store";
+import type { NotchAgent } from "../shared/agent-notch";
+import { AGENT_NOTCH_CHANNELS, AGENT_NOTCH_PREF } from "../shared/agent-notch";
 import { CONFIG_EDITOR_PREF, readConfigEditor } from "../shared/config-editor";
 import { KEYMAP_DISABLED_PREF, KEYMAP_OVERRIDES_PREF } from "../shared/hotkeys";
 import type {
@@ -71,11 +73,12 @@ import {
 } from "../shared/ipc-types";
 import { isLanguage } from "../shared/languages";
 import { parseLaunchProfile } from "../shared/launch-profile";
+import { NOTCH_APPS_CHANNELS } from "../shared/notch-apps";
 import type { DroppedProxy } from "../shared/proxy";
 import type { RpcCommand, RpcSessionState } from "../shared/rpc-types";
 import { isSessionOutputPath } from "../shared/session-output";
 import { vietnameseVoicePreference } from "../shared/speech-language";
-import { quitRisk, requestQuit, requestRestart } from "./app-quit";
+import { quitRisk, requestRestart } from "./app-quit";
 import { BenchmarkRunner } from "./benchmark-runner";
 import type { BrowserUseHost } from "./browser-use-host";
 import type { CollabPhoneHost } from "./collab-phone";
@@ -88,10 +91,13 @@ import { hasUnsavedFileDrafts, setWindowFileDrafts } from "./file-draft-guard";
 import { readImageFile } from "./fs-image";
 import { getMainLanguage, mainT } from "./i18n";
 import type { LogWatcher } from "./log-watcher";
-import { listMcpCatalog } from "./mcp-catalog";
 import type { MemoryWatcher } from "./memory-watcher";
 import { createMenu } from "./menu";
 import { deleteModelsProvider, listModelsProviders, modelsPath, upsertModelsProvider } from "./models-config";
+import type { NotchApps } from "./notch-apps";
+import type { NotchCustomizeHost } from "./notch-customize-host";
+import { startAgentNotch } from "./notch-runtime";
+import { decodeNotchSetup, encodeNotchSetup } from "./notch-setup";
 import { MissingSpeechVoice, speakWithOsVoice } from "./os-speech";
 import { openSystemTerminal } from "./os-terminal";
 import type { PhoneHub } from "./phone-hub";
@@ -116,18 +122,26 @@ import { installTemplate, readTemplatesCatalog } from "./templates";
 import { setTrayState } from "./tray";
 import { aggregateTrayStatus } from "./tray-labels";
 import { appVersion } from "./updater";
+import { WALLPAPER_EXTENSIONS, WallpaperStore } from "./wallpaper";
 import type { SpawnWindow, WindowManager } from "./window";
 import { browseWorkspace, searchWorkspace } from "./workspace-explorer";
 import { openWorkspaceEdit, saveWorkspaceEdit } from "./workspace-file-editor";
 import { resolveExistingPath, resolveWithin, toAbsolutePath } from "./workspace-paths";
 
+// ipc.ts is imported before app.whenReady(): Chromium needs the scheme privileges then.
+protocol.registerSchemesAsPrivileged([
+	{ scheme: "wisa-wallpaper", privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+]);
+
 export interface IpcDeps {
 	sidecarPool: SidecarPool;
 	browserUse: BrowserUseHost;
+	notchApps: NotchApps;
+	notchCustomize: NotchCustomizeHost;
 	sessionIndex: SessionIndex;
 	statsClient: StatsClient;
-	/** Demand-driven revive for the bundled stats server (no server → "exhausted"). */
-	statsRestart: () => Revive;
+	/** Demand-driven startup/revive, including its shared readiness wait. */
+	statsRestart: () => Revive | Promise<Revive>;
 	logWatcher: LogWatcher;
 	memoryWatcher: MemoryWatcher;
 	customThemesWatcher: CustomThemesWatcher;
@@ -212,6 +226,7 @@ const RESETTABLE_GUI_PREFS: ReadonlySet<string> = new Set([
 	CONFIG_EDITOR_PREF,
 	KEYMAP_DISABLED_PREF,
 	KEYMAP_OVERRIDES_PREF,
+	AGENT_NOTCH_PREF,
 	"approvalMode",
 	"codeLineNumbers",
 	"collapseLargePastes",
@@ -474,6 +489,115 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	const { sidecarPool, sessionIndex, statsClient, logWatcher, memoryWatcher, customThemesWatcher, windowManager } =
 		deps;
 	const prefsStore = new Store<PrefsSchema>({ name: "prefs" });
+	const notch = startAgentNotch({
+		pool: sidecarPool,
+		windowManager,
+		readPreference: () => prefsStore.get(AGENT_NOTCH_PREF),
+		writePreference: settings => prefsStore.set(AGENT_NOTCH_PREF, settings),
+	});
+	const isNotchSettingsSender = (event: Electron.IpcMainInvokeEvent): boolean =>
+		event.senderFrame === event.sender.mainFrame &&
+		windowManager.getAllWindows().some(window => !window.isDestroyed() && window.webContents === event.sender);
+	deps.notchApps.setActiveListener(active => notch.setCustomActive(active));
+	ipcMain.handle(NOTCH_APPS_CHANNELS.command, async (event, args: Record<string, unknown>) => {
+		if (!isNotchSettingsSender(event)) throw new Error("Untrusted mini-app settings sender");
+		const owner = BrowserWindow.fromWebContents(event.sender);
+		if (!owner) throw new Error("Mini-app settings window closed");
+		if (!["list", "preview", "apply", "rollback", "stop", "delete"].includes(String(args?.action)))
+			throw new Error("Unsupported mini-app settings action");
+		await deps.notchApps.execute(args, owner);
+		return deps.notchApps.snapshot();
+	});
+	ipcMain.handle(NOTCH_APPS_CHANNELS.customize, (event, tabId: string, enabled: boolean) => {
+		if (!isNotchSettingsSender(event)) throw new Error("Untrusted mini-app customization sender");
+		const owner = BrowserWindow.fromWebContents(event.sender);
+		if (
+			!owner ||
+			typeof tabId !== "string" ||
+			typeof enabled !== "boolean" ||
+			!sidecarPool.sidecarForTab(owner, tabId)
+		)
+			throw new Error("Mini-app customization tab is not owned by this window");
+		return deps.notchCustomize.setEnabled(tabId, enabled);
+	});
+	ipcMain.handle(AGENT_NOTCH_CHANNELS.get, event => {
+		if (!isNotchSettingsSender(event)) throw new Error("Untrusted notch settings sender");
+		return notch.getState();
+	});
+	ipcMain.handle(AGENT_NOTCH_CHANNELS.configure, async (event, value: unknown) => {
+		if (!isNotchSettingsSender(event)) throw new Error("Untrusted notch settings sender");
+		const next = notch.configure(value);
+		if (!next.settings.enabled) await deps.notchApps.execute({ action: "stop" });
+		return next;
+	});
+	const notchDialog = (event: Electron.IpcMainInvokeEvent): BrowserWindow => {
+		if (!isNotchSettingsSender(event)) throw new Error("Untrusted notch settings sender");
+		const owner = BrowserWindow.fromWebContents(event.sender);
+		if (!owner) throw new Error("Notch settings window closed");
+		return owner;
+	};
+	ipcMain.handle(AGENT_NOTCH_CHANNELS.exportSetup, async event => {
+		const owner = notchDialog(event);
+		const content = encodeNotchSetup(notch.getState().settings);
+		const result = await dialog.showSaveDialog(owner, {
+			title: mainT("notch.export"),
+			defaultPath: "wisa-notch.json",
+			filters: [{ name: mainT("notch.setup"), extensions: ["json"] }],
+		});
+		if (result.canceled || !result.filePath) return false;
+		await fsp.writeFile(result.filePath, content, { encoding: "utf8", mode: 0o600 });
+		return true;
+	});
+	ipcMain.handle(AGENT_NOTCH_CHANNELS.importSetup, async event => {
+		const owner = notchDialog(event);
+		const result = await dialog.showOpenDialog(owner, {
+			title: mainT("notch.import"),
+			properties: ["openFile"],
+			filters: [{ name: mainT("notch.setup"), extensions: ["json"] }],
+		});
+		if (result.canceled || !result.filePaths[0]) return null;
+		const file = result.filePaths[0];
+		if ((await fsp.stat(file)).size > 65_536) throw new Error("Notch setup exceeds 64 KiB");
+		return notch.configure(decodeNotchSetup(await fsp.readFile(file, "utf8")));
+	});
+	ipcMain.handle(AGENT_NOTCH_CHANNELS.integrations, event => {
+		notchDialog(event);
+		return notch.integrations.list();
+	});
+	ipcMain.handle(AGENT_NOTCH_CHANNELS.connectAgent, (event, agent: NotchAgent, connected: boolean) => {
+		notchDialog(event);
+		if (typeof connected !== "boolean") throw new Error("Invalid Notch connection request");
+		return notch.integrations.connect(agent, connected);
+	});
+	const wallpaper = new WallpaperStore(app.getPath("userData"), value => {
+		for (const window of BrowserWindow.getAllWindows()) {
+			if (!window.isDestroyed()) window.webContents.send(IPC_EVENTS.WALLPAPER_CHANGED, value);
+		}
+	});
+	protocol.handle("wisa-wallpaper", request => wallpaper.respond(request));
+	ipcMain.handle(IPC_COMMANDS.WALLPAPER_GET, () => wallpaper.get());
+	ipcMain.handle(IPC_COMMANDS.WALLPAPER_CHOOSE, async event => {
+		const parent = BrowserWindow.fromWebContents(event.sender);
+		const options: Electron.OpenDialogOptions = {
+			title: mainT("wallpaper.pick"),
+			properties: ["openFile"],
+			filters: [{ name: mainT("wallpaper.media"), extensions: WALLPAPER_EXTENSIONS }],
+		};
+		try {
+			const result = await (parent ? dialog.showOpenDialog(parent, options) : dialog.showOpenDialog(options));
+			return result.canceled || !result.filePaths[0] ? wallpaper.get() : await wallpaper.select(result.filePaths[0]);
+		} catch {
+			// Filesystem errors include the source path: never disclose it over IPC.
+			throw new Error(mainT("wallpaper.importFailed"));
+		}
+	});
+	ipcMain.handle(IPC_COMMANDS.WALLPAPER_CLEAR, async () => {
+		try {
+			await wallpaper.clear();
+		} catch {
+			throw new Error(mainT("wallpaper.clearFailed"));
+		}
+	});
 
 	// Drop a closed window's tray/progress snapshot so the aggregate reflects
 	// only live windows (and re-render the tray with the new aggregate).
@@ -493,6 +617,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	// boolean tells the pool whether the tool was answered inline; only
 	// renderer-forwarded calls get request-id → origin tracking (F-UI-ORIGIN).
 	sidecarPool.hostToolExecutor = (sidecar, request, win) => {
+		if (deps.notchCustomize.handleToolCall(sidecar, request, win)) return true;
 		if (deps.browserUse.handleToolCall(sidecar, request)) return true;
 		if (deps.schedulerHost?.handleToolCall(sidecar, request, sidecarPool.tabForSidecar(sidecar))) return true;
 		const result = executeGuiHostTool(request.toolName, request.arguments);
@@ -708,7 +833,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 						sidecarPool.adoptSessionCwd(
 							issuerTabId,
 							state.cwd,
-							peerEpoch !== undefined && state.sessionId ? { sessionId: state.sessionId, epoch: peerEpoch } : undefined,
+							peerEpoch !== undefined && state.sessionId
+								? { sessionId: state.sessionId, epoch: peerEpoch }
+								: undefined,
 						) &&
 						issuerTabId === sidecarPool.activeTabForWindow(win)
 					) {
@@ -972,14 +1099,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 			// Nothing is listening: ask for it and let the caller keep waiting — but
 			// only while a revive is actually possible, so a permanently dead stats
 			// server ends in an error instead of an endless "loading".
-			const revive = deps.statsRestart();
-			return {
-				error:
-					revive === "exhausted"
-						? "The bundled stats server is not running."
-						: "The bundled stats server is not ready. Please retry shortly.",
-				unavailable: revive !== "exhausted",
-			};
+			const revive = await deps.statsRestart();
+			if (!statsClient.port) {
+				return {
+					error:
+						revive === "exhausted"
+							? "The bundled stats server is not running."
+							: "The bundled stats server is not ready. Please retry shortly.",
+					unavailable: revive !== "exhausted",
+				};
+			}
 		}
 		try {
 			return await statsClient.fetch(payload.path, payload.params);
@@ -992,10 +1121,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	});
 
 	// The dashboard's base URL (/trace deep-links into its hash routes).
-	ipcMain.handle(IPC_COMMANDS.STATS_URL, (): IpcStatsUrlResult => {
+	ipcMain.handle(IPC_COMMANDS.STATS_URL, async (): Promise<IpcStatsUrlResult> => {
 		if (!statsClient.port) {
-			const revive = deps.statsRestart();
-			return { url: null, unavailable: revive !== "exhausted" };
+			const revive = await deps.statsRestart();
+			if (!statsClient.port) return { url: null, unavailable: revive !== "exhausted" };
 		}
 		return { url: `http://127.0.0.1:${statsClient.port}` };
 	});
@@ -1030,7 +1159,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	// `window.close()`: closing the focused window only hides the rest of the
 	// session behind it.
 	ipcMain.on(IPC_COMMANDS.APP_QUIT, () => {
-		requestQuit();
+		app.quit();
 	});
 
 	// System
@@ -1150,30 +1279,33 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	ipcMain.handle(IPC_COMMANDS.SYSTEM_STOP_SPEECH, event => {
 		speaking.get(event.sender)?.abort();
 	});
-	ipcMain.handle(IPC_COMMANDS.SYSTEM_SPEAK, async (event, payload: { text?: string; language?: string; voice?: unknown }) => {
-		const sender = event.sender;
-		speaking.get(sender)?.abort();
-		const controller = new AbortController();
-		speaking.set(sender, controller);
-		const onDestroyed = () => controller.abort();
-		sender.once("destroyed", onDestroyed);
-		try {
-			await speakWithOsVoice(
-				String(payload.text ?? ""),
-				String(payload.language ?? "en"),
-				vietnameseVoicePreference(payload.voice),
-				controller.signal,
-			);
-			return { ok: true };
-		} catch (cause) {
-			if (controller.signal.aborted) return { ok: true };
-			if (cause instanceof MissingSpeechVoice) return { ok: false, missingVoice: true };
-			return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
-		} finally {
-			if (!sender.isDestroyed()) sender.removeListener("destroyed", onDestroyed);
-			if (speaking.get(sender) === controller) speaking.delete(sender);
-		}
-	});
+	ipcMain.handle(
+		IPC_COMMANDS.SYSTEM_SPEAK,
+		async (event, payload: { text?: string; language?: string; voice?: unknown }) => {
+			const sender = event.sender;
+			speaking.get(sender)?.abort();
+			const controller = new AbortController();
+			speaking.set(sender, controller);
+			const onDestroyed = () => controller.abort();
+			sender.once("destroyed", onDestroyed);
+			try {
+				await speakWithOsVoice(
+					String(payload.text ?? ""),
+					String(payload.language ?? "en"),
+					vietnameseVoicePreference(payload.voice),
+					controller.signal,
+				);
+				return { ok: true };
+			} catch (cause) {
+				if (controller.signal.aborted) return { ok: true };
+				if (cause instanceof MissingSpeechVoice) return { ok: false, missingVoice: true };
+				return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
+			} finally {
+				if (!sender.isDestroyed()) sender.removeListener("destroyed", onDestroyed);
+				if (speaking.get(sender) === controller) speaking.delete(sender);
+			}
+		},
+	);
 
 	ipcMain.handle(IPC_COMMANDS.SYSTEM_NOTIFY, (event, payload: IpcNotifyPayload) => {
 		if (typeof payload.title === "string") {
@@ -1252,6 +1384,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 		}
 		if (payload.key === "language" && isLanguage(payload.value)) {
 			createMenu(windowManager, deps.spawnWindow);
+			notch.refreshLanguage();
 			for (const window of BrowserWindow.getAllWindows()) {
 				window.webContents.send(IPC_EVENTS.LANGUAGE_CHANGED, payload.value);
 			}
@@ -1281,6 +1414,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 			if (!response.success) throw new Error(response.error);
 			const preserved = Object.entries(prefsStore.store).filter(([key]) => !RESETTABLE_GUI_PREFS.has(key));
 			prefsStore.store = Object.fromEntries(preserved);
+			notch.configure(undefined);
 			sidecarPool.refreshSpare();
 			// Another window may have started work while Core flushed to disk.
 			if (resetBlocked()) return "saved";
@@ -1564,9 +1698,6 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 	ipcMain.handle(IPC_COMMANDS.PLUGIN_LOGO, (_event, owner: unknown) => pluginCatalog.logo(owner));
 	ipcMain.handle(IPC_COMMANDS.PLUGIN_INSPECT, (_event, payload: IpcPluginInspectPayload) =>
 		pluginCatalog.inspect(payload),
-	);
-	ipcMain.handle(IPC_COMMANDS.MCP_CATALOG_LIST, (_event, payload: unknown) =>
-		listMcpCatalog((url, init) => net.fetch(url, init), payload),
 	);
 	ipcMain.handle(
 		IPC_COMMANDS.PROJECT_AUDIT_RUN,

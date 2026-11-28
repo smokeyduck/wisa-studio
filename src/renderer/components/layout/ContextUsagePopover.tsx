@@ -43,7 +43,7 @@ export function ContextUsagePopover({ autoCompactAt = null }: { autoCompactAt?: 
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const popoverRef = useRef<HTMLDivElement>(null);
 	const closeTimer = useRef<number | undefined>(undefined);
-	const { mounted, closing } = useOverlayPresence(open);
+	const { mounted, closing } = useOverlayPresence(open, popoverRef, "popover");
 
 	const updateAnchor = useCallback(() => {
 		const rect = buttonRef.current?.getBoundingClientRect();
@@ -131,6 +131,7 @@ export function ContextUsagePopover({ autoCompactAt = null }: { autoCompactAt?: 
 	return (
 		<div className="relative shrink-0" onMouseEnter={reveal} onMouseLeave={scheduleClose}>
 			<button
+				data-tour="context"
 				aria-controls="omp-context-usage-popover"
 				aria-expanded={open}
 				aria-label={triggerLabel}
@@ -183,7 +184,7 @@ export function ContextUsagePopover({ autoCompactAt = null }: { autoCompactAt?: 
 						aria-label={t("contextUsage.title")}
 						className={cx(
 							"fixed z-[80] rounded-[18px] border border-[var(--omp-border)] bg-[var(--omp-bg-elevated)] p-4 shadow-[var(--omp-shadow-lg)]",
-							closing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
+							closing && "pointer-events-none",
 						)}
 						id="omp-context-usage-popover"
 						inert={closing}

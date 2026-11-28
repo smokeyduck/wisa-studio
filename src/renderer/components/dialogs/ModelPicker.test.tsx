@@ -123,11 +123,11 @@ describe("ModelPicker vendor groups", () => {
 		expect(labels).not.toContain("wisa");
 	});
 
-	it("sorts groups by display name, so xAI does not trail the lower-case ids", async () => {
+	it("puts prioritized manufacturers before connection-only groups", async () => {
 		useModelStore.setState({ availableModels: CATALOG });
 		await openPicker();
 
-		expect(groupLabels()).toEqual(["MiniMax", "Wisa", "xAI"]);
+		expect(groupLabels()).toEqual(["xAI", "MiniMax", "Wisa"]);
 	});
 
 	it("renders an inline brand mark per header", async () => {

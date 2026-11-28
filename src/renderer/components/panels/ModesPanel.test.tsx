@@ -1,10 +1,4 @@
-/**
- * Tests for the modes window: closed-state rendering plus the pure
- * status-variant, loop-limit, and loop-event normalization contracts that
- * drive the Vibe/Goal/Loop tabs. (Open-state SSR assertions are not viable:
- * react-dom/server renders createPortal children as empty in this repo's
- * test environment.)
- */
+/** Closed sidebar rendering and pure mode-status contracts. */
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";

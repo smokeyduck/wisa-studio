@@ -1331,13 +1331,33 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		category: "modes",
 		affordance: { kind: "window", open: () => ctx.openModes("vibe") },
 	});
-	add({
-		name: "goal",
-		label: t("cmd.goal"),
-		description: t("cmd.goal.desc"),
-		category: "modes",
-		affordance: { kind: "window", open: () => ctx.openModes("goal") },
-	});
+	// Extension commands retain ownership of their name (including aliases).
+	const extensionOwnsGoal = ctx.availableCommands.some(
+		command =>
+			command.source &&
+			command.source !== "builtin" &&
+			(command.name.toLowerCase() === "goal" || command.aliases?.some(alias => alias.toLowerCase() === "goal")),
+	);
+	if (!extensionOwnsGoal) {
+		add({
+			name: "goal",
+			label: t("cmd.goal"),
+			description: t("cmd.goal.desc"),
+			category: "modes",
+			affordance: {
+				kind: "action",
+				run: async initial => {
+					const objective = initial?.replace(/^set(?:\s+|$)/, "").trim();
+					if (!objective) {
+						ctx.openModes("goal");
+						return;
+					}
+					const response = await boundRpc.guidedGoal(objective);
+					if (!response.success) throw new Error(response.error);
+				},
+			},
+		});
+	}
 	add({
 		name: "loop",
 		label: t("cmd.loop"),
@@ -1503,6 +1523,12 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		affordance: { kind: "window", open: () => useUiStore.getState().openChangelog() },
 	});
 	add({
+		name: "tutorial",
+		label: t("tutorial.title"),
+		category: "view",
+		affordance: { kind: "window", open: () => useUiStore.getState().openTutorial() },
+	});
+	add({
 		name: "copy",
 		label: t("cmd.copy"),
 		description: t("cmd.copy.desc"),
@@ -1593,6 +1619,28 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		description: t("cmd.phone.desc"),
 		category: "view",
 		affordance: { kind: "window", open: () => useUiStore.getState().openPhone() },
+	});
+	add({
+		name: "customize-notch",
+		label: t("cmd.customizeNotch"),
+		description: t("cmd.customizeNotch.desc"),
+		category: "tools",
+		affordance:
+			ctx.tabKind === "chat"
+				? { kind: "unavailable", reason: t("unavailable.chatSession") }
+				: {
+						kind: "action",
+						run: async args => {
+							const mode = args?.trim().toLowerCase() || "on";
+							if (mode !== "on" && mode !== "off") throw new Error(t("notch.customizeUsage"));
+							if (!runtime || sessionRuntime(runtime.tabId) !== runtime) throw new Error(t("app.actionFailed"));
+							const result = await window.omp.notchApps.customize(runtime.tabId, mode === "on");
+							toast({
+								variant: "info",
+								message: t(result.enabled ? "notch.customizeEnabled" : "notch.customizeDisabled"),
+							});
+						},
+					},
 	});
 
 	// ═══════════════════════════════════════════════════════════════════
@@ -1724,6 +1772,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 	// a native item · as its name OR one of its aliases · is dropped: `/models`
 	// and `/modes` must not appear as dead rows next to the working picker.
 	for (const cmd of ctx.availableCommands) {
+		if (extensionOwnsGoal && cmd.source === "builtin" && cmd.name === "goal") continue;
 		if (cmd.name === "fast" || isLegacyBrowserCommand(cmd) || claimed.has(cmd.name)) continue;
 		// Keep terminal-only commands visible as disabled rows. The palette is
 		// the GUI's command index; hiding a command makes its client limitation opaque.
@@ -1992,16 +2041,26 @@ function isLegacyBrowserCommand(command: AvailableCommand): boolean {
 }
 
 /**
- * Slash commands the GUI runs itself. The sidecar never advertises them, so the
- * composer's `/` menu and submit planner list them next to the sidecar's own.
+ * Slash commands the GUI runs itself. Keep native entry points discoverable
+ * even before the sidecar's command list arrives, without replacing extensions.
  */
 export function withGuiNativeCommands(commands: AvailableCommand[]): AvailableCommand[] {
 	const supported = commands.filter(command => !isLegacyBrowserCommand(command));
-	if (supported.some(command => command.name === "phone")) return supported;
-	return [
-		{ name: "phone", description: translate("cmd.phone.desc"), source: "builtin", textModeExecutable: false },
-		...supported,
-	];
+	for (const name of ["goal", "phone", "tutorial", "customize-notch"]) {
+		if (
+			supported.some(
+				command => command.name === name || command.aliases?.some(alias => alias.toLowerCase() === name),
+			)
+		)
+			continue;
+		supported.push({
+			name,
+			description: name === "tutorial" ? translate("tutorial.title") : translate(`cmd.${keyOf(name)}.desc`),
+			source: "builtin",
+			textModeExecutable: false,
+		});
+	}
+	return supported;
 }
 
 /**

@@ -134,7 +134,7 @@ test("the bundled Core opens Chromium for the user and delegates navigation to B
 		app.process().stdout?.on("data", chunk => output.push(String(chunk)));
 		app.process().stderr?.on("data", chunk => output.push(String(chunk)));
 		const page = await app.firstWindow({ timeout: 30_000 }).catch(error => {
-			throw new Error(`WISA Studio did not open a window:\n${output.join("")}`, { cause: error });
+			throw new Error(`Wisa did not open a window:\n${output.join("")}`, { cause: error });
 		});
 		await page.waitForFunction(() => window.omp?.rpc != null);
 		await expect.poll(async () => {

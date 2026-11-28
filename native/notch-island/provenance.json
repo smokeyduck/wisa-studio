@@ -1,0 +1,38 @@
+{
+  "name": "Notch Island",
+  "repository": "https://github.com/MANISH007700/notch-island",
+  "commit": "6217ed2360ad4c0887abc725f9cd9e6e2ea02427",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 Manish Sharma",
+  "sourceFiles": [
+    "Sources/App/main.swift",
+    "Sources/App/Store.swift",
+    "Sources/App/Views.swift",
+    "Sources/App/Logos.swift",
+    "Sources/Shared/Socket.swift",
+    "Sources/Shared/Process.swift",
+    "Sources/Shared/Agents.swift",
+    "Info.plist",
+    "LICENSE"
+  ],
+  "adaptations": [
+    "Reuse upstream SwiftUI island design and logos without a renderer implementation.",
+    "Add Wisa-only mode with profile-specific UserDefaults suite, private HOME/socket and an exact CGDirectDisplayID; never follow the pointer or choose another display.",
+    "Bind Wisa-mode helper lifetime to its parent process with a kernel exit notification, including startup races, crashes and force-quit; leave standalone mode unchanged.",
+    "Disable external-agent discovery, transcript reading, process discovery and quota access in Wisa mode; truthfully label Wisa sessions.",
+    "Emit newline JSON ready/open events on stdout; explicit jump/Open Wisa actions target the owning Wisa tab instead of an external terminal.",
+    "Echo captured _request_id in socket replies, bind UI actions to that request and clear pending UI on socket cancellation; preserve upstream single-use socket answers.",
+    "Make global approval shortcuts opt-in and disable synthetic SIGUSR2 approval in Wisa mode; retain SIGUSR1 snapshot/toggle seam.",
+    "Honor WISA_NOTCH_SHOW_IDLE by ordering the existing nonactivating all-Spaces/fullscreen-auxiliary panel out when empty.",
+    "Use org.wisa.studio.notch bundle identifier; build a universal arm64+x86_64 macOS 14+ helper with source/compiler cache and embedded MIT license. No installer, login item or external hooks are included."
+  ],
+  "protocol": {
+    "transport": "One newline-terminated JSON event per Unix stream socket; PermissionRequest retains its socket until a single answer or cancellation.",
+    "identity": "session_id is Wisa tabId; _agent is wisa; PermissionRequest carries _request_id which is echoed in the reply.",
+    "snapshot": "WisaSnapshot carries running, nullable tool_name and last_assistant_message without synthesizing a user prompt; a pending permission request retains its waiting status and controls.",
+    "stdout": ["{type:ready}", "{type:open,sessionId:tabId}"],
+    "replyBehaviors": ["allow", "always", "deny", "ask", "answer"],
+    "answers": "Object keyed by question text with selected option label as string. Upstream multi-select joins labels with comma-space; Wisa bridge may route ambiguous forms to Open Wisa.",
+    "permissionScope": "always is only offered when permission_suggestions is nonempty; only the main-process bridge may apply an exact captured suggestion."
+  }
+}

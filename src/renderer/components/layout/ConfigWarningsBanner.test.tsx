@@ -9,7 +9,9 @@ import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { I18nProvider, translate } from "../../lib/i18n";
+import { useModelStore } from "../../stores/model";
 import { useSessionStore } from "../../stores/session";
+import { useUiStore } from "../../stores/ui";
 import { ConfigWarningsBanner } from "./ConfigWarningsBanner";
 
 const { document, window, HTMLElement, Element, Node } = parseHTML("<html><body></body></html>");
@@ -52,9 +54,64 @@ afterEach(async () => {
 	});
 	container.remove();
 	useSessionStore.getState().reset();
+	useModelStore.getState().reset();
+	useUiStore.getState().closeModelPicker();
 });
 
 describe("ConfigWarningsBanner", () => {
+	const missingModel =
+		"No default model selected. Use /login, set an API key environment variable, or select a local model with /model or --model.";
+
+	it("replaces missing-model CLI advice with an actionable setup step after connecting a provider", async () => {
+		useSessionStore.setState({ status: "ready", configWarnings: [missingModel] });
+		useModelStore.setState({
+			providers: [
+				{ id: "wisa", name: "WISA", authenticated: true, disabled: false, modelCount: 2, loginAvailable: false },
+			],
+		});
+		await mount(<ConfigWarningsBanner />);
+		expect(container.textContent).toContain(translate("configWarnings.modelSetupTitle"));
+		expect(container.textContent).not.toContain("Configuration warning");
+		expect(container.textContent).not.toContain("/login");
+		await clickButton(translate("configWarnings.chooseModel"));
+		expect(useUiStore.getState().modelPickerOpen).toBe(true);
+		await act(async () => {
+			useModelStore.setState({ model: { provider: "wisa", id: "selected-model", int: 40 } });
+		});
+		expect(container.textContent).toBe("");
+	});
+
+	it("ignores a startup missing-model warning on reconnect but preserves real configuration problems", async () => {
+		useModelStore.setState({ model: { provider: "wisa", id: "selected-model", int: 40 } });
+		useSessionStore.setState({
+			status: "ready",
+			configWarnings: [missingModel, "models.yml: unknown provider 'foo'"],
+		});
+		await mount(<ConfigWarningsBanner />);
+		expect(container.textContent).toContain("Configuration warning");
+		expect(container.textContent).toContain("models.yml: unknown provider 'foo'");
+		expect(container.textContent).not.toContain("No default model");
+		expect(container.textContent).not.toContain(translate("configWarnings.modelSetupTitle"));
+	});
+
+	it("waits for sidecar readiness and shows setup again if the live model is cleared", async () => {
+		useSessionStore.setState({ status: "starting", configWarnings: [missingModel] });
+		await mount(<ConfigWarningsBanner />);
+		expect(container.textContent).toBe("");
+		await act(async () => {
+			useSessionStore.setState({ status: "ready" });
+		});
+		expect(container.textContent).toContain(translate("configWarnings.chooseModel"));
+		await act(async () => {
+			useModelStore.setState({ model: { provider: "wisa", id: "selected-model", int: 40 } });
+		});
+		expect(container.textContent).toBe("");
+		await act(async () => {
+			useModelStore.setState({ model: null });
+		});
+		expect(container.textContent).toContain(translate("configWarnings.chooseModel"));
+	});
+
 	it("renders nothing without warnings", async () => {
 		await mount(<ConfigWarningsBanner />);
 		expect(container.textContent).toBe("");

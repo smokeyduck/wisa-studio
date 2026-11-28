@@ -47,9 +47,9 @@ export function ChatContextBar() {
 	const autoCompactAt = useAutoCompactAt(contextWindow);
 	const [open, setOpen] = useState(false);
 	const [pos, setPos] = useState<{ left: number; bottom: number; width: number } | null>(null);
-	const { mounted, closing } = useOverlayPresence(open);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const popoverRef = useRef<HTMLDivElement>(null);
+	const { mounted, closing } = useOverlayPresence(open, popoverRef, "popover");
 	/** The system prompt being edited; `null` shows the saved one. Survives closing the popover. */
 	const [draft, setDraft] = useState<string | null>(null);
 
@@ -97,6 +97,7 @@ export function ChatContextBar() {
 	return (
 		<div className="omp-context-bar flex h-6 min-w-0 items-center justify-between gap-2 px-1">
 			<button
+				data-tour="chat-context"
 				ref={triggerRef}
 				type="button"
 				aria-expanded={open}
@@ -129,7 +130,7 @@ export function ChatContextBar() {
 						style={{ left: pos.left, bottom: pos.bottom, width: pos.width }}
 						className={cx(
 							"fixed z-[100] rounded-xl border border-(--omp-border) bg-(--omp-panel-bg) p-3 shadow-(--omp-shadow-md)",
-							closing ? "omp-scale-out pointer-events-none" : "omp-pop-in",
+							closing && "pointer-events-none",
 						)}
 					>
 						<div role="radiogroup" aria-label={t("chatContext.historyLabel")} className="space-y-1">

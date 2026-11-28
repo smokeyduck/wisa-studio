@@ -9,7 +9,12 @@ import type { AvailableCommand } from "../../shared/rpc-types";
 import { useSessionStore } from "../stores/session";
 import { useTabsStore } from "../stores/tabs";
 import { useUiStore } from "../stores/ui";
-import { buildCurrentCommandMenu, type CommandMenuItem, commandArgPrefill } from "./command-registry";
+import {
+	buildCurrentCommandMenu,
+	type CommandMenuItem,
+	commandArgPrefill,
+	withGuiNativeCommands,
+} from "./command-registry";
 import { translate } from "./i18n";
 
 const CHAT_REASON = translate("unavailable.chatSession");
@@ -80,6 +85,34 @@ describe("chat-tab availability", () => {
 });
 
 describe("native rows vs sidecar-advertised duplicates", () => {
+	it("discovers the native goal entry even when Core discovery is missing", () => {
+		expect(withGuiNativeCommands([])).toContainEqual({
+			name: "goal",
+			description: translate("cmd.goal.desc"),
+			source: "builtin",
+			textModeExecutable: false,
+		});
+	});
+
+	it("does not duplicate or overwrite discovered goal commands or extension aliases", () => {
+		const builtin: AvailableCommand = {
+			name: "goal",
+			description: "Core goal",
+			source: "builtin",
+			textModeExecutable: true,
+		};
+		const extension: AvailableCommand = {
+			name: "custom",
+			description: "Extension goal",
+			source: "extension",
+			aliases: ["goal"],
+		};
+		expect(withGuiNativeCommands([builtin]).filter(command => command.name === "goal")).toEqual([builtin]);
+		const commands = withGuiNativeCommands([extension]);
+		expect(commands).toContain(extension);
+		expect(commands.some(command => command.name === "goal")).toBe(false);
+	});
+
 	it("keeps a terminal-only sidecar command visible but disabled", () => {
 		seedTab("agent");
 		const item = menuItem("terminal-only");

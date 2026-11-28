@@ -8,7 +8,13 @@
  * store, which keeps a question started in either surface visible in both.
  */
 import { createStore } from "zustand/vanilla";
-import { type BtwHistoryRecord, type BtwHistoryTurn, getBtwLatestTurn, type RpcBtwFrame } from "../../shared/rpc-types";
+import {
+	type BtwHistoryRecord,
+	type BtwHistoryTurn,
+	getBtwLatestTurn,
+	type ImageContent,
+	type RpcBtwFrame,
+} from "../../shared/rpc-types";
 import { describeError } from "../lib/errors";
 import { activeTabCommand, createScopedStoreApi, type TabCommand, useScopedStore } from "./session-runtime-context";
 
@@ -24,7 +30,7 @@ export interface BtwStore {
 	error: string | null;
 	refresh: () => Promise<void>;
 	select: (id: string | null) => void;
-	ask: (question: string, recordId?: string) => Promise<BtwHistoryRecord>;
+	ask: (question: string, recordId?: string, images?: ImageContent[]) => Promise<BtwHistoryRecord>;
 	cancel: (recordId: string) => Promise<void>;
 	branch: () => Promise<{ cancelled?: boolean }>;
 	/** Send topic `recordId`'s steering prompt to the main session; false when the session refused it. */
@@ -125,13 +131,17 @@ export function createBtwStore(command: TabCommand = activeTabCommand) {
 			}
 		},
 		select: id => set({ selectedId: id }),
-		ask: async (question, recordId) => {
+		ask: async (question, recordId, images) => {
 			if (get().pending) throw new Error("A side question is already starting");
 			const generation = sessionGeneration;
 			set({ pending: true });
 			try {
-				const response = await command({ type: "btw", question, ...(recordId ? { recordId } : {}) }, 120_000);
-				if (generation !== sessionGeneration) throw new Error("The session changed while starting the side question");
+				const response = await command(
+					{ type: "btw", question, ...(recordId ? { recordId } : {}), ...(images?.length ? { images } : {}) },
+					120_000,
+				);
+				if (generation !== sessionGeneration)
+					throw new Error("The session changed while starting the side question");
 				if (!response.success) throw new Error(response.error);
 				const record = (response.data as { record?: BtwHistoryRecord } | undefined)?.record;
 				if (!record) throw new Error("Malformed /btw response");

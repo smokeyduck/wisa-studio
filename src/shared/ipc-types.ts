@@ -3,12 +3,13 @@
  * Type-safe contract for the contextBridge API.
  */
 
+import type { AgentNotchApi } from "./agent-notch";
 import type { CollabAutoStartMode, CollabPhoneEntry, CollabPhoneSnapshot } from "./collab-phone";
 import type { DocumentPreviewResult } from "./document-preview";
 import type { Language } from "./languages";
 import type { LaunchProfile } from "./launch-profile";
-import type { McpCatalogPage, McpCatalogRequest } from "./mcp-catalog";
 import type { SessionModelOverride } from "./model-restore";
+import type { NotchAppsApi } from "./notch-apps";
 import type { PluginEffects } from "./plugin-effects";
 import type { RunReport } from "./scheduler-types";
 import type {
@@ -21,6 +22,7 @@ import type {
 } from "./skills-community";
 import type { VietnameseVoice } from "./speech-language";
 import type { IpcTemplateInstallPayload, IpcTemplateInstallResult, IpcTemplatesCatalogResult } from "./templates";
+import type { WallpaperApi } from "./wallpaper";
 
 export type IpcProjectAuditResponse =
 	| { report: RunReport }
@@ -98,6 +100,7 @@ import type {
 // ============================================================================
 
 export const IPC_EVENTS = {
+	WALLPAPER_CHANGED: "wallpaper:changed",
 	/** Global interface language changed in any app window. */
 	LANGUAGE_CHANGED: "prefs:language-changed",
 	/** The user's saved shortcuts changed in some app window. */
@@ -108,6 +111,8 @@ export const IPC_EVENTS = {
 	SIDECAR_STATUS: "sidecar:status",
 	/** Per-tab sidecar status push (every tab of the window, foreground or background) */
 	TAB_STATUS: "tab:status",
+	/** Explicit user navigation from the native companion to its owning tab. */
+	WINDOW_FOCUS_TAB: "window:focus-tab",
 	/** Extension UI request from agent */
 	EXTENSION_UI: "extension-ui:request",
 	/** Scheduled tasks (plan/23): the ledger or a task changed. */
@@ -288,6 +293,9 @@ export const IPC_COMMANDS = {
 	PHONE_HUB_REVOKE: "phone-hub:revoke",
 	/** Phone hub: current state without changing it (→ IpcPhoneHubState) */
 	PHONE_HUB_STATE: "phone-hub:state",
+	WALLPAPER_GET: "wallpaper:get",
+	WALLPAPER_CHOOSE: "wallpaper:choose",
+	WALLPAPER_CLEAR: "wallpaper:clear",
 	/** Get GUI preferences */
 	PREFS_GET: "prefs:get",
 	/** Set GUI preferences */
@@ -333,8 +341,6 @@ export const IPC_COMMANDS = {
 	PLUGIN_LOGO: "plugin-catalog:logo",
 	/** Preview what installing a plugin would add, from its GitHub repository */
 	PLUGIN_INSPECT: "plugin-catalog:inspect",
-	/** Browse the official MCP registry without opening renderer network access. */
-	MCP_CATALOG_LIST: "mcp-catalog:list",
 	PROJECT_AUDIT_RUN: "project-audit:run",
 	PROJECT_AUDIT_CANCEL: "project-audit:cancel",
 	/** The web-template catalog (remote, cached, or bundled snapshot) */
@@ -492,6 +498,7 @@ export type DeepLinkPayload =
 export interface MenuActionPayload {
 	approvalMode?: "always-ask" | "always-ask-cached" | "write" | "yolo";
 	cwd?: string;
+	settingsTab?: string;
 }
 
 /** Run-progress state pushed by the renderer (terminal.showProgress): dock badge + window progress bar. */
@@ -1337,6 +1344,9 @@ export interface CaptionColors {
 }
 
 export interface OmpApi {
+	notch: AgentNotchApi;
+	notchApps: NotchAppsApi;
+	wallpaper: WallpaperApi;
 	/** `process.platform`: which window controls sit over the header. */
 	platform: string;
 	/** Native startup language, resolved before the first renderer paint. */
@@ -1406,6 +1416,8 @@ export interface OmpApi {
 		getForceTool(): Promise<RpcResponse>;
 		listForeignSessions(source: "claude" | "codex"): Promise<RpcResponse>;
 		importForeignSession(source: "claude" | "codex", foreignId: string): Promise<RpcResponse>;
+		previewOfficialArchive(filePath: string): Promise<RpcResponse>;
+		importOfficialArchive(filePath: string, archiveId: string, conversationIds: string[]): Promise<RpcResponse>;
 		forkFrom(entryId: string): Promise<RpcResponse>;
 		switchLeaf(entryId: string, options?: { summarize?: boolean; customInstructions?: string }): Promise<RpcResponse>;
 		resumeAfterAskReanswer(): Promise<RpcResponse>;
@@ -1598,6 +1610,7 @@ export interface OmpApi {
 		onBatch(callback: (events: AgentSessionEvent[]) => void): () => void;
 		onSidecarStatus(callback: (status: IpcSidecarStatusPayload) => void): () => void;
 		onTabStatus(callback: (payload: IpcTabStatusPayload) => void): () => void;
+		onFocusTab(callback: (tabId: string) => void): () => void;
 		onExtensionUi(callback: (request: ExtensionUIRequest, tabId: string) => void): () => void;
 		onHostToolCall(callback: (request: HostToolCallRequest) => void): () => void;
 		onHostUriRequest(callback: (request: HostUriRequest) => void): () => void;
@@ -1742,7 +1755,11 @@ export interface OmpApi {
 		recorderSave(path: string, data: ArrayBuffer): Promise<{ ok: boolean; error?: string }>;
 		notify(title: string, body?: string): void;
 		/** Speak text with the OS voice; resolves once playback finished, or with the engine's error. */
-		speak(text: string, language: string, voice?: VietnameseVoice): Promise<{
+		speak(
+			text: string,
+			language: string,
+			voice?: VietnameseVoice,
+		): Promise<{
 			ok: boolean;
 			error?: string;
 			missingVoice?: boolean;
@@ -1830,9 +1847,6 @@ export interface OmpApi {
 	pluginCatalog: {
 		logo(owner: string): Promise<string | null>;
 		inspect(payload: IpcPluginInspectPayload): Promise<IpcPluginInspection>;
-	};
-	mcpCatalog: {
-		list(payload: McpCatalogRequest): Promise<McpCatalogPage>;
 	};
 	projectAudit: {
 		run(id: string, tabId: string): Promise<IpcProjectAuditResponse>;
