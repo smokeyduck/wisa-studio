@@ -7,9 +7,11 @@ earlier versions belong to that project; see [NOTICE](NOTICE).
 
 ## [Unreleased]
 
-## [1.1.7] - 2026-11-29
+## [1.1.8] - 2026-11-29
 
 Core source: `smokeyduck/oh-my-pi@31e90ad2ae4f1c50d718755f37a102959c4bf43f` (Core 19.2.1 with WISA patches, synced with upstream stable `v19.2.1`).
+
+- Defer an idle app quit until the cancelled `before-quit` event unwinds, so macOS reaches `will-quit` and exits instead of leaving a windowless process. The unpublished v1.1.7 candidate was stopped by the packaged GUI shutdown gate.
 
 - Align the release sidecar probe with Wisa's 20% compaction default; use distinct legacy and explicit-override thresholds so configuration isolation and precedence remain checked. The unpublished v1.1.6 candidate was stopped by this outdated assertion.
 

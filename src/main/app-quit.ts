@@ -92,7 +92,9 @@ export function installQuitGuard(
 		if (asking) return;
 		const risk = quitRisk();
 		if (!quitNeedsConfirmation(risk)) {
-			requestQuit();
+			// Let the cancelled before-quit unwind before starting the approved quit.
+			// Reentrant app.quit() can close every window without reaching will-quit on macOS.
+			setImmediate(() => requestQuit());
 			return;
 		}
 		asking = true;
